@@ -217,3 +217,41 @@ export const suitabilityRuleSchema: RxJsonSchema<SuitabilityRuleDocType> = {
   },
   required: ["key", "conditions", "fallback", "updatedAt"],
 };
+
+// ---------------------------------------------------------------------------
+// Weather places — the last good dashboard payload per place (issue #269).
+// A new collection (not a version bump of the unused `weather_cache`) so no
+// migration has to run on existing devices.
+// ---------------------------------------------------------------------------
+
+export interface WeatherPlaceDocType {
+  slug: string;
+  payload: string; // JSON-stringified DashboardPayload (src/lib/device-weather.ts)
+  fetchedAt: number;
+  lastAccessedAt: number;
+  /** When the stored hourly forecast stops covering "now" (epoch ms). */
+  expiresAt: number;
+  bytes: number;
+}
+
+export const weatherPlaceSchema: RxJsonSchema<WeatherPlaceDocType> = {
+  version: 0,
+  primaryKey: "slug",
+  type: "object",
+  properties: {
+    slug: { type: "string", maxLength: 120 },
+    payload: { type: "string" },
+    fetchedAt: { type: "number" },
+    lastAccessedAt: { type: "number" },
+    expiresAt: { type: "number" },
+    bytes: { type: "number" },
+  },
+  required: [
+    "slug",
+    "payload",
+    "fetchedAt",
+    "lastAccessedAt",
+    "expiresAt",
+    "bytes",
+  ],
+};

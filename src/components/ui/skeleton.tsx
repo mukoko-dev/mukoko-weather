@@ -130,10 +130,55 @@ function ChatSkeleton({ className }: { className?: string }) {
   );
 }
 
+/**
+ * A stack of pulsing text lines (the paragraph placeholder used while AI
+ * text or a briefing loads). `lastWidth` lets the final line be shorter, as
+ * a real paragraph ends.
+ */
+function SkeletonLines({
+  widths,
+  count = 3,
+  className,
+  lastWidth = "w-2/3",
+  label = "Loading",
+}: {
+  /** Explicit Tailwind width class per line (overrides count/lastWidth). */
+  widths?: string[];
+  count?: number;
+  className?: string;
+  lastWidth?: string;
+  label?: string;
+}) {
+  const lines =
+    widths ??
+    Array.from({ length: count }, (_, i) =>
+      i === count - 1 ? lastWidth : "w-full",
+    );
+  return (
+    <div
+      className={cn("space-y-2", className)}
+      role="status"
+      aria-label={label}
+    >
+      {lines.map((width, i) => (
+        <div
+          key={i}
+          aria-hidden="true"
+          className={cn(
+            "h-4 animate-pulse rounded-full bg-text-tertiary/20",
+            width,
+          )}
+        />
+      ))}
+    </div>
+  );
+}
+
 export {
   Skeleton,
   CardSkeleton,
   ChartSkeleton,
   MetricCardSkeleton,
   ChatSkeleton,
+  SkeletonLines,
 };

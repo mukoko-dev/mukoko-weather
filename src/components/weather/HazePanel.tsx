@@ -1,6 +1,7 @@
 "use client";
 
 import { roundCoord } from "@/lib/location-privacy";
+import { fetchWorker } from "@/lib/weather-api";
 import { useEffect, useRef, useState, type ComponentType } from "react";
 import {
   CloudIcon,
@@ -26,11 +27,12 @@ import {
   type HazeLevel,
   type HazeResponse,
 } from "@/lib/haze";
+import { StatGrid } from "./StatGrid";
 
 /**
  * Location-aware haze panel (smoke, dust, urban smog, seasons, official PSI).
  *
- * Fetches `/api/py/haze` for the given coordinates. Renders a wide card only
+ * Fetches the Worker's `/v1/haze` for the given coordinates. Renders a wide card only
  * when there is haze, or an active haze season with elevated readings —
  * otherwise nothing at all (no empty card). Failures render nothing.
  */
@@ -65,7 +67,7 @@ export function HazePanel({ lat, lon }: Props) {
     abortRef.current = controller;
     let cancelled = false;
 
-    fetch(`/api/py/haze?lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`, {
+    fetchWorker("haze", `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`, {
       signal: controller.signal,
     })
       .then(async (res) => {
@@ -132,6 +134,10 @@ export function HazePanel({ lat, lon }: Props) {
         <span
           className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium ${severity.soft} ${severity.text}`}
         >
+          <span
+            aria-hidden="true"
+            className={`size-2.5 shrink-0 rounded-full ring-1 ring-wx-outline ${severity.fill}`}
+          />
           <span aria-hidden="true">
             <TypeIcon size={14} />
           </span>
@@ -146,7 +152,7 @@ export function HazePanel({ lat, lon }: Props) {
           return (
             <span
               key={segmentLevel}
-              className={`h-2 flex-1 rounded-full ${
+              className={`h-2 flex-1 rounded-full ring-1 ring-wx-outline ${
                 filled
                   ? hazeSeverityClasses(segmentLevel).fill
                   : "bg-surface-dim"
@@ -156,28 +162,16 @@ export function HazePanel({ lat, lon }: Props) {
         })}
       </div>
 
-      <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <div className="meerkat">
-          <dt className="dove">Visibility</dt>
-          <dd className="text-base font-medium text-text-primary">
-            {formatVisibility(data.visibilityKm)}
-          </dd>
-        </div>
-        <div className="meerkat">
-          <dt className="dove">PM2.5</dt>
-          <dd className="text-base font-medium text-text-primary">
-            {formatMicrograms(data.pm25)}
-          </dd>
-        </div>
-        {showDust && (
-          <div className="meerkat">
-            <dt className="dove">Dust</dt>
-            <dd className="text-base font-medium text-text-primary">
-              {formatMicrograms(data.dust)}
-            </dd>
-          </div>
-        )}
-      </dl>
+      <StatGrid
+        columns={3}
+        items={[
+          { label: "Visibility", value: formatVisibility(data.visibilityKm) },
+          { label: "PM2.5", value: formatMicrograms(data.pm25) },
+          ...(showDust
+            ? [{ label: "Dust", value: formatMicrograms(data.dust) }]
+            : []),
+        ]}
+      />
 
       {peak && <p className="gazelle">Worst around {peak}</p>}
 

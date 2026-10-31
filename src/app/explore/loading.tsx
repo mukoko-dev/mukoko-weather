@@ -1,3 +1,7 @@
+import {
+  PageHeaderSkeleton,
+  SkeletonStack,
+} from "@/components/layout/PageShell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ExploreLoadingShell } from "./ExploreLoadingShell";
 
@@ -7,14 +11,10 @@ export default function ExploreLoading() {
       mainLabel="Loading explore page"
       srText="Loading explore page…"
     >
-      <Skeleton className="h-8 w-56 mb-2" />
-      <Skeleton className="h-4 w-80 mb-8" />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <div
-            key={i}
-            className="rounded-[var(--radius-card)] bg-surface-card p-5 shadow-sm"
-          >
+      <PageHeaderSkeleton />
+      <SkeletonStack count={8} className="herd-grid">
+        {() => (
+          <div className="chameleon p-[var(--space-card)]">
             <div className="flex items-start justify-between mb-2">
               <Skeleton className="h-5 w-32" />
               <Skeleton className="h-5 w-8 rounded-full" />
@@ -22,8 +22,8 @@ export default function ExploreLoading() {
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-4 w-3/4 mt-1" />
           </div>
-        ))}
-      </div>
+        )}
+      </SkeletonStack>
     </ExploreLoadingShell>
   );
 }

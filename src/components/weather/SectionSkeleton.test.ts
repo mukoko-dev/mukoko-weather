@@ -64,10 +64,11 @@ describe("sub-route loading boundaries compose shared skeletons", () => {
     expect(mapLoading).not.toContain("grid-cols-4");
   });
 
-  it("forecast and atmosphere loading boundaries keep the header and breadcrumb skeletons", () => {
+  it("forecast and atmosphere loading boundaries use PageShellSkeleton with the breadcrumb row", () => {
     for (const src of [forecastLoading, atmosphereLoading]) {
-      expect(src).toContain("<HeaderSkeleton />");
-      expect(src).toContain("<BreadcrumbSkeleton");
+      expect(src).toContain("<PageShellSkeleton");
+      expect(src).toContain("breadcrumb");
+      expect(src).not.toContain("<HeaderSkeleton />");
     }
   });
 

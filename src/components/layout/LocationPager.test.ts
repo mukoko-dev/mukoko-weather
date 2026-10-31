@@ -10,8 +10,11 @@ import { resolve } from "path";
 const source = readFileSync(resolve(__dirname, "LocationPager.tsx"), "utf-8");
 
 describe("LocationPager — accessible page indicator", () => {
-  it("is a labelled navigation landmark", () => {
+  it("is a labelled group inside the bottom bar's navigation, not a nested nav landmark", () => {
+    expect(source).toContain('role="group"');
     expect(source).toContain('aria-label="Location pages"');
+    expect(source).not.toMatch(/<nav[\s>]/);
+    expect(source).not.toMatch(/<\/nav>/);
   });
 
   it("labels the home glyph My Location and points it at /", () => {
@@ -91,18 +94,61 @@ describe("useLocationSwipe — swipe between locations", () => {
     expect(source).toContain("router.push(target);");
   });
 
-  it("derives the sequence from the saved locations and visible suggested places, the same as the dots", () => {
+  it("takes its sequence from the shared usePagerSequence hook, the same as the dots", () => {
     expect(source).toContain(
       "const savedLocations = useAppStore((s) => s.savedLocations);",
     );
-    expect(source).toContain("hiddenPresetSlugs");
-    expect(source).toContain("visiblePresetSlugs({");
-    expect(source).toContain("pagerSequence(\n      savedLocations,");
+    expect(source).toContain(
+      "const sequence = usePagerSequence(savedLocations, selectedLocation);",
+    );
+  });
+
+  it("warms both neighbouring pages when idle so a swipe lands quickly", () => {
+    expect(source).toContain("router.prefetch(target)");
+    expect(source).toContain("requestIdleCallback");
+    expect(source).toContain("neighbour(sequence, index, 1)");
+    expect(source).toContain("neighbour(sequence, index, -1)");
   });
 
   it("can be switched off, e.g. while reordering sections", () => {
     expect(source).toContain("enabled = true,");
     expect(source).toContain("}: { enabled?: boolean } = {})");
     expect(source).toContain("return useSwipe({");
+  });
+});
+
+describe("pager sequence — one source for the dots and the swipe", () => {
+  /** The function body that starts at `start` and ends at the next top-level `}`. */
+  function bodyFrom(start: string): string {
+    const at = source.indexOf(start);
+    expect(at).toBeGreaterThan(-1);
+    const end = source.indexOf("\n}\n", at);
+    return source.slice(at, end + 3);
+  }
+
+  it("defines usePagerSequence exactly once and it is the only place pagerSequence is called", () => {
+    expect(source.match(/export function usePagerSequence\(/g)).toHaveLength(1);
+    expect(source.match(/\bpagerSequence\(/g)).toHaveLength(1);
+    expect(bodyFrom("export function usePagerSequence(")).toContain(
+      "pagerSequence(",
+    );
+  });
+
+  it("is called by both LocationPager and useLocationSwipe with the same arguments", () => {
+    expect(
+      source.match(/usePagerSequence\(savedLocations, selectedLocation\)/g),
+    ).toHaveLength(2);
+    expect(bodyFrom("export function LocationPager(")).toContain(
+      "usePagerSequence(savedLocations, selectedLocation)",
+    );
+    expect(bodyFrom("export function useLocationSwipe(")).toContain(
+      "usePagerSequence(savedLocations, selectedLocation)",
+    );
+  });
+
+  it("reads the hidden-preset and anchor state only inside the shared hook", () => {
+    expect(source.match(/visiblePresetSlugs\(\{/g)).toHaveLength(1);
+    expect(source.match(/s\.hiddenPresetSlugs/g)).toHaveLength(1);
+    expect(source.match(/s\.presetAnchor/g)).toHaveLength(1);
   });
 });

@@ -36,16 +36,16 @@ export const CONTROL_CLASSES = new Set([
   // Pill buttons (Mzizi Button: default / outline variants)
   "kudu",
   "kudu-sm",
-  "kudu-plate",
   "impala",
   "impala-sm",
   "impala-primary",
-  "impala-plate",
   // Round icon button
   "bee",
   // Round icon control on a card surface (nav island, map overlays)
   "duiker",
   "duiker-solid",
+  // Round icon control on the hero sky (Share, the ⋯ menu)
+  "kestrel-round",
   // Pill chip / toggle chip (aria-pressed)
   "quail",
   // Inline text actions and nav links (Mzizi Button `link` variant)
@@ -60,9 +60,10 @@ export const CONTROL_CLASSES = new Set([
  * map zoom controls, drag handles — counted per file, each with a reason.
  */
 const ALLOWED_EXCEPTIONS: Record<string, { count: number; reason: string }> = {
-  "src/components/layout/Header.tsx": {
-    count: 2,
-    reason: "mobile ⋯ menu item rows (MENU_ITEM_CLASS) — menu, not a button",
+  "src/components/layout/PhoneMenu.tsx": {
+    count: 3,
+    reason:
+      "phone menu slot rows (My Weather, Use my location, Notifications; ACCOUNT_MENU_ROW_CLASS) — menu rows inside the Mzizi account menu, not buttons",
   },
   "src/app/locations/LocationsMenu.tsx": {
     count: 2,
@@ -80,15 +81,15 @@ const ALLOWED_EXCEPTIONS: Record<string, { count: number; reason: string }> = {
     count: 1,
     reason: "round dismiss (×) icon control",
   },
-  "src/app/profile/ProfileClient.tsx": {
+  "src/components/profile/GroupedRow.tsx": {
     count: 1,
     reason:
-      "Preferences settings-list row (.guineafowl-row) — list row, not a pill",
+      "settings-list row (.guineafowl-row) used by Preferences and the profile navigation — list row, not a pill",
   },
   "src/components/profile/ProfileAppearance.tsx": {
     count: 1,
     reason:
-      "Light/Dark/System option tiles (role=radio) — radio cards, not pills",
+      "Light/Dark/System preview cards (role=radio) — radio cards, not pills",
   },
   "src/components/profile/ProfileIdentity.tsx": {
     count: 1,
@@ -104,9 +105,13 @@ const ALLOWED_EXCEPTIONS: Record<string, { count: number; reason: string }> = {
     reason: "full-width disclosure header row of the chat card",
   },
   "src/components/weather/MyWeatherModal.tsx": {
-    count: 6,
+    count: 4,
     reason:
-      "selectable list rows and tiles: location rows, activity tiles, theme and forecast-model radio cards",
+      "selectable list rows and tiles: location rows, activity tiles (the theme and forecast-model radios are SelectRow)",
+  },
+  "src/components/weather/SelectRow.tsx": {
+    count: 1,
+    reason: "the one selectable radio row (.bushbuck) shared by MyWeatherModal",
   },
   "src/components/weather/reports/WeatherReportModal.tsx": {
     count: 2,
@@ -331,15 +336,61 @@ describe("Mzizi alignment guard — every button", () => {
     }
   });
 
-  it("the hero plate CTA and Share are Mzizi pills", () => {
+  it("the hero's Share is a Mzizi sky control (the activities call lives in ActivityInsights)", () => {
     const hero = FOUND.filter((f) => f.file.endsWith("CurrentConditions.tsx"));
-    expect(hero.length).toBe(2);
+    expect(hero.length).toBe(1);
     for (const f of hero) {
-      expect(
-        classTokens(f.tag).some(
-          (t) => t === "kudu-plate" || t === "impala-plate",
-        ),
-      ).toBe(true);
+      expect(classTokens(f.tag).some((t) => t === "kestrel-round")).toBe(true);
     }
+  });
+});
+
+describe("Mzizi alignment guard — menus", () => {
+  // The site has ONE phone menu and it is the Mzizi registry's
+  // `app-account-menu`, vendored in src/components/ui/. Owner rule: "We have a
+  // standard way that we have menus, Mzizi has a standard."
+  const read = (rel: string) => readFileSync(resolve(ROOT, rel), "utf-8");
+  const sources = walk(resolve(ROOT, "src")).filter(
+    (f) => !f.endsWith(".test.tsx"),
+  );
+
+  it("no custom phone menu is left (MobileMoreMenu and its id are gone)", () => {
+    const offenders = sources
+      .filter((f) =>
+        /MobileMoreMenu|mobile-more-menu/.test(readFileSync(f, "utf-8")),
+      )
+      .map((f) => relative(ROOT, f));
+    expect(offenders).toEqual([]);
+    expect(() =>
+      statSync(resolve(ROOT, "src/components/layout/MobileMoreMenu.tsx")),
+    ).toThrow();
+  });
+
+  it("PhoneMenu is a thin wrapper around the vendored Mzizi AccountMenu", () => {
+    const phone = read("src/components/layout/PhoneMenu.tsx");
+    expect(phone).toContain('from "@/components/ui/app-account-menu"');
+    expect(phone).toContain("<AccountMenu");
+    // The disclosure, outside-click, Escape and focus return belong to the
+    // registry component; the wrapper owns none of them.
+    expect(phone).not.toMatch(
+      /addEventListener|menuOpen|setMenuOpen|<details|<summary/,
+    );
+  });
+
+  it("the header and the hero reach the phone menu only through PhoneMenu", () => {
+    for (const file of [
+      "src/components/layout/Header.tsx",
+      "src/components/weather/CurrentConditions.tsx",
+    ]) {
+      const src = read(file);
+      expect(src, file).toContain("<PhoneMenu");
+      expect(src, file).not.toMatch(/menuOpen|setMenuOpen|mobile-.*-menu/);
+    }
+  });
+
+  it("the vendored component names its registry source and lists its deviations", () => {
+    const menu = read("src/components/ui/app-account-menu.tsx");
+    expect(menu).toContain("https://api.mzizi.dev/v1/ui/app-account-menu");
+    expect(menu).toMatch(/Local changes from upstream/);
   });
 });

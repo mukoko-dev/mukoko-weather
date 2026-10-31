@@ -9,10 +9,17 @@
 # Deploy order follows the service bindings, so every Worker that others bind
 # to is live before them:
 #
-#   1. forecast, aviation, places, stations, tiles   (bind to no Worker)
-#   2. ai, internal-api, jobs                        (bind to forecast)
-#   3. public-api                                    (binds to forecast,
+#   1. forecast, aviation, mongo-bridge, stations, tiles
+#                                                    (bind to no Worker)
+#   2. places                                        (binds to mongo-bridge)
+#   3. ai, internal-api, jobs                        (bind to forecast; ai also
+#                                                    binds places)
+#   4. public-api                                    (binds to forecast,
 #                                                     aviation, places, ai)
+#
+# mongo-bridge is TypeScript (workers/mongo-bridge): the deploy installs its
+# dependencies with npm ci, and wrangler bundles it. It needs the Secrets
+# Store secret MUKOKO_MONGODB_RW_URI to exist first.
 #
 # The wrangler configs define no `env.*` blocks, so `production` is the only
 # environment: each Worker deploys from its top-level config. If a config
@@ -43,6 +50,7 @@ on:
           - all
           - forecast
           - aviation
+          - mongo-bridge
           - places
           - stations
           - tiles
@@ -158,7 +166,7 @@ jobs:
           set -euo pipefail
 
           # Binding order: see the header of this file.
-          order=(forecast aviation places stations tiles ai internal-api jobs public-api)
+          order=(forecast aviation mongo-bridge places stations tiles ai internal-api jobs public-api)
           if [ "$WORKER" = "all" ]; then
             selected=("${order[@]}")
           else
@@ -183,6 +191,11 @@ jobs:
             env_args=()
             if grep -qP '^\s*"env"\s*:' "$cfg"; then
               env_args=(--env "$DEPLOY_ENV")
+            fi
+
+            # A TypeScript Worker installs its own dependencies first.
+            if [ -f "$w/package.json" ]; then
+              (cd "$w" && npm ci --ignore-scripts --no-audit --no-fund)
             fi
 
             # wrangler runs the config's build command (worker-build --release).

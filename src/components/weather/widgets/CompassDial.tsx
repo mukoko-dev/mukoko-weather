@@ -64,7 +64,7 @@ export function CompassDial({
           y={c.y}
           textAnchor="middle"
           dominantBaseline="middle"
-          className="fill-text-secondary text-[7px] font-semibold"
+          className="fill-text-secondary text-[10px] font-semibold"
           aria-hidden="true"
         >
           {c.label}
@@ -110,7 +110,7 @@ export function CompassDial({
         y={CENTER + 7}
         textAnchor="middle"
         dominantBaseline="middle"
-        className="fill-text-tertiary text-[5.5px] [paint-order:stroke] stroke-surface-card stroke-[2px]"
+        className="fill-text-tertiary text-[8.5px] [paint-order:stroke] stroke-surface-card stroke-[2px]"
         aria-hidden="true"
       >
         {gust != null ? `${unit} · gusts ${gust}` : unit}

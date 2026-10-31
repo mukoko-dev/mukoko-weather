@@ -7,6 +7,8 @@ import type { ReactNode } from "react";
 interface Props {
   id: string;
   reordering: boolean;
+  /** A pinned section (the hero) is never draggable: no handle, no sorting. */
+  pinned?: boolean;
   children: ReactNode;
 }
 
@@ -20,7 +22,12 @@ interface Props {
  * "Customise layout" no longer refetches the AI summary, drops the chat, rebuilds
  * charts, or recreates the Three.js hero.
  */
-export function DraggableSection({ id, reordering, children }: Props) {
+export function DraggableSection({
+  id,
+  reordering,
+  pinned = false,
+  children,
+}: Props) {
   const {
     attributes,
     listeners,
@@ -28,15 +35,16 @@ export function DraggableSection({ id, reordering, children }: Props) {
     transform,
     transition,
     isDragging,
-  } = useSortable({ id });
+  } = useSortable({ id, disabled: pinned });
 
-  const style = reordering
-    ? ({
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.5 : undefined,
-      } as React.CSSProperties)
-    : undefined;
+  const style =
+    reordering && !pinned
+      ? ({
+          transform: CSS.Transform.toString(transform),
+          transition,
+          opacity: isDragging ? 0.5 : undefined,
+        } as React.CSSProperties)
+      : undefined;
 
   return (
     <div
@@ -49,7 +57,7 @@ export function DraggableSection({ id, reordering, children }: Props) {
           itself on hover of the card, but the hovered element was a SIBLING of this
           button (not an ancestor), so the hover selector never matched and the handle
           stayed hidden for mouse/touch users. It is now shown outright while reordering. */}
-      {reordering && (
+      {reordering && !pinned && (
         <button
           {...attributes}
           {...listeners}
@@ -72,7 +80,7 @@ export function DraggableSection({ id, reordering, children }: Props) {
           the draggable card. */}
       <div
         className={
-          reordering
+          reordering && !pinned
             ? "rounded-[var(--radius-card)] pl-10 ring-2 ring-primary/20 transition-all focus-within:ring-primary/40"
             : undefined
         }

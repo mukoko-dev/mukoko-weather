@@ -35,10 +35,9 @@ describe("data fetching", () => {
   });
 
   it("shows loading spinner", () => {
-    expect(source).toContain('role="status"');
-    expect(source).toContain("sr-only");
-    // Spinner is the shared primitive (src/components/ui/spinner.tsx)
-    expect(source).toContain("<Spinner");
+    // LoadingNotice is the shared loading line (wraps ui/spinner.tsx and
+    // carries role="status").
+    expect(source).toContain("<LoadingNotice");
   });
 });
 
@@ -84,8 +83,8 @@ describe("upvoting", () => {
   });
 
   it("the empty state is a calm card with a copper edge, not a saturated fill", () => {
-    expect(source).toContain('className="acacia relative overflow-hidden"');
-    expect(source).toContain("w-1 bg-mineral-copper");
+    expect(source).toContain("acacia border-mineral-copper/40 shadow-md");
+    expect(source).not.toContain("w-1 bg-mineral-copper");
     expect(source).not.toContain(
       "rounded-[var(--radius-card)] bg-mineral-copper p-4",
     );

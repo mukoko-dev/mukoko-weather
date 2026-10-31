@@ -1,6 +1,7 @@
 "use client";
 
 import type { AgriChartRow } from "@/lib/agriculture";
+import { WX_SERIES } from "@/lib/weather-scales";
 import { TimeSeriesChart, type SeriesConfig } from "./TimeSeriesChart";
 
 interface RainEtChartProps {
@@ -14,7 +15,7 @@ const SERIES: SeriesConfig[] = [
   {
     key: "rainMm",
     label: "Rain (mm)",
-    color: "var(--color-rain)",
+    color: WX_SERIES.rain,
     type: "bar",
     opacity: 0.6,
     order: 2,

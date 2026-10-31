@@ -838,7 +838,7 @@ describe("db-init indexes for the model baseline (issue #246)", () => {
 });
 
 describe("db-init indexes for agriculture (issue #265)", () => {
-  it("TTL-indexes both agriculture caches the Python module writes", async () => {
+  it("TTL-indexes the AI cache Python still writes and the retired payload cache (the farm payload is KV now, so leftover docs expire)", async () => {
     const fs = await import("fs");
     const source = fs.readFileSync("src/lib/db.ts", "utf-8");
     const py = fs.readFileSync("api/py/_agriculture.py", "utf-8");
@@ -847,8 +847,9 @@ describe("db-init indexes for agriculture (issue #265)", () => {
         source.indexOf(`collection("${name}"),\n      { expiresAt: 1 }`),
         name,
       ).toBeGreaterThan(-1);
-      expect(py).toContain(`weather_db()["${name}"]`);
     }
+    expect(py).toContain('weather_db()["agriculture_ai"]');
+    expect(py).not.toContain('weather_db()["agriculture_cache"]');
   });
 });
 
@@ -860,15 +861,6 @@ describe("syncAirports keeps airports fetched on demand (#302)", () => {
       _id: { $nin: ["FVRG", "FAOR"] },
       source: { $ne: DISCOVERED_AIRPORT_SOURCE },
     });
-  });
-
-  it("uses the same source tag as the Python writer", async () => {
-    const { DISCOVERED_AIRPORT_SOURCE } = await import("./db");
-    const py = readFileSync(
-      resolve(__dirname, "../../api/py/_airports.py"),
-      "utf-8",
-    );
-    expect(py).toContain(`DISCOVERED_SOURCE = "${DISCOVERED_AIRPORT_SOURCE}"`);
   });
 
   it("syncAirports deletes through the prune filter", () => {

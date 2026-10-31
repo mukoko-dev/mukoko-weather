@@ -126,9 +126,7 @@ pub fn activities(ids: &[String]) -> Vec<String> {
         let id = id.trim();
         if !id.is_empty()
             && id.len() <= 40
-            && id
-                .bytes()
-                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+            && crate::slug::chars_ok(id)
             && !out.iter().any(|o| o == id)
         {
             out.push(id.to_owned());

@@ -1,9 +1,11 @@
 import { Suspense } from "react";
 import { Metadata } from "next";
 import Link from "next/link";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
-import { Breadcrumb } from "@/components/layout/Breadcrumb";
+import { PageShell } from "@/components/layout/PageShell";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { trail } from "@/components/layout/Breadcrumb";
+import { ExploreCard } from "@/components/explore/ExploreCard";
+import { CountPill } from "@/components/explore/CountPill";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getTagCountsAndStats, getFeaturedTagsFromDb } from "@/lib/db";
 import { logError } from "@/lib/observability";
@@ -57,113 +59,87 @@ export default async function ExplorePage() {
   const tagMeta = new Map(featuredTags.map((t) => [t.slug, t]));
 
   return (
-    <>
-      <Header />
-
-      <Breadcrumb
-        items={[{ label: "Home", href: "/" }, { label: "Explore" }]}
+    <PageShell
+      width="wide"
+      breadcrumb={trail({ label: "Explore" })}
+      className="animate-fade-in overflow-x-clip"
+    >
+      <PageHeader
+        title="Explore"
+        intro="Browse weather locations worldwide by category, country, and province."
       />
 
-      <main
-        id="main-content"
-        className="animate-fade-in mx-auto max-w-5xl overflow-x-clip px-4 py-8 pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-8 md:px-8"
-      >
-        <h1 className="text-2xl font-bold text-text-primary font-heading sm:text-3xl">
-          Explore
-        </h1>
-        <p className="mt-3 text-text-secondary">
-          Browse weather locations worldwide by category, country, and province.
+      {/* AI Search */}
+      <Suspense fallback={null}>
+        <div className="mt-8">
+          <ExploreSearch />
+        </div>
+      </Suspense>
+
+      {/* Shamwari CTA card — paused as a standalone destination, see FLAGS.shamwari_chat */}
+      {isFeatureEnabled("shamwari_chat") && (
+        <CTACard
+          variant="accent"
+          as="h2"
+          title="Ask Shamwari"
+          description="Chat with our AI weather assistant for real-time insights and activity advice"
+          action={
+            <Link href="/shamwari" className="kudu-sm">
+              Start chatting
+            </Link>
+          }
+          className="mt-6"
+        />
+      )}
+
+      {/* Category browse section */}
+      <section aria-labelledby="browse-heading" className="mt-8">
+        <h2 id="browse-heading" className="eland">
+          Browse by Category
+        </h2>
+        <p className="mt-1 text-base text-text-secondary">
+          {totalLocations || "265+"} locations worldwide
         </p>
 
-        {/* AI Search */}
-        <Suspense fallback={null}>
-          <div className="mt-8">
-            <ExploreSearch />
-          </div>
-        </Suspense>
-
-        {/* Shamwari CTA card — paused as a standalone destination, see FLAGS.shamwari_chat */}
-        {isFeatureEnabled("shamwari_chat") && (
-          <CTACard
-            variant="accent"
-            as="h2"
-            title="Ask Shamwari"
-            description="Chat with our AI weather assistant for real-time insights and activity advice"
-            action={
-              <Link
-                href="/shamwari"
-                className="press-scale shrink-0 inline-flex items-center gap-2 rounded-[var(--radius-sm)] bg-primary px-4 py-2 text-base font-medium text-primary-foreground hover:bg-primary/90 transition-all focus-visible:outline-2 focus-visible:outline-primary min-h-[var(--touch-target-min)]"
-              >
-                Start chatting
-              </Link>
-            }
-            className="mt-6"
-          />
+        {tagCounts.length === 0 && (
+          <EmptyState className="mt-6">
+            No locations available here yet.
+          </EmptyState>
         )}
 
-        {/* Category browse section */}
-        <section aria-labelledby="browse-heading" className="mt-8">
-          <h2
-            id="browse-heading"
-            className="text-xl font-bold text-text-primary font-heading"
-          >
-            Browse by Category
-          </h2>
-          <p className="mt-1 text-base text-text-secondary">
-            {totalLocations || "265+"} locations worldwide
-          </p>
+        <div className="herd-grid mt-6">
+          {tagCounts.map(({ tag, count }) => {
+            const meta = tagMeta.get(tag);
+            if (!meta) return null;
 
-          {tagCounts.length === 0 && (
-            <EmptyState className="mt-6">
-              No locations available here yet.
-            </EmptyState>
-          )}
-
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {tagCounts.map(({ tag, count }) => {
-              const meta = tagMeta.get(tag);
-              if (!meta) return null;
-
-              return (
-                <Link
-                  key={tag}
-                  href={`/explore/${tag}`}
-                  className="group card-interactive baobab p-5"
-                >
-                  <div className="flex items-start justify-between">
-                    <h3 className="giraffe group-hover:text-primary transition-colors">
-                      {meta.label}
-                    </h3>
-                    <span className="rounded-full bg-primary/10 px-2.5 py-1 text-base font-medium text-primary">
-                      {count}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-base text-text-secondary line-clamp-2">
-                    {meta.description}
-                  </p>
-                </Link>
-              );
-            })}
-          </div>
-
-          {/* Country browse card */}
-          <CTACard
-            title="Browse by Country"
-            description="Explore weather worldwide — grouped by country and province"
-            action={
-              <Link
-                href="/explore/country"
-                className="press-scale shrink-0 inline-flex items-center gap-1 rounded-[var(--radius-sm)] bg-primary px-4 py-2 text-base font-medium text-primary-foreground hover:bg-primary/90 transition-all focus-visible:outline-2 focus-visible:outline-primary min-h-[var(--touch-target-min)]"
+            return (
+              <ExploreCard
+                key={tag}
+                href={`/explore/${tag}`}
+                as="h3"
+                title={meta.label}
+                badge={<CountPill>{count}</CountPill>}
               >
-                Browse countries
-              </Link>
-            }
-            className="mt-6"
-          />
-        </section>
-      </main>
+                <p className="mt-2 text-base text-text-secondary line-clamp-2">
+                  {meta.description}
+                </p>
+              </ExploreCard>
+            );
+          })}
+        </div>
 
-      <Footer />
-    </>
+        {/* Country browse card */}
+        <CTACard
+          title="Browse by Country"
+          description="Explore weather worldwide — grouped by country and province"
+          action={
+            <Link href="/explore/country" className="kudu-sm">
+              Browse countries
+            </Link>
+          }
+          className="mt-6"
+        />
+      </section>
+    </PageShell>
   );
 }

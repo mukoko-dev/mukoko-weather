@@ -57,11 +57,12 @@ describe("Breadcrumb usage sites", () => {
     "../../app/[location]/agriculture/AgricultureDashboard.tsx",
   ];
 
-  it("is imported by the atmosphere and forecast sub-route dashboards", () => {
+  it("is reached by the atmosphere, forecast and agriculture dashboards through PageShell's breadcrumb prop", () => {
     for (const file of usageFiles) {
       const dashboardSource = readFileSync(resolve(__dirname, file), "utf-8");
-      expect(dashboardSource).toContain("@/components/layout/Breadcrumb");
-      expect(dashboardSource).toContain("<Breadcrumb");
+      expect(dashboardSource).toContain("@/components/layout/PageShell");
+      expect(dashboardSource).toContain("<PageShell");
+      expect(dashboardSource).toContain("breadcrumb={[");
     }
   });
 
@@ -135,7 +136,8 @@ describe("BreadcrumbSkeleton (issue #104)", () => {
       "../../app/[location]/agriculture/loading.tsx",
     ]) {
       const loadingSource = readFileSync(resolve(__dirname, file), "utf-8");
-      expect(loadingSource).toContain("<BreadcrumbSkeleton");
+      expect(loadingSource).toContain("<PageShellSkeleton");
+      expect(loadingSource).toContain("breadcrumb");
       expect(loadingSource).not.toContain(
         '<span className="text-text-tertiary/30">/</span>',
       );
@@ -146,5 +148,23 @@ describe("BreadcrumbSkeleton (issue #104)", () => {
 describe("Breadcrumb touch targets", () => {
   it("links carry the .dik-dik class so they reach 48px on coarse pointers", () => {
     expect(source).toMatch(/<Link[\s\S]*?className="dik-dik /);
+  });
+});
+
+describe("trail and HOME_CRUMB", () => {
+  it("HOME_CRUMB links Home to /", async () => {
+    const { HOME_CRUMB } = await import("./Breadcrumb");
+    expect(HOME_CRUMB).toEqual({ label: "Home", href: "/" });
+  });
+
+  it("trail puts Home first, then the given items", async () => {
+    const { trail } = await import("./Breadcrumb");
+    expect(
+      trail({ label: "Explore", href: "/explore" }, { label: "Map" }),
+    ).toEqual([
+      { label: "Home", href: "/" },
+      { label: "Explore", href: "/explore" },
+      { label: "Map" },
+    ]);
   });
 });

@@ -7,12 +7,12 @@ import {
 } from "./CurrentLocationHome";
 import {
   getLocationFromDb,
-  getWeatherForLocation,
   getCountryByCode,
   getSeasonForDate,
 } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { checkFrostRisk, createFallbackWeather } from "@/lib/weather";
+import { readLastLocation } from "@/lib/last-location";
+import { loadLocationWeather } from "@/lib/location-payload";
 import type { WeatherLocation } from "@/lib/locations";
 import { ipFallbackLocation } from "@/lib/home-location";
 import { countryDisplayName, reconcileCountry } from "@/lib/location-country";
@@ -20,13 +20,11 @@ import { reconcileElevation } from "@/lib/location-elevation";
 import { SITE_URL } from "@/lib/site";
 import { fetchPlaces } from "@/lib/weather-api";
 import { usableIpGeo } from "@/lib/location-choice";
-import { WeatherLoadingScene } from "@/components/weather/WeatherLoadingScene";
+import { LocationSkeleton } from "@/components/weather/LocationSkeleton";
 
 // Bound the Worker geo fetch so a hung or protected upstream can't stall
 // the home render — the onboarding chooser is a fine fallback.
 const GEO_FETCH_TIMEOUT_MS = 2500;
-
-const SLUG_RE = /^[a-z0-9-]{1,80}$/;
 
 /**
  * The home page IS the current-location weather page (the Apple Weather
@@ -35,7 +33,7 @@ const SLUG_RE = /^[a-z0-9-]{1,80}$/;
 export const metadata: Metadata = {
   title: "My Location Weather — Live Forecast & Conditions",
   description:
-    "Live weather for your current location — real-time conditions, hourly and 7-day forecasts, frost alerts, and AI-powered insights from mukoko weather.",
+    "Live weather for your current location — real-time conditions, hourly and 7-day forecasts, frost alerts, and local insights from mukoko weather.",
   alternates: {
     canonical: `${SITE_URL}/`,
   },
@@ -65,10 +63,10 @@ export default function Home() {
   // Suspense, so the 200 shell was flushed before any page could call
   // notFound() or send a redirect status: unknown slugs answered 200
   // "Location not found" and /profile a 200 meta-refresh (#237). Scoping the
-  // boundary to `/` keeps the home loading scene and lets every other route
+  // boundary to `/` keeps the home loading skeleton and lets every other route
   // send its real status.
   return (
-    <Suspense fallback={<WeatherLoadingScene />}>
+    <Suspense fallback={<LocationSkeleton />}>
       <HomeContent />
     </Suspense>
   );
@@ -130,11 +128,11 @@ async function buildHome() {
   // would otherwise strand the visitor on a broken page every time — falling
   // through to fresh detection breaks that loop.
   const cookieStore = await cookies();
-  const lastLocation = cookieStore.get("lastLocation")?.value;
+  const lastLocation = readLastLocation(cookieStore);
 
   let detectedLocation: WeatherLocation | null = null;
 
-  if (lastLocation && SLUG_RE.test(lastLocation)) {
+  if (lastLocation) {
     const resolved = await getLocationFromDb(lastLocation).catch(() => null);
     if (resolved) detectedLocation = resolved;
     // Unresolvable cookie — ignore it and continue to IP-geo detection below.
@@ -216,26 +214,8 @@ async function buildHome() {
 
   // Same double-caught weather fetch as the /{slug} page — the home shell
   // ALWAYS renders, worst case with seasonal estimates.
-  let weather;
-  let weatherSource: string;
-  try {
-    const result = await getWeatherForLocation(
-      seededLocation.slug,
-      seededLocation.lat,
-      seededLocation.lon,
-      seededLocation.elevation,
-    );
-    weather = result.data;
-    weatherSource = result.source;
-  } catch {
-    weather = createFallbackWeather(
-      seededLocation.lat,
-      seededLocation.lon,
-      seededLocation.elevation,
-    );
-    weatherSource = "fallback";
-  }
-  const usingFallback = weatherSource === "fallback";
+  const { weather, usingFallback, frostAlert } =
+    await loadLocationWeather(seededLocation);
   const location = reconcileElevation(
     reconcileCountry(seededLocation, weather.timezone),
     weather.elevation,
@@ -253,9 +233,7 @@ async function buildHome() {
     location,
     weather,
     usingFallback,
-    frostAlert: usingFallback
-      ? null
-      : checkFrostRisk(weather.hourly, weather.utc_offset_seconds),
+    frostAlert,
     season,
     countryName: countryDoc?.name ?? countryDisplayName(countryCode),
   };
