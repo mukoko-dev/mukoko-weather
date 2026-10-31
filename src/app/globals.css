@@ -1482,6 +1482,19 @@ body {
            border border-surface-dim bg-surface-card shadow-sm;
   }
 
+  /* .okapi — a quiet placeholder bar for the location loading skeleton. A
+     tint of the surrounding text colour (so it reads on the sky plate and on
+     a card alike, in both themes) with a soft highlight that slides across
+     it. The slide is opt-in under `prefers-reduced-motion: no-preference`
+     (below), so with Reduce Motion the bar is a static block. Decorative:
+     the skeleton marks its blocks aria-hidden. */
+  .okapi {
+    @apply inline-block rounded-[var(--radius-sm)] align-middle;
+    --okapi-base: color-mix(in srgb, currentColor 14%, transparent);
+    --okapi-glint: color-mix(in srgb, currentColor 26%, transparent);
+    background-color: var(--okapi-base);
+  }
+
   /* ── Static-page typography ──────────────────────────────────────────── */
 
   /* .termite — inline code chip (small mono nest inside prose) */
@@ -1578,6 +1591,29 @@ body {
      stays on the cobalt pill instead of spilling onto the light header. */
   outline-offset: 0px;
   border-radius: 9999px;
+}
+
+/* Loading-skeleton shimmer (.okapi). Only when motion is welcome; otherwise
+   the bar stays the static base tint set on the class itself. */
+@media (prefers-reduced-motion: no-preference) {
+  .okapi {
+    background-image: linear-gradient(
+      90deg,
+      var(--okapi-base) 0%,
+      var(--okapi-glint) 50%,
+      var(--okapi-base) 100%
+    );
+    background-size: 200% 100%;
+    animation: okapi-shimmer 1.6s linear infinite;
+  }
+}
+@keyframes okapi-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
 }
 
 /* ===== Reduced Motion — WCAG 2.3.3 ===== */

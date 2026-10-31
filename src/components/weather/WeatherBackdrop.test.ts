@@ -8,7 +8,14 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-const source = readFileSync(resolve(__dirname, "WeatherBackdrop.tsx"), "utf-8");
+const backdrop = readFileSync(
+  resolve(__dirname, "WeatherBackdrop.tsx"),
+  "utf-8",
+);
+// The static sky layers live in WeatherSky (shared with the loading
+// skeleton); the backdrop adds the Three.js layer inside it.
+const sky = readFileSync(resolve(__dirname, "WeatherSky.tsx"), "utf-8");
+const source = backdrop + "\n" + sky;
 
 describe("WeatherBackdrop — component contract", () => {
   it("is a client component", () => {
@@ -78,7 +85,7 @@ describe("WeatherBackdrop — reduced motion + resilience", () => {
 
   it("always paints the static real-weather sky gradient as the fallback", () => {
     // Same palette as the Three.js layer (palette.ts ↔ --weather-sky-*).
-    expect(source).toContain("skyClassName(sceneType, isDay, phase)");
+    expect(source).toContain("skyClassName(type, isDay, phase)");
   });
 
   it("catches scene creation failures so the card never breaks", () => {
@@ -110,6 +117,7 @@ describe("WeatherBackdrop — scene mapping + twilight", () => {
   it("resolves sky classes from the shared palette, not a local switch", () => {
     expect(source).toContain("skyClassName");
     expect(source).not.toContain("weaver-sky");
+    expect(backdrop).toContain("<WeatherSky type={sceneType}");
   });
 
   it("derives a dawn/dusk phase from the location clock and passes it on", () => {
@@ -159,12 +167,13 @@ describe("WeatherBackdrop — device and scroll policy (v0.10.0 perf)", () => {
     expect(scene).toContain('powerPreference: "low-power"');
   });
 
-  it("the loading scene delays Three.js so quick loads never open a second context", () => {
-    const loading = readFileSync(
-      resolve(__dirname, "WeatherLoadingScene.tsx"),
+  it("the loading skeleton never opens a WebGL context", () => {
+    const skeleton = readFileSync(
+      resolve(__dirname, "LocationSkeleton.tsx"),
       "utf-8",
     );
-    expect(loading).toContain("LOADING_SCENE_3D_DELAY_MS");
-    expect(loading).toContain("window.clearTimeout(startTimer)");
+    expect(skeleton).not.toContain("createWeatherScene");
+    expect(skeleton).not.toMatch(/from "three"/);
+    expect(skeleton).toContain("<WeatherSky");
   });
 });
