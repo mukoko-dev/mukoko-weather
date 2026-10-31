@@ -10,6 +10,8 @@ workers/
                          contract, places, station QC and ingest keys, circuit breaker
   crates/weather-edge/   Worker helpers: JSON errors, bearer auth, timeouts
   crates/weather-mongo/  a minimal read-only MongoDB client (OP_MSG over a TLS socket, SCRAM-SHA-256, BSON)
+  crates/weather-webpush/ the Web Push protocol (RFC 8291 encryption, RFC 8292 VAPID, RFC 8030 request) behind an
+                         injected transport; pure: no key, no clock, no random source, no network
   forecast/              mukoko-weather-forecast   provider aggregation (service binding only)
   internal-api/          mukoko-weather-internal   GET /internal/forecast for the Nyuchi API; POST /internal/ai/chat/completions
                                                    for the app's Python backend
@@ -225,6 +227,22 @@ Creating Cloudflare resources and deploying are owner actions. Run these from `w
    curl -s -H "Authorization: Bearer $WEATHER_SERVICE_API_KEY" \
      "https://weather-internal.mukoko.com/internal/forecast?location=harare&days=3"
    ```
+
+## Web Push alerts ([#289](https://github.com/mukoko-dev/mukoko-weather/issues/289))
+
+Frost first, then severe weather, as Web Push to a browser that opted in. **Built:** the rules of what to send (`weather_core::push`: validation of an endpoint against an allow list, preferences, quiet hours, per-day and per-night caps, dedupe, the frost evaluation, the payload, what a push service's status means) and the protocol that carries a decided alert (`crates/weather-webpush`). **Not built:** the Worker that holds the key and does the `fetch`, the evaluator tick in `mukoko-weather-jobs`, and the Nyuchi API routes that store subscriptions and preferences (`/v1/notifications/*`, nyuchi/nyuchi-api); nothing in this repo can send a push yet.
+
+`weather-webpush` is pure like `weather-core`: it holds no key, reads no clock, draws no random number and opens no connection. The VAPID private key, the current time, the per-message salt and ephemeral key arrive as arguments, and the POST is the caller's `Transport` (a Worker implements it with `fetch`, without following redirects). So it tests natively against the RFCs' own vectors and builds for `wasm32-unknown-unknown` with no JS shim.
+
+| Module    | Standard                                                                        | Pinned by                                                                                                                                  |
+| --------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `encrypt` | RFC 8291 message encryption over the RFC 8188 `aes128gcm` content coding        | the RFC 8291 section 5 worked example, byte for byte (the example's printed `Content-Length: 145` is off by one; the body is 144 octets)   |
+| `vapid`   | RFC 8292 voluntary application server identification (ES256 JWT, `vapid t=,k=`) | the RFC 8292 section 2.4 token verified under its published key; our tokens verified under ours; claims in the RFC's order; 12 hour expiry |
+| `request` | RFC 8030 (`TTL`, `Urgency`, the encrypted body) and the injected `Transport`    | headers, the audience being the push service origin, build errors that say whose fault they are, a full decrypt of the built request       |
+
+Safety properties the tests hold: an endpoint outside the allow list (`weather_core::push::validate_endpoint`: https, a known push service, the default port only, no credentials) is refused before anything is signed or encrypted, so the sender cannot be pointed at an internal address; `Debug` of a request, a subscription, a recipient or a key never prints the endpoint, a key, a token or a body (an endpoint is a bearer capability; logs carry `weather_core::push::endpoint_id`, a SHA-256); a push service's answer is classified by `weather_core::push::classify_status` (a 404, 410 or 403 deactivates the subscription, a 429, 5xx or a timeout is retried on a later tick, any other 4xx is not), and `Outcome::delivery_status` maps it onto the `platform.alertDeliveries.status` values of the data-infra model. Delivery is best effort and nothing here promises it.
+
+The VAPID key pair is an **owner step**: generate it once (a P-256 key; the private half is a Secrets Store secret, the public half is what the Nyuchi API serves from `GET /v1/notifications/push/config` and a browser subscribes against) and set the contact `mailto:`. Never generate or store it from code in this repo. Changing the pair later invalidates every subscription.
 
 ## MongoDB from a Worker
 

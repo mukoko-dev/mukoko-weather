@@ -104,6 +104,16 @@ pub fn validate_endpoint(endpoint: &str) -> Result<(), PushError> {
     }
 }
 
+/// The origin (`https://host`) of an endpoint the sender may use: the VAPID
+/// `aud` claim names it (RFC 8292 section 2). The endpoint goes through
+/// [`validate_endpoint`] first, so a host outside the allow list never gets a
+/// token. A port is refused by that check (only the default is accepted), so
+/// the origin never carries one.
+pub fn endpoint_origin(endpoint: &str) -> Result<String, PushError> {
+    validate_endpoint(endpoint)?;
+    Ok(format!("https://{}", https_host(endpoint)?))
+}
+
 fn is_b64url(s: &str) -> bool {
     s.chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
@@ -462,6 +472,20 @@ pub enum Outcome {
     Retry,
     /// Any other 4xx: our request was refused; do not retry.
     Failed,
+}
+
+impl Outcome {
+    /// The `AlertDeliveryStatus` value for the delivery log
+    /// (`platform.alertDeliveries.status`, nyuchi/data-infra
+    /// `schemas/model/notifications.yaml`). `skipped_quiet` and
+    /// `skipped_cap` come from [`Decision`], not from a push service.
+    pub fn delivery_status(self) -> &'static str {
+        match self {
+            Self::Accepted => "sent",
+            Self::Expired => "gone",
+            Self::Retry | Self::Failed => "failed",
+        }
+    }
 }
 
 pub fn classify_status(status: u16) -> Outcome {
@@ -853,6 +877,39 @@ mod tests {
         for word in ["guarantee", "email", "token", "endpoint"] {
             assert!(!json.contains(word));
         }
+    }
+
+    #[test]
+    fn the_origin_is_the_allowed_host_in_lower_case_and_nothing_else() {
+        assert_eq!(
+            endpoint_origin("https://FCM.googleapis.com/fcm/send/abc?x=1").as_deref(),
+            Ok("https://fcm.googleapis.com")
+        );
+        assert_eq!(
+            endpoint_origin("https://fcm.googleapis.com:443/fcm/send/abc").as_deref(),
+            Ok("https://fcm.googleapis.com")
+        );
+        // a refused endpoint never yields an origin to sign for
+        assert_eq!(
+            endpoint_origin("https://evil.example/x"),
+            Err(PushError::HostNotAllowed)
+        );
+        assert_eq!(
+            endpoint_origin("http://fcm.googleapis.com/x"),
+            Err(PushError::NotHttps)
+        );
+        assert_eq!(
+            endpoint_origin("https://fcm.googleapis.com:8443/x"),
+            Err(PushError::BadEndpoint)
+        );
+    }
+
+    #[test]
+    fn outcomes_map_onto_the_delivery_log_statuses() {
+        assert_eq!(Outcome::Accepted.delivery_status(), "sent");
+        assert_eq!(Outcome::Expired.delivery_status(), "gone");
+        assert_eq!(Outcome::Retry.delivery_status(), "failed");
+        assert_eq!(Outcome::Failed.delivery_status(), "failed");
     }
 
     #[test]

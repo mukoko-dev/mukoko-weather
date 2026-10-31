@@ -7,6 +7,7 @@ members = [
   "crates/weather-core",
   "crates/weather-edge",
   "crates/weather-mongo",
+  "crates/weather-webpush",
   "ai",
   "forecast",
   "internal-api",
@@ -30,7 +31,8 @@ publish = false
 weather-core = { path = "crates/weather-core" }
 weather-edge = { path = "crates/weather-edge" }
 weather-mongo = { path = "crates/weather-mongo" }
-serde = { version = "1.0", features = ["derive"] }
+weather-webpush = { path = "crates/weather-webpush" }
+serde ={ version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = { version = "0.4", default-features = false, features = [
   "std",
@@ -46,6 +48,21 @@ sha2 = "0.10"
 pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
 subtle = "2.6"
 hex = "0.4"
+# Web Push (RFC 8291 encryption, RFC 8292 VAPID). RustCrypto, pure Rust, no
+# system library and no RNG: callers inject the salt and the ephemeral key, so
+# nothing here needs getrandom (which wasm32-unknown-unknown cannot link
+# without a JS shim).
+base64 = { version = "0.22", default-features = false, features = ["alloc"] }
+p256 = { version = "0.13", default-features = false, features = [
+  "arithmetic",
+  "ecdh",
+  "ecdsa",
+] }
+hkdf = { version = "0.12", default-features = false }
+aes-gcm = { version = "0.10", default-features = false, features = [
+  "aes",
+  "alloc",
+] }
 
 [profile.release]
 opt-level = "s"
