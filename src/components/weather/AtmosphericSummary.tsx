@@ -91,18 +91,27 @@ type Mineral =
   | "tanzanite"
   | "terracotta";
 
+/**
+ * The whole border of a tile takes its mineral, at 40% (a SOLID border on all
+ * four sides, never a one-side stripe: Mzizi border rule, see globals.css
+ * "Card edge"). Static strings so Tailwind can see every class.
+ */
 const EDGE_CLASS: Record<Mineral, string> = {
-  cobalt: "bg-mineral-cobalt",
-  gold: "bg-mineral-gold",
-  copper: "bg-mineral-copper",
-  sodalite: "bg-mineral-sodalite",
-  malachite: "bg-mineral-malachite",
-  tanzanite: "bg-mineral-tanzanite",
-  terracotta: "bg-mineral-terracotta",
+  cobalt: "[&>section]:border-mineral-cobalt/40",
+  gold: "[&>section]:border-mineral-gold/40",
+  copper: "[&>section]:border-mineral-copper/40",
+  sodalite: "[&>section]:border-mineral-sodalite/40",
+  malachite: "[&>section]:border-mineral-malachite/40",
+  tanzanite: "[&>section]:border-mineral-tanzanite/40",
+  terracotta: "[&>section]:border-mineral-terracotta/40",
 };
 
-/** Wraps a card with the mineral leading edge (a 4px rule, not glass). */
-function EdgeTile({
+/**
+ * Wraps a card so its whole border takes the card's mineral and the card sits
+ * slightly raised (`shadow-md`). The card is the wrapper's `<section>` child;
+ * it fills the wrapper's height so a row of tiles lines up.
+ */
+export function EdgeTile({
   mineral,
   className,
   children,
@@ -114,17 +123,11 @@ function EdgeTile({
   return (
     <div
       className={cn(
-        "relative min-w-0 overflow-hidden rounded-[var(--radius-card)]",
+        "relative min-w-0 rounded-[var(--radius-card)] [&>section]:h-full [&>section]:shadow-md",
+        EDGE_CLASS[mineral],
         className,
       )}
     >
-      <span
-        aria-hidden="true"
-        className={cn(
-          "absolute inset-y-0 left-0 z-[1] w-1",
-          EDGE_CLASS[mineral],
-        )}
-      />
       {children}
     </div>
   );
