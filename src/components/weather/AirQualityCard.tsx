@@ -75,8 +75,10 @@ export const AQI_LEVEL_LABELS: Record<AqiLevel, string> = {
 };
 
 /**
- * Map AQI to the gauge: the arc sweeps the six official EPA colours up to the
- * band the reading is in (weather-scales.ts), position as a share of 0-500.
+ * Map AQI to the gauge: a SOLID arc in the current band's official EPA colour
+ * (weather-scales.ts), position as a share of 0-500. A gradient would be
+ * horizontal across the dial, so an AQI of 250 would draw green on its left
+ * half; one band colour never misreports the reading.
  */
 export function aqiGauge(aqi: number): GaugeConfig {
   const percent = Math.min((aqi / 500) * 100, 100);
@@ -87,7 +89,7 @@ export function aqiGauge(aqi: number): GaugeConfig {
   return {
     percent,
     strokeClass: AQI_SCALE.bands[index].stroke,
-    gradient: AQI_SCALE.bands.slice(0, index + 1).map((b) => `var(${b.token})`),
+    gradient: [`var(${AQI_SCALE.bands[index].token})`],
   };
 }
 

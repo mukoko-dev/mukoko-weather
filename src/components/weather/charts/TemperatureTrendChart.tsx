@@ -33,7 +33,7 @@ const SERIES: SeriesConfig[] = [
   {
     key: "feelsLikeLow",
     label: "Feels Low",
-    color: WX_SERIES.feels,
+    color: WX_SERIES.feelsLow,
     dashed: true,
   },
 ];

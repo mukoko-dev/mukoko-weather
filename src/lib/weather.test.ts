@@ -329,6 +329,13 @@ describe("uvLevel", () => {
     expect(uvLevel(15).label).toBe("Extreme");
   });
 
+  it("classifies the raw value, without rounding (upper bounds inclusive at 2, 5, 7, 10)", () => {
+    expect(uvLevel(2).label).toBe("Low");
+    expect(uvLevel(2.4).label).toBe("Moderate");
+    expect(uvLevel(5.5).label).toBe("High");
+    expect(uvLevel(10.4).label).toBe("Extreme");
+  });
+
   it("all levels have a WHO swatch class", () => {
     for (const idx of [0, 3, 6, 8, 11]) {
       expect(uvLevel(idx).swatch).toMatch(/^bg-wx-uv-/);

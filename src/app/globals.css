@@ -261,7 +261,8 @@
 
   /* Weather DATA colours (src/lib/weather-scales.ts). Meaning, not brand:
      never aliased to Mzizi minerals. Scale colours are the same in both
-     themes on purpose (a published convention is recognised by its colours);
+     themes on purpose (a published convention is recognised by its colours),
+     except frost, whose blues are retuned per theme for border contrast;
      the series tokens below are tuned per theme for contrast on a card. */
   --wx-temp-1: #4575b4;
   --wx-temp-2: #74add1;
@@ -303,18 +304,23 @@
   --wx-uv-3: #f85900;
   --wx-uv-4: #d8001d;
   --wx-uv-5: #6b49c8;
-  --wx-frost-1: #9ecae1;
-  --wx-frost-2: #4292c6;
-  --wx-frost-3: #08519c;
+  --wx-frost-1: #4292c6;
+  --wx-frost-2: #2171b5;
+  --wx-frost-3: #08306b;
   --wx-flight-1: #2e9d4a;
   --wx-flight-2: #2f6fd0;
   --wx-flight-3: #d62828;
   --wx-flight-4: #c026d3;
   --wx-fg-dark: #0a0a0a;
   --wx-fg-light: #ffffff;
+  /* Outline for data fills and swatches: the official fill colours (EPA, WHO)
+     cannot all be 3:1 against a light or dark base, so every data fill carries
+     this outline (non-text UI contrast, WCAG 1.4.11). Tuned per theme. */
+  --wx-outline: #5c5b55;
   --wx-series-temp: #d73027;
   --wx-series-temp-low: #4575b4;
   --wx-series-feels: #b8570b;
+  --wx-series-feels-low: #2f7f96;
   --wx-series-rain: #0b6fb8;
   --wx-series-rain-prob: #08519c;
   --wx-series-wind: #2a9d8f;
@@ -519,16 +525,18 @@
   --wx-uv-5: #6b49c8;
   --wx-frost-1: #9ecae1;
   --wx-frost-2: #4292c6;
-  --wx-frost-3: #08519c;
+  --wx-frost-3: #2171b5;
   --wx-flight-1: #2e9d4a;
   --wx-flight-2: #2f6fd0;
   --wx-flight-3: #d62828;
   --wx-flight-4: #c026d3;
   --wx-fg-dark: #0a0a0a;
   --wx-fg-light: #ffffff;
+  --wx-outline: #b5b5b0;
   --wx-series-temp: #f4806f;
   --wx-series-temp-low: #74add1;
   --wx-series-feels: #fdae61;
+  --wx-series-feels-low: #7fc4d8;
   --wx-series-rain: #4fc3f7;
   --wx-series-rain-prob: #9ecae1;
   --wx-series-wind: #5fd3c4;
@@ -705,9 +713,11 @@
   --color-wx-flight-4: var(--wx-flight-4);
   --color-wx-fg-dark: var(--wx-fg-dark);
   --color-wx-fg-light: var(--wx-fg-light);
+  --color-wx-outline: var(--wx-outline);
   --color-wx-series-temp: var(--wx-series-temp);
   --color-wx-series-temp-low: var(--wx-series-temp-low);
   --color-wx-series-feels: var(--wx-series-feels);
+  --color-wx-series-feels-low: var(--wx-series-feels-low);
   --color-wx-series-rain: var(--wx-series-rain);
   --color-wx-series-rain-prob: var(--wx-series-rain-prob);
   --color-wx-series-wind: var(--wx-series-wind);

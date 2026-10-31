@@ -17,7 +17,7 @@ import { locationClockLabel, weatherOffsetSeconds } from "@/lib/location-time";
 import { useHydrated } from "@/lib/use-hydrated";
 import {
   AQI_ADVICE,
-  AQI_TEXT_CLASS,
+  AQI_LEVEL_BG_CLASS,
   currentHourIndex,
   nextHourIndexes,
 } from "@/lib/display";
@@ -181,18 +181,18 @@ export function DisplayAirQuality({
   return (
     <Panel titleId="display-aq-heading" title="Air quality">
       <div className="mt-2 flex items-baseline gap-4">
-        <p
-          className={cn(
-            "font-heading text-6xl font-bold tabular-nums",
-            AQI_TEXT_CLASS[air.level],
-          )}
-        >
+        <p className="font-heading text-6xl font-bold tabular-nums text-text-primary">
           {air.aqi}
         </p>
         <div>
-          <p
-            className={cn("text-2xl font-semibold", AQI_TEXT_CLASS[air.level])}
-          >
+          <p className="flex items-center gap-2 text-2xl font-semibold text-text-primary">
+            <span
+              aria-hidden="true"
+              className={cn(
+                "size-5 shrink-0 rounded-full ring-1 ring-wx-outline",
+                AQI_LEVEL_BG_CLASS[air.level],
+              )}
+            />
             {label}
           </p>
           <p className="text-base text-text-secondary">
@@ -256,16 +256,18 @@ export function DisplaySgPsi({
       <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <p className="text-xl text-text-primary">
           PSI (24h){" "}
-          <span
-            className={cn(
-              "font-heading text-4xl font-bold tabular-nums",
-              band.textClass,
-            )}
-          >
+          <span className="font-heading text-4xl font-bold tabular-nums text-text-primary">
             {sg.psi24h}
           </span>
         </p>
-        <p className={cn("text-2xl font-semibold", band.textClass)}>
+        <p className="flex items-center gap-2 text-2xl font-semibold text-text-primary">
+          <span
+            aria-hidden="true"
+            className={cn(
+              "size-4 shrink-0 rounded-full ring-1 ring-wx-outline",
+              band.bgClass,
+            )}
+          />
           {band.label}
         </p>
       </div>

@@ -73,6 +73,8 @@ const SEVERITY_RAMP = [
 export function gradientFromStrokeClass(strokeClass: string): string[] {
   const token = STROKE_TO_TOKEN[strokeClass];
   if (!token) return SEVERITY_RAMP.slice(0, 2);
+  // A weather-scale stroke (stroke-wx-aqi-3 ...) is one data colour: solid, its own.
+  if (strokeClass.startsWith("stroke-wx-")) return [token];
   // severity-cold isn't part of the linear ramp — pair it with low for a sweep.
   if (token === "var(--color-severity-cold)") {
     return ["var(--color-severity-low)", token];

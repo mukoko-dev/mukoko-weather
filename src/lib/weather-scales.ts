@@ -57,12 +57,19 @@
  *    encodings (owner rule; mzizi-dev/mzizi-registry#588).
  *      cloud  ColorBrewer Greys, white (clear) to near-black (overcast),
  *             breakpoints at quarter cover. Convention, not a standard.
- *      frost  Three blues (light advisory to dark severe), ColorBrewer Blues.
- *             The NWS uses its own hazard-map palette for frost/freeze
- *             products; not adopted.
+ *      frost  Three blues (advisory to severe), ColorBrewer Blues, retuned per
+ *             theme so each border holds 3:1 on the card. The NWS uses its own
+ *             hazard-map palette for frost/freeze products; not adopted.
+ *      psi    Singapore NEA PSI: NEA's names and ranges, EPA colours where the
+ *             ranges match (see PSI_SCALE).
  *
  * Colour never carries the value alone: every band has a printed range or
  * name (`label`, `name`), and legends print them.
+ *
+ * Contrast: the official EPA / WHO / radar fills cannot all reach 3:1 against a
+ * light or dark base map or card, so every data fill carries the theme-aware
+ * `--wx-outline` (map cell outlines, legend and swatch rings, bubble borders).
+ * UV bands classify the RAW value (inclusive upper bounds 2, 5, 7, 10).
  *
  * Units are UCUM: Cel, km/h, mm/h, %, [AQI] and [UVI] (the UCUM-style arbitrary
  * units for the two indices; they have no registered UCUM code).
@@ -344,7 +351,7 @@ export const WIND_SCALE: WeatherScale = {
     {
       from: 62,
       label: "62",
-      name: "Gale (8)",
+      name: "Gale (8-9)",
       token: "--wx-wind-6",
       bg: "bg-wx-wind-6",
       stroke: "stroke-wx-wind-6",
@@ -688,11 +695,19 @@ export function legendSegmentsFor(
   );
 }
 
-/** WHO UV band for an index (values are reported as whole numbers). */
+/**
+ * WHO UV band for an index, classified on the RAW value: upper bounds
+ * inclusive at 2, 5, 7 and 10 (so 2.6 is Moderate, 5.5 is High), the same
+ * thresholds uvLevel() has always used. We did not find a WHO/EPA sentence we
+ * could cite for rounding to a whole number first, so no rounding is applied.
+ * Whole-number inputs fall on the WHO ranges (0-2, 3-5, 6-7, 8-10, 11+).
+ */
 export function uvBand(index: number | null | undefined): ScaleBand | null {
   if (index === null || index === undefined || !Number.isFinite(index))
     return null;
-  return scaleBand(UV_SCALE, Math.round(Math.max(0, index)));
+  const v = Math.max(0, index);
+  const i = v <= 2 ? 0 : v <= 5 ? 1 : v <= 7 ? 2 : v <= 10 ? 3 : 4;
+  return UV_SCALE.bands[i];
 }
 
 /** CSS var reference for a UV value's WHO colour (chart bars). */
@@ -707,6 +722,48 @@ export function aqiScaleBand(aqi: number | null | undefined): ScaleBand | null {
 }
 
 /**
+ * Singapore NEA PSI (Pollutant Standards Index) bands: Good 0-50, Moderate
+ * 51-100, Unhealthy 101-200, Very unhealthy 201-300, Hazardous 301+ (names and
+ * ranges from https://www.nea.gov.sg/our-services/pollution-control/air-pollution/faqs).
+ * Status "ours": NEA's page gives the names and ranges, and secondary sources
+ * disagree on its colours, so we do not claim an NEA palette. Where a PSI range
+ * equals an EPA range (0-50, 51-100, 201-300, 301+) it takes the EPA colour;
+ * NEA "Unhealthy" (101-200) spans the EPA orange and red bands and takes the
+ * EPA orange. Flagged for bundu-labs/bundu-standards#39.
+ */
+const PSI_FROM_AQI = [0, 1, 2, 4, 5] as const;
+const PSI_RANGES = [
+  { from: 0, label: "0", name: "Good" },
+  { from: 51, label: "51", name: "Moderate" },
+  { from: 101, label: "101", name: "Unhealthy" },
+  { from: 201, label: "201", name: "Very unhealthy" },
+  { from: 301, label: "301+", name: "Hazardous" },
+] as const;
+export const PSI_SCALE: WeatherScale = {
+  id: "psi",
+  quantity: "Singapore NEA Pollutant Standards Index",
+  unit: "[PSI]",
+  status: "ours",
+  bands: PSI_RANGES.map((range, i) => ({
+    ...AQI_SCALE.bands[PSI_FROM_AQI[i]],
+    ...range,
+  })),
+};
+
+/**
+ * Hex of the flight-category colours for react-pdf (the briefing PDF cannot
+ * read CSS custom properties). The single source for the PDF: a test pins
+ * `bg` to the --wx-flight-* tokens in globals.css and `fg` to each band's
+ * `on` class. The only hex outside globals.css, a documented exception.
+ */
+export const FLIGHT_CATEGORY_PDF: Record<string, { bg: string; fg: string }> = {
+  VFR: { bg: "#2e9d4a", fg: "#0a0a0a" },
+  MVFR: { bg: "#2f6fd0", fg: "#ffffff" },
+  IFR: { bg: "#d62828", fg: "#ffffff" },
+  LIFR: { bg: "#c026d3", fg: "#ffffff" },
+};
+
+/**
  * Chart series colours for a measured quantity drawn as one line or area
  * (CSS custom-property references, resolved by resolveColor at render time).
  * Same hue family as the matching map scale (temperature red/blue, rain blue,
@@ -717,6 +774,7 @@ export const WX_SERIES = {
   temp: "var(--wx-series-temp)",
   tempLow: "var(--wx-series-temp-low)",
   feels: "var(--wx-series-feels)",
+  feelsLow: "var(--wx-series-feels-low)",
   rain: "var(--wx-series-rain)",
   rainProb: "var(--wx-series-rain-prob)",
   wind: "var(--wx-series-wind)",

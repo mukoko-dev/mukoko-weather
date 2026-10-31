@@ -392,6 +392,14 @@ export const AQI_LEGEND: LayerLegend = {
   segments: legendSegmentsFor(AQI_SCALE),
 };
 
+/**
+ * Caption for the layers painted by Tomorrow.io raster tiles (rain, temperature,
+ * wind, cloud). The tiles use Tomorrow.io's own palette; the scale printed here
+ * is our reference scale (weather-scales.ts), not the tile pixels. The tiles
+ * Worker does not forward Tomorrow.io's `gradient` parameter yet (follow-up: mukoko-dev/mukoko-weather#387).
+ */
+export const TILE_NOTE = "Reference scale; map shading from Tomorrow.io";
+
 /** Chips in display order. Air quality first, then the four tile layers. */
 export const MAP_CHIPS: readonly MapChip[] = [
   {
@@ -405,6 +413,7 @@ export const MAP_CHIPS: readonly MapChip[] = [
     legend: {
       unit: "mm/h",
       segments: legendSegmentsFor(RAIN_SCALE),
+      note: TILE_NOTE,
     },
   },
   {
@@ -413,6 +422,7 @@ export const MAP_CHIPS: readonly MapChip[] = [
     legend: {
       unit: "°C",
       segments: legendSegmentsFor(TEMP_SCALE),
+      note: TILE_NOTE,
     },
   },
   {
@@ -421,6 +431,7 @@ export const MAP_CHIPS: readonly MapChip[] = [
     legend: {
       unit: "km/h",
       segments: legendSegmentsFor(WIND_SCALE),
+      note: TILE_NOTE,
     },
   },
   {
@@ -429,6 +440,7 @@ export const MAP_CHIPS: readonly MapChip[] = [
     legend: {
       unit: "%",
       segments: legendSegmentsFor(CLOUD_SCALE),
+      note: TILE_NOTE,
     },
   },
   {

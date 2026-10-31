@@ -141,7 +141,7 @@ export function DailyForecast({ daily }: Props) {
                   <span className="inline-flex items-center gap-1">
                     <span
                       aria-hidden="true"
-                      className={`size-2.5 rounded-full ring-1 ring-border ${uvInfo.swatch}`}
+                      className={`size-2.5 rounded-full ring-1 ring-wx-outline ${uvInfo.swatch}`}
                     />
                     UV {uvMax} {uvInfo.label}
                   </span>

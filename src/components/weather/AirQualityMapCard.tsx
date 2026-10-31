@@ -123,7 +123,7 @@ export function AirQualityMapCard({
         >
           <span
             aria-hidden="true"
-            className={`size-3 shrink-0 rounded-full ring-1 ring-border ${AQI_BAND_BG_CLASS[band]}`}
+            className={`size-3 shrink-0 rounded-full ring-1 ring-wx-outline ${AQI_BAND_BG_CLASS[band]}`}
           />
           <span className="text-base font-semibold text-text-primary">
             {aqi}

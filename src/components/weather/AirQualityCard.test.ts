@@ -35,6 +35,15 @@ describe("aqiGauge", () => {
     expect(aqiGauge(450).strokeClass).toBe("stroke-wx-aqi-6");
   });
 
+  it("draws a SOLID arc in the current band's EPA colour (no gradient across bands)", () => {
+    expect(aqiGauge(150).gradient).toEqual(["var(--wx-aqi-3)"]);
+    expect(aqiGauge(250).gradient).toEqual(["var(--wx-aqi-5)"]);
+    expect(aqiGauge(450).gradient).toEqual(["var(--wx-aqi-6)"]);
+    for (const aqi of [0, 75, 175, 350]) {
+      expect(aqiGauge(aqi).gradient).toHaveLength(1);
+    }
+  });
+
   it("percent scales linearly to a 500 max", () => {
     expect(aqiGauge(0).percent).toBe(0);
     expect(aqiGauge(250).percent).toBe(50);
