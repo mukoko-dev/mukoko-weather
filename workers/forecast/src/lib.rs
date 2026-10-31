@@ -10,6 +10,7 @@
 //! GET /air-quality/grid?lat=&lon=[&radiusKm=][&n=] US AQI on an n x n grid (one batched call)
 //! GET /haze?lat=&lon=                              haze level, type, advice and season (Open-Meteo, NEA in Singapore)
 //! GET /normals?lat=&lon=[&date=]                   1991-2020 average daily high and low (ERA5 via Open-Meteo)
+//! GET /monthly-normals?lat=&lon=                   the twelve monthly normals: temperature, rainfall, rainy days
 //! GET /enso                                        El Nino / La Nina phase (NOAA CPC ONI)
 //! GET /sg-air[?lat=&lon=]                          official Singapore NEA PSI and PM2.5
 //! GET /model-grid?lat=&lon=[&model=]               one model's 3-hourly forecast on a 7×7 grid
@@ -57,6 +58,7 @@ pub async fn fetch(req: Request, env: Env, ctx: Context) -> Result<Response> {
         "/enso" => enso::enso(&env, &ctx).await,
         "/haze" => haze::haze(&req, &env, &ctx).await,
         "/normals" => normals::normals(&req, &env, &ctx).await,
+        "/monthly-normals" => normals::monthly(&req, &env, &ctx).await,
         "/sg-air" => sg_air::sg_air(&req, &env, &ctx).await,
         "/model-grid" => model_grid::model_grid(&req, &env, &ctx).await,
         "/health" => health(&req, &env).await,
