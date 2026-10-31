@@ -14,13 +14,15 @@ describe("PageShell", () => {
     expect(source).toContain("<Footer />");
   });
 
-  it("renders the single main landmark with the skip-link target", () => {
+  it("renders the main landmark with the skip-link target (page + skeleton)", () => {
     expect(source).toContain('id="main-content"');
-    expect(source.match(/<main/g)?.length).toBe(1);
+    expect(source.match(/^\s+<main$/gm)?.length).toBe(2);
   });
 
   it("clears the mobile nav island with --mobile-nav-clearance and restores at sm", () => {
-    expect(source).toContain("pb-[var(--mobile-nav-clearance)] sm:pb-10");
+    expect(source).toContain(
+      "pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-8",
+    );
   });
 
   it("supports the 3xl and 5xl reading widths", () => {

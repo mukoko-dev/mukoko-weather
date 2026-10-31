@@ -46,11 +46,10 @@ describe("/releases — server page", () => {
   });
 
   it("has the main landmark, one h1, a visible breadcrumb and a labelled list", () => {
-    expect(page).toContain('id="main-content"');
+    expect(page).toContain("<PageShell");
     expect(page.match(/<h1/g)).toHaveLength(1);
     expect(page).toContain('{ label: "Release notes" }');
     expect(page).toContain('aria-label="Releases"');
-    expect(page).toContain("pb-[var(--mobile-nav-clearance)]");
   });
 
   it("links the full technical history on GitHub, clearly labelled", () => {

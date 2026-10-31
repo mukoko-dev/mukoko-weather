@@ -49,10 +49,8 @@ describe("locations page — route contract", () => {
     expect(pageSource).toContain("isLocationSlug(remembered)");
   });
 
-  it("wraps the list in the shared header, footer and main landmark", () => {
-    expect(pageSource).toContain("<Header />");
-    expect(pageSource).toContain("<Footer />");
-    expect(pageSource).toContain('id="main-content"');
+  it("wraps the list in the shared PageShell (header, footer, main landmark)", () => {
+    expect(pageSource).toContain("<PageShell");
   });
 });
 
