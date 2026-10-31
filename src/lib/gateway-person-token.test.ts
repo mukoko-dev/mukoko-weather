@@ -236,6 +236,11 @@ describe("Console client only", () => {
       status: 503,
     });
     expect(transport).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining("WORKOS_CLIENT_ID"),
+      }),
+    );
   });
 });
 
