@@ -24,6 +24,7 @@
 //!                                                    the shape of /api/py/airports/nearest
 //! GET /v1/locations, /v1/search, /v1/geo, /v1/history   places (mukoko-weather-places)
 //! POST /v1/devices, GET|PATCH /v1/devices/{id}      device preference profiles
+//! POST|GET /v1/reports, POST /v1/reports/upvote     community weather reports
 //! POST /v1/ai/{followup,chat,history/analyze}   Shamwari Weather (the weather summary is not public: it is
 //!                                               a signed-in route of the app, reached through mukoko-weather-internal)
 //! GET /health
@@ -60,7 +61,8 @@ const AI_BINDING: &str = "AI_SERVICE";
 /// AI request bodies larger than this are refused here.
 const MAX_AI_BODY_BYTES: usize = 64 * 1024;
 /// Device profile bodies are a few hundred bytes.
-const MAX_DEVICE_BODY_BYTES: usize = 16 * 1024;
+/// Device profile and community report bodies larger than this are refused here.
+const MAX_COMMUNITY_BODY_BYTES: usize = 16 * 1024;
 const RATE_LIMITER: &str = "RATE_LIMITER";
 const KEY_RATE_LIMITER: &str = "KEY_RATE_LIMITER";
 const PLACES_BINDING: &str = "PLACES";
@@ -89,12 +91,12 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
         } else {
             forward_ai(&mut req, &env).await
         }
-    } else if is_devices_path(&req.path()) {
+    } else if is_community_path(&req.path()) {
         match req.method() {
             Method::Get | Method::Post | Method::Patch => {
                 match rate_limited(&req, &env, &keys::Caller::Anonymous).await {
                     Some(limited) => limited,
-                    None => forward_devices(&mut req, &env).await,
+                    None => forward_community(&mut req, &env).await,
                 }
             }
             _ => error(405, "method_not_allowed", "Use POST, GET or PATCH."),
@@ -262,24 +264,36 @@ async fn rate_limited(req: &Request, env: &Env, caller: &keys::Caller) -> Option
     }
 }
 
-fn is_devices_path(path: &str) -> bool {
-    path == "/v1/devices" || path.starts_with("/v1/devices/")
+/// The routes `mukoko-weather-places` serves from MongoDB through the bridge,
+/// which are also the ones that write: device profiles and community reports.
+fn is_community_path(path: &str) -> bool {
+    path == "/v1/devices"
+        || path.starts_with("/v1/devices/")
+        || path == "/v1/reports"
+        || path == "/v1/reports/upvote"
 }
 
-/// Device preference profiles: `POST /v1/devices`, `GET` and `PATCH
-/// /v1/devices/{id}`, passed to `mukoko-weather-places` with the client's IP.
-async fn forward_devices(req: &mut Request, env: &Env) -> Result<Response> {
+/// Device preference profiles (`POST /v1/devices`, `GET` and `PATCH
+/// /v1/devices/{id}`) and community reports (`POST` and `GET /v1/reports`,
+/// `POST /v1/reports/upvote`), passed to `mukoko-weather-places` with the
+/// client's IP and the query string, and never cached.
+async fn forward_community(req: &mut Request, env: &Env) -> Result<Response> {
     let method = req.method();
     let body = if method == Method::Get {
         String::new()
     } else {
         let text = req.text().await.unwrap_or_default();
-        if text.len() > MAX_DEVICE_BODY_BYTES {
+        if text.len() > MAX_COMMUNITY_BODY_BYTES {
             return error(413, "payload_too_large", "The request body is too large.");
         }
         text
     };
     let path = req.path();
+    let query = req
+        .url()?
+        .query()
+        .map(|q| format!("?{q}"))
+        .unwrap_or_default();
     let headers = Headers::new();
     headers.set("Content-Type", "application/json")?;
     headers.set("X-Mukoko-Client-IP", &client_ip(req))?;
@@ -289,7 +303,7 @@ async fn forward_devices(req: &mut Request, env: &Env) -> Result<Response> {
         init.with_body(Some(JsValue::from_str(&body)));
     }
     let inner = Request::new_with_init(
-        &format!("https://places{}", path.trim_start_matches("/v1")),
+        &format!("https://places{}{query}", path.trim_start_matches("/v1")),
         &init,
     )?;
     let Ok(mut upstream) = env.service(PLACES_BINDING)?.fetch_request(inner).await else {

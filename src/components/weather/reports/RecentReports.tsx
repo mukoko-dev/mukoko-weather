@@ -6,6 +6,7 @@ import { trackEvent } from "@/lib/analytics";
 import { CloudSunIcon, MegaphoneIcon } from "@/lib/weather-icons";
 import { getReportTypeInfo } from "@/lib/report-types";
 import { fetchJson } from "@/lib/fetch-json";
+import { reportsListUrl, reportsUpvoteUrl } from "@/lib/reports-api";
 import { LoadingNotice } from "@/components/ui/loading-notice";
 import { Button } from "@/components/ui/button";
 import { formatRelative } from "@/lib/i18n";
@@ -47,9 +48,7 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
   useEffect(() => {
     if (!locationSlug) return;
 
-    fetchJson<{ reports?: Report[] }>(
-      `/api/py/reports?location=${locationSlug}&hours=24`,
-    )
+    fetchJson<{ reports?: Report[] }>(reportsListUrl(locationSlug))
       .then((data) => setReports(data?.reports || []))
       .finally(() => setLoading(false));
   }, [locationSlug]);
@@ -57,7 +56,7 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
   const handleUpvote = useCallback(
     async (reportId: string) => {
       try {
-        const res = await fetch("/api/py/reports/upvote", {
+        const res = await fetch(reportsUpvoteUrl(), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ reportId }),

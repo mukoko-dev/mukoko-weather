@@ -27,9 +27,6 @@ configure_logging()
 from ._chat import router as chat_router
 from ._embeddings import router as embeddings_router
 from ._weather import router as weather_router
-from ._locations import router as locations_router
-from ._history import router as history_router
-from ._stations import router as stations_router
 from ._ai_followup import router as ai_followup_router
 from ._history_analyze import router as history_analyze_router
 from ._explore_search import router as explore_search_router
@@ -61,9 +58,7 @@ app = FastAPI(
 
 _ALLOWED_ORIGINS = [
     "https://weather.mukoko.com",
-    "https://weatherstations.nyuchi.com",  # station console (monorepo: station-console/, separate Vercel project)
     "http://localhost:3000",   # web dev (Next.js)
-    "http://localhost:3001",   # station console dev
     "http://localhost:8081",   # Expo Metro web bundler
     "http://localhost:8082",   # Expo web dev server
     "http://localhost:19006",  # legacy Expo web port
@@ -94,12 +89,9 @@ app.add_middleware(
 # Mount routers
 # ---------------------------------------------------------------------------
 
-app.include_router(stations_router)
 app.include_router(chat_router)
 app.include_router(embeddings_router)
 app.include_router(weather_router)
-app.include_router(locations_router)
-app.include_router(history_router)
 app.include_router(ai_followup_router)
 app.include_router(history_analyze_router)
 app.include_router(explore_search_router)

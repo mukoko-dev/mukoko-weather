@@ -153,8 +153,10 @@ describe("route structure", () => {
 
   it("calls the existing internal geo + weather endpoints", () => {
     expect(source).toContain("/api/py/weather");
-    expect(source).toContain("/api/py/geo");
-    expect(source).toContain("/api/py/locations");
+    expect(source).toContain('workerUrl("geo"');
+    expect(source).toContain('workerUrl("locations"');
+    expect(source).not.toContain("/api/py/geo");
+    expect(source).not.toContain("/api/py/locations");
   });
 
   it("unwraps the { location: {…} } wrapper from the locations endpoint", () => {

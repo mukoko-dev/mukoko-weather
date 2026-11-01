@@ -65,7 +65,7 @@ type DayRange = HistoryDays;
 type ViewTab = "weather" | "insights";
 
 /** The slice of a location this dashboard needs — satisfied by both the
- *  quick-search results and the full location doc from /api/py/locations. */
+ *  quick-search results and the full location doc from /v1/locations. */
 type SelectedHistoryLocation = {
   slug: string;
   name: string;
@@ -140,7 +140,7 @@ function formatSunTime(iso: string): string {
 }
 
 /**
- * User-facing copy for a failed /api/py/history request. Exported for tests.
+ * User-facing copy for a failed /v1/history request. Exported for tests.
  * The raw server detail is shown only for client errors (it's our own,
  * human-readable validation text); 5xx gets a plain retry message.
  */
@@ -561,7 +561,7 @@ export function suitabilityColors(
 
 export function HistoryDashboard() {
   const globalSlug = useAppStore((s) => s.selectedLocation);
-  // Shared debounced /api/py/search hook — same debounce + AbortController
+  // Shared debounced /v1/search hook — same debounce + AbortController
   // cancellation as every other quick location search in the app. Replaces a
   // hand-rolled setTimeout debounce with NO cancellation, where a fast retype
   // could let a stale slower response overwrite newer results (issue #103).
