@@ -69,30 +69,6 @@ from fastapi import Request  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
-def _no_overpass_network(monkeypatch):
-    """Keep Overpass off the network in every test.
-
-    `_locations._reverse_geocode` now tries Overpass before Nominatim. Tests
-    that patch `py._locations._get_http` do not cover `py._overpass._get_http`,
-    so without this the suite makes real HTTP calls — slow, flaky, and dependent
-    on a public community endpoint.
-
-    Defaulting it to unreachable means the existing Nominatim-path assertions
-    keep testing exactly what they did before. Tests that want the Overpass path
-    patch `py._overpass._get_http` themselves, which overrides this.
-    """
-    try:
-        from py import _overpass
-    except Exception:  # pragma: no cover - module always importable in practice
-        return
-
-    def _unavailable():
-        raise RuntimeError("Overpass disabled in tests")
-
-    monkeypatch.setattr(_overpass, "_get_http", _unavailable)
-
-
-@pytest.fixture(autouse=True)
 def _no_place_knowledge_side_effects(monkeypatch):
     """Keep place-knowledge lookups off the network and off background threads.
 
@@ -150,7 +126,7 @@ def _reset_shared_breakers():
     an open circuit into a later test."""
     from py import _circuit_breaker as cb
 
-    names = ("aviation_breaker", "nominatim_breaker")
+    names = ("aviation_breaker",)
     for name in names:
         getattr(cb, name, None) and getattr(cb, name).reset()
     yield

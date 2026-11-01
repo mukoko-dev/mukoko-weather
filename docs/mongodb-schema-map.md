@@ -103,8 +103,8 @@ Far richer than our local `LOCATIONS`. Includes conservation, hospitality, comme
 | Collection                           | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Notes for mukoko                                                                                                                                                                                                    |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `places`                             | Every place — landmarks, businesses, parks, mountains, lakes, towns. Schema.org-aligned (`LocalBusiness`, `TouristAttraction`, `Park`, etc.) Includes `conservation.bigFive`, `hospitality`, `commerce`, `bundu.trustSignals`, `bundu.communityCaretakers`.                                                                                                                                                                                                                                                                                                                                                    | Mukoko reads from this. **Stop maintaining `src/lib/locations.ts` seed array.** Add a Python helper `place_by_slug()` that reads from `places.places`.                                                              |
-| `placesGeo`                          | Administrative geography (continent → country → province → city → town → village). ISO 3166 codes. 2dsphere-indexed boundaries. `sourceProvenance.dataOrigin` enum includes `mukoko_seed` (Phase 0C-1 city seed) and `mukoko_user` (Phase 0E — written from `add_location` when a user adds a new place).                                                                                                                                                                                                                                                                                                      | Use for breadcrumbs (Country / Province / Location). Replaces our hardcoded `COUNTRIES`/`PROVINCES`.                                                                                                                |
-| `seedRequests`                       | **NEW (Phase 0E)** — validatorless queue of Fundi Places seed requests. Mukoko writes one entry per search-miss; the Fundi worker polls and processes them. See "Search-miss flow" section below.                                                                                                                                                                                                                                                                                                                                                                                                              | Mukoko writes only. Fundi consumes.                                                                                                                                                                                 |
+| `placesGeo`                          | Administrative geography (continent → country → province → city → town → village). ISO 3166 codes. 2dsphere-indexed boundaries. `sourceProvenance.dataOrigin` enum includes `mukoko_seed` (Phase 0C-1 city seed) and `mukoko_user` (Phase 0E — written when a user added a new place; the weather backend no longer writes it).                                                                                                                                                                                                                                                                                | Use for breadcrumbs (Country / Province / Location). Replaces our hardcoded `COUNTRIES`/`PROVINCES`.                                                                                                                |
+| `seedRequests`                       | **NEW (Phase 0E)** — validatorless queue of Fundi Places seed requests. Mukoko wrote one entry per search-miss; the Fundi worker polls and processes them. Mukoko no longer writes it.                                                                                                                                                                                                                                                                                                                                                                                                                         | Mukoko writes only. Fundi consumes.                                                                                                                                                                                 |
 | `categories`                         | OSM-tagged categories with translations + schema.org type mappings                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Could replace our `TAGS` system.                                                                                                                                                                                    |
 | `seasonalInfo`                       | RRule-based seasonal patterns per place (closed seasons, harvest, migration)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Mukoko's `seasons` collection should reference these.                                                                                                                                                               |
 | **`placeKnowledge`** (NEW, proposed) | One document per place, `_id` = the place's own id (`placeCollection` says `placesGeo` or `places`): season calendar with local names, crop planting/vegetative/harvest windows, grazing notes, climate normals and Köppen class, soil, elevation, time zone, hemisphere, `provenance[]` per fact group (source, licence, method), `refreshAfter` per group. Moment-by-moment values (current season, crop phase, moon, ENSO) are computed by readers, never stored. Canonical model: nyuchi/data-infra `PlaceKnowledge` (#107); created by nyuchi/api-gateway `scripts/places_knowledge_validators.py` (#308) | Read by `GET /v1/locations/profile` (Rust Worker: read-only, builds on the fly). Only the Python builder writes it, while Python AI/agriculture code imports it. Fundi must build one too. Refs mukoko-weather#277. |
@@ -292,13 +292,15 @@ The bridge keeps one official-driver `MongoClient` in a Durable Object, uses the
 `weather.locations` is **dropped**. As of Phase 0G the Python backend also reads
 exclusively through `places.placesGeo` — `api/py/_places_resolver.py` mirrors the
 TypeScript resolver in `src/lib/places.ts`, and every read/write in `_history.py`,
-`_chat.py`, `_explore_search.py`, `_reports.py`, `_weather.py`, and `_locations.py`
-flows through it. The legacy `weather.countries` and `weather.provinces` collections
+`_chat.py`, `_explore_search.py`, `_reports.py` and `_weather.py` flows through it. The legacy `weather.countries` and `weather.provinces` collections
 are also dropped — `placesGeo.geoType=country/province` is the canonical source.
 
-Mukoko-weather reads/writes every location through `places.placesGeo` (admin
+Mukoko-weather reads every location through `places.placesGeo` (admin
 geography) + `places.places` (POIs from OSM/Fundi) via the helpers in
-`src/lib/places.ts` (TypeScript) and `api/py/_places_resolver.py` (Python).
+`src/lib/places.ts` (TypeScript) and `api/py/_places_resolver.py` (Python), and
+writes none (see "Creating a place" below). The Rust places Worker reads no
+database for places at all (`GET /v1/locations|search|geo`: compiled-in seeds, spots,
+the Nyuchi API and geocoders).
 
 ### Clean URL slug → placesGeo entry
 
@@ -319,105 +321,29 @@ The adapter (`adaptPlacesGeoToLocationDoc`) reshapes the platform doc to the leg
 (tags, elevation, provinceSlug) fall back to `sourceProvenance.mukoko*` first, then
 to the static `LOCATIONS` seed entry, then to `["city"]` / `0` defaults.
 
-### Create-on-demand flow
+### Creating a place (no longer done by the weather backend)
 
-When `resolveLocationSlug(slug)` returns null AND the request has lat/lon (IP geo
-header or GPS coords), `POST /api/py/locations/add` runs:
+The weather backend does not write `places.placesGeo`, `places.places` or
+`places.seedRequests` any more (#333). `POST /api/py/locations/add` and
+`GET /api/py/geo?autoCreate=true` (reverse-geocode, 1 km duplicate gate, OSM-ref
+join, `upsert_placesgeo_city`, Overpass naming, Fundi seed queue, AI season
+enrichment, the place-knowledge build hook) were deleted from `api/py`. A
+`mukoko_user` placesGeo document is now only one that an earlier version wrote.
 
-```
-1. Reverse-geocode lat/lon → { name, country ISO, province, nominatimAddress }
-2. upsert_placesgeo_city(...) — Phase 0E helper:
-     a. find_nearby_placesgeo() — 5 km radius, normalised-name match,
-        scoped by parentPlaceId (country _id)
-     b. If a pre-existing platform doc matches:
-        - patch in mukokoSlug / mukokoTags / mukokoProvince /
-          mukokoElevation / mukokoNominatimAddress
-        - return { wasExisting: true, ... }
-     c. Else insert a new placesGeo doc with sourceProvenance.dataOrigin:
-        "mukoko_user" and all the mukoko* fields stamped
-3. Return the new/existing placesGeo _id + slug to the caller
-4. Caller redirects browser to /<clean-slug>
-5. resolveLocationSlug() now finds the entry via sourceProvenance.mukokoSlug
-   → render page
-```
+What a visitor gets instead, with no write anywhere:
 
-Phase 0F note: the `enqueue_fundi_seed()` POI enrichment call from the Phase 0E
-flow is intentionally NOT triggered any more. POI seeding (`places.places` from
-OSM via the Fundi worker) is a separate optional concern, not a P0 feature for
-mukoko-weather. Re-enable behind a flag like `MUKOKO_ENRICH_POIS_VIA_FUNDI` once
-the POI surface is wired up.
+- `GET https://weather-api.mukoko.com/v1/geo?lat=&lon=&autoCreate=true` (the
+  places Worker) names the exact place with one cached, budgeted Nominatim
+  lookup and answers its `{name}--{geohash}` spot slug. The spot renders from
+  its slug alone (`src/lib/smart-slug.ts`), so no record has to exist first.
+- A place that should become a canonical, shareable record is contributed
+  through the Nyuchi API: `POST https://api.nyuchi.com/v1/places`
+  (`gateway/routers/places.py` `create_place` in `nyuchi/nyuchi-api`; a signed-in
+  person's token; the place starts `pending` and is listed after a reviewer
+  approves it). The weather app does not call it yet.
 
-### Why queue-based? (Phase 0E historical — disabled in Phase 0F)
-
-Fundi Places is a **separate service** exposed only via MCP. Python cannot call MCP tools directly, so mukoko cannot synchronously trigger a Fundi seed. The integration was therefore queue-based:
-
-1. Mukoko writes a `places.seedRequests` doc with `status: "queued"`.
-2. Fundi's worker polls the queue, processes each request, and updates its own status field (`processing` → `complete`/`error`).
-3. Mukoko **fires and forgets** — there is no polling endpoint on the mukoko side. The user-facing response from `/api/py/locations/add` does not wait for Fundi.
-
-**Phase 0F**: the `enqueue_fundi_seed()` call is no longer triggered by `add_location` /
-`geo_lookup`. POI enrichment is a separate optional concern; re-enable behind a feature
-flag once we actually consume `places.places` POIs in mukoko-weather.
-
-### `places.seedRequests` shape
-
-The collection is **validatorless** (Fundi owns the schema). The document mukoko writes:
-
-```jsonc
-{
-  "_id": "<uuid>",
-  "_schemaVersion": "v3.1",
-  "status": "queued",
-  "region": {
-    "kind": "point_radius",
-    "center": [lon, lat],      // GeoJSON-order [lon, lat]
-    "radiusMeters": 5000
-  },
-  "source": {
-    "kind": "search_miss",
-    "surface": "mukoko-weather",
-    "query": "<location name>",
-    "requestedByPersonId": null   // populated once auth is wired
-  },
-  "categories": "all",
-  "createdAt": "<iso datetime>",
-  "updatedAt": "<iso datetime>",
-  "startedAt": null,
-  "finishedAt": null,
-  "error": null,
-  "placesCreated": null,
-  "placesGeoCreated": null
-}
-```
-
-### Dedup guarantees (Phase 0E hardening)
-
-These rules prevent the duplicate-record corruption (`windsor-avenue-2`, `-3`, …) that earlier iterations produced:
-
-| Collection                      | Dedup strategy                                                                                                                                                                                                                                                                                                                                                           |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `places.placesGeo`              | `upsert_placesgeo_city()` always calls `find_nearby_placesgeo()` first — **5 km radius**, normalised-name match (strips diacritics, road-type suffixes, leading house numbers), scoped by `parentPlaceId` (country \_id). If a match is found, the existing doc is returned with `wasExisting: true` — **no auto-suffixed slug is ever generated**.                      |
-| `places.seedRequests`           | `enqueue_fundi_seed()` checks for an in-flight (`queued` or `processing`) request within **1 km**. If one exists, its `_id` is returned and no new doc is inserted.                                                                                                                                                                                                      |
-| `places.placesGeo` mukoko slugs | Phase 0G: `_resolve_slug_collision()` queries `placesGeo.sourceProvenance.mukokoSlug` (mukoko's slug namespace) and tries suburb- then road-enriched variants. If all still collide, it raises `SlugCollisionError` and `add_location` returns `mode: "duplicate"` pointing to the existing record. The numeric-suffix fallback (`-2`, `-3`, …) was removed in Phase 0E. |
-
-### Response shape changes
-
-`/api/py/locations/add` now returns two extra platform-canonical identifiers when a new location is created:
-
-```jsonc
-{
-  "mode": "created",
-  "location": { /* legacy locations doc */ },
-  "placesGeoId": "<placesGeo._id>",     // null only if the platform write failed
-  "placesGeoSlug": "<placesGeo.slug>"   // hash-suffixed: "harare-a1b2c3"
-}
-```
-
-The frontend can use these to resolve weather queries through `placesGeo` once the legacy `weather.locations` collection is decommissioned.
-
-### Failure handling
-
-The platform write is wrapped in `try/except` in `_locations.py:add_location` — **a placesGeo failure must never break the user-facing 201 response**. Phase 0G: the legacy `weather.locations` write is gone — `placesGeo` is now the only write target, and if it fails the response still includes the geocoded location data with `placesGeoId: null` / `placesGeoSlug: null`. Platform failures are logged as warnings.
+The seed-request queue (`places.seedRequests`, Fundi) was disabled in Phase 0F and
+is gone with the module; nothing reads or writes it from this repo.
 
 ---
 

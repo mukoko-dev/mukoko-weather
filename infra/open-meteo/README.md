@@ -24,7 +24,7 @@ Out of scope:
   decision: history is not self-hosted; it is pulled from an external API
   where it is needed. That work is tracked separately, so no archive config
   lives here.
-- Geocoding and the `/v1/elevation` lookup in `api/py/_locations.py`.
+- Geocoding and the `/v1/elevation` lookup in the places Worker (`weather_core::locations`).
 - The optional edge layers (`worker/`, `workers/`). They still call the
   public API and can be moved in a follow-up.
 

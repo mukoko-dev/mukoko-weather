@@ -171,10 +171,6 @@ class TestRouterMounting:
         paths = self._get_route_paths()
         assert "/api/py/ai" in paths
 
-    def test_locations_router_mounted(self):
-        paths = self._get_route_paths()
-        assert "/api/py/locations/add" in paths
-
     def test_history_router_mounted(self):
         paths = self._get_route_paths()
         assert "/api/py/history" in paths
