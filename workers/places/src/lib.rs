@@ -12,6 +12,7 @@
 //! GET /geo?lat=&lon=[&autoCreate=true]
 //! GET /history?location=&days=1..365
 //! POST /devices | GET, PATCH /devices/{id}   device preference profiles (MongoDB, via the bridge)
+//! POST, GET /reports | POST /reports/upvote  community weather reports (MongoDB, via the bridge)
 //! GET /health
 //! ```
 //!
@@ -29,7 +30,7 @@ mod bridge;
 mod budget;
 mod community;
 mod history;
-mod limits;
+mod reports;
 mod sources;
 
 use serde_json::{json, Value};
@@ -40,7 +41,6 @@ use weather_core::resolve::{self, Naming, PointAnswer, SpotKind};
 use weather_edge::{error, json, query_pairs};
 use worker::{event, Context, Env, Method, Request, Response, Result};
 
-const DB: &str = "WEATHER_DB";
 const GEOCODE_LIMITER: &str = "GEOCODE_LIMITER";
 
 struct Query(Vec<(String, String)>);
@@ -66,6 +66,9 @@ impl Query {
 pub async fn fetch(mut req: Request, env: Env, ctx: Context) -> Result<Response> {
     if req.path().starts_with("/devices") {
         return community::devices(&mut req, &env).await;
+    }
+    if req.path().starts_with("/reports") {
+        return reports::reports(&mut req, &env).await;
     }
     if req.method() != Method::Get {
         return error(405, "method_not_allowed", "Only GET is served.");
@@ -104,8 +107,14 @@ fn page<T: Clone>(items: &[T], skip: usize, limit: usize) -> Vec<T> {
 }
 
 /// A location by slug: seed, then a `{name}--{geohash}` spot (named by an
-/// earlier reverse geocode when there is one), then the Nyuchi API.
-async fn find_location(env: &Env, slug: &str) -> std::result::Result<Option<LocationDoc>, ()> {
+/// earlier reverse geocode when there is one), then the Nyuchi API, then a
+/// community place from `places.placesGeo` (through the bridge). A slug that
+/// resolves nowhere is `Ok(None)`; a source that could not answer is `Err`, and
+/// a place another source holds still wins over it.
+pub(crate) async fn find_location(
+    env: &Env,
+    slug: &str,
+) -> std::result::Result<Option<LocationDoc>, ()> {
     if let Some(l) = locations::find_seed(slug) {
         return Ok(Some(l.clone()));
     }
@@ -116,7 +125,17 @@ async fn find_location(env: &Env, slug: &str) -> std::result::Result<Option<Loca
             .filter(|l| l.slug == slug);
         return Ok(Some(named.unwrap_or(spot)));
     }
-    sources::nyuchi_place(env, slug).await
+    let nyuchi = sources::nyuchi_place(env, slug).await;
+    if let Ok(Some(l)) = nyuchi {
+        return Ok(Some(l));
+    }
+    match sources::community_place(env, slug).await {
+        Ok(Some(l)) => Ok(Some(l)),
+        // Not a community place either: the Nyuchi answer (none, or its failure) stands.
+        Ok(None) => nyuchi,
+        // The bridge could not say, so "no such place" would be a guess.
+        Err(()) => Err(()),
+    }
 }
 
 async fn locations_route(env: &Env, q: &Query) -> Result<Response> {

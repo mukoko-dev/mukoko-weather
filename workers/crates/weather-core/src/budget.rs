@@ -45,6 +45,11 @@ pub enum Action {
     /// A place-profile request that needs an upstream (a 30-year archive
     /// request, SoilGrids): a cache hit is free.
     PlaceProfile,
+    /// A community weather report submitted (a write to MongoDB).
+    WeatherReport,
+    /// A new device profile created without a caller-supplied id (unbounded
+    /// document creation).
+    DeviceCreate,
 }
 
 /// Hourly limits for one action.
@@ -67,6 +72,8 @@ impl Action {
             Action::HistoryNasaPower => "history-nasa-power",
             Action::HistoryOpenMeteo => "history-open-meteo",
             Action::PlaceProfile => "place-profile",
+            Action::WeatherReport => "weather-report",
+            Action::DeviceCreate => "device-create",
         }
     }
 
@@ -127,6 +134,20 @@ impl Action {
             Action::PlaceProfile => Limits {
                 per_client: 120,
                 global: 600,
+            },
+            // As in the Python backend: 5 reports an hour per client. The
+            // service-wide hour bounds a flood of fresh addresses writing to
+            // MongoDB (twelve reports have ever been stored).
+            Action::WeatherReport => Limits {
+                per_client: crate::community::SUBMIT_PER_HOUR,
+                global: 600,
+            },
+            // As in the Python backend: 20 fresh device profiles an hour per
+            // client. The service-wide hour is far above real first launches
+            // and bounds document creation by many addresses.
+            Action::DeviceCreate => Limits {
+                per_client: crate::community::DEVICE_CREATE_PER_HOUR,
+                global: 3_000,
             },
         }
     }
@@ -408,6 +429,28 @@ mod tests {
         // refusal stands, with the service-wide label.
         assert_eq!(refusal(l, 0, 0, 50), Decision::GlobalLimit);
         assert!(!refusal(l, 0, 0, 1).allowed());
+    }
+
+    #[test]
+    fn community_writes_are_budgeted_like_the_python_and_keep_their_event_names() {
+        // The names are the ones the old read-then-insert limiter wrote, so
+        // the hour's existing rows still count across the deploy.
+        assert_eq!(Action::WeatherReport.name(), "weather-report");
+        assert_eq!(Action::DeviceCreate.name(), "device-create");
+        let r = Action::WeatherReport.limits();
+        let d = Action::DeviceCreate.limits();
+        assert_eq!(r.per_client, 5);
+        assert_eq!(d.per_client, 20);
+        assert!(r.per_client <= r.global && d.per_client <= d.global);
+        // Atomic: both go through the one guarded statement, so parallel
+        // submissions cannot all read the same count and pass.
+        assert_eq!(decide(r, 4, 0), Decision::Allow);
+        assert_eq!(decide(r, 5, 0), Decision::ClientLimit);
+        assert_eq!(decide(d, 19, 0), Decision::Allow);
+        assert_eq!(decide(d, 20, 0), Decision::ClientLimit);
+        assert_eq!(decide(r, 0, 600), Decision::GlobalLimit);
+        let names = [Action::WeatherReport, Action::DeviceCreate].map(Action::name);
+        assert_ne!(names[0], names[1]);
     }
 
     #[test]

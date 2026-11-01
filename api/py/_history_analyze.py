@@ -268,8 +268,8 @@ async def analyze_history(body: AnalyzeRequest, request: Request):
 
     # Verify location exists and get metadata — resolved via places.placesGeo
     # (Phase 0G); weather.locations is dropped, so a direct locations_collection
-    # lookup here would 404 on every request. Matches the pattern in _history.py,
-    # _chat.py, _reports.py, and _locations.py.
+    # lookup here would 404 on every request. Matches the pattern in _chat.py,
+    # _reports.py, and _locations.py.
     try:
         loc = find_location(location_slug)
     except Exception:
@@ -283,11 +283,10 @@ async def analyze_history(body: AnalyzeRequest, request: Request):
     loc_lat = loc.get("lat", 0.0)
     loc_lon = loc.get("lon", 0.0)
 
-    # Same reader as GET /api/py/history (date-keyed, alias-merged), oldest
-    # first for trend analysis. Gaps were already filled when the user loaded
-    # the dashboard, so no archive call is made here.
-    from ._history import history_slugs
-    from ._history_store import read_history
+    # Date-keyed, alias-merged reader (the days the Rust Worker's /v1/history
+    # recorded or stored), oldest first for trend analysis. Gaps were already
+    # filled when the user loaded the dashboard, so no archive call is made here.
+    from ._history_store import history_slugs, read_history
 
     slugs = history_slugs(location_slug, loc)
     history = list(
