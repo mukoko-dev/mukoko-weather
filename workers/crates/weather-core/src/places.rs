@@ -60,6 +60,26 @@ pub fn seed() -> &'static [Place] {
     })
 }
 
+#[derive(Deserialize)]
+struct SeedTags {
+    slug: String,
+    #[serde(default)]
+    tags: Vec<String>,
+}
+
+/// The tags (`city`, `farming`, ...) of a seed location, from the same
+/// compiled-in file as [`seed`]. Empty for a slug that is not a seed.
+pub fn seed_tags(slug: &str) -> &'static [String] {
+    static TAGS: OnceLock<Vec<SeedTags>> = OnceLock::new();
+    let all = TAGS.get_or_init(|| {
+        serde_json::from_str(SEED_JSON).expect("seed-locations.json is valid (checked in CI)")
+    });
+    all.iter()
+        .find(|r| r.slug == slug)
+        .map(|r| r.tags.as_slice())
+        .unwrap_or(&[])
+}
+
 /// Lower-case, ASCII-fold the common accents, and join words with `-`, the
 /// way the app builds slugs.
 pub fn slugify(text: &str) -> String {
@@ -197,6 +217,13 @@ mod tests {
         let h = resolve_seed("harare").unwrap();
         assert_eq!(h.name.as_deref(), Some("Harare"));
         assert_eq!(h.country.as_deref(), Some("ZW"));
+    }
+
+    #[test]
+    fn seed_tags_come_from_the_same_file() {
+        assert!(seed_tags("harare").contains(&"city".to_owned()));
+        assert!(seed_tags("no-such-place").is_empty());
+        assert!(seed().iter().all(|p| !seed_tags(&p.slug).is_empty()));
     }
 
     #[test]
