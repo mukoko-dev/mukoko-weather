@@ -211,11 +211,10 @@ class TestCallSites:
 
 
     def test_archive_stays_on_the_public_api(self, monkeypatch):
-        """History/normals are out of scope for the self-hosted instance."""
-        from py import _history_store, _normals
+        """Normals (and the Worker's history) are out of scope for the self-hosted instance."""
+        from py import _normals
 
         _self_hosted(monkeypatch)
-        assert _history_store.ARCHIVE_URL.startswith("https://archive-api.open-meteo.com/")
         assert _normals.ARCHIVE_URL.startswith("https://archive-api.open-meteo.com/")
 
 

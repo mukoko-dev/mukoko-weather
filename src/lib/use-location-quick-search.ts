@@ -17,7 +17,7 @@ export interface QuickSearchLocation {
 export interface UseLocationQuickSearchOptions {
   /** Debounce delay in ms before firing the request. Default 300. */
   debounceMs?: number;
-  /** Max results requested from /v1/search (or /api/py/search). Default 10. */
+  /** Max results requested from /v1/search. Default 10. */
   limit?: number;
   /** Minimum trimmed query length before a request fires. Default 1. */
   minLength?: number;
@@ -46,7 +46,7 @@ export interface UseLocationQuickSearchResult {
 
 /**
  * Shared debounced "quick match" location search — the same fast,
- * cancellable /api/py/search lookup used everywhere the app lets a user find
+ * cancellable /v1/search lookup used everywhere the app lets a user find
  * a location by typing (My Weather modal's add-location search, Explore's
  * instant quick matches). One place defines the debounce timing, request
  * cancellation, and result shape, so these surfaces can't silently drift
@@ -87,8 +87,8 @@ export function useLocationQuickSearch({
     const raf = requestAnimationFrame(() => {
       if (disposed) return;
       setLoading(true);
-      // The Rust Worker when NEXT_PUBLIC_WEATHER_API_URL is set (it also
-      // offers a country or region itself as a last result), else /api/py.
+      // The Rust Worker (it also offers a country or region itself as a last
+      // result); there is no fallback to the Python backend.
       fetchPlaces("search", `q=${encodeURIComponent(q)}&limit=${limit}`, {
         signal: controller.signal,
       })
