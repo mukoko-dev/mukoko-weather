@@ -1,8 +1,9 @@
 // mukoko-weather-ai: Shamwari Weather (mukoko-dev/mukoko-weather#148).
 // No route and no workers.dev address. Reached over service bindings
 // (AI_SERVICE) only: mukoko-weather-api forwards /v1/ai/*, and
-// mukoko-weather-internal forwards the Python backend's model calls
-// (service key checked there) to /internal/chat/completions.
+// mukoko-weather-internal forwards the signed-in app's calls
+// (/internal/summary, ...) and the Python backend's model calls (/internal/
+// chat/completions) after checking its service key.
 //
 // Every model call goes through the `shamwari` AI Gateway (Guardrails on,
 // logging off) to an open-weights Workers AI model. The guardrails block
@@ -57,23 +58,25 @@
     { "binding": "PLACES", "service": "mukoko-weather-places" },
   ],
   "kv_namespaces": [
-    // Summaries (30 min, 1 min for fallback text) and history analyses (1 h).
+    // Summaries (30, 60 or 120 min by tag, 1 min for fallback text) and
+    // history analyses (1 h).
     { "binding": "AI_CACHE", "id": "b0576f0244c0465d96a816a776e44e18" },
   ],
   "d1_databases": [
     {
-      // rate_events (migration 0002) holds the hourly budgets of the model
-      // calls made for one visitor: the AI location search (15 an hour per
-      // client) and the history analysis (10 an hour per client), see
-      // weather_core::budget. This Worker only counts and inserts rows; the
-      // table and its migrations belong to the places and stations Workers.
+      // rate_events (migration 0002) holds the hourly model budgets
+      // (weather_core::budget): the signed-in person's summary, follow-up and
+      // agriculture explanation, and per client the AI location search (15 an
+      // hour) and the history analysis (10 an hour). Rows hold a hash of the
+      // person id or IP, never the id. Nothing else is read or written.
       "binding": "WEATHER_DB",
       "database_name": "mukoko-weather",
       "database_id": "9a8846ea-ee34-4479-bc4c-790ee2beabee",
       "migrations_dir": "../d1/migrations",
     },
   ],
-  // Per client IP (CF-Connecting-IP, passed on by mukoko-weather-api).
+  // Per client IP (CF-Connecting-IP, passed on by mukoko-weather-api): the
+  // public routes only.
   "ratelimits": [
     {
       "name": "RATE_LIMITER",

@@ -4,7 +4,11 @@
 //! the `AI_SERVICE` binding with the caller's `CF-Connecting-IP`.
 //!
 //! ```text
-//! POST /v1/ai, /v1/ai/summary   {weatherData, location, activities} → {insight, cached, generatedAt}
+//! POST /internal/summary        {location: {slug, name, lat, lon, elevation, country, tags},
+//!                                activities} → {insight, cached, generatedAt}
+//!                               Only from mukoko-weather-internal (service key checked
+//!                               there), for the signed-in app: counted against the
+//!                               person's hour (`X-Mukoko-User-Id`, `X-Mukoko-Client-IP`).
 //! POST /v1/ai/followup          {message, locationName, locationSlug, weatherSummary,
 //!                                activities, season, history} → {response}
 //! POST /v1/ai/chat              {message, history, activities} → {response, references}
@@ -25,13 +29,13 @@
 //! guardrails_unavailable`. Messages carrying personal data are refused
 //! before any call (`422 personal_data_detected`).
 
-mod budget;
 mod explore;
 mod gateway;
 mod handlers;
 mod passthrough;
 mod profile;
 
+use weather_edge::budget::Caller;
 use weather_edge::{error, json, responses};
 use worker::{event, Context, Env, Method, Request, Response, Result};
 
@@ -56,12 +60,12 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
                 "ai": env.ai("AI").is_ok(),
                 "cache": env.kv(CACHE_BINDING).is_ok(),
                 "history": env.service(PLACES_BINDING).is_ok(),
-                "budget": budget::bound(&env),
+                "budget": env.d1("WEATHER_DB").is_ok(),
             }),
         );
     }
     let route = match path.as_str() {
-        "/v1/ai" | "/v1/ai/summary" => Route::Summary,
+        "/internal/summary" => Route::Summary,
         "/v1/ai/followup" => Route::Followup,
         "/v1/ai/chat" => Route::Chat,
         "/v1/ai/history/analyze" => Route::History,
@@ -72,10 +76,11 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     if req.method() != Method::Post {
         return error(405, "method_not_allowed", "Only POST is served.");
     }
-    // The per-IP limit is for the app's own /v1/ai/* callers. Backend calls
-    // all arrive with one key, so a shared bucket would throttle the whole
-    // site; the backend rate-limits per visitor itself.
-    let internal = matches!(route, Route::Completions);
+    // The per-IP limit is for the public /v1/ai/* callers. Internal calls all
+    // arrive with one key, so a shared bucket would throttle the whole site:
+    // the backend passthrough rate-limits per visitor itself, and the
+    // signed-in app routes spend the person's hourly D1 budget.
+    let internal = matches!(route, Route::Completions | Route::Summary);
     if !internal {
         if let Some(limited) = rate_limited(&req, &env).await {
             return limited;
@@ -83,7 +88,9 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     }
 
     let text = req.text().await.unwrap_or_default();
-    let cap = if internal {
+    // Only the backend passthrough carries whole tool loops; the app's routes
+    // are a location and a few ids.
+    let cap = if matches!(route, Route::Completions) {
         MAX_INTERNAL_BODY_BYTES
     } else {
         MAX_BODY_BYTES
@@ -99,7 +106,8 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     // text match), so it decides for itself what a missing block means.
     if matches!(route, Route::Explore) {
         let guardrails = gateway::guardrails(&env).await;
-        return explore::handle(&env, guardrails, weather_edge::client_ip(&req), body).await;
+        let caller = Caller::from_request(&req);
+        return explore::handle(&env, guardrails, caller, body).await;
     }
 
     // Fail closed: no guardrails block, no model call on any route.
@@ -110,10 +118,28 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
             "Shamwari is unavailable right now. Please try again shortly.",
         );
     };
+    // The person behind an internal app route, named by the app's server after
+    // it checked the WorkOS session and `mukoko-weather-internal` checked the
+    // service key. These paths are not reachable from the public API, which
+    // forwards `/v1/ai/*` only and builds its own request.
+    let caller = matches!(route, Route::Summary).then(|| {
+        let subject = req
+            .headers()
+            .get(weather_core::ai::USER_ID_HEADER)
+            .ok()
+            .flatten()
+            .and_then(|s| weather_core::ai::valid_subject(&s));
+        Caller::with_subject(&req, subject)
+    });
+    // The public history analysis spends the visitor's hour too, keyed by the
+    // visitor's address; a person header is never read on a public route.
+    let caller =
+        caller.or_else(|| matches!(route, Route::History).then(|| Caller::from_request(&req)));
     let ctx = handlers::Ctx {
         env: &env,
         guardrails,
         client_ip: weather_edge::client_ip(&req),
+        caller,
     };
     match route {
         Route::Summary => handlers::summary(&ctx, body).await,

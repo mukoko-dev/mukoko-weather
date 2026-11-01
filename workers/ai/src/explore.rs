@@ -18,10 +18,11 @@ use weather_core::ai::explore::{self, Brief, Entry, Session, Step, Work};
 use weather_core::ai::guardrails::{system_prompt, Compiled};
 use weather_core::ai::{completions, pii, Invalid};
 use weather_core::budget::{Action, Decision};
+use weather_edge::budget::{self, Caller};
 use weather_edge::{error, json, responses};
 use worker::{Env, Response, Result};
 
-use crate::{budget, gateway, handlers};
+use crate::{gateway, handlers};
 
 /// The gateway metadata route name (no user content).
 const ROUTE: &str = "explore";
@@ -31,7 +32,7 @@ const ROUTE: &str = "explore";
 pub async fn handle(
     env: &Env,
     guardrails: Option<Compiled>,
-    client_ip: Option<String>,
+    caller: Caller,
     body: Value,
 ) -> Result<Response> {
     let query = match explore::query(body["query"].as_str().unwrap_or("")) {
@@ -51,8 +52,7 @@ pub async fn handle(
         return text_search(env, &query, catalogue).await;
     };
 
-    let client = budget::client_key(client_ip.as_deref());
-    match budget::take(env, Action::ExploreSearch, &client).await {
+    match budget::take(env, Action::ExploreSearch, &caller).await {
         Decision::Allow => {}
         Decision::ClientLimit => {
             return responses::rate_limited(
