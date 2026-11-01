@@ -96,6 +96,8 @@ describe("where Apple's credit appears", () => {
     expect(at).toBeGreaterThan(-1);
     const block = src.slice(src.lastIndexOf("{modelBaseline &&", at), at + 120);
     expect(block).toContain("{modelBaseline &&");
+    // Nothing at all (not even the wrapper) for the blend or an Open-Meteo model.
+    expect(block).toContain("isExternalForecastModel(model)");
     expect(block).toContain('use="baseline"');
   });
 
