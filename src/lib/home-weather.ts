@@ -66,8 +66,10 @@ export const MODEL_WEATHER_TIMEOUT_MS = 10_000;
  *
  * Goes through the Rust Worker (`GET /v1/weather`) with `?models=`
  * (comparison series) and `?model=` (the `selectedForecastModel` preference;
- * `best_match` means the Africa-weighted blend). The Worker does not serve a
- * single-model baseline yet, so a picked model comes back as the blend and
+ * `best_match` means the Africa-weighted blend). The Worker serves a picked
+ * model as the baseline (`X-Weather-Provider: open-meteo:<model>`, its own
+ * cache row, `best_match` filling the variables the model does not publish);
+ * with no data for that model at the point it answers `best_match` and
  * `baseline` stays null. Only when the Worker is unreachable does it fall back
  * to a direct Open-Meteo call, which still yields comparison series.
  *
