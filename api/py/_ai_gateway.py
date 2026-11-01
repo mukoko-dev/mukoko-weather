@@ -9,8 +9,7 @@ call over a service binding to ``mukoko-weather-ai``, which runs it on a
 Workers AI GLM model through the ``shamwari`` AI Gateway with the native
 ``env.AI`` binding — no token anywhere — with the Nyuchi guardrails first in
 the system prompt. The wire format is OpenAI chat completions (``messages``,
-``tools``, ``max_tokens``), so the tool loops in ``_chat.py`` and
-``_explore_search.py`` work unchanged. The Worker returns the model's
+``tools``, ``max_tokens``). The Worker returns the model's
 ``content`` only, never its reasoning, and adds reasoning headroom to the
 token budget itself.
 
@@ -63,8 +62,8 @@ ErrorKind = Literal["no_client", "circuit_open", "rate_limited", "api_error"]
 # The gateway the Worker routes through (reported by the status page only).
 DEFAULT_GATEWAY_ID = "shamwari"
 COMPLETIONS_PATH = "/internal/ai/chat/completions"
-# Under _chat.py's 30 s per-call guard. GLM reasons first; the Worker asks
-# for low reasoning effort to keep calls short.
+# GLM reasons first; the Worker asks for low reasoning effort to keep calls
+# short.
 REQUEST_TIMEOUT_S = 25.0
 
 URL_ENV = "WEATHER_AI_URL"

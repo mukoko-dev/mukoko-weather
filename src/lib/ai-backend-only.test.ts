@@ -8,8 +8,9 @@
  * reaches them over HTTPS through mukoko-weather-internal with the service
  * key and holds no Cloudflare AI token. Browser code, Next.js server/client
  * components, NEXT_PUBLIC_* vars, the edge worker/ and the embed go through
- * our backend routes (/api/ai/* → /api/py/ai/*, /api/py/chat,
- * /api/py/explore/search). This test fails if src/, worker/ or api/py
+ * our backend routes (/api/ai/* → /api/py/ai/*, and the Worker's /v1/ai/chat,
+ * /v1/ai/explore/search and /v1/ai/history/analyze). This test fails if
+ * src/, worker/ or api/py
  * references the gateway host, a Workers AI call, an AI SDK or a Cloudflare
  * AI token env name — and, when a production build exists, if the client
  * bundle does.

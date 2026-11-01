@@ -24,7 +24,9 @@
 //!                                                    the shape of /api/py/airports/nearest
 //! GET /v1/locations, /v1/search, /v1/geo, /v1/history   places (mukoko-weather-places)
 //! POST /v1/devices, GET|PATCH /v1/devices/{id}      device preference profiles
-//! POST /v1/ai, /v1/ai/{summary,followup,chat,history/analyze}   Shamwari Weather
+//! POST /v1/ai/{followup,chat,history/analyze,explore/search}   Shamwari Weather (the weather summary is not
+//!                                               public: it is a signed-in route of the app, reached through
+//!                                               mukoko-weather-internal)
 //! GET /health
 //! ```
 //!
@@ -331,6 +333,10 @@ async fn forward_ai(req: &mut Request, env: &Env) -> Result<Response> {
     if let Some(ip) = req.headers().get("CF-Connecting-IP")? {
         headers.set("CF-Connecting-IP", &ip)?;
     }
+    // The AI Worker budgets the model calls per client (an hour of searches
+    // and analyses each), so it must key by the visitor, not by this Worker:
+    // the header every other relay stamps, read when the first is not there.
+    headers.set("X-Mukoko-Client-IP", &client_ip(req))?;
     let mut init = RequestInit::new();
     init.with_method(Method::Post)
         .with_headers(headers)

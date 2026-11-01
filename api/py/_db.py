@@ -35,14 +35,13 @@ _client: Optional[MongoClient] = None
 # history caps can't drift between endpoints.
 # ---------------------------------------------------------------------------
 
-#: Location slug format, shared by _chat.py, _devices.py, _explore_search.py,
-#: and _locations.py.
+#: Location slug format, shared by _locations.py and the other slug-taking routes.
 SLUG_RE = re.compile(r"^[a-z0-9-]{1,80}$")
 
-#: Chat/follow-up message length cap, shared by _chat.py and _ai_followup.py.
+#: Follow-up message length cap, used by _ai_followup.py.
 MAX_MESSAGE_LEN = 2000
 
-#: Conversation history length cap, shared by _chat.py and _ai_followup.py.
+#: Conversation history length cap, used by _ai_followup.py.
 MAX_HISTORY = 10
 
 
@@ -188,10 +187,6 @@ def ai_suggested_rules_collection():
 def weather_reports_collection():
     """Legacy snake_case alias. New code: prefer :func:`community_reports_collection`."""
     return weather_db()["weather_reports"]
-
-
-def history_analysis_collection():
-    return weather_db()["history_analysis"]
 
 
 def metar_cache_collection():

@@ -1,0 +1,585 @@
+{
+  "_oracle": "api/py/_history_analyze.py analyze_history and api/py/_place_knowledge.py with_profile / PROFILE_GROUNDING_RULE at origin/staging 4091aa3, run with the real Python (dependencies scripted)",
+  "groundingRule": "Use the place profile to ground timing and local practice (season, crop stage, climate). Lines marked ~ are derived estimates: say \"typically\" or \"around\", never state them as fact. If the profile has no crop calendar, do not name local crops.",
+  "withProfile": [
+    {
+      "block": "",
+      "out": ""
+    },
+    {
+      "block": "Place profile (stored facts about this place; lines marked ~ are derived estimates — present them as approximate, never as fact):\n- Harare, ZW; 1490 m; Southern hemisphere; Africa/Harare\n- Climate: Cwb (Subtropical highland)",
+      "out": "\nPlace profile (stored facts about this place; lines marked ~ are derived estimates — present them as approximate, never as fact):\n- Harare, ZW; 1490 m; Southern hemisphere; Africa/Harare\n- Climate: Cwb (Subtropical highland)\nUse the place profile to ground timing and local practice (season, crop stage, climate). Lines marked ~ are derived estimates: say \"typically\" or \"around\", never state them as fact. If the profile has no crop calendar, do not name local crops.\n"
+    },
+    {
+      "block": "Place profile (x):\n- one line",
+      "out": "\nPlace profile (x):\n- one line\nUse the place profile to ground timing and local practice (season, crop stage, climate). Lines marked ~ are derived estimates: say \"typically\" or \"around\", never state them as fact. If the profile has no crop calendar, do not name local crops.\n"
+    }
+  ],
+  "history": [
+    {
+      "name": "Harare",
+      "elevation": 1490,
+      "activities": [],
+      "block": "Place profile (stored facts about this place; lines marked ~ are derived estimates — present them as approximate, never as fact):\n- Harare, ZW; 1490 m; Southern hemisphere; Africa/Harare\n- Climate: Cwb (Subtropical highland)",
+      "records": [
+        {
+          "date": "2026-10-01",
+          "current": {
+            "temperature_2m": 21.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [25.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-02",
+          "current": {
+            "temperature_2m": 22.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [26.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-03",
+          "current": {
+            "temperature_2m": 20.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [27.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-04",
+          "current": {
+            "temperature_2m": 21.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [24.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-05",
+          "current": {
+            "temperature_2m": 22.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [25.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-06",
+          "current": {
+            "temperature_2m": 20.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [26.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-07",
+          "current": {
+            "temperature_2m": 21.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [27.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-08",
+          "current": {
+            "temperature_2m": 22.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [24.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        }
+      ],
+      "stats": "Period: 2026-10-01 to 2026-10-08 (8 data points)\nTemperature: avg high 26.0°C (range 24.5-27.5), avg low 12.0°C (range 12.0-12.0)\nPrecipitation: total 0.0mm, 0 rainy days out of 8\nMost common conditions: Partly cloudy (8d)",
+      "userContent": "Analyze this weather history for Harare (elevation: 1490m).\nSeason: Summer (Summer) — Hot and wet.\n\nPlace profile (stored facts about this place; lines marked ~ are derived estimates — present them as approximate, never as fact):\n- Harare, ZW; 1490 m; Southern hemisphere; Africa/Harare\n- Climate: Cwb (Subtropical highland)\nUse the place profile to ground timing and local practice (season, crop stage, climate). Lines marked ~ are derived estimates: say \"typically\" or \"around\", never state them as fact. If the profile has no crop calendar, do not name local crops.\n\n\nStatistical summary:\nPeriod: 2026-10-01 to 2026-10-08 (8 data points)\nTemperature: avg high 26.0°C (range 24.5-27.5), avg low 12.0°C (range 12.0-12.0)\nPrecipitation: total 0.0mm, 0 rainy days out of 8\nMost common conditions: Partly cloudy (8d)",
+      "profileArgs": {
+        "slug": "harare",
+        "lat": -17.83,
+        "lon": 31.05,
+        "country": "ZW",
+        "name": "Harare"
+      }
+    },
+    {
+      "name": "Harare",
+      "elevation": 1490,
+      "activities": [],
+      "block": "",
+      "records": [
+        {
+          "date": "2026-10-01",
+          "current": {
+            "temperature_2m": 21.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [25.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-02",
+          "current": {
+            "temperature_2m": 22.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [26.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-03",
+          "current": {
+            "temperature_2m": 20.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [27.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-04",
+          "current": {
+            "temperature_2m": 21.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [24.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-05",
+          "current": {
+            "temperature_2m": 22.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [25.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-06",
+          "current": {
+            "temperature_2m": 20.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [26.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-07",
+          "current": {
+            "temperature_2m": 21.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [27.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-08",
+          "current": {
+            "temperature_2m": 22.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [24.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        }
+      ],
+      "stats": "Period: 2026-10-01 to 2026-10-08 (8 data points)\nTemperature: avg high 26.0°C (range 24.5-27.5), avg low 12.0°C (range 12.0-12.0)\nPrecipitation: total 0.0mm, 0 rainy days out of 8\nMost common conditions: Partly cloudy (8d)",
+      "userContent": "Analyze this weather history for Harare (elevation: 1490m).\nSeason: Summer (Summer) — Hot and wet.\n\n\nStatistical summary:\nPeriod: 2026-10-01 to 2026-10-08 (8 data points)\nTemperature: avg high 26.0°C (range 24.5-27.5), avg low 12.0°C (range 12.0-12.0)\nPrecipitation: total 0.0mm, 0 rainy days out of 8\nMost common conditions: Partly cloudy (8d)",
+      "profileArgs": {
+        "slug": "harare",
+        "lat": -17.83,
+        "lon": 31.05,
+        "country": "ZW",
+        "name": "Harare"
+      }
+    },
+    {
+      "name": "Harare",
+      "elevation": 1490,
+      "activities": ["soccer", "running"],
+      "block": "Place profile (stored facts about this place; lines marked ~ are derived estimates — present them as approximate, never as fact):\n- Harare, ZW; 1490 m; Southern hemisphere; Africa/Harare\n- Climate: Cwb (Subtropical highland)",
+      "records": [
+        {
+          "date": "2026-10-01",
+          "current": {
+            "temperature_2m": 21.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [25.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-02",
+          "current": {
+            "temperature_2m": 22.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [26.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-03",
+          "current": {
+            "temperature_2m": 20.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [27.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-04",
+          "current": {
+            "temperature_2m": 21.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [24.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-05",
+          "current": {
+            "temperature_2m": 22.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [25.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-06",
+          "current": {
+            "temperature_2m": 20.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [26.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-07",
+          "current": {
+            "temperature_2m": 21.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [27.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-08",
+          "current": {
+            "temperature_2m": 22.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [24.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        }
+      ],
+      "stats": "Period: 2026-10-01 to 2026-10-08 (8 data points)\nTemperature: avg high 26.0°C (range 24.5-27.5), avg low 12.0°C (range 12.0-12.0)\nPrecipitation: total 0.0mm, 0 rainy days out of 8\nMost common conditions: Partly cloudy (8d)",
+      "userContent": "Analyze this weather history for Harare (elevation: 1490m).\nSeason: Summer (Summer) — Hot and wet.\n\nUser activities: soccer, running. Focus recommendations on these.\nPlace profile (stored facts about this place; lines marked ~ are derived estimates — present them as approximate, never as fact):\n- Harare, ZW; 1490 m; Southern hemisphere; Africa/Harare\n- Climate: Cwb (Subtropical highland)\nUse the place profile to ground timing and local practice (season, crop stage, climate). Lines marked ~ are derived estimates: say \"typically\" or \"around\", never state them as fact. If the profile has no crop calendar, do not name local crops.\n\n\nStatistical summary:\nPeriod: 2026-10-01 to 2026-10-08 (8 data points)\nTemperature: avg high 26.0°C (range 24.5-27.5), avg low 12.0°C (range 12.0-12.0)\nPrecipitation: total 0.0mm, 0 rainy days out of 8\nMost common conditions: Partly cloudy (8d)",
+      "profileArgs": {
+        "slug": "harare",
+        "lat": -17.83,
+        "lon": 31.05,
+        "country": "ZW",
+        "name": "Harare"
+      }
+    },
+    {
+      "name": "Harare",
+      "elevation": 1490,
+      "activities": ["soccer"],
+      "block": "Place profile (x):\n- one line",
+      "records": [
+        {
+          "date": "2026-10-01",
+          "current": {
+            "temperature_2m": 21.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [25.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-02",
+          "current": {
+            "temperature_2m": 22.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [26.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-03",
+          "current": {
+            "temperature_2m": 20.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [27.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-04",
+          "current": {
+            "temperature_2m": 21.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [24.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-05",
+          "current": {
+            "temperature_2m": 22.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [25.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-06",
+          "current": {
+            "temperature_2m": 20.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [26.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-07",
+          "current": {
+            "temperature_2m": 21.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [27.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-08",
+          "current": {
+            "temperature_2m": 22.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [24.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        }
+      ],
+      "stats": "Period: 2026-10-01 to 2026-10-08 (8 data points)\nTemperature: avg high 26.0°C (range 24.5-27.5), avg low 12.0°C (range 12.0-12.0)\nPrecipitation: total 0.0mm, 0 rainy days out of 8\nMost common conditions: Partly cloudy (8d)",
+      "userContent": "Analyze this weather history for Harare (elevation: 1490m).\nSeason: Summer (Summer) — Hot and wet.\n\nUser activities: soccer. Focus recommendations on these.\nPlace profile (x):\n- one line\nUse the place profile to ground timing and local practice (season, crop stage, climate). Lines marked ~ are derived estimates: say \"typically\" or \"around\", never state them as fact. If the profile has no crop calendar, do not name local crops.\n\n\nStatistical summary:\nPeriod: 2026-10-01 to 2026-10-08 (8 data points)\nTemperature: avg high 26.0°C (range 24.5-27.5), avg low 12.0°C (range 12.0-12.0)\nPrecipitation: total 0.0mm, 0 rainy days out of 8\nMost common conditions: Partly cloudy (8d)",
+      "profileArgs": {
+        "slug": "harare",
+        "lat": -17.83,
+        "lon": 31.05,
+        "country": "ZW",
+        "name": "Harare"
+      }
+    },
+    {
+      "name": "Victoria Falls",
+      "elevation": 915,
+      "activities": [],
+      "block": "",
+      "records": [
+        {
+          "date": "2026-10-01",
+          "current": {
+            "temperature_2m": 21.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [25.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-02",
+          "current": {
+            "temperature_2m": 22.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [26.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-03",
+          "current": {
+            "temperature_2m": 20.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [27.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-04",
+          "current": {
+            "temperature_2m": 21.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [24.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-05",
+          "current": {
+            "temperature_2m": 22.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [25.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-06",
+          "current": {
+            "temperature_2m": 20.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [26.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-07",
+          "current": {
+            "temperature_2m": 21.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [27.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        },
+        {
+          "date": "2026-10-08",
+          "current": {
+            "temperature_2m": 22.5,
+            "weather_code": 2
+          },
+          "daily": {
+            "temperature_2m_max": [24.5],
+            "temperature_2m_min": [12.0],
+            "precipitation_sum": [0.0]
+          }
+        }
+      ],
+      "stats": "Period: 2026-10-01 to 2026-10-08 (8 data points)\nTemperature: avg high 26.0°C (range 24.5-27.5), avg low 12.0°C (range 12.0-12.0)\nPrecipitation: total 0.0mm, 0 rainy days out of 8\nMost common conditions: Partly cloudy (8d)",
+      "userContent": "Analyze this weather history for Victoria Falls (elevation: 915m).\nSeason: Summer (Summer) — Hot and wet.\n\n\nStatistical summary:\nPeriod: 2026-10-01 to 2026-10-08 (8 data points)\nTemperature: avg high 26.0°C (range 24.5-27.5), avg low 12.0°C (range 12.0-12.0)\nPrecipitation: total 0.0mm, 0 rainy days out of 8\nMost common conditions: Partly cloudy (8d)",
+      "profileArgs": {
+        "slug": "harare",
+        "lat": -17.83,
+        "lon": 31.05,
+        "country": "ZW",
+        "name": "Victoria Falls"
+      }
+    }
+  ]
+}

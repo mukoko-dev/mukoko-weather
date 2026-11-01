@@ -27,7 +27,7 @@ We will acknowledge your report within 48 hours and provide an update within 7 d
 
 ### API Keys
 
-- **`ANTHROPIC_API_KEY`** — server-side environment variable, never exposed to the client. Used only in Python backend endpoints (`api/py/_ai.py`, `api/py/_chat.py`, etc.)
+- **`ANTHROPIC_API_KEY`** — server-side environment variable, never exposed to the client. Used only in Python backend endpoints (`api/py/_ai.py`, etc.)
 - **Tomorrow.io API key** — stored in MongoDB (`api_keys` collection via `getApiKey`/`setApiKey` in `src/lib/db.ts`), never in environment variables or client-side code. Seeded via `POST /api/db-init`
 - **`DB_INIT_SECRET`** — optional server-side environment variable protecting the `/api/db-init` endpoint in production (via `x-init-secret` header)
 
@@ -53,20 +53,16 @@ We will acknowledge your report within 48 hours and provide an update within 7 d
 - GA4 error exception events are used for client-side error monitoring (error boundaries, error pages)
 - Users can opt out via browser settings or the Google Analytics opt-out extension
 
-### Shamwari AI Chatbot (`/api/py/chat`)
+### Shamwari AI Chat (`POST /v1/ai/chat`, the AI Worker)
 
-The Shamwari chatbot endpoint has layered security controls:
+The chat runs on the Rust AI Worker (`workers/ai`), reached through `mukoko-weather-api`; the Python `/api/py/chat` was deleted. Its security controls:
 
-- **Rate limiting** — 20 requests/hour/IP via MongoDB-backed rate limiter (`check_rate_limit` in `api/py/_db.py`); IP required (rejects requests with no identifiable client). **Deployment constraint:** the rate limiter trusts the first entry in `x-forwarded-for` (Vercel prepends the real client IP). If deployed behind a proxy that does not manage `x-forwarded-for`, the rate limiter can be bypassed by spoofing the header
-- **Input validation** — message must be a non-empty string, max 2000 characters; history capped at 10 messages, each truncated to 2000 characters; activities array capped at 10 items; location slugs validated via `SLUG_RE` (`^[a-z0-9-]{1,80}$`); tags validated against `KNOWN_TAGS` allowlist
-- **Structured messages API** — the Anthropic Messages API sends each turn as a separate object with an explicit role. Legacy boundary markers (`\n\nHuman:`, `\n\nAssistant:`) have no special meaning and cannot inject new turns
-- **System prompt guardrails** — DATA GUARDRAILS in the system prompt constrain Claude's response scope to weather-related topics
-- **Circuit breaker** — all Anthropic API calls are wrapped in `anthropic_breaker` (3 failures / 5min cooldown) in `api/py/_circuit_breaker.py`; `CircuitOpenError` returns a user-friendly "temporarily unavailable" message
-- **Tool execution timeouts** — each tool call has a 15-second timeout; tool loop bounded at 5 iterations
-- **Server-controlled tool output** — Claude never sees raw weather API responses; tool implementations validate inputs and return structured data
-- **Singleton Anthropic client with key-rotation** — module-level client reused across warm Vercel function invocations; automatically recreated when the API key changes (hash-based invalidation)
-- **Tool result caps** — `list_locations_by_tag` capped to 20 results to prevent unbounded context injection; search results capped to 10
-- **Client-side error isolation** — `MarkdownErrorBoundary` wraps ReactMarkdown rendering in the chatbot UI; malformed markdown from Claude degrades to plain text instead of crashing the chat
+- **Rate limiting** — 10 requests a minute per client (the Worker's rate-limit binding, keyed by the visitor's address as the public API passes it on). The Python route's 20 requests an hour has no equivalent here.
+- **Input validation** — message must be a non-empty string, max 2000 characters; history capped at 10 turns, each cut to 2000 characters, roles limited to `user` and `assistant`; activity ids are shape-checked before they reach a prompt
+- **Personal data** — a message or history turn with an email address, phone number or card number is refused (`422 personal_data_detected`) before any model call
+- **Guardrails** — the Nyuchi API's compiled guardrails block goes first in the system prompt; without one the Worker answers `503` and never calls the model. The `shamwari` AI Gateway adds Guardrails and DLP, and a block is answered with a polite refusal
+- **No tools** — the model cannot call anything; the weather for the places named is fetched by the Worker and put in the prompt
+- **Client-side error isolation** — `MarkdownErrorBoundary` wraps markdown rendering in the chatbot UI; malformed markdown degrades to plain text instead of crashing the chat
 
 ### Rate Limiting
 
@@ -74,13 +70,12 @@ All rate-limited endpoints use a MongoDB-backed IP rate limiter (`check_rate_lim
 
 | Endpoint                   | Limit       |
 | -------------------------- | ----------- |
-| `/api/py/chat`             | 20 req/hour |
 | `/api/py/ai/followup`      | 30 req/hour |
-| `/api/py/explore/search`   | 15 req/hour |
-| `/api/py/history/analyze`  | 10 req/hour |
 | `/api/py/locations/add`    | 5 req/hour  |
 | `/api/py/reports` (submit) | 5 req/hour  |
 | `/api/py/reports/clarify`  | 10 req/hour |
+
+The routes on the Rust Workers keep their limits in the Workers' own D1 table `rate_events` (`weather_core::budget`; the client is a SHA-256 of the visitor's address, never the address). The AI location search (`/v1/ai/explore/search`, 15 an hour per client) and the AI history analysis (`/v1/ai/history/analyze`, 10 an hour per client) fail closed: when the budget cannot be read, the model is not called. See `workers/README.md`.
 
 ### Circuit Breaker System
 

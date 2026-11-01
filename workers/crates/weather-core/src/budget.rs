@@ -1,11 +1,12 @@
 //! Hourly budgets for the third-party geocoders (Open-Meteo forward geocoding,
-//! Nominatim reverse geocoding), kept in D1 (`rate_events`, migration 0002).
+//! Nominatim reverse geocoding) and for the model calls (`mukoko-weather-ai`),
+//! kept in D1 (`rate_events`, migration 0002).
 //!
-//! Both services are free and meant for light use, so every UNCACHED call is
-//! counted per client and for the whole service, per action, so one surface
-//! (autocomplete) can never starve another (a bare name in a URL). The pure
-//! parts live here, tested natively; the Worker (`mukoko-weather-places`) only
-//! runs the SQL.
+//! The geocoders are free and meant for light use, and a model call costs, so
+//! every UNCACHED call is counted per client and for the whole service, per
+//! action, so one surface (autocomplete) can never starve another (a bare name
+//! in a URL). The pure parts live here, tested natively; the Workers only run
+//! the SQL (`weather_edge::budget`).
 //!
 //! Who is "the client" is pluggable ([`client_key`]): a verified token subject
 //! when the caller presents one, else the IP address. No token verifier exists
@@ -45,6 +46,19 @@ pub enum Action {
     /// A place-profile request that needs an upstream (a 30-year archive
     /// request, SoilGrids): a cache hit is free.
     PlaceProfile,
+    /// An AI location search (`/v1/ai/explore/search`): up to three model
+    /// calls and some forecast lookups.
+    ExploreSearch,
+    /// An AI history analysis (`/v1/ai/history/analyze`) that calls the model:
+    /// an analysis answered from the cache is free.
+    HistoryAnalysis,
+    /// A weather summary that goes to the model (a cache miss): the signed-in
+    /// person's hour.
+    AiSummary,
+    /// A follow-up chat message (always a model call).
+    AiFollowup,
+    /// An agriculture explanation that goes to the model (a cache miss).
+    AiAgriculture,
 }
 
 /// Hourly limits for one action.
@@ -67,6 +81,11 @@ impl Action {
             Action::HistoryNasaPower => "history-nasa-power",
             Action::HistoryOpenMeteo => "history-open-meteo",
             Action::PlaceProfile => "place-profile",
+            Action::ExploreSearch => "ai-explore-search",
+            Action::HistoryAnalysis => "ai-history-analysis",
+            Action::AiSummary => "ai-summary",
+            Action::AiFollowup => "ai-followup",
+            Action::AiAgriculture => "ai-agriculture",
         }
     }
 
@@ -126,6 +145,34 @@ impl Action {
             // is one archive request (about 250 KB) and two SoilGrids calls.
             Action::PlaceProfile => Limits {
                 per_client: 120,
+                global: 600,
+            },
+            // 15 searches an hour per client, as in the Python backend. Each
+            // is up to three model calls; the service-wide cap is 40 clients
+            // at their limit, and past it the search answers from the text
+            // match instead of the model.
+            Action::ExploreSearch => Limits {
+                per_client: 15,
+                global: 600,
+            },
+            // 10 analyses an hour per client, as in the Python backend. Each
+            // is one model call.
+            Action::HistoryAnalysis => Limits {
+                per_client: 10,
+                global: 300,
+            },
+            // 30 model calls an hour per signed-in person for each of the
+            // three, as the Python backend limited them per IP. The
+            // service-wide ceilings (1,500 an hour for the summary and the
+            // follow-up, 600 for agriculture) bound what the model can cost
+            // if many accounts are used at once; cache hits are free and
+            // never counted.
+            Action::AiSummary | Action::AiFollowup => Limits {
+                per_client: 30,
+                global: 1_500,
+            },
+            Action::AiAgriculture => Limits {
+                per_client: 30,
                 global: 600,
             },
         }
@@ -317,6 +364,22 @@ mod tests {
     }
 
     #[test]
+    fn model_budgets_are_the_pythons_per_person_hour() {
+        for (a, name) in [
+            (Action::AiSummary, "ai-summary"),
+            (Action::AiFollowup, "ai-followup"),
+            (Action::AiAgriculture, "ai-agriculture"),
+        ] {
+            assert_eq!(a.name(), name);
+            assert_eq!(a.limits().per_client, 30, "{name}");
+            assert!(a.limits().per_client <= a.limits().global);
+        }
+        // Each has its own rows: one surface cannot starve another.
+        assert_ne!(Action::AiSummary.name(), Action::AiFollowup.name());
+        assert_ne!(Action::AiSummary.name(), Action::AiAgriculture.name());
+    }
+
+    #[test]
     fn windows() {
         assert_eq!(window_start(HOUR_MS + 5), 5);
         assert_eq!(window_start(10), 0);
@@ -408,6 +471,20 @@ mod tests {
         // refusal stands, with the service-wide label.
         assert_eq!(refusal(l, 0, 0, 50), Decision::GlobalLimit);
         assert!(!refusal(l, 0, 0, 1).allowed());
+    }
+
+    #[test]
+    fn the_ai_budgets_are_the_pythons_per_client_and_bounded_service_wide() {
+        // 15 searches and 10 analyses an hour per client, as the Python had.
+        assert_eq!(Action::ExploreSearch.limits().per_client, 15);
+        assert_eq!(Action::HistoryAnalysis.limits().per_client, 10);
+        assert_eq!(Action::ExploreSearch.name(), "ai-explore-search");
+        assert_eq!(Action::HistoryAnalysis.name(), "ai-history-analysis");
+        for a in [Action::ExploreSearch, Action::HistoryAnalysis] {
+            let l = a.limits();
+            assert!(l.per_client <= l.global);
+        }
+        assert_ne!(Action::ExploreSearch.name(), Action::HistoryAnalysis.name());
     }
 
     #[test]

@@ -67,8 +67,10 @@ describe("sendMessage logic", () => {
     expect(source).toContain("!trimmed || loading");
   });
 
-  it("sends message to /api/py/chat", () => {
-    expect(source).toContain('fetch("/api/py/chat"');
+  it("sends the message to the Worker's /v1/ai/chat (never retried), not the removed /api/py/chat", () => {
+    expect(source).toContain('"ai/chat"');
+    expect(source).toContain("retries: 0");
+    expect(source).not.toContain("/api/py/");
   });
 
   it("includes history and activities in request body", () => {
@@ -230,8 +232,10 @@ describe("rate limit error surfacing", () => {
     expect(source).toContain("res.json().catch(() => null)");
   });
 
-  it("extracts response or error message from body", () => {
-    expect(source).toContain("body?.response ?? body?.error");
+  it("extracts the Worker's error_description, else response or error, from the body", () => {
+    expect(source).toContain("body?.error_description");
+    expect(source).toContain("body?.response");
+    expect(source).toContain("body?.error");
   });
 
   it("uses server error message when available instead of generic fallback", () => {
