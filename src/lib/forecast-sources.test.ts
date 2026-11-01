@@ -94,7 +94,12 @@ describe("the credit due", () => {
 
   it("is one credit per provider however many of its models are shown", () => {
     const list = creditsFor(
-      ["ecmwf_ifs", APPLE_WEATHERKIT_MODEL, "gfs_seamless", APPLE_WEATHERKIT_MODEL],
+      [
+        "ecmwf_ifs",
+        APPLE_WEATHERKIT_MODEL,
+        "gfs_seamless",
+        APPLE_WEATHERKIT_MODEL,
+      ],
       "plotted",
     );
     expect(list).toHaveLength(1);

@@ -104,9 +104,9 @@ describe("where Apple's credit appears", () => {
     expect(src).toContain('isFeatureEnabled("apple_weatherkit")');
     const at = src.indexOf("<ForecastCredit");
     expect(at).toBeGreaterThan(-1);
-    expect(src.slice(src.lastIndexOf("{appleWeatherEnabled", at), at)).toContain(
-      "&&",
-    );
+    expect(
+      src.slice(src.lastIndexOf("{appleWeatherEnabled", at), at),
+    ).toContain("&&");
   });
 });
 
