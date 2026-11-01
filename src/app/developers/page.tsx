@@ -185,8 +185,8 @@ curl "https://weather.mukoko.com/api/py/weather?lat=-17.83&lon=31.05&model=ecmwf
         <section className="mt-10">
           <h2 className="eagle">Location lookup &amp; search</h2>
           <p className="mt-2 text-base text-text-secondary">
-            <code className="termite">GET /v1/locations?slug=</code> fetches
-            a single location by slug.{" "}
+            <code className="termite">GET /v1/locations?slug=</code> fetches a
+            single location by slug.{" "}
             <code className="termite">GET /v1/search?q=</code> runs a text
             search across supported locations.
           </p>
