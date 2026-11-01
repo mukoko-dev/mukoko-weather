@@ -117,12 +117,7 @@ export const FIRST_PARTY_ORIGINS = [
  * the API layer (FastAPI CORSMiddleware).
  */
 export const CORS_POLICY = {
-  open: [
-    "/api/py/geo",
-    "/api/py/search",
-    "/api/embed/:path*",
-    "/embed/:path*",
-  ],
+  open: ["/api/py/geo", "/api/py/search", "/api/embed/:path*", "/embed/:path*"],
   allowlist: FIRST_PARTY_ORIGINS,
   /** Hardware ingest is not a browser: no CORS needed. */
   noCors: ["/api/py/stations/ingest"],
