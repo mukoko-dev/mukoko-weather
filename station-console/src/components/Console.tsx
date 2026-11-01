@@ -8,6 +8,7 @@ import {
   registerStation,
   fetchStatus,
   submitManualReading,
+  type IngestInstructions,
   type RegisteredStation,
   type StationStatus,
 } from "@/lib/api";
@@ -30,6 +31,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 interface Credentials {
   stationId: string;
   ingestKey: string;
+  /** Where to point the station, as the API stated it at registration. */
+  ingest: IngestInstructions;
 }
 
 export function Console({
@@ -95,7 +98,11 @@ export function Console({
       const next = [...stations, entry];
       setStations(next);
       saveStations(next);
-      setCreds({ stationId: result.stationId, ingestKey: result.ingestKey });
+      setCreds({
+        stationId: result.stationId,
+        ingestKey: result.ingestKey,
+        ingest: result.ingest,
+      });
       setName("");
       setLat("");
       setLon("");
@@ -147,14 +154,20 @@ export function Console({
             </p>
             <p>
               Wunderground protocol — server{" "}
-              <code className="font-mono">weather.mukoko.com</code>, path{" "}
-              <code className="font-mono">/api/py/stations/ingest</code>, ID =
-              station ID, PASSWORD = ingest key
+              <code className="font-mono">
+                {creds.ingest.wunderground.server}
+              </code>
+              , path{" "}
+              <code className="font-mono">
+                {creds.ingest.wunderground.path}
+              </code>
+              , ID = station ID, PASSWORD = ingest key
             </p>
             <p>
               Ecowitt protocol — server{" "}
-              <code className="font-mono">weather.mukoko.com</code>, path{" "}
-              <code className="font-mono">/api/py/stations/ingest</code>,
+              <code className="font-mono">{creds.ingest.ecowitt.server}</code>,
+              path{" "}
+              <code className="font-mono">{creds.ingest.ecowitt.path}</code>,
               PASSKEY ={" "}
               <code className="font-mono">
                 {creds.stationId}:{"<key>"}
