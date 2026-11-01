@@ -17,7 +17,6 @@ const eslintConfig = defineConfig([
     "public/sw.js.map",
     // Monorepo sub-apps with their own toolchains (own tsconfig/lint)
     "station-console/**",
-    "worker/**",
     "workers/mongo-bridge/**",
   ]),
 ]);
