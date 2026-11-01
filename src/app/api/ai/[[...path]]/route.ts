@@ -5,14 +5,16 @@
  * the WorkOS AuthKit session with `withAuth()` (the cookie is encrypted with
  * WORKOS_COOKIE_PASSWORD on this side, so nothing downstream could read it)
  * and answers 401 to anonymous callers. A signed-in call is then sent to the
- * backend with who is asking:
+ * internal weather Worker (`src/lib/ai-worker.ts`: `WEATHER_SERVICE_URL`, the
+ * service key `WEATHER_SERVICE_API_KEY`) with who is asking:
  *
- * - the weather summary (the bare `/api/ai`) goes to the internal weather
- *   Worker (`src/lib/ai-worker.ts`: `WEATHER_SERVICE_URL`, the service key
- *   `WEATHER_SERVICE_API_KEY`), which runs it on Workers AI and counts it
- *   against the person's hour;
- * - the rest (`followup`, `agriculture`) still go to the Python functions
- *   (`/api/py/ai/*`) until they are ported (#333).
+ * - the bare `/api/ai`: the weather summary;
+ * - `/api/ai/followup`: the follow-up chat on a location page;
+ * - `/api/ai/agriculture`: the agriculture explanation (`snapshot` or
+ *   `briefing`).
+ *
+ * The Worker runs them on Workers AI and counts each model call against the
+ * person's hour. Any other subpath is a 404: nothing is forwarded blindly.
  *
  * Why a proxy at all: AuthKit is the single source of truth for who is signed
  * in. The backend gets a clean request with a user id and never the session
@@ -31,31 +33,6 @@ import {
 } from "@/lib/ai-worker";
 
 export const dynamic = "force-dynamic";
-
-/** Headers we never forward to the Python functions (hop-by-hop, host-specific, or auth). */
-const STRIPPED_REQUEST_HEADERS = new Set([
-  "host",
-  "connection",
-  "keep-alive",
-  "transfer-encoding",
-  "upgrade",
-  "proxy-authorization",
-  "proxy-authenticate",
-  "te",
-  "trailer",
-  "cookie",
-  "content-length",
-]);
-
-/** Response headers we drop on the way back to the client. */
-const STRIPPED_RESPONSE_HEADERS = new Set([
-  "connection",
-  "keep-alive",
-  "transfer-encoding",
-  "upgrade",
-  "content-encoding",
-  "content-length",
-]);
 
 interface ProxyParams {
   // Optional catch-all — `path` is undefined for the bare /api/ai request.
@@ -121,62 +98,6 @@ async function viaWorker(
   return new Response(upstream.body, { status: upstream.status, headers });
 }
 
-/** The Python functions (until followup and agriculture are ported). */
-async function viaPython(
-  req: NextRequest,
-  subpath: string,
-  userId: string,
-  userEmail: string | null,
-): Promise<Response> {
-  const url = new URL(req.url);
-  const upstream = new URL(`/api/py/ai/${subpath}`, url.origin);
-  upstream.search = url.search;
-
-  const headers = new Headers();
-  req.headers.forEach((value, key) => {
-    if (!STRIPPED_REQUEST_HEADERS.has(key.toLowerCase())) {
-      headers.set(key, value);
-    }
-  });
-  headers.set("X-Mukoko-User-Id", userId);
-  if (userEmail) headers.set("X-Mukoko-User-Email", userEmail);
-  // Shared-secret stamp (issue #92): when MUKOKO_INTERNAL_SECRET is set —
-  // one env var read by both the Next.js and Python runtimes of the same
-  // deployment — Python's require_internal_caller() rejects any /api/py/ai/*
-  // request that didn't come through this proxy. Unset = guard disabled.
-  const internalSecret = process.env.MUKOKO_INTERNAL_SECRET;
-  if (internalSecret) headers.set("X-Mukoko-Internal", internalSecret);
-
-  // Body is only meaningful for non-GET/HEAD. NextRequest exposes a stream
-  // body — pass it through verbatim. `duplex: "half"` is required by the
-  // Fetch spec when streaming a request body in Node 18+/undici.
-  const method = req.method.toUpperCase();
-  const hasBody = method !== "GET" && method !== "HEAD";
-
-  const upstreamRes = await fetch(upstream, {
-    method,
-    headers,
-    body: hasBody ? req.body : undefined,
-    // @ts-expect-error — `duplex` is required for streaming bodies in undici
-    duplex: hasBody ? "half" : undefined,
-    redirect: "manual",
-  });
-
-  // Mirror response headers (minus hop-by-hop) back to the client.
-  const responseHeaders = new Headers();
-  upstreamRes.headers.forEach((value, key) => {
-    if (!STRIPPED_RESPONSE_HEADERS.has(key.toLowerCase())) {
-      responseHeaders.set(key, value);
-    }
-  });
-
-  return new Response(upstreamRes.body, {
-    status: upstreamRes.status,
-    statusText: upstreamRes.statusText,
-    headers: responseHeaders,
-  });
-}
-
 async function proxy(
   req: NextRequest,
   { params }: ProxyParams,
@@ -192,8 +113,10 @@ async function proxy(
   const { path } = await params;
   const subpath = (path ?? []).join("/");
   const workerPath = aiWorkerPath(subpath);
-  if (workerPath !== undefined) return viaWorker(req, workerPath, user.id);
-  return viaPython(req, subpath, user.id, user.email ?? null);
+  if (workerPath === undefined) {
+    return problem(404, "not_found", "No such AI route.");
+  }
+  return viaWorker(req, workerPath, user.id);
 }
 
 export const GET = proxy;

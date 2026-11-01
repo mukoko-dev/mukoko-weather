@@ -9,8 +9,13 @@
 //!                               Only from mukoko-weather-internal (service key checked
 //!                               there), for the signed-in app: counted against the
 //!                               person's hour (`X-Mukoko-User-Id`, `X-Mukoko-Client-IP`).
-//! POST /v1/ai/followup          {message, locationName, locationSlug, weatherSummary,
+//! POST /internal/followup       {message, locationName, locationSlug, weatherSummary,
 //!                                activities, season, history} → {response}
+//!                               The same caller and budget as the summary.
+//! POST /internal/agriculture    {location: {slug, name, country, elevation, lat, lon},
+//!                                activities, mode: "snapshot" | "briefing"}
+//!                               → {text, source, cached, mode, generatedAt}
+//!                               The same caller and budget as the summary.
 //! POST /v1/ai/chat              {message, history, activities} → {response, references}
 //! POST /v1/ai/history/analyze   {location, days 7..365, activities}
 //!                               → {analysis, stats, cached, dataPoints}
@@ -62,7 +67,8 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     }
     let route = match path.as_str() {
         "/internal/summary" => Route::Summary,
-        "/v1/ai/followup" => Route::Followup,
+        "/internal/followup" => Route::Followup,
+        "/internal/agriculture" => Route::Agriculture,
         "/v1/ai/chat" => Route::Chat,
         "/v1/ai/history/analyze" => Route::History,
         "/internal/chat/completions" => Route::Completions,
@@ -75,8 +81,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     // arrive with one key, so a shared bucket would throttle the whole site:
     // the backend passthrough rate-limits per visitor itself, and the
     // signed-in app routes spend the person's hourly D1 budget.
-    let internal = matches!(route, Route::Completions | Route::Summary);
-    if !internal {
+    if !route.internal() {
         if let Some(limited) = rate_limited(&req, &env).await {
             return limited;
         }
@@ -109,7 +114,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     // it checked the WorkOS session and `mukoko-weather-internal` checked the
     // service key. These paths are not reachable from the public API, which
     // forwards `/v1/ai/*` only and builds its own request.
-    let caller = matches!(route, Route::Summary).then(|| {
+    let caller = route.app().then(|| {
         let subject = req
             .headers()
             .get(weather_core::ai::USER_ID_HEADER)
@@ -127,6 +132,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     match route {
         Route::Summary => handlers::summary(&ctx, body).await,
         Route::Followup => handlers::followup(&ctx, body).await,
+        Route::Agriculture => handlers::agriculture(&ctx, body).await,
         Route::Chat => handlers::chat(&ctx, body).await,
         Route::History => handlers::history(&ctx, body).await,
         Route::Completions => passthrough::handle(&env, &ctx.guardrails, &body).await,
@@ -136,9 +142,23 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
 enum Route {
     Summary,
     Followup,
+    Agriculture,
     Chat,
     History,
     Completions,
+}
+
+impl Route {
+    /// The signed-in app's routes: reached through `mukoko-weather-internal`,
+    /// counted against the person's hour.
+    fn app(&self) -> bool {
+        matches!(self, Route::Summary | Route::Followup | Route::Agriculture)
+    }
+
+    /// Every route that is not public (no per-IP limiter).
+    fn internal(&self) -> bool {
+        self.app() || matches!(self, Route::Completions)
+    }
 }
 
 /// `Some(429)` when the client is over its limit. A missing limiter binding

@@ -13,6 +13,11 @@ describe("aiWorkerPath", () => {
     expect(aiWorkerPath("")).toBe("/internal/ai/summary");
   });
 
+  it("maps followup and agriculture to their Worker routes", () => {
+    expect(aiWorkerPath("followup")).toBe("/internal/ai/followup");
+    expect(aiWorkerPath("agriculture")).toBe("/internal/ai/agriculture");
+  });
+
   it("has no route for a subpath it does not serve", () => {
     for (const sub of [
       "prompts",

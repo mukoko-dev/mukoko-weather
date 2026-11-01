@@ -9,6 +9,7 @@
 //! `_history_analyze.py`. The prompts that lived in Mongo `ai_prompts` are
 //! compiled in: the Workers never read a database outside their own stores.
 
+pub mod agriculture;
 pub mod completions;
 pub mod guardrails;
 pub mod history;

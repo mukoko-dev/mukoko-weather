@@ -29,9 +29,17 @@ const forecastProfile = read("workers/forecast/src/profile.rs");
 const publicApi = read("workers/public-api/src/lib.rs");
 
 describe("the AI summary is not public", () => {
-  it("the AI Worker serves it on /internal/summary only", () => {
+  it("the AI Worker serves them on /internal/* only", () => {
     expect(aiLib).toContain('"/internal/summary" => Route::Summary');
-    expect(aiLib).not.toContain('"/v1/ai/summary"');
+    expect(aiLib).toContain('"/internal/followup" => Route::Followup');
+    expect(aiLib).toContain('"/internal/agriculture" => Route::Agriculture');
+    for (const gone of [
+      "/v1/ai/summary",
+      "/v1/ai/followup",
+      "/v1/ai/agriculture",
+    ]) {
+      expect(aiLib).not.toContain(`"${gone}"`);
+    }
     expect(aiLib).not.toMatch(/"\/v1\/ai"\s*(\||=>)/);
   });
 
@@ -42,9 +50,12 @@ describe("the AI summary is not public", () => {
     expect(publicApi).not.toContain("/internal/summary");
   });
 
-  it("the internal Worker checks the service key before it forwards", () => {
+  it("the internal Worker checks the service key before it forwards, for each app route", () => {
     expect(internal).toMatch(
-      /\("\/internal\/ai\/summary", Method::Post\) => match authorised\(&req, &env\)\.await\? \{\s*Some\(refused\) => Ok\(refused\),\s*None => app_ai\(&mut req, &env, "\/internal\/summary"\)\.await,/,
+      /"\/internal\/ai\/summary" \| "\/internal\/ai\/followup" \| "\/internal\/ai\/agriculture"/,
+    );
+    expect(internal).toMatch(
+      /Method::Post,\s*\) => match authorised\(&req, &env\)\.await\? \{\s*Some\(refused\) => Ok\(refused\),[\s\S]*?None => \{\s*app_ai\(/,
     );
   });
 
@@ -82,8 +93,11 @@ describe("the model budget", () => {
   });
 
   it("only the signed-in routes spend a budget (the public ones keep the per-minute limiter)", () => {
-    expect(aiLib).toContain("matches!(route, Route::Summary).then(");
-    expect(aiLib).toContain("Route::Completions | Route::Summary");
+    expect(aiLib).toContain("route.app().then(");
+    expect(aiLib).toMatch(
+      /fn app\(&self\) -> bool \{\s*matches!\(\s*self,\s*Route::Summary \| Route::Followup \| Route::Agriculture\s*\)/,
+    );
+    expect(aiLib).toContain("if !route.internal() {");
   });
 });
 
@@ -126,5 +140,47 @@ describe("the place profile grounds the summary prompt", () => {
       expect(route).not.toContain(upstream);
     }
     expect(route).toContain("profile_prompt_block(&profile)");
+  });
+});
+
+describe("the follow-up and the agriculture explanation", () => {
+  const followup = aiHandlers.slice(
+    aiHandlers.indexOf("pub async fn followup("),
+    aiHandlers.indexOf("struct CachedExplanation"),
+  );
+  const agri = aiHandlers.slice(
+    aiHandlers.indexOf("pub async fn agriculture("),
+    aiHandlers.indexOf("/// `POST /v1/ai/chat`"),
+  );
+
+  it("the follow-up is counted before the model and grounded in the page's profile", () => {
+    expect(followup.indexOf("spend(ctx, Action::AiFollowup)")).toBeGreaterThan(
+      -1,
+    );
+    expect(followup.indexOf("spend(ctx, Action::AiFollowup)")).toBeLessThan(
+      followup.indexOf("gateway::run("),
+    );
+    expect(followup).toContain("profile::block_for_slug(");
+    expect(followup).toContain("with_profile(");
+    // No cache: nothing a caller steers is stored for others.
+    expect(followup).not.toContain("kv_put(");
+  });
+
+  it("the entitlement hook runs before the cache, and only a cache miss is counted", () => {
+    const entitled = agri.indexOf("agriculture::entitled(");
+    const cache = agri.indexOf("kv_get::<CachedExplanation>");
+    const spend = agri.indexOf("spend(ctx, Action::AiAgriculture)");
+    const model = agri.indexOf("gateway::run(");
+    expect(entitled).toBeGreaterThan(-1);
+    expect(cache).toBeGreaterThan(entitled);
+    expect(spend).toBeGreaterThan(cache);
+    expect(model).toBeGreaterThan(spend);
+  });
+
+  it("the farm data comes from the forecast Worker and only a seed's own slug is passed on", () => {
+    expect(agri).toContain("farm_data(");
+    expect(aiHandlers).toContain("https://forecast/agriculture?lat=");
+    expect(agri).toContain("let seed_slug = seed.map(|p| p.slug.as_str());");
+    expect(agri).not.toContain('loc["slug"]');
   });
 });

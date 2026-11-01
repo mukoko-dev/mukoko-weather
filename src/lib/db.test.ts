@@ -838,18 +838,17 @@ describe("db-init indexes for the model baseline (issue #246)", () => {
 });
 
 describe("db-init indexes for agriculture (issue #265)", () => {
-  it("TTL-indexes the AI cache Python still writes and the retired payload cache (the farm payload is KV now, so leftover docs expire)", async () => {
+  it("keeps the TTL indexes of the retired agriculture caches so leftover documents expire (the farm payload and the explanation are KV in the Workers now)", async () => {
     const fs = await import("fs");
     const source = fs.readFileSync("src/lib/db.ts", "utf-8");
-    const py = fs.readFileSync("api/py/_agriculture.py", "utf-8");
     for (const name of ["agriculture_cache", "agriculture_ai"]) {
       expect(
         source.indexOf(`collection("${name}"),\n      { expiresAt: 1 }`),
         name,
       ).toBeGreaterThan(-1);
     }
-    expect(py).toContain('weather_db()["agriculture_ai"]');
-    expect(py).not.toContain('weather_db()["agriculture_cache"]');
+    // Nothing writes either collection any more.
+    expect(fs.existsSync("api/py/_agriculture.py")).toBe(false);
   });
 });
 

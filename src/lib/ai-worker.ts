@@ -27,6 +27,8 @@ export const AI_WORKER_TIMEOUT_MS = 25_000;
  */
 export const AI_WORKER_ROUTES: Readonly<Record<string, string>> = {
   "": "/internal/ai/summary",
+  followup: "/internal/ai/followup",
+  agriculture: "/internal/ai/agriculture",
 };
 
 /** The internal Worker's path for a subpath, or `undefined` when it has none. */

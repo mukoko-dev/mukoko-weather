@@ -46,9 +46,6 @@ pub async fn block(
     lon: f64,
     country: Option<&str>,
 ) -> String {
-    let Ok(fetcher) = env.service(FORECAST_BINDING) else {
-        return String::new();
-    };
     let mut url = format!("https://forecast/profile-block?lat={lat}&lon={lon}");
     if let Some(s) = slug.filter(|s| !s.is_empty()) {
         url.push_str(&format!("&slug={s}"));
@@ -58,6 +55,27 @@ pub async fn block(
     {
         url.push_str(&format!("&country={c}"));
     }
+    ask(env, url).await
+}
+
+/// The profile block of the place a slug names, or `""` (a slug that is not a
+/// valid one, or that resolves to nothing). For the follow-up chat, which has
+/// only the page's slug: the text goes to that person's own conversation and
+/// is never cached, so the slug being client-supplied cannot reach anyone else.
+pub async fn block_for_slug(env: &Env, slug: &str) -> String {
+    let slug = slug.trim().to_lowercase();
+    if slug.is_empty() || slug.len() > 120 || !weather_core::place_profile::valid_slug(&slug) {
+        return String::new();
+    }
+    ask(env, format!("https://forecast/profile-block?slug={slug}")).await
+}
+
+/// `GET` the forecast Worker's profile block at `url`, bounded; `""` on any
+/// failure.
+async fn ask(env: &Env, url: String) -> String {
+    let Ok(fetcher) = env.service(FORECAST_BINDING) else {
+        return String::new();
+    };
     let answer = within(PROFILE_TIMEOUT, async {
         let mut resp = fetcher.fetch(url, None).await.ok()?;
         if resp.status_code() != 200 {

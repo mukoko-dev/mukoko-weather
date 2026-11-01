@@ -3,12 +3,12 @@
  *
  * The proxy MUST:
  *   1. Reject unauthenticated requests with HTTP 401 and contact nothing.
- *   2. Send the weather summary (the bare /api/ai) to the internal weather
- *      Worker with the service key, the person's id and address, and never the
- *      session cookie, the email or the key in the answer.
- *   3. Still forward followup / agriculture to /api/py/ai/* with the user's
- *      identity (until they are ported).
- *   4. Pass the Worker's status and Retry-After through.
+ *   2. Send the weather summary (the bare /api/ai), the follow-up and the
+ *      agriculture explanation to the internal weather Worker with the service
+ *      key, the person's id and address, and never the session cookie, the
+ *      email or the key in the answer.
+ *   3. Pass the Worker's status and Retry-After through.
+ *   4. Answer 404 to any other subpath, forwarding nothing.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
@@ -211,69 +211,91 @@ describe("the weather summary goes to the internal weather Worker", () => {
   });
 });
 
-describe("followup and agriculture still go to the Python functions", () => {
-  it("forwards authenticated POSTs to /api/py/ai/<path> with X-Mukoko-User-* headers", async () => {
-    withAuthMock.mockResolvedValueOnce({
-      user: { id: "user_abc", email: "bryan@nyuchi.com" },
-    });
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
-    );
+describe("followup and agriculture go to the internal weather Worker too", () => {
+  it.each([
+    ["followup", "/internal/ai/followup"],
+    ["agriculture", "/internal/ai/agriculture"],
+  ])(
+    "%s is forwarded to %s with the service key and the person",
+    async (sub, workerPath) => {
+      withAuthMock.mockResolvedValueOnce({
+        user: { id: "user_abc", email: "bryan@nyuchi.com" },
+      });
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
 
+      const mod = await import("./route");
+      const body = JSON.stringify({ message: "hi" });
+      const res = await mod.POST(
+        makeRequest(`https://weather.mukoko.com/api/ai/${sub}?lang=en`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: "wos-session=secret",
+          },
+          body,
+        }) as never,
+        { params: Promise.resolve({ path: [sub] }) },
+      );
+      expect(res.status).toBe(200);
+      const [url, init] = fetchMock.mock.calls[0];
+      // The query string does not cross: the Worker reads a JSON body only.
+      expect(String(url)).toBe(
+        `https://weather-internal.mukoko.com${workerPath}`,
+      );
+      expect(init.body).toBe(body);
+      const headers = init.headers as Headers;
+      expect(headers.get("authorization")).toBe("Bearer svc-key");
+      expect(headers.get("x-mukoko-user-id")).toBe("user_abc");
+      expect(headers.get("cookie")).toBeNull();
+      expect(headers.get("x-mukoko-user-email")).toBeNull();
+    },
+  );
+
+  it("answers 404 to any other subpath and contacts nothing", async () => {
     const mod = await import("./route");
-    const params = Promise.resolve({ path: ["followup"] });
-    const req = makeRequest(
-      "https://weather.mukoko.com/api/ai/followup?lang=en",
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          cookie: "wos-session=secret",
-        },
-        body: JSON.stringify({ message: "hi" }),
-      },
-    );
-
-    const res = await mod.POST(req as never, { params });
-    expect(res.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-
-    const [upstreamUrl, upstreamInit] = fetchMock.mock.calls[0];
-    expect(String(upstreamUrl)).toBe(
-      "https://weather.mukoko.com/api/py/ai/followup?lang=en",
-    );
-    expect(upstreamInit.method).toBe("POST");
-
-    const headers = upstreamInit.headers as Headers;
-    expect(headers.get("X-Mukoko-User-Id")).toBe("user_abc");
-    expect(headers.get("X-Mukoko-User-Email")).toBe("bryan@nyuchi.com");
-    // Cookies must be stripped so the Python layer never sees the session cookie.
-    expect(headers.get("cookie")).toBeNull();
-    expect(headers.get("content-type")).toBe("application/json");
+    for (const path of [
+      ["prompts"],
+      ["suggested-rules"],
+      ["followup", "x"],
+      [".."],
+    ]) {
+      withAuthMock.mockResolvedValueOnce({ user: { id: "u1", email: null } });
+      const res = await mod.POST(
+        makeRequest("https://weather.mukoko.com/api/ai/x", {
+          method: "POST",
+          body: "{}",
+        }) as never,
+        { params: Promise.resolve({ path }) },
+      );
+      expect(res.status).toBe(404);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("mirrors upstream status code to the client", async () => {
+  it("mirrors the Worker's status and Retry-After to the client", async () => {
     withAuthMock.mockResolvedValueOnce({ user: { id: "u1", email: "a@b.c" } });
     fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ error: "rate limited" }), {
+      new Response(JSON.stringify({ error: "rate_limited" }), {
         status: 429,
-        headers: { "retry-after": "60" },
+        headers: { "retry-after": "600", "content-type": "application/json" },
       }),
     );
-
     const mod = await import("./route");
-    const params = Promise.resolve({ path: ["followup"] });
-    const req = makeRequest("https://weather.mukoko.com/api/ai/followup", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ message: "?" }),
-    });
-    const res = await mod.POST(req as never, { params });
+    const res = await mod.POST(
+      makeRequest("https://weather.mukoko.com/api/ai/agriculture", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "snapshot" }),
+      }) as never,
+      { params: Promise.resolve({ path: ["agriculture"] }) },
+    );
     expect(res.status).toBe(429);
-    expect(res.headers.get("retry-after")).toBe("60");
+    expect(res.headers.get("retry-after")).toBe("600");
   });
 
   it("exposes GET/POST/PUT/PATCH/DELETE/OPTIONS exports", async () => {
