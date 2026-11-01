@@ -117,8 +117,6 @@ export const FIRST_PARTY_ORIGINS = [
 export const CORS_POLICY = {
   open: [
     "/api/py/weather",
-    "/api/py/geo",
-    "/api/py/search",
     "/api/py/airquality/:path*",
     "/api/embed/:path*",
     "/embed/:path*",
