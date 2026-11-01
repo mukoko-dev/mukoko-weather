@@ -21,6 +21,20 @@
 //! 400 bad request   401 missing or wrong key   413 too large
 //! 422 personal data or a guardrails block   429 model busy
 //! 502 model or AI Worker failed   503 key or guardrails not configured
+//!
+//! POST /internal/ai/summary | /internal/ai/followup | /internal/ai/agriculture
+//!     Authorization: Bearer <WEATHER_SERVICE_API_KEY>
+//!     X-Mukoko-User-Id: <the signed-in person>   X-Mukoko-Client-IP: <their address>
+//!     summary:     {location: {slug, name, lat, lon, elevation, country, tags}, activities}
+//!                  → {insight, cached, generatedAt}
+//!     followup:    {message, locationName, locationSlug, weatherSummary, activities,
+//!                   season, history} → {response}
+//!     agriculture: {location: {slug, name, country, elevation, lat, lon}, activities,
+//!                   mode: "snapshot" | "briefing"} → {text, source, cached, mode, generatedAt}
+//! 429 the person's hour is used
+//! (the signed-in app's AI routes: the app's Next.js server checks the WorkOS
+//! session and then calls these with the service key; the AI Worker counts
+//! each model call against the person)
 //! GET /health  liveness, no auth, no detail
 //! ```
 //!
@@ -43,6 +57,11 @@ const FORECAST_BINDING: &str = "FORECAST";
 const AI_BINDING: &str = "AI_SERVICE";
 /// Larger chat-completions bodies are refused here (the AI Worker's cap).
 const MAX_AI_BODY_BYTES: usize = 512 * 1024;
+/// The app's AI requests (a location and a few ids) are small.
+const MAX_APP_AI_BODY_BYTES: usize = 64 * 1024;
+/// Longest person id or client address passed on (the AI Worker checks the
+/// id's shape; an IPv6 address with a zone is shorter than this).
+const MAX_HEADER_ID_LEN: usize = 128;
 
 #[event(fetch)]
 pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
@@ -60,12 +79,31 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
             Some(refused) => Ok(refused),
             None => completions(&mut req, &env).await,
         },
+        (
+            path @ ("/internal/ai/summary" | "/internal/ai/followup" | "/internal/ai/agriculture"),
+            Method::Post,
+        ) => match authorised(&req, &env).await? {
+            Some(refused) => Ok(refused),
+            // `/internal/ai/<name>` on this Worker is `/internal/<name>` on the AI Worker.
+            None => {
+                app_ai(
+                    &mut req,
+                    &env,
+                    &path.replacen("/internal/ai/", "/internal/", 1),
+                )
+                .await
+            }
+        },
         ("/health" | "/internal/forecast", _) => {
             error(405, "method_not_allowed", "Only GET is served.")
         }
-        ("/internal/ai/chat/completions", _) => {
-            error(405, "method_not_allowed", "Only POST is served.")
-        }
+        (
+            "/internal/ai/chat/completions"
+            | "/internal/ai/summary"
+            | "/internal/ai/followup"
+            | "/internal/ai/agriculture",
+            _,
+        ) => error(405, "method_not_allowed", "Only POST is served."),
         _ => error(404, "not_found", "No such route."),
     }
 }
@@ -100,11 +138,44 @@ async fn completions(req: &mut Request, env: &Env) -> Result<Response> {
     }
     let headers = Headers::new();
     headers.set("Content-Type", "application/json")?;
+    relay_ai(env, "/internal/chat/completions", headers, &body).await
+}
+
+/// Forward one of the signed-in app's AI requests to `mukoko-weather-ai`'s
+/// internal path, with who is asking: the person (`X-Mukoko-User-Id`, checked
+/// by the AI Worker to be an opaque id) and their address
+/// (`X-Mukoko-Client-IP`), both set by the app's server after it checked the
+/// WorkOS session. The service key does not cross. The AI Worker counts the
+/// model call against the person's hour.
+async fn app_ai(req: &mut Request, env: &Env, ai_path: &str) -> Result<Response> {
+    let body = req.text().await.unwrap_or_default();
+    if body.len() > MAX_APP_AI_BODY_BYTES {
+        return error(413, "payload_too_large", "The request body is too large.");
+    }
+    let headers = Headers::new();
+    headers.set("Content-Type", "application/json")?;
+    for name in [
+        weather_core::ai::USER_ID_HEADER,
+        weather_core::client_ip::CLIENT_IP_HEADER,
+    ] {
+        if let Some(v) = req.headers().get(name)? {
+            let v = v.trim();
+            if !v.is_empty() && v.len() <= MAX_HEADER_ID_LEN {
+                headers.set(name, v)?;
+            }
+        }
+    }
+    relay_ai(env, ai_path, headers, &body).await
+}
+
+/// `POST` `body` to `ai_path` on `mukoko-weather-ai` and relay its answer
+/// (status, JSON body, `Retry-After`).
+async fn relay_ai(env: &Env, ai_path: &str, headers: Headers, body: &str) -> Result<Response> {
     let mut init = RequestInit::new();
     init.with_method(Method::Post)
         .with_headers(headers)
-        .with_body(Some(JsValue::from_str(&body)));
-    let inner = Request::new_with_init("https://ai/internal/chat/completions", &init)?;
+        .with_body(Some(JsValue::from_str(body)));
+    let inner = Request::new_with_init(&format!("https://ai{ai_path}"), &init)?;
     let Ok(mut upstream) = env.service(AI_BINDING)?.fetch_request(inner).await else {
         return error(
             502,

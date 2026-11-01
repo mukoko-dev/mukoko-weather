@@ -4,25 +4,25 @@
 use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use weather_core::ai::agriculture::{self, Mode};
 use weather_core::ai::guardrails::{system_prompt, Compiled};
 use weather_core::ai::history::{aggregate, fingerprint, Record};
 use weather_core::ai::prompts::{self, ClientPlace, Season};
+use weather_core::ai::summary::{self, season_for, summary_activities};
 use weather_core::ai::{activities, conversation, Invalid, Turn, REFUSAL};
+use weather_core::budget::{Action, Decision};
+use weather_core::place_profile::with_profile;
 use weather_core::places::{resolve_seed, slugify};
 use weather_core::{geo, Place};
+use weather_edge::budget::{self, Caller};
 use weather_edge::{error, json, now, now_rfc3339, responses};
 use worker::{Env, Response, Result};
 
 use crate::gateway::{self, Call, ModelError};
+use crate::profile;
 use crate::{CACHE_BINDING, FORECAST_BINDING, PLACES_BINDING};
 
-/// Summaries live 30 minutes; the fallback text only a minute, so one
-/// failed call does not hide real summaries for long.
-const SUMMARY_TTL: u64 = 1_800;
-const SUMMARY_FALLBACK_TTL: u64 = 60;
 const HISTORY_TTL: u64 = 3_600;
-/// A cached summary is redone early when the temperature moves more than this.
-const STALE_TEMP_DELTA: f64 = 5.0;
 /// Most places whose weather a chat message pulls in.
 const CHAT_PLACES: usize = 3;
 const TROUBLE: &str = "Shamwari is having trouble right now. Please try again in a moment.";
@@ -33,6 +33,29 @@ pub struct Ctx<'a> {
     /// The visitor's address as the API passed it on, for the places Worker's
     /// per-client history budget.
     pub client_ip: Option<String>,
+    /// Who spends the model budget, on the routes that have one (the
+    /// signed-in app routes, reached through `mukoko-weather-internal`).
+    /// `None` on the public routes, which have the per-minute limiter only.
+    pub caller: Option<Caller>,
+}
+
+/// Spend one model call of `action` for the caller, if the route has a
+/// budget. `None` means go ahead; `Some` is the answer to send instead:
+/// `429` with a `Retry-After`. Fails closed (a budget that cannot be read
+/// refuses), so nothing reaches the model unmetered.
+async fn spend(ctx: &Ctx<'_>, action: Action) -> Option<Result<Response>> {
+    let caller = ctx.caller.as_ref()?;
+    match budget::take(ctx.env, action, caller).await {
+        Decision::Allow => None,
+        Decision::ClientLimit => Some(responses::rate_limited(
+            600,
+            "You have used this hour's Shamwari requests. Please try again later.",
+        )),
+        Decision::GlobalLimit => Some(responses::rate_limited(
+            300,
+            "Shamwari is busy right now. Please try again shortly.",
+        )),
+    }
 }
 
 fn invalid(i: Invalid) -> Result<Response> {
@@ -97,8 +120,14 @@ struct CachedSummary {
     generated_at: String,
 }
 
-/// `POST /v1/ai/summary`. The weather is fetched here; the client's
-/// `weatherData` is not trusted into the prompt.
+/// `POST /internal/summary`, from the signed-in app. The weather is fetched
+/// here; the client's `weatherData` is not trusted into the prompt.
+///
+/// What the client says about the place is untrusted text that ends up in the
+/// prompt and in a cache entry other people read, so `summary_identity`
+/// decides what is used and keys the entry by it. The activities and tags are
+/// allowlisted. Cache hits are free; only a call that goes to the model is
+/// counted against the person's hour.
 pub async fn summary(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
     let loc = &body["location"];
     let (Some(lat), Some(lon)) = (loc["lat"].as_f64(), loc["lon"].as_f64()) else {
@@ -111,7 +140,8 @@ pub async fn summary(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
     if !geo::valid_coordinates(lat, lon) {
         return error(400, "invalid_request", "Invalid coordinates");
     }
-    let acts = ids(&body["activities"]);
+    // Known activities only, at most three: the prompt and the key use this list.
+    let acts = summary_activities(&ids(&body["activities"]));
     let Some(data) = weather(ctx.env, lat, lon).await else {
         return error(
             503,
@@ -124,29 +154,47 @@ pub async fn summary(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
 
     // Who the summary is about, and where it is cached, come from our own
     // record of the place when we have one (see `summary_identity`).
+    let client_tags: Vec<String> = loc["tags"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|t| t.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
     let client = ClientPlace {
         name: loc["name"].as_str(),
         country: loc["country"].as_str(),
         elevation: loc["elevation"].as_f64(),
+        tags: client_tags,
     };
     let (summary_loc, key) =
         prompts::summary_identity(lat, lon, &client, &acts, data["elevation"].as_f64());
     let name = summary_loc.name.clone();
     if let Some(c) = kv_get::<CachedSummary>(ctx.env, &key).await {
-        let moved = match (c.temperature, temp) {
-            (Some(a), Some(b)) => (a - b).abs() > STALE_TEMP_DELTA,
-            _ => false,
-        };
-        if !moved && c.weather_code == code {
+        if !summary::is_stale(c.temperature, c.weather_code, temp, code) {
             return json(
                 200,
                 &json!({"insight": c.insight, "cached": true, "generatedAt": c.generated_at}),
             );
         }
     }
+    if let Some(over) = spend(ctx, Action::AiSummary).await {
+        return over;
+    }
 
-    let season = prompts::season(lat, now());
-    let request = prompts::summary_request(&summary_loc, &data, &acts, &season);
+    // The country's calendar (only a two-letter code counts), else the
+    // hemisphere's; then what is stored about the place.
+    let country = summary_loc
+        .country
+        .as_deref()
+        .filter(|c| c.chars().count() == 2);
+    let season = season_for(country, lat, now());
+    // Never the client's slug: the block describes the place the point is.
+    let block = with_profile(
+        &profile::block(ctx.env, None, summary_loc.lat, summary_loc.lon, country).await,
+    );
+    let request = prompts::summary_request(&summary_loc, &data, &acts, &season, &block);
     let system = system_prompt(&ctx.guardrails, prompts::SUMMARY);
     let call = Call {
         route: "summary",
@@ -157,12 +205,12 @@ pub async fn summary(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
         content: request,
     }];
     let (insight, ttl) = match gateway::run(ctx.env, call, &system, &user).await {
-        Ok(text) => (text, SUMMARY_TTL),
+        Ok(text) => (text, summary::ttl(&summary_loc.tags)),
         Err(ModelError::RateLimited) => return rate_limited(),
         // A blocked or failed summary shows the plain conditions instead.
         Err(_) => (
             prompts::fallback_insight(&name, &data, &season),
-            SUMMARY_FALLBACK_TTL,
+            summary::TTL_FALLBACK,
         ),
     };
     let generated_at = now_rfc3339();
@@ -184,21 +232,34 @@ pub async fn summary(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
     )
 }
 
-/// `POST /v1/ai/followup`.
+/// `POST /internal/followup`, from the signed-in app. The place profile is the
+/// one the named slug is, as the Python looked it up; there is no cache, so a
+/// client cannot make text other people read. Every message is a model call,
+/// counted against the person's hour.
 pub async fn followup(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
     let message = body["message"].as_str().unwrap_or("");
-    let turns = match conversation(message, &turns(&body["history"])) {
+    let str_of = |k: &str| body[k].as_str().unwrap_or("");
+    let turns = match prompts::followup_turns(
+        message,
+        str_of("weatherSummary"),
+        &turns(&body["history"]),
+    ) {
         Ok(t) => t,
         Err(e) => return invalid(e),
     };
-    let str_of = |k: &str| body[k].as_str().unwrap_or("");
-    let app = prompts::followup_prompt(
+    if let Some(over) = spend(ctx, Action::AiFollowup).await {
+        return over;
+    }
+    let mut app = prompts::followup_prompt(
         str_of("locationName"),
         str_of("locationSlug"),
         str_of("weatherSummary"),
         &ids(&body["activities"]),
         str_of("season"),
     );
+    app.push_str(&with_profile(
+        &profile::block_for_slug(ctx.env, str_of("locationSlug")).await,
+    ));
     let system = system_prompt(&ctx.guardrails, &app);
     let call = Call {
         route: "followup",
@@ -210,6 +271,201 @@ pub async fn followup(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
         Err(ModelError::RateLimited) => rate_limited(),
         Err(ModelError::Failed) => json(200, &json!({"response": TROUBLE, "error": true})),
     }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CachedExplanation {
+    text: String,
+    /// `ai` or `fallback`.
+    source: String,
+    generated_at: String,
+}
+
+/// The farm data for a point from the forecast Worker (`GET /agriculture`).
+/// Any failure is `available: false`, so the route degrades to its fallback.
+async fn farm_data(
+    env: &Env,
+    lat: f64,
+    lon: f64,
+    slug: Option<&str>,
+    country: Option<&str>,
+    crops: &[String],
+) -> Value {
+    let mut url = format!("https://forecast/agriculture?lat={lat}&lon={lon}");
+    if let Some(s) = slug {
+        url.push_str(&format!("&location={s}"));
+    }
+    if let Some(c) = country {
+        url.push_str(&format!("&country={c}"));
+    }
+    if !crops.is_empty() {
+        url.push_str(&format!("&crops={}", crops.join(",")));
+    }
+    let answer = async {
+        let mut resp = env
+            .service(FORECAST_BINDING)
+            .ok()?
+            .fetch(url, None)
+            .await
+            .ok()?;
+        if resp.status_code() != 200 {
+            return None;
+        }
+        resp.json::<Value>().await.ok()
+    }
+    .await;
+    answer
+        .filter(Value::is_object)
+        .unwrap_or_else(|| json!({"available": false, "reason": "provider_error"}))
+}
+
+/// `POST /internal/agriculture`, from the signed-in app: the model explains the
+/// forecast Worker's deterministic farm data (`weather_core::ai::agriculture`).
+/// The entitlement hook runs before the cache is read; a cache hit is free and
+/// only a call that reaches the model is counted against the person's hour.
+/// As for the summary, what the client says about the place decides the cache
+/// key (`place_identity`), so no caller reads text another caller steered.
+pub async fn agriculture(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
+    let loc = &body["location"];
+    let Some(mode) = Mode::parse(body["mode"].as_str().unwrap_or("snapshot")) else {
+        return error(
+            422,
+            "invalid_request",
+            "`mode` must be `snapshot` or `briefing`.",
+        );
+    };
+    let (Some(lat), Some(lon)) = (loc["lat"].as_f64(), loc["lon"].as_f64()) else {
+        return error(
+            422,
+            "invalid_request",
+            "`location.lat` and `location.lon` are required.",
+        );
+    };
+    if !geo::valid_coordinates(lat, lon) {
+        return error(422, "invalid_request", "Invalid coordinates");
+    }
+    // Known farming activities, from the first 20 entries (not capped first).
+    let raw: Vec<String> = body["activities"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+    let crops = agriculture::farming_activities(&raw);
+
+    let client = ClientPlace {
+        name: loc["name"].as_str(),
+        country: loc["country"].as_str(),
+        elevation: loc["elevation"].as_f64(),
+        tags: Vec::new(),
+    };
+    // The key does not wait on the farm data, so a hit costs nothing upstream.
+    let (place, place_key) = prompts::place_identity(lat, lon, &client, None);
+    let seed = weather_core::places::nearest_seed(lat, lon, prompts::SEED_SUMMARY_KM);
+    let country = place
+        .country
+        .as_deref()
+        .filter(|c| c.len() == 2 && c.chars().all(|ch| ch.is_ascii_alphabetic()))
+        .map(str::to_uppercase);
+    // The slug is only ever OUR seed's: a client's slug is not trusted to name
+    // the place the data is for.
+    let seed_slug = seed.map(|p| p.slug.as_str());
+    let now_iso = now_rfc3339();
+    let answer = |text: &str, source: &str, cached: bool, generated_at: &str| {
+        json(
+            200,
+            &json!({"text": text, "source": source, "cached": cached, "mode": mode.as_str(), "generatedAt": generated_at}),
+        )
+    };
+
+    let person = ctx.caller.as_ref().and_then(|c| c.subject.as_deref());
+    if !agriculture::entitled(person) {
+        // Deterministic text only; the AI cache is never read or written, so
+        // model text cannot reach an unentitled caller.
+        let data = farm_data(ctx.env, lat, lon, seed_slug, country.as_deref(), &crops).await;
+        return answer(
+            &agriculture::fallback_text(&data, mode),
+            "fallback",
+            false,
+            &now_iso,
+        );
+    }
+
+    let key = agriculture::cache_key(&place_key, mode, &crops);
+    if let Some(c) = kv_get::<CachedExplanation>(ctx.env, &key).await {
+        return answer(&c.text, &c.source, true, &c.generated_at);
+    }
+    if let Some(over) = spend(ctx, Action::AiAgriculture).await {
+        return over;
+    }
+
+    let data = farm_data(ctx.env, lat, lon, seed_slug, country.as_deref(), &crops).await;
+    let store = |text: String, source: &'static str| {
+        let entry = CachedExplanation {
+            text,
+            source: source.to_owned(),
+            generated_at: now_iso.clone(),
+        };
+        let ttl = if source == "fallback" {
+            agriculture::FALLBACK_TTL
+        } else {
+            agriculture::AI_CACHE_TTL
+        };
+        async move {
+            kv_put(ctx.env, &key, &entry, ttl).await;
+            entry
+        }
+    };
+    if data["available"].as_bool() != Some(true) {
+        let entry = store(agriculture::fallback_text(&data, mode), "fallback").await;
+        return answer(&entry.text, "fallback", false, &now_iso);
+    }
+
+    // The elevation shown: our record's at a seed centre, else the client's,
+    // else the farm data's.
+    let elevation = if seed.is_some() {
+        Some(place.elevation)
+    } else {
+        loc["elevation"]
+            .as_f64()
+            .or_else(|| data["elevation"].as_f64())
+    };
+    let prompt_place = agriculture::PromptPlace {
+        name: &place.name,
+        country: country.as_deref().unwrap_or(""),
+        lat: place.lat,
+        lon: place.lon,
+        elevation,
+    };
+    let Some((template, max_tokens)) = agriculture::system_prompt(mode) else {
+        let entry = store(agriculture::fallback_text(&data, mode), "fallback").await;
+        return answer(&entry.text, "fallback", false, &now_iso);
+    };
+    let system = system_prompt(&ctx.guardrails, template);
+    let call = Call {
+        route: "agriculture",
+        max_tokens,
+    };
+    let user = [Turn {
+        role: "user".into(),
+        content: agriculture::user_prompt(&prompt_place, &crops, &data),
+    }];
+    let text = match gateway::run(ctx.env, call, &system, &user).await {
+        Ok(text) => text.trim().to_owned(),
+        // "Try again later", honestly, rather than caching fallback text.
+        Err(ModelError::RateLimited) => return rate_limited(),
+        Err(_) => String::new(),
+    };
+    let (text, source) = if text.is_empty() {
+        (agriculture::fallback_text(&data, mode), "fallback")
+    } else {
+        (text, "ai")
+    };
+    let entry = store(text, source).await;
+    answer(&entry.text, source, false, &now_iso)
 }
 
 /// `POST /v1/ai/chat`. The weather for the places the user names is fetched
@@ -412,7 +668,11 @@ pub async fn history(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
 
     let stats = aggregate(&records);
     let name = place.name.clone().unwrap_or_else(|| place.slug.clone());
-    let season: Season = prompts::season(place.lat, now());
+    let season: Season = season_for(
+        place.country.as_deref().filter(|c| c.chars().count() == 2),
+        place.lat,
+        now(),
+    );
     let request = prompts::history_request(
         &name,
         place.elevation.unwrap_or(0.0),

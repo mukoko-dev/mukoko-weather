@@ -24,7 +24,9 @@
 //!                                                    the shape of /api/py/airports/nearest
 //! GET /v1/locations, /v1/search, /v1/geo, /v1/history   places (mukoko-weather-places)
 //! POST /v1/devices, GET|PATCH /v1/devices/{id}      device preference profiles
-//! POST /v1/ai, /v1/ai/{summary,followup,chat,history/analyze}   Shamwari Weather
+//! POST /v1/ai/{chat,history/analyze}   Shamwari Weather (the summary, the follow-up and the agriculture
+//!                                      explanation are not public: they are signed-in routes of the app,
+//!                                      reached through mukoko-weather-internal)
 //! GET /health
 //! ```
 //!

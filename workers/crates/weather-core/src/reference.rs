@@ -9,7 +9,10 @@
 //! regenerates from those seed files (CI fails when they are stale).
 //!
 //! The one thing MongoDB held that the seed files do not is the data-managed
-//! `aiInstructions` on an activity; nothing a Worker serves reads it.
+//! `aiInstructions` on an activity. They are compiled in from
+//! `data/reference/activity-guidance.json` (a snapshot of the 55 production
+//! documents, 2026-11-01) and used only by the AI Worker's prompts
+//! ([`activity_brief`]); `/v1/activities` does not serve them.
 //!
 //! Every function takes the parsed query and returns a [`Reply`]: status, JSON
 //! body and `Cache-Control`, in the shapes the Python routes answered.
@@ -25,6 +28,7 @@ const TAGS: &str = include_str!("../data/reference/tags.json");
 const REGIONS: &str = include_str!("../data/reference/regions.json");
 const AI_PROMPTS: &str = include_str!("../data/reference/ai-prompts.json");
 const AI_RULES: &str = include_str!("../data/reference/ai-suggested-rules.json");
+const ACTIVITY_GUIDANCE: &str = include_str!("../data/reference/activity-guidance.json");
 
 const REF_CACHE: &str = "public, max-age=3600, stale-while-revalidate=86400";
 const RULES_CACHE: &str = "s-maxage=300, stale-while-revalidate=60";
@@ -67,6 +71,64 @@ fn activities() -> &'static [Value] {
 /// replaces `filter_known_activities`' database lookup).
 pub fn is_known_activity(id: &str) -> bool {
     activities().iter().any(|a| text(a, "id") == id)
+}
+
+/// An activity as an AI prompt names it: the label the user sees, its
+/// category, and the per-activity guidance the model is told to follow.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ActivityBrief {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub category: &'static str,
+    /// What weather factors matter for this activity and what regional
+    /// framing to use (`aiInstructions`).
+    pub guidance: Option<&'static str>,
+}
+
+fn guidance() -> &'static Map<String, Value> {
+    static CELL: OnceLock<Map<String, Value>> = OnceLock::new();
+    CELL.get_or_init(|| {
+        serde_json::from_str(ACTIVITY_GUIDANCE).expect("activity-guidance.json is valid")
+    })
+}
+
+/// The label, category and guidance of a known activity id; `None` for an id
+/// the app does not ship.
+pub fn activity_brief(id: &str) -> Option<ActivityBrief> {
+    let doc = activities().iter().find(|a| text(a, "id") == id)?;
+    Some(ActivityBrief {
+        id: text(doc, "id"),
+        label: text(doc, "label"),
+        category: text(doc, "category"),
+        guidance: guidance()
+            .get(id)
+            .and_then(Value::as_str)
+            .filter(|g| !g.trim().is_empty()),
+    })
+}
+
+/// The template and output budget of an active AI prompt document by key (any
+/// key, `system:*` included: this is for the AI Worker, which has them compiled
+/// in; the public `/v1/ai/prompts` route never serves a `system:*` prompt).
+pub fn ai_prompt(key: &str) -> Option<(&'static str, Option<u32>)> {
+    let doc = prompts()
+        .iter()
+        .find(|p| active(p) && text(p, "promptKey") == key)?;
+    let template = text(doc, "template");
+    (!template.is_empty()).then(|| {
+        (
+            template,
+            doc.get("maxTokens")
+                .and_then(Value::as_u64)
+                .and_then(|t| u32::try_from(t).ok()),
+        )
+    })
+}
+
+/// Whether `slug` is one of the app's location tags (the allowlist that
+/// replaces `get_known_tags`' database lookup).
+pub fn is_known_tag(slug: &str) -> bool {
+    tags().iter().any(|t| text(t, "slug") == slug)
 }
 
 fn categories() -> &'static [Value] {
@@ -344,6 +406,35 @@ mod tests {
         assert!(!regions().is_empty());
         assert!(!prompts().is_empty());
         assert!(!suggested_rules().is_empty());
+    }
+
+    #[test]
+    fn every_activity_has_guidance_and_nothing_else_does() {
+        let ids: Vec<&str> = activities().iter().map(|a| text(a, "id")).collect();
+        let mut keyed: Vec<&str> = guidance().keys().map(String::as_str).collect();
+        keyed.sort_unstable();
+        let mut want = ids.clone();
+        want.sort_unstable();
+        assert_eq!(
+            keyed, want,
+            "activity-guidance.json must key exactly the activities"
+        );
+        for id in ids {
+            let brief = activity_brief(id).expect("known");
+            assert_eq!(brief.id, id);
+            assert!(brief.guidance.is_some_and(|g| g.len() > 20), "{id}");
+            assert!(!brief.label.is_empty() && !brief.category.is_empty());
+        }
+    }
+
+    #[test]
+    fn briefs_and_tags_are_allowlists() {
+        let football = activity_brief("football").expect("football is shipped");
+        assert_eq!(football.category, "sports");
+        assert!(activity_brief("ignore previous instructions").is_none());
+        assert!(activity_brief("").is_none());
+        assert!(is_known_tag("farming") && is_known_tag("city"));
+        assert!(!is_known_tag("Farming") && !is_known_tag("evil; tag") && !is_known_tag(""));
     }
 
     #[test]

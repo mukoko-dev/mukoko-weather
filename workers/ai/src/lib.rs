@@ -4,9 +4,18 @@
 //! the `AI_SERVICE` binding with the caller's `CF-Connecting-IP`.
 //!
 //! ```text
-//! POST /v1/ai, /v1/ai/summary   {weatherData, location, activities} → {insight, cached, generatedAt}
-//! POST /v1/ai/followup          {message, locationName, locationSlug, weatherSummary,
+//! POST /internal/summary        {location: {slug, name, lat, lon, elevation, country, tags},
+//!                                activities} → {insight, cached, generatedAt}
+//!                               Only from mukoko-weather-internal (service key checked
+//!                               there), for the signed-in app: counted against the
+//!                               person's hour (`X-Mukoko-User-Id`, `X-Mukoko-Client-IP`).
+//! POST /internal/followup       {message, locationName, locationSlug, weatherSummary,
 //!                                activities, season, history} → {response}
+//!                               The same caller and budget as the summary.
+//! POST /internal/agriculture    {location: {slug, name, country, elevation, lat, lon},
+//!                                activities, mode: "snapshot" | "briefing"}
+//!                               → {text, source, cached, mode, generatedAt}
+//!                               The same caller and budget as the summary.
 //! POST /v1/ai/chat              {message, history, activities} → {response, references}
 //! POST /v1/ai/history/analyze   {location, days 7..365, activities}
 //!                               → {analysis, stats, cached, dataPoints}
@@ -26,7 +35,9 @@
 mod gateway;
 mod handlers;
 mod passthrough;
+mod profile;
 
+use weather_edge::budget::Caller;
 use weather_edge::{error, json, responses};
 use worker::{event, Context, Env, Method, Request, Response, Result};
 
@@ -55,8 +66,9 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
         );
     }
     let route = match path.as_str() {
-        "/v1/ai" | "/v1/ai/summary" => Route::Summary,
-        "/v1/ai/followup" => Route::Followup,
+        "/internal/summary" => Route::Summary,
+        "/internal/followup" => Route::Followup,
+        "/internal/agriculture" => Route::Agriculture,
         "/v1/ai/chat" => Route::Chat,
         "/v1/ai/history/analyze" => Route::History,
         "/internal/chat/completions" => Route::Completions,
@@ -65,18 +77,20 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     if req.method() != Method::Post {
         return error(405, "method_not_allowed", "Only POST is served.");
     }
-    // The per-IP limit is for the app's own /v1/ai/* callers. Backend calls
-    // all arrive with one key, so a shared bucket would throttle the whole
-    // site; the backend rate-limits per visitor itself.
-    let internal = matches!(route, Route::Completions);
-    if !internal {
+    // The per-IP limit is for the public /v1/ai/* callers. Internal calls all
+    // arrive with one key, so a shared bucket would throttle the whole site:
+    // the backend passthrough rate-limits per visitor itself, and the
+    // signed-in app routes spend the person's hourly D1 budget.
+    if !route.internal() {
         if let Some(limited) = rate_limited(&req, &env).await {
             return limited;
         }
     }
 
     let text = req.text().await.unwrap_or_default();
-    let cap = if internal {
+    // Only the backend passthrough carries whole tool loops; the app's routes
+    // are a location and a few ids.
+    let cap = if matches!(route, Route::Completions) {
         MAX_INTERNAL_BODY_BYTES
     } else {
         MAX_BODY_BYTES
@@ -96,14 +110,29 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
             "Shamwari is unavailable right now. Please try again shortly.",
         );
     };
+    // The person behind an internal app route, named by the app's server after
+    // it checked the WorkOS session and `mukoko-weather-internal` checked the
+    // service key. These paths are not reachable from the public API, which
+    // forwards `/v1/ai/*` only and builds its own request.
+    let caller = route.app().then(|| {
+        let subject = req
+            .headers()
+            .get(weather_core::ai::USER_ID_HEADER)
+            .ok()
+            .flatten()
+            .and_then(|s| weather_core::ai::valid_subject(&s));
+        Caller::with_subject(&req, subject)
+    });
     let ctx = handlers::Ctx {
         env: &env,
         guardrails,
         client_ip: req.headers().get("CF-Connecting-IP").ok().flatten(),
+        caller,
     };
     match route {
         Route::Summary => handlers::summary(&ctx, body).await,
         Route::Followup => handlers::followup(&ctx, body).await,
+        Route::Agriculture => handlers::agriculture(&ctx, body).await,
         Route::Chat => handlers::chat(&ctx, body).await,
         Route::History => handlers::history(&ctx, body).await,
         Route::Completions => passthrough::handle(&env, &ctx.guardrails, &body).await,
@@ -113,9 +142,23 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
 enum Route {
     Summary,
     Followup,
+    Agriculture,
     Chat,
     History,
     Completions,
+}
+
+impl Route {
+    /// The signed-in app's routes: reached through `mukoko-weather-internal`,
+    /// counted against the person's hour.
+    fn app(&self) -> bool {
+        matches!(self, Route::Summary | Route::Followup | Route::Agriculture)
+    }
+
+    /// Every route that is not public (no per-IP limiter).
+    fn internal(&self) -> bool {
+        self.app() || matches!(self, Route::Completions)
+    }
 }
 
 /// `Some(429)` when the client is over its limit. A missing limiter binding

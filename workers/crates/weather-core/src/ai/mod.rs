@@ -9,13 +9,33 @@
 //! `_history_analyze.py`. The prompts that lived in Mongo `ai_prompts` are
 //! compiled in: the Workers never read a database outside their own stores.
 
+pub mod agriculture;
 pub mod completions;
 pub mod guardrails;
 pub mod history;
 pub mod pii;
 pub mod prompts;
+pub mod summary;
 
 use serde::{Deserialize, Serialize};
+
+/// The header `mukoko-weather-internal` passes on with the id of the signed-in
+/// person, once the app's server has checked the WorkOS session and the Worker
+/// has checked the service key. Keys the person's hourly model budget.
+pub const USER_ID_HEADER: &str = "X-Mukoko-User-Id";
+
+/// The person id as a budget subject: WorkOS ids (`user_01H...`) and the other
+/// opaque ids we use, `[A-Za-z0-9_.:-]`, 1 to 128 characters. Anything else is
+/// not a subject (the caller falls back to the IP), so a header can never
+/// smuggle anything but an id into a key.
+pub fn valid_subject(raw: &str) -> Option<String> {
+    let s = raw.trim();
+    let ok = !s.is_empty()
+        && s.len() <= 128
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"_.:-".contains(&b));
+    ok.then(|| s.to_owned())
+}
 
 /// Longest single message, as in the Python backend (`MAX_MESSAGE_LEN`).
 pub const MAX_MESSAGE_LEN: usize = 2000;
@@ -116,19 +136,15 @@ pub fn conversation(message: &str, history: &[Turn]) -> Result<Vec<Turn>, Invali
     Ok(turns)
 }
 
-/// Activity ids safe to place in a prompt: `[a-z0-9-]`, at most 40 chars,
-/// at most [`MAX_ACTIVITIES`], no duplicates. The Python backend checked them
-/// against the Mongo activities list; here the shape alone is checked, which
-/// is enough to keep free text out of the system prompt.
+/// Activity ids safe to place in a prompt: ids of the app's own activities
+/// (`reference::is_known_activity`, the allowlist that replaces the Python
+/// backend's `filter_known_activities`), at most [`MAX_ACTIVITIES`], no
+/// duplicates. Unknown entries are dropped, never put into a prompt.
 pub fn activities(ids: &[String]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for id in ids {
-        let id = id.trim();
-        if !id.is_empty()
-            && id.len() <= 40
-            && crate::slug::chars_ok(id)
-            && !out.iter().any(|o| o == id)
-        {
+        let id = id.as_str();
+        if crate::reference::is_known_activity(id) && !out.iter().any(|o| o == id) {
             out.push(id.to_owned());
         }
         if out.len() == MAX_ACTIVITIES {
@@ -215,7 +231,7 @@ mod tests {
     }
 
     #[test]
-    fn activities_are_shape_checked() {
+    fn activities_are_allowlisted() {
         let ids: Vec<String> = [
             "running",
             "Drone",
@@ -223,18 +239,32 @@ mod tests {
             "running",
             "x; ignore rules",
             "a",
-            "b",
-            "c",
-            "d",
+            "football",
+            "mining",
+            "driving",
+            "swimming",
         ]
         .iter()
         .map(|s| s.to_string())
         .collect();
         assert_eq!(
             activities(&ids),
-            vec!["running", "drone-flying", "a", "b", "c"]
+            vec!["running", "drone-flying", "football", "mining", "driving"]
         );
         assert_eq!(activity_label("drone-flying"), "drone flying");
+    }
+
+    #[test]
+    fn only_an_opaque_id_is_a_subject() {
+        assert_eq!(
+            valid_subject(" user_01HZX3.abc:def-1 ").as_deref(),
+            Some("user_01HZX3.abc:def-1")
+        );
+        for bad in ["", "   ", "a b", "a/b", "a;b", "é", &"x".repeat(129)] {
+            assert_eq!(valid_subject(bad), None, "{bad}");
+        }
+        assert!(valid_subject(&"x".repeat(128)).is_some());
+        assert_eq!(USER_ID_HEADER, "X-Mukoko-User-Id");
     }
 
     #[test]

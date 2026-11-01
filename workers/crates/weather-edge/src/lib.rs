@@ -5,6 +5,7 @@
 
 use std::time::Duration;
 
+pub mod budget;
 pub mod cors;
 pub mod responses;
 pub mod service;
