@@ -1,10 +1,9 @@
-"""Secrets must never reach logs: header-borne provider keys + log redaction."""
+"""Secrets must never reach logs: query-string redaction in log records and tracebacks."""
 
 from __future__ import annotations
 
 import io
 import logging
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -18,34 +17,6 @@ from py._logging import (
 
 FAKE_KEY = "test-fake-key-123"
 
-
-# ---------------------------------------------------------------------------
-# Tomorrow.io: key in the header, not the URL
-# ---------------------------------------------------------------------------
-
-
-class TestTomorrowKeyInHeader:
-    @patch("py._http.get_http_client")
-    def test_forecast_sends_key_in_header(self, mock_client):
-        # Tomorrow.io is enrichment-only now (issue #246); same key rule applies.
-        from py._enrichment import fetch_tomorrow_insights
-
-        resp = MagicMock(status_code=500)
-        mock_client.return_value.get.return_value = resp
-
-        from py._enrichment import TomorrowUnavailable
-
-        with pytest.raises(TomorrowUnavailable) as exc:
-            fetch_tomorrow_insights(-17.83, 31.05, FAKE_KEY)
-        assert FAKE_KEY not in str(exc.value)  # the logged reason never carries the key
-
-        call = mock_client.return_value.get.call_args
-        url = call.args[0]
-        params = call.kwargs.get("params") or {}
-        assert FAKE_KEY not in url
-        assert "apikey" not in params
-        assert FAKE_KEY not in str(params)
-        assert call.kwargs["headers"] == {"apikey": FAKE_KEY}
 
 class TestRedactSecrets:
     @pytest.mark.parametrize(

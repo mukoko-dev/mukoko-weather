@@ -14,8 +14,8 @@ coarse enough that a town's page slugs, GPS fixes and the client refresh all
 share one provider fetch (Tomorrow.io free tier: 500 calls/day).
 
 The key is built from integer cell indices, never from formatted floats, so
-the TypeScript mirror (``src/lib/weather-cache-key.ts``) produces the same
-string bit for bit. Both are pinned to ``tests/fixtures/weather-cache-keys.json``.
+the Rust Worker (``weather_core::geo::cache_key``) produces the same string
+bit for bit. Both are pinned to ``tests/fixtures/weather-cache-keys.json``.
 The ``cell:`` prefix keeps new keys disjoint from every legacy key (place
 slugs and the old raw ``{lat:.2f}_{lon:.2f}`` fallback), so a legacy row can
 never be read under a new key; legacy rows just expire through the TTL.
@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import math
 
-#: Grid size in degrees. Change it here AND in src/lib/weather-cache-key.ts.
+#: Grid size in degrees. Change it here AND in workers/crates/weather-core/src/geo.rs.
 GRID_DEG = 0.05
 _CELLS_PER_DEG = 20  # 1 / GRID_DEG, kept integral so both languages agree
 _LAT_MAX_IDX = 90 * _CELLS_PER_DEG

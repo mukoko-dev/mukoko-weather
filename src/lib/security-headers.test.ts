@@ -103,10 +103,8 @@ describe("CORS (B06)", () => {
 
   it("keeps the documented public browser API and embeds CORS-open", () => {
     for (const s of [
-      "/api/py/weather",
       "/api/py/geo",
       "/api/py/search",
-      "/api/py/airquality/:path*",
       "/api/embed/:path*",
       "/embed/:path*",
     ])

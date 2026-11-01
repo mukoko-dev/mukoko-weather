@@ -48,7 +48,7 @@ pub fn valid_coordinates(lat: f64, lon: f64) -> bool {
 }
 
 /// The 0.05° (~5.6 km) grid cell of a coordinate, `cell:-17.85_31.05`: the key
-/// the Python `weather_cache_key` and the TypeScript `weatherCacheKey` derive,
+/// the Python `weather_cache_key` (still in `api/py/_weather_cache_key.py`) derives,
 /// pinned to `tests/fixtures/weather-cache-keys.json`. Built from integer cell
 /// indices (round half up), never from formatted floats.
 pub fn cell_key(lat: f64, lon: f64) -> String {
