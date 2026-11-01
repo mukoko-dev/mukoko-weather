@@ -1,28 +1,38 @@
 /**
- * Auth-gated proxy for the Python AI endpoints.
+ * Auth-gated proxy for the AI routes.
  *
- * The Python FastAPI app cannot decode the WorkOS AuthKit session cookie
- * directly (the cookie is encrypted with WORKOS_COOKIE_PASSWORD on the
- * Next.js side). This route is the bridge: every AI request first lands
- * here, we validate the session with `withAuth()`, then forward to
- * `/api/py/ai/${path}` with the user identity attached as headers so the
- * Python layer can log/audit per-user without re-validating.
+ * The browser calls `/api/ai/*`. This route is the sign-in gate: it validates
+ * the WorkOS AuthKit session with `withAuth()` (the cookie is encrypted with
+ * WORKOS_COOKIE_PASSWORD on this side, so nothing downstream could read it)
+ * and answers 401 to anonymous callers. A signed-in call is then sent to the
+ * backend with who is asking:
  *
- * Why proxy instead of gating in Python:
- *   - Single source of truth for auth (AuthKit)
- *   - Python doesn't need WorkOS SDK or cookie crypto
- *   - 401 lands fast (no round-trip into FastAPI for unauth users)
+ * - the weather summary (the bare `/api/ai`) goes to the internal weather
+ *   Worker (`src/lib/ai-worker.ts`: `WEATHER_SERVICE_URL`, the service key
+ *   `WEATHER_SERVICE_API_KEY`), which runs it on Workers AI and counts it
+ *   against the person's hour;
+ * - the rest (`followup`, `agriculture`) still go to the Python functions
+ *   (`/api/py/ai/*`) until they are ported (#333).
  *
- * All HTTP methods are passed through. Query string + body are preserved.
- * Hop-by-hop headers are stripped.
+ * Why a proxy at all: AuthKit is the single source of truth for who is signed
+ * in. The backend gets a clean request with a user id and never the session
+ * cookie.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { withAuth } from "@workos-inc/authkit-nextjs";
+import {
+  AI_WORKER_TIMEOUT_MS,
+  MAX_AI_BODY_BYTES,
+  aiWorkerHeaders,
+  aiWorkerOrigin,
+  aiWorkerPath,
+  visitorIp,
+} from "@/lib/ai-worker";
 
 export const dynamic = "force-dynamic";
 
-/** Headers we never forward upstream (hop-by-hop, host-specific, or auth). */
+/** Headers we never forward to the Python functions (hop-by-hop, host-specific, or auth). */
 const STRIPPED_REQUEST_HEADERS = new Set([
   "host",
   "connection",
@@ -52,42 +62,84 @@ interface ProxyParams {
   params: Promise<{ path?: string[] }>;
 }
 
-async function proxy(
+/** A small JSON error in the Workers' envelope. */
+function problem(status: number, error: string, description: string) {
+  return NextResponse.json(
+    { error, error_description: description },
+    { status, headers: { "Cache-Control": "no-store" } },
+  );
+}
+
+/**
+ * Send a signed-in call to the internal weather Worker and hand its answer
+ * back (status, JSON, `Retry-After`). Nothing from the visitor's request but
+ * the body crosses; the service key never leaves the server.
+ */
+async function viaWorker(
   req: NextRequest,
-  { params }: ProxyParams,
+  workerPath: string,
+  userId: string,
 ): Promise<Response> {
-  const { user } = await withAuth();
-  if (!user) {
-    return NextResponse.json(
-      { error: "unauthorized", message: "Sign in to use Mukoko AI features." },
-      { status: 401 },
+  if (req.method.toUpperCase() !== "POST") {
+    return problem(405, "method_not_allowed", "Only POST is served.");
+  }
+  const origin = aiWorkerOrigin();
+  const key = (process.env.WEATHER_SERVICE_API_KEY ?? "").trim();
+  if (!origin || !key) {
+    return problem(
+      503,
+      "ai_unavailable",
+      "Shamwari is not available right now. Please try again later.",
     );
   }
+  const body = await req.text();
+  if (new TextEncoder().encode(body).length > MAX_AI_BODY_BYTES) {
+    return problem(413, "payload_too_large", "The request body is too large.");
+  }
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${origin}${workerPath}`, {
+      method: "POST",
+      headers: aiWorkerHeaders({
+        key,
+        userId,
+        ip: visitorIp(req.headers),
+      }),
+      body,
+      redirect: "manual",
+      signal: AbortSignal.timeout(AI_WORKER_TIMEOUT_MS),
+    });
+  } catch {
+    return problem(502, "upstream_unreachable", "Shamwari did not answer.");
+  }
+  const headers = new Headers({
+    "Content-Type": upstream.headers.get("content-type") ?? "application/json",
+    "Cache-Control": "no-store",
+  });
+  const retryAfter = upstream.headers.get("retry-after");
+  if (retryAfter) headers.set("Retry-After", retryAfter);
+  return new Response(upstream.body, { status: upstream.status, headers });
+}
 
-  const { path } = await params;
-  const subpath = (path ?? []).join("/");
+/** The Python functions (until followup and agriculture are ported). */
+async function viaPython(
+  req: NextRequest,
+  subpath: string,
+  userId: string,
+  userEmail: string | null,
+): Promise<Response> {
   const url = new URL(req.url);
-  // Build the upstream URL — same origin, but rerouted to the Python prefix.
-  // The route is an OPTIONAL catch-all ([[...path]]) so the bare `/api/ai`
-  // (the AI summary endpoint — AISummary POSTs here) matches too; a required
-  // catch-all silently fell through to Next's 404 page and the widget showed
-  // "Unable to load AI summary" for every signed-in user. No trailing slash
-  // when there's no subpath — FastAPI's `/api/py/ai/` would 307-redirect.
-  const upstream = new URL(
-    subpath ? `/api/py/ai/${subpath}` : "/api/py/ai",
-    url.origin,
-  );
+  const upstream = new URL(`/api/py/ai/${subpath}`, url.origin);
   upstream.search = url.search;
 
-  // Forward request headers minus hop-by-hop / cookie, plus the user identity.
   const headers = new Headers();
   req.headers.forEach((value, key) => {
     if (!STRIPPED_REQUEST_HEADERS.has(key.toLowerCase())) {
       headers.set(key, value);
     }
   });
-  headers.set("X-Mukoko-User-Id", user.id);
-  if (user.email) headers.set("X-Mukoko-User-Email", user.email);
+  headers.set("X-Mukoko-User-Id", userId);
+  if (userEmail) headers.set("X-Mukoko-User-Email", userEmail);
   // Shared-secret stamp (issue #92): when MUKOKO_INTERNAL_SECRET is set —
   // one env var read by both the Next.js and Python runtimes of the same
   // deployment — Python's require_internal_caller() rejects any /api/py/ai/*
@@ -123,6 +175,25 @@ async function proxy(
     statusText: upstreamRes.statusText,
     headers: responseHeaders,
   });
+}
+
+async function proxy(
+  req: NextRequest,
+  { params }: ProxyParams,
+): Promise<Response> {
+  const { user } = await withAuth();
+  if (!user) {
+    return NextResponse.json(
+      { error: "unauthorized", message: "Sign in to use Mukoko AI features." },
+      { status: 401 },
+    );
+  }
+
+  const { path } = await params;
+  const subpath = (path ?? []).join("/");
+  const workerPath = aiWorkerPath(subpath);
+  if (workerPath !== undefined) return viaWorker(req, workerPath, user.id);
+  return viaPython(req, subpath, user.id, user.email ?? null);
 }
 
 export const GET = proxy;

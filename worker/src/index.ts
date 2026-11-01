@@ -6,7 +6,6 @@
  * Routes:
  *   GET  /api/weather?lat=&lon=         — Cached Open-Meteo weather proxy
  *   GET  /api/geo?lat=&lon=             — Nearest location lookup
- *   POST /api/ai                        — AI weather summary (KV-cached)
  *   GET  /api/locations                 — All locations
  *   GET  /api/locations/:tag            — Locations filtered by tag
  *   GET  /embed/widget.js              — Embeddable widget script
@@ -18,7 +17,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { weatherRoutes } from "./routes/weather";
-import { aiRoutes } from "./routes/ai";
 import { geoRoutes } from "./routes/geo";
 import { locationRoutes } from "./routes/locations";
 import { embedRoutes } from "./routes/embed";
@@ -57,7 +55,6 @@ app.get("/api/health", (c) => {
 
 // ───── API Routes ─────
 app.route("/api/weather", weatherRoutes);
-app.route("/api/ai", aiRoutes);
 app.route("/api/geo", geoRoutes);
 app.route("/api/locations", locationRoutes);
 

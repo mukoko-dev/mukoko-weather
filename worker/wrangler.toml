@@ -9,12 +9,6 @@ compatibility_flags = ["nodejs_compat"]
 # Configure via Cloudflare Dashboard: Workers > nyuchi-weather-api > Custom Domains
 
 # ───── KV Namespace Bindings ─────
-# AI summary cache — tiered TTL per location
-[[kv_namespaces]]
-binding = "AI_SUMMARIES"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
-preview_id = "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
-
 # Weather data cache — short-lived cache of Open-Meteo responses
 [[kv_namespaces]]
 binding = "WEATHER_CACHE"
@@ -33,9 +27,10 @@ ENVIRONMENT = "production"
 CORS_ORIGINS = "https://nyuchi.com,https://mukoko.com,https://weather.mukoko.com"
 NEXT_APP_URL = "https://weather.mukoko.com"
 
-# ───── Secrets (set via `wrangler secret put`) ─────
-# MUKOKO_INTERNAL_SECRET — optional; matches the backend's, lets the worker call /api/py/ai
-# (AI is served by the Python backend only — the worker never calls Cloudflare AI directly)
+# ───── AI ─────
+# No AI route here: Shamwari is a signed-in feature served by the AI Worker
+# (workers/ai) behind the app's /api/ai proxy, which the catch-all below
+# reaches. This Worker holds no AI token and no service key.
 
 # ───── Dev environment ─────
 [env.dev]

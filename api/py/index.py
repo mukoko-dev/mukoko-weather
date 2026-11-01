@@ -27,7 +27,6 @@ configure_logging()
 from ._chat import router as chat_router
 from ._embeddings import router as embeddings_router
 from ._weather import router as weather_router
-from ._ai import router as ai_router
 from ._locations import router as locations_router
 from ._history import router as history_router
 from ._stations import router as stations_router
@@ -99,7 +98,6 @@ app.include_router(stations_router)
 app.include_router(chat_router)
 app.include_router(embeddings_router)
 app.include_router(weather_router)
-app.include_router(ai_router)
 app.include_router(locations_router)
 app.include_router(history_router)
 app.include_router(ai_followup_router)

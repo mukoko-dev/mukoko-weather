@@ -167,9 +167,9 @@ class TestRouterMounting:
         paths = self._get_route_paths()
         assert "/api/py/weather" in paths
 
-    def test_ai_router_mounted(self):
+    def test_the_summary_route_is_gone_it_runs_on_the_ai_worker(self):
         paths = self._get_route_paths()
-        assert "/api/py/ai" in paths
+        assert "/api/py/ai" not in paths
 
     def test_locations_router_mounted(self):
         paths = self._get_route_paths()
