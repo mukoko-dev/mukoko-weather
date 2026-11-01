@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "fs";
+import { resolve } from "path";
 import nextConfig from "../../next.config";
 import {
   buildCsp,
@@ -111,6 +113,30 @@ describe("CORS (B06)", () => {
       "/embed/:path*",
     ])
       expect(sources).toContain(s);
+  });
+
+  it("the API Worker opens exactly the documented routes", () => {
+    // `weather_core::cors::OPEN_READ_ROUTES` is the Worker-side image of the
+    // open list above: weather, geo, search and air quality (+ its grid).
+    const rust = readFileSync(
+      resolve(__dirname, "../../workers/crates/weather-core/src/cors.rs"),
+      "utf-8",
+    );
+    const block =
+      /pub const OPEN_READ_ROUTES: \[&str; \d+\] = \[([^\]]*)\]/.exec(rust);
+    expect(block).not.toBeNull();
+    const workerRoutes = [...(block?.[1] ?? "").matchAll(/"([^"]+)"/g)]
+      .map((m) => m[1])
+      .sort();
+    expect(workerRoutes).toEqual(
+      [
+        "/v1/air-quality",
+        "/v1/air-quality/grid",
+        "/v1/geo",
+        "/v1/search",
+        "/v1/weather",
+      ].sort(),
+    );
   });
 
   it("never sends credentials with the wildcard", () => {
