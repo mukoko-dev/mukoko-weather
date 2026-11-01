@@ -15,6 +15,7 @@ import {
 } from "@/lib/store";
 import { getScrollBehavior } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
+import { fetchWorker } from "@/lib/weather-api";
 import {
   fetchSuggestedRules,
   getExplorePrompts,
@@ -325,24 +326,35 @@ export function ExploreChatbot() {
         const controller = new AbortController();
         abortRef.current = controller;
 
-        const res = await fetch("/api/py/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            message: trimmed,
-            history,
-            ...(selectedActivities.length > 0 && {
-              activities: selectedActivities,
+        // The Worker's chat (`POST /v1/ai/chat`, the one the mobile app
+        // calls); the Python chat route it replaced is gone. A POST is never
+        // retried: a model call costs.
+        const res = await fetchWorker(
+          "ai/chat",
+          "",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              message: trimmed,
+              history,
+              ...(selectedActivities.length > 0 && {
+                activities: selectedActivities,
+              }),
             }),
-          }),
-          signal: controller.signal,
-        });
+            signal: controller.signal,
+          },
+          { retries: 0, timeoutMs: 40_000 },
+        );
 
         if (!res.ok) {
-          // Surface actionable messages (e.g. rate-limit "Too many requests")
+          // Surface actionable messages (e.g. a rate limit's description)
           const body = await res.json().catch(() => null);
           throw new Error(
-            body?.response ?? body?.error ?? `Request failed (${res.status})`,
+            body?.error_description ??
+              body?.response ??
+              body?.error ??
+              `Request failed (${res.status})`,
           );
         }
 

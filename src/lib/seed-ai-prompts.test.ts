@@ -41,7 +41,8 @@ describe("AI_PROMPTS uniqueness and structure", () => {
 
   it("system:chat template has all required placeholders", () => {
     const chatPrompt = AI_PROMPTS.find((p) => p.promptKey === "system:chat");
-    // These must stay in sync with _apply_template() in api/py/_chat.py
+    // The placeholders the seed template keeps. The Python _apply_template()
+    // that filled them is gone; the AI Worker compiles its own chat prompt.
     expect(chatPrompt!.template).toContain("{locationList}");
     expect(chatPrompt!.template).toContain("{locationCount}");
     expect(chatPrompt!.template).toContain("{activityList}");

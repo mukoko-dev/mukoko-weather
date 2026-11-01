@@ -155,14 +155,6 @@ class TestRouterMounting:
         return paths
 
 
-    def test_chat_router_mounted(self):
-        paths = self._get_route_paths()
-        assert "/api/py/chat" in paths
-
-    def test_embeddings_router_mounted(self):
-        paths = self._get_route_paths()
-        assert "/api/py/embeddings/status" in paths
-
     def test_weather_router_mounted(self):
         paths = self._get_route_paths()
         assert "/api/py/weather" in paths

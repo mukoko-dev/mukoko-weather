@@ -148,22 +148,17 @@ A chart crash, API timeout, or rendering error in any section only affects that 
 
 ### Shamwari Chatbot Resilience
 
-The Shamwari chatbot (`/api/py/chat`) has multiple resilience layers:
+The Shamwari chat is `POST /v1/ai/chat` on the Rust AI Worker (`workers/ai`); the Python `/api/py/chat` and its tool loop were deleted while the chat was paused. The Worker's layers:
 
-| Layer             | Mechanism                                           | Scope        |
-| ----------------- | --------------------------------------------------- | ------------ |
-| Rate limiter      | 20 req/hour/IP (MongoDB-backed)                     | Per-client   |
-| Input validation  | Type + length checks, slug regex, tag allowlist     | Per-request  |
-| Circuit breaker   | `ai_breaker` on all AI gateway calls                | Per-provider |
-| Tool timeout      | 15s per tool execution                              | Per-tool     |
-| Tool loop bound   | Max 5 iterations                                    | Per-request  |
-| Tool result cap   | `list_locations_by_tag` capped to 20 results        | Per-tool     |
-| Weather cache     | `Map<string, WeatherResult>`                        | Per-request  |
-| Rules cache       | `rulesCache` ref                                    | Per-request  |
-| Location context  | Module-level, 5-min TTL                             | Per-instance |
-| Activity context  | Module-level, 5-min TTL (dynamic prompt list)       | Per-instance |
-| Singleton client  | Module-level with hash-based key-rotation detection | Per-instance |
-| Markdown boundary | `MarkdownErrorBoundary` in chatbot UI               | Per-message  |
+| Layer              | Mechanism                                                                     | Scope       |
+| ------------------ | ----------------------------------------------------------------------------- | ----------- |
+| Rate limiter       | 10 requests a minute per client (Workers rate-limit binding)                  | Per-client  |
+| Input validation   | Message 1 to 2000 characters, last 10 turns, roles `user`/`assistant`         | Per-request |
+| Personal data      | Email, phone and card numbers refused (`422`), never sent to a model          | Per-request |
+| Guardrails         | The Nyuchi API's compiled block first in the system prompt; `503` without one | Per-isolate |
+| Gateway            | `shamwari` AI Gateway: Guardrails and DLP blocks answered politely            | Per-call    |
+| Weather for places | The seed places named in the message, up to three, from the forecast Worker   | Per-request |
+| Markdown boundary  | `MarkdownErrorBoundary` in the chatbot UI                                     | Per-section |
 
 ## Lazy Loading (TikTok-Style Sequential)
 

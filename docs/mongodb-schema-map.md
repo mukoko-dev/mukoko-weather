@@ -292,7 +292,7 @@ The bridge keeps one official-driver `MongoClient` in a Durable Object, uses the
 `weather.locations` is **dropped**. As of Phase 0G the Python backend also reads
 exclusively through `places.placesGeo` — `api/py/_places_resolver.py` mirrors the
 TypeScript resolver in `src/lib/places.ts`, and every read/write in `_history.py`,
-`_chat.py`, `_explore_search.py`, `_reports.py`, `_weather.py`, and `_locations.py`
+`_reports.py`, `_weather.py`, and `_locations.py`
 flows through it. The legacy `weather.countries` and `weather.provinces` collections
 are also dropped — `placesGeo.geoType=country/province` is the canonical source.
 

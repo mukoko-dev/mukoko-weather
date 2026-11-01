@@ -64,6 +64,7 @@ export type WorkerRoute =
   | "normals/monthly"
   | "aviation/nearest-metar"
   | "suitability"
+  | "ai/chat"
   | "ai/history/analyze"
   | "devices"
   | `devices/${string}`;
