@@ -22,16 +22,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use weather_core::blend::{self, Attempt, NotBlended, Upstream};
 use weather_core::breaker::{self, Breaker};
-use weather_core::{geo, normalize, Source};
+use weather_core::{normalize, Source};
 use weather_edge::{get_with_timeout, now, now_ms, now_rfc3339};
 use worker::{Context, Env};
 
 pub const CACHE_BINDING: &str = "FORECAST_CACHE";
-/// 15 minutes, as in the Python backend, for a blend.
-const BLEND_TTL_SECONDS: u64 = 900;
-/// A `best_match` answer is cached for less, so a blend that was missed to a
-/// passing upstream problem is back within minutes, not a quarter of an hour.
-const BEST_MATCH_TTL_SECONDS: u64 = 300;
 const OPEN_METEO_TIMEOUT: Duration = Duration::from_secs(8);
 
 thread_local! {
@@ -55,18 +50,6 @@ pub struct Got {
     pub cache_hit: bool,
 }
 
-/// The forecast KV key. The version is part of it: `wx:v1:` rows hold a
-/// Tomorrow.io-or-best_match document and must never be served as a blend.
-pub fn cache_key(lat: f64, lon: f64) -> String {
-    format!("wx:v2:{}", geo::cache_key(lat, lon))
-}
-
-/// The KV key of a user-picked model: the blend's cell key plus `::<model>`,
-/// so a single-model row can never be served as the blend (or the reverse).
-pub fn model_cache_key(lat: f64, lon: f64, model: &str) -> String {
-    format!("{}::{model}", cache_key(lat, lon))
-}
-
 /// The forecast for a point, or `None` when the cache is cold and every
 /// provider failed. `refresh` skips the cache read (the answer is still
 /// cached): the jobs Worker uses it to keep popular places warm. `model` is
@@ -81,10 +64,8 @@ pub async fn forecast(
     model: Option<&str>,
 ) -> Option<Got> {
     let kv = env.kv(CACHE_BINDING).ok();
-    let key = match model {
-        Some(m) => model_cache_key(lat, lon, m),
-        None => cache_key(lat, lon),
-    };
+    // The key and the lifetime are `weather_core::blend`'s rules.
+    let key = blend::forecast_cache_key(lat, lon, model);
 
     if let Some(kv) = kv.as_ref().filter(|_| !refresh) {
         if let Ok(Some(mut hit)) = kv.get(&key).json::<Got>().await {
@@ -94,13 +75,7 @@ pub async fn forecast(
     }
 
     let (data, provider, blend_header) = baseline(env, lat, lon, model).await?;
-    // A blend and a picked model are cached a quarter of an hour; the
-    // `best_match` fallback for less, so the real baseline is back soon.
-    let ttl = if blend_header.is_some() || provider != blend::PROVIDER_BEST_MATCH {
-        BLEND_TTL_SECONDS
-    } else {
-        BEST_MATCH_TTL_SECONDS
-    };
+    let ttl = blend::cache_ttl_seconds(&provider);
     let got = Got {
         data,
         source: Source::OpenMeteo,
@@ -221,19 +196,31 @@ async fn baseline(
 /// data here (not an outage: no breaker failure), the breaker is open, or the
 /// request was rejected or failed (only a failure counts against the breaker).
 async fn single_model(lat: f64, lon: f64, model: &str) -> Option<Value> {
-    if !open_meteo_allowed() {
-        return None;
-    }
-    let url = blend::open_meteo_url(lat, lon, &blend::single_model_request(model));
-    match fetch(&url).await {
-        Fetched::Ok(raw) => {
-            let payload = blend::build_single_model(&raw, model, now())?;
+    let upstream = if open_meteo_allowed() {
+        let url = blend::open_meteo_url(lat, lon, &blend::single_model_request(model));
+        Some(fetch(&url).await)
+    } else {
+        None
+    };
+    // The decision (and the breaker accounting) is `weather_core`'s.
+    match blend::attempt_single_model(
+        match &upstream {
+            Some(Fetched::Ok(raw)) => Upstream::Body(raw),
+            Some(Fetched::Rejected) => Upstream::Rejected,
+            Some(Fetched::Failed) => Upstream::Failed,
+            None => Upstream::BreakerOpen,
+        },
+        model,
+        now(),
+    ) {
+        blend::SingleAttempt::Built(payload) => {
             record_open_meteo(true);
             Some(payload)
         }
-        Fetched::Rejected => None,
-        Fetched::Failed => {
-            record_open_meteo(false);
+        blend::SingleAttempt::Fallback { breaker_failure } => {
+            if breaker_failure {
+                record_open_meteo(false);
+            }
             None
         }
     }
@@ -280,6 +267,40 @@ pub fn record_open_meteo(ok: bool) {
             b.record_failure(now_ms());
         }
     });
+}
+
+/// [`extras`] through the KV cache: one Open-Meteo call per cell and model set
+/// per quarter of an hour (the key and lifetime are
+/// `weather_core::normalize::extras_cache_key` / `EXTRAS_CACHE_TTL_SECONDS`),
+/// instead of one per request. Only a success is cached.
+pub async fn extras_cached(
+    env: &Env,
+    ctx: &Context,
+    lat: f64,
+    lon: f64,
+    models: &[String],
+) -> Option<Value> {
+    let kv = env.kv(CACHE_BINDING).ok();
+    let key = normalize::extras_cache_key(lat, lon, models);
+    if let Some(kv) = &kv {
+        if let Ok(Some(hit)) = kv.get(&key).json::<Value>().await {
+            return Some(hit);
+        }
+    }
+    let fresh = extras(lat, lon, models).await?;
+    if let Some(kv) = kv {
+        if let Ok(body) = serde_json::to_string(&fresh) {
+            ctx.wait_until(async move {
+                if let Ok(put) = kv.put(&key, body) {
+                    let _ = put
+                        .expiration_ttl(normalize::EXTRAS_CACHE_TTL_SECONDS)
+                        .execute()
+                        .await;
+                }
+            });
+        }
+    }
+    Some(fresh)
 }
 
 /// The comparison extras for models the baseline did not carry (per-model

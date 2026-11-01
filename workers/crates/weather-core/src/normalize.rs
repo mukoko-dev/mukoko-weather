@@ -145,6 +145,24 @@ pub fn sanitize_models(models: &[&str]) -> Vec<String> {
     }
 }
 
+/// How long the comparison extras for a cell and model set are cached
+/// (seconds): the baseline's own lifetime, so the comparison and the forecast
+/// it sits beside age together.
+pub const EXTRAS_CACHE_TTL_SECONDS: u64 = 900;
+
+/// The KV key of the comparison extras for a point and a model set:
+/// `wx:extras:v1:` + the point rounded to 0.01° (the forecast row's own
+/// granularity, `geo::cache_key`) + the model ids in request order. A
+/// different place or a different set is a different row, so a caller's
+/// `?models=` choice is never served another caller's series.
+pub fn extras_cache_key(lat: f64, lon: f64, models: &[String]) -> String {
+    format!(
+        "wx:extras:v1:{}:{}",
+        crate::geo::cache_key(lat, lon),
+        models.join(",")
+    )
+}
+
 /// The Open-Meteo URL for the multi-model comparison and nowcast extras.
 pub fn open_meteo_extras_url(lat: f64, lon: f64, models: &[String]) -> String {
     format!(
@@ -595,6 +613,38 @@ pub fn blend_station_current(data: &mut Value, station_current: &Value) {
 mod tests {
     use super::*;
     use chrono::TimeZone;
+
+    #[test]
+    fn the_extras_are_cached_per_cell_and_model_set_for_a_quarter_of_an_hour() {
+        let set = |m: &[&str]| m.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        let base = extras_cache_key(-17.83, 31.05, &set(&["ecmwf_ifs", "gfs_seamless"]));
+        assert_eq!(base, "wx:extras:v1:-17.83_31.05:ecmwf_ifs,gfs_seamless");
+        assert_eq!(EXTRAS_CACHE_TTL_SECONDS, 900);
+        // Two nearby points share the row.
+        assert_eq!(
+            base,
+            extras_cache_key(-17.8292, 31.0522, &set(&["ecmwf_ifs", "gfs_seamless"]))
+        );
+        // Another place, another set, or another order is another row.
+        assert_ne!(
+            base,
+            extras_cache_key(11.28, 49.18, &set(&["ecmwf_ifs", "gfs_seamless"]))
+        );
+        assert_ne!(base, extras_cache_key(-17.83, 31.05, &set(&["ecmwf_ifs"])));
+        assert_ne!(
+            base,
+            extras_cache_key(-17.83, 31.05, &set(&["gfs_seamless", "ecmwf_ifs"]))
+        );
+        // It can never collide with a forecast row.
+        assert!(!base.starts_with("wx:v2:"));
+        // Even the longest allowed set stays inside a KV key (512 bytes).
+        let all: Vec<String> = KNOWN_FORECAST_MODELS
+            .iter()
+            .filter(|m| **m != "best_match")
+            .map(|m| (*m).to_owned())
+            .collect();
+        assert!(extras_cache_key(-17.83, 31.05, &all).len() < 512);
+    }
 
     fn tomorrow_fixture() -> Value {
         json!({"timelines": {
