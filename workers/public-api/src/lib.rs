@@ -381,16 +381,24 @@ async fn weather(req: &Request, env: &Env) -> Result<Response> {
     }
 
     let mut q = format!("/weather?lat={lat}&lon={lon}&extras=1");
-    if let Some(models) = get("models") {
-        // The forecast Worker keeps only known model ids; send just the
-        // characters a model id can have.
-        let safe: String = models
-            .chars()
+    // The forecast Worker keeps only known model ids; send just the
+    // characters a model id can have.
+    let model_chars = |s: &str, max: usize| -> String {
+        s.chars()
             .filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == ',')
-            .take(200)
-            .collect();
+            .take(max)
+            .collect()
+    };
+    if let Some(models) = get("models") {
         q.push_str("&models=");
-        q.push_str(&safe);
+        q.push_str(&model_chars(models, 200));
+    }
+    // The user's own baseline model (`selectedForecastModel`); `best_match`
+    // and anything unknown mean the blend, decided by the forecast Worker.
+    let picked = get("model").map(|m| model_chars(m, 64)).unwrap_or_default();
+    if !picked.is_empty() {
+        q.push_str("&model=");
+        q.push_str(&picked);
     }
 
     if let Some(mut upstream) = service::ask(env, FORECAST_BINDING, &q).await? {
@@ -407,11 +415,14 @@ async fn weather(req: &Request, env: &Env) -> Result<Response> {
                 ] {
                     copy_header(upstream.headers(), resp.headers(), h)?;
                 }
-                // Only the full blend is worth five minutes at the edge. A
-                // degraded answer (single model, best_match) is short-lived,
-                // so the blend comes back as soon as it recovers.
-                let blended = upstream.headers().get("X-Weather-Provider")?.as_deref()
-                    == Some("open-meteo:blend");
+                // Only the full blend, or the model the caller asked for, is
+                // worth five minutes at the edge. A degraded answer
+                // (best_match) is short-lived, so the blend comes back as soon
+                // as it recovers.
+                let provider = upstream.headers().get("X-Weather-Provider")?;
+                let blended = provider.as_deref().is_some_and(|p| {
+                    p.starts_with("open-meteo:") && p != weather_core::blend::PROVIDER_BEST_MATCH
+                });
                 let cache = if blended {
                     "public, max-age=300"
                 } else {
