@@ -37,7 +37,7 @@ const DEFAULT_TIMEOUT_MS = 10000;
 const DEFAULT_MAXIMUM_AGE_MS = 60000;
 /**
  * Cap on the /v1/geo round-trip after the fix arrives. Find-only is a
- * cheap DB read; create-on-demand reverse-geocodes (Overpass, then Nominatim)
+ * cheap read; create-on-demand reverse-geocodes the exact point (Nominatim)
  * so it gets longer. Without a cap, a hung lookup left the visitor on a
  * "Finding your location…" screen indefinitely.
  */
