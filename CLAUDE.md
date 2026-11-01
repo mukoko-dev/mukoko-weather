@@ -1671,7 +1671,7 @@ _Library tests:_
 - `src/lib/geohash.test.ts` — geohash encode/decode against published reference vectors, determinism, precision/error bounds, neighbours (interior, pole, antimeridian), case-insensitivity
 - `src/lib/smart-slug.test.ts` — build/parse round-trip, `--` delimiter safety against every shipped seed slug (the `/gweru` → Arctic hazard), legacy-slug complement
 - `src/lib/places.test.ts` — resolver pure logic (normalizeName, inferNameFromSlug, adapters, `adaptSeedToLocationDoc`, `nearestSeedLocation`, seed-slug uniqueness)
-- `src/lib/places-resolver.test.ts` — `resolveLocationSlug` with a mocked placesGeo collection: seed fallback on no-match / DB throw, genuine unknown slugs still 404, real placesGeo docs still win, city-state country-doc acceptance, `CITY_STATE_COUNTRIES` parity with `api/py/_locations.py`
+- `src/lib/places-resolver.test.ts` — `resolveLocationSlug` with a mocked placesGeo collection: seed fallback on no-match / DB throw, genuine unknown slugs still 404, real placesGeo docs still win, city-state country-doc acceptance, `CITY_STATE_COUNTRIES` parity with the Rust `CITY_STATES` (`weather_core::locations`)
 - `src/lib/site.test.ts` + `src/lib/db-weather-self-fetch.test.ts` — SSR self-fetch target (override, production domain, preview bypass header) and `getWeatherForLocation` reaching `/api/py/weather` with `redirect: "manual"`, naming protection redirects and HTML answers, never logging the bypass secret (issue #262)
 - `src/lib/db.test.ts` — database operations (CRUD, TTL, suitability rules, Vector Search embedding guard, $facet aggregation)
 - `src/lib/suitability-cache.test.ts` — suitability cache TTL, reset, category styles
