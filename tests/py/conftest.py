@@ -144,20 +144,6 @@ def mock_request():
 
 
 @pytest.fixture(autouse=True)
-def _fresh_find_only_cache():
-    """The /api/py/geo find-only fallback keeps a per-instance cell cache
-    (#302); clear it so one test's spot never answers another's lookup."""
-    try:
-        from py import _locations
-    except Exception:  # pragma: no cover
-        yield
-        return
-    _locations._find_only_cache.clear()
-    yield
-    _locations._find_only_cache.clear()
-
-
-@pytest.fixture(autouse=True)
 def _reset_shared_breakers():
     """Breakers are process-wide singletons: a test that opens one (the
     aviation breaker in the METAR and airport-discovery tests) must never leak

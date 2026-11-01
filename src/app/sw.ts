@@ -101,24 +101,6 @@ const serwist = new Serwist({
       }),
     },
 
-    // Location search — NetworkFirst (short cache for offline browsing)
-    {
-      matcher: ({ url }) =>
-        url.pathname.startsWith("/api/py/search") ||
-        url.pathname.startsWith("/api/py/locations") ||
-        url.pathname.startsWith("/api/py/geo"),
-      handler: new NetworkFirst({
-        cacheName: "location-data",
-        networkTimeoutSeconds: 3,
-        plugins: [
-          new ExpirationPlugin({
-            maxEntries: 50,
-            maxAgeSeconds: 30 * 60,
-          }),
-        ],
-      }),
-    },
-
     // Map tiles — CacheFirst (expensive, stable data)
     {
       matcher: ({ url }) => url.pathname.startsWith("/v1/map-tiles"),
