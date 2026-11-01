@@ -1,3 +1,9 @@
 {
-  "rewrites": [{ "source": "/api/py/(.*)", "destination": "/api/py" }]
+  "rewrites": [
+    {
+      "source": "/api/py/stations/ingest",
+      "destination": "https://weather-ingest.nyuchi.com/api/py/stations/ingest"
+    },
+    { "source": "/api/py/(.*)", "destination": "/api/py" }
+  ]
 }

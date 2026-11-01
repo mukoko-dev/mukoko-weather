@@ -59,3 +59,38 @@ describe("weather Worker config", () => {
     expect(text).toContain("rate_events");
   });
 });
+
+describe("weather stations already in the field (the old upload URL)", () => {
+  const ROOT = resolve(__dirname, "../..");
+  const rewrites = (
+    JSON.parse(readFileSync(resolve(ROOT, "vercel.json"), "utf-8")) as {
+      rewrites: { source: string; destination: string }[];
+    }
+  ).rewrites;
+
+  it("vercel.json sends the old ingest path to the stations Worker, ahead of the Python catch-all", () => {
+    const ingest = rewrites.findIndex(
+      (r) => r.source === "/api/py/stations/ingest",
+    );
+    const catchAll = rewrites.findIndex((r) => r.source === "/api/py/(.*)");
+    expect(ingest).toBeGreaterThanOrEqual(0);
+    // First match wins: the specific rule must come before the catch-all.
+    if (catchAll >= 0) expect(ingest).toBeLessThan(catchAll);
+    // The Worker serves the same path (it strips `/api/py`), so a console
+    // configured with the old URL keeps the protocol it speaks.
+    expect(rewrites[ingest]!.destination).toBe(
+      "https://weather-ingest.nyuchi.com/api/py/stations/ingest",
+    );
+  });
+
+  it("the stations Worker also takes weather.mukoko.com/api/py/stations/* as a route", () => {
+    const text = wrangler("stations");
+    expect(text).toMatch(
+      /"pattern":\s*"weather\.mukoko\.com\/api\/py\/stations\/\*",\s*"zone_name":\s*"mukoko\.com"/,
+    );
+    // The custom domain the consoles are told to use stays.
+    expect(text).toMatch(
+      /"pattern":\s*"weather-ingest\.nyuchi\.com",\s*"custom_domain":\s*true/,
+    );
+  });
+});
