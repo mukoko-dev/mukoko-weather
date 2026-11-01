@@ -32,8 +32,6 @@ from ._locations import router as locations_router
 from ._history import router as history_router
 from ._stations import router as stations_router
 from ._ai_followup import router as ai_followup_router
-from ._history_analyze import router as history_analyze_router
-from ._explore_search import router as explore_search_router
 from ._reports import router as reports_router
 from ._air_quality import router as air_quality_router
 from ._agriculture import router as agriculture_router
@@ -103,8 +101,6 @@ app.include_router(ai_router)
 app.include_router(locations_router)
 app.include_router(history_router)
 app.include_router(ai_followup_router)
-app.include_router(history_analyze_router)
-app.include_router(explore_search_router)
 app.include_router(reports_router)
 app.include_router(air_quality_router)
 app.include_router(agriculture_router)

@@ -45,6 +45,12 @@ pub enum Action {
     /// A place-profile request that needs an upstream (a 30-year archive
     /// request, SoilGrids): a cache hit is free.
     PlaceProfile,
+    /// An AI location search (`/v1/ai/explore/search`): up to three model
+    /// calls and some forecast lookups.
+    ExploreSearch,
+    /// An AI history analysis (`/v1/ai/history/analyze`) that calls the model:
+    /// an analysis answered from the cache is free.
+    HistoryAnalysis,
 }
 
 /// Hourly limits for one action.
@@ -67,6 +73,8 @@ impl Action {
             Action::HistoryNasaPower => "history-nasa-power",
             Action::HistoryOpenMeteo => "history-open-meteo",
             Action::PlaceProfile => "place-profile",
+            Action::ExploreSearch => "ai-explore-search",
+            Action::HistoryAnalysis => "ai-history-analysis",
         }
     }
 
@@ -127,6 +135,20 @@ impl Action {
             Action::PlaceProfile => Limits {
                 per_client: 120,
                 global: 600,
+            },
+            // 15 searches an hour per client, as in the Python backend. Each
+            // is up to three model calls; the service-wide cap is 40 clients
+            // at their limit, and past it the search answers from the text
+            // match instead of the model.
+            Action::ExploreSearch => Limits {
+                per_client: 15,
+                global: 600,
+            },
+            // 10 analyses an hour per client, as in the Python backend. Each
+            // is one model call.
+            Action::HistoryAnalysis => Limits {
+                per_client: 10,
+                global: 300,
             },
         }
     }
@@ -408,6 +430,20 @@ mod tests {
         // refusal stands, with the service-wide label.
         assert_eq!(refusal(l, 0, 0, 50), Decision::GlobalLimit);
         assert!(!refusal(l, 0, 0, 1).allowed());
+    }
+
+    #[test]
+    fn the_ai_budgets_are_the_pythons_per_client_and_bounded_service_wide() {
+        // 15 searches and 10 analyses an hour per client, as the Python had.
+        assert_eq!(Action::ExploreSearch.limits().per_client, 15);
+        assert_eq!(Action::HistoryAnalysis.limits().per_client, 10);
+        assert_eq!(Action::ExploreSearch.name(), "ai-explore-search");
+        assert_eq!(Action::HistoryAnalysis.name(), "ai-history-analysis");
+        for a in [Action::ExploreSearch, Action::HistoryAnalysis] {
+            let l = a.limits();
+            assert!(l.per_client <= l.global);
+        }
+        assert_ne!(Action::ExploreSearch.name(), Action::HistoryAnalysis.name());
     }
 
     #[test]

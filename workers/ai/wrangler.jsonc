@@ -60,6 +60,19 @@
     // Summaries (30 min, 1 min for fallback text) and history analyses (1 h).
     { "binding": "AI_CACHE", "id": "b0576f0244c0465d96a816a776e44e18" },
   ],
+  "d1_databases": [
+    {
+      // rate_events (migration 0002) holds the hourly budgets of the model
+      // calls made for one visitor: the AI location search (15 an hour per
+      // client) and the history analysis (10 an hour per client), see
+      // weather_core::budget. This Worker only counts and inserts rows; the
+      // table and its migrations belong to the places and stations Workers.
+      "binding": "WEATHER_DB",
+      "database_name": "mukoko-weather",
+      "database_id": "9a8846ea-ee34-4479-bc4c-790ee2beabee",
+      "migrations_dir": "../d1/migrations",
+    },
+  ],
   // Per client IP (CF-Connecting-IP, passed on by mukoko-weather-api).
   "ratelimits": [
     {

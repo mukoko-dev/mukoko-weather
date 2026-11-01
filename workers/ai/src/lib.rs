@@ -10,6 +10,8 @@
 //! POST /v1/ai/chat              {message, history, activities} → {response, references}
 //! POST /v1/ai/history/analyze   {location, days 7..365, activities}
 //!                               → {analysis, stats, cached, dataPoints}
+//! POST /v1/ai/explore/search    {query} → {locations, summary, source}
+//!                               (the model with two tools, else a text match)
 //! POST /internal/chat/completions  OpenAI-style {messages, tools?, max_tokens?, model?}
 //!                               → an OpenAI chat completion. Only from
 //!                                 mukoko-weather-internal (service key checked
@@ -23,6 +25,8 @@
 //! guardrails_unavailable`. Messages carrying personal data are refused
 //! before any call (`422 personal_data_detected`).
 
+mod budget;
+mod explore;
 mod gateway;
 mod handlers;
 mod passthrough;
@@ -51,6 +55,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
                 "ai": env.ai("AI").is_ok(),
                 "cache": env.kv(CACHE_BINDING).is_ok(),
                 "history": env.service(PLACES_BINDING).is_ok(),
+                "budget": budget::bound(&env),
             }),
         );
     }
@@ -59,6 +64,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
         "/v1/ai/followup" => Route::Followup,
         "/v1/ai/chat" => Route::Chat,
         "/v1/ai/history/analyze" => Route::History,
+        "/v1/ai/explore/search" => Route::Explore,
         "/internal/chat/completions" => Route::Completions,
         _ => return error(404, "not_found", "No such route."),
     };
@@ -88,6 +94,13 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
         return error(400, "invalid_request", "The body must be JSON.");
     };
 
+    // The search is the one route that still answers without the model (the
+    // text match), so it decides for itself what a missing block means.
+    if matches!(route, Route::Explore) {
+        let guardrails = gateway::guardrails(&env).await;
+        return explore::handle(&env, guardrails, weather_edge::client_ip(&req), body).await;
+    }
+
     // Fail closed: no guardrails block, no model call on any route.
     let Some(guardrails) = gateway::guardrails(&env).await else {
         return error(
@@ -99,7 +112,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     let ctx = handlers::Ctx {
         env: &env,
         guardrails,
-        client_ip: req.headers().get("CF-Connecting-IP").ok().flatten(),
+        client_ip: weather_edge::client_ip(&req),
     };
     match route {
         Route::Summary => handlers::summary(&ctx, body).await,
@@ -107,6 +120,8 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
         Route::Chat => handlers::chat(&ctx, body).await,
         Route::History => handlers::history(&ctx, body).await,
         Route::Completions => passthrough::handle(&env, &ctx.guardrails, &body).await,
+        // Answered above, before the guardrails gate.
+        Route::Explore => error(404, "not_found", "No such route."),
     }
 }
 
@@ -115,6 +130,7 @@ enum Route {
     Followup,
     Chat,
     History,
+    Explore,
     Completions,
 }
 

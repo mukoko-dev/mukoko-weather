@@ -8,11 +8,13 @@ use weather_core::ai::guardrails::{system_prompt, Compiled};
 use weather_core::ai::history::{aggregate, fingerprint, Record};
 use weather_core::ai::prompts::{self, ClientPlace, Season};
 use weather_core::ai::{activities, conversation, Invalid, Turn, REFUSAL};
+use weather_core::budget::{Action, Decision};
 use weather_core::places::{resolve_seed, slugify};
 use weather_core::{geo, Place};
 use weather_edge::{error, json, now, now_rfc3339, responses};
 use worker::{Env, Response, Result};
 
+use crate::budget;
 use crate::gateway::{self, Call, ModelError};
 use crate::{CACHE_BINDING, FORECAST_BINDING, PLACES_BINDING};
 
@@ -60,7 +62,7 @@ fn turns(v: &Value) -> Vec<Turn> {
 }
 
 /// The full `WeatherData` for a point, from the forecast Worker.
-async fn weather(env: &Env, lat: f64, lon: f64) -> Option<Value> {
+pub(crate) async fn weather(env: &Env, lat: f64, lon: f64) -> Option<Value> {
     let fetcher = env.service(FORECAST_BINDING).ok()?;
     let mut resp = fetcher
         .fetch(
@@ -337,6 +339,7 @@ async fn history_records(ctx: &Ctx<'_>, slug: &str, window: &str) -> Option<Vec<
             current: d["current"].clone(),
             daily: d["daily"].clone(),
             insights: d["insights"].clone(),
+            source: d["source"].as_str().map(str::to_owned),
         })
         .collect();
     records.sort_by(|a, b| a.date.cmp(&b.date));
@@ -411,6 +414,34 @@ pub async fn history(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
     }
 
     let stats = aggregate(&records);
+
+    // A model call is a budgeted spend (10 an hour per client, as the Python
+    // backend had); an analysis answered from the cache above was free. Over
+    // the client's hour is a 429; the service's hour spent, or a budget that
+    // cannot be read (it fails closed), answers with the statistics alone.
+    let client = budget::client_key(ctx.client_ip.as_deref());
+    match budget::take(ctx.env, Action::HistoryAnalysis, &client).await {
+        Decision::Allow => {}
+        Decision::ClientLimit => {
+            return responses::rate_limited(
+                900,
+                "You have used this hour's AI analyses. Please try again later.",
+            )
+        }
+        Decision::GlobalLimit => {
+            return json(
+                200,
+                &json!({
+                    "analysis": "AI analysis is busy right now. The statistical summary is available above.",
+                    "stats": stats,
+                    "cached": false,
+                    "error": true,
+                    "dataPoints": points,
+                }),
+            )
+        }
+    }
+
     let name = place.name.clone().unwrap_or_else(|| place.slug.clone());
     let season: Season = prompts::season(place.lat, now());
     let request = prompts::history_request(

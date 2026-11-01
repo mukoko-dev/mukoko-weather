@@ -192,7 +192,7 @@ Sections also UNMOUNT when scrolled 1500px past the viewport (bidirectional), re
 | `weather_cache`       |       15 min       | Weather API responses, keyed by 0.05° grid cell                                           |
 | `ai_summaries`        |   30/60/120 min    | Cached AI weather summaries (tiered by location)                                          |
 | `weather_history`     |        None        | Permanent historical weather records                                                      |
-| `history_analysis`    |       1 hour       | Cached AI history analysis results                                                        |
+| `history_analysis`    |       1 hour       | Unused: AI history analyses are cached in the AI Worker's KV (`history:v1:`)              |
 | `locations`           |        None        | Seed + community locations                                                                |
 | `activities`          |        None        | Activity definitions (30+ activities, 6 categories)                                       |
 | `activity_categories` |        None        | Category metadata with mineral color styles                                               |
