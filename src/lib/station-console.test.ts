@@ -13,12 +13,13 @@ describe("station console client", () => {
   const api = read("station-console/src/lib/api.ts");
   const screen = read("station-console/src/components/Console.tsx");
 
-  it("defaults to the stations Worker's custom domain", () => {
+  it("defaults to the stations Worker's existing host, and says it is transitional", () => {
     expect(api).toContain('"https://weather-ingest.nyuchi.com"');
     expect(api).not.toMatch(/\?\?\s*"https:\/\/weather\.mukoko\.com"/);
+    expect(api).toContain("TRANSITIONAL");
   });
 
-  it("keeps the /api/py/stations paths the Worker serves on every host", () => {
+  it("keeps the /api/py/stations paths the Worker serves", () => {
     for (const route of ["register", "status", "manual"]) {
       expect(api).toContain(`/api/py/stations/${route}`);
     }
@@ -38,16 +39,6 @@ describe("station console client", () => {
   });
 });
 
-describe("stations Worker", () => {
-  const worker = read("workers/stations/src/lib.rs");
-
-  it("tells new registrations the unprefixed ingest path and still serves the old prefix", () => {
-    expect(worker.match(/"path": "\/stations\/ingest"/g)).toHaveLength(2);
-    expect(worker).not.toContain('"path": "/api/py/stations/ingest"');
-    expect(worker).toContain('strip_prefix("/api/py")');
-  });
-});
-
 describe("the Python stations route is gone", () => {
   it("has no module, no router and no test", () => {
     expect(existsSync(resolve(ROOT, "api/py/_stations.py"))).toBe(false);
@@ -55,15 +46,12 @@ describe("the Python stations route is gone", () => {
     expect(read("api/py/index.py")).not.toMatch(/stations/);
   });
 
-  it("is reached only through the Worker: the old ingest URL is rewritten, nothing else under /api/py/stations falls to Python", () => {
-    const rewrites = (
-      JSON.parse(read("vercel.json")) as {
-        rewrites: { source: string; destination: string }[];
-      }
-    ).rewrites;
-    expect(rewrites[0]).toEqual({
-      source: "/api/py/stations/ingest",
-      destination: "https://weather-ingest.nyuchi.com/api/py/stations/ingest",
-    });
+  it("serves station uploads from the stations Worker's one host", () => {
+    // Ingest is the Worker's (Wunderground GET, Ecowitt POST, the literal
+    // body `success`); nothing under /api/py/stations falls to Python.
+    const worker = read("workers/stations/src/lib.rs");
+    expect(worker).toContain('"/stations/ingest"');
+    expect(worker).toContain('strip_prefix("/api/py")');
+    expect(worker).toContain('"success"');
   });
 });

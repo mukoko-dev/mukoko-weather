@@ -1,22 +1,17 @@
 //! `mukoko-weather-stations`: weather-station registration and ingest.
 //!
-//! The protocols are those of the Python backend this replaced
-//! (`api/py/_stations.py`, deleted):
+//! The paths and protocols are those of `api/py/_stations.py`, so a station
+//! console only has to change its upload host:
 //!
 //! ```text
-//! POST /stations/register   JSON; the ingest key is shown once, only its hash is stored
-//! GET  /stations/ingest     Wunderground protocol (ID, PASSWORD, imperial query)
-//! POST /stations/ingest     Ecowitt protocol (form; PASSKEY=<stationId>:<key>)
-//! POST /stations/manual     JSON reading from an analog station
-//! GET  /stations/status     ?id=&key=, for the station console
+//! POST /api/py/stations/register   JSON; the ingest key is shown once, only its hash is stored
+//! GET  /api/py/stations/ingest     Wunderground protocol (ID, PASSWORD, imperial query)
+//! POST /api/py/stations/ingest     Ecowitt protocol (form; PASSKEY=<stationId>:<key>)
+//! POST /api/py/stations/manual     JSON reading from an analog station
+//! GET  /api/py/stations/status     ?id=&key=, for the station console
 //! ```
 //!
-//! Every route is also served under `/api/py`, the prefix the Python used, so
-//! a console already configured with the old upload URL keeps working:
-//! Cloudflare routes `weather.mukoko.com/api/py/stations/*` here
-//! (`wrangler.jsonc`), and until that route is deployed `vercel.json` rewrites
-//! the ingest path to this Worker's custom domain. New registrations are told
-//! the unprefixed path.
+//! The same routes are served without the `/api/py` prefix.
 //!
 //! The hot path does only the work an upload needs:
 //!
@@ -259,12 +254,12 @@ async fn register(req: &mut Request, env: &Env) -> Result<Response> {
             "ingest": {
                 "wunderground": {
                     "server": host,
-                    "path": "/stations/ingest",
+                    "path": "/api/py/stations/ingest",
                     "params": "ID=<stationId>&PASSWORD=<ingestKey>",
                 },
                 "ecowitt": {
                     "server": host,
-                    "path": "/stations/ingest",
+                    "path": "/api/py/stations/ingest",
                     "note": "Set the customized upload PASSKEY to <stationId>:<ingestKey>",
                 },
             },

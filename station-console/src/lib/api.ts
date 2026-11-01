@@ -5,10 +5,16 @@
  * go through that API.
  *
  * The Worker serves every route both as `/stations/*` and as
- * `/api/py/stations/*`, the prefix the Python used. This client keeps the
- * prefixed form because it also works when `NEXT_PUBLIC_WEATHER_API_BASE` is
- * still `https://weather.mukoko.com` (Cloudflare routes that path to the
- * Worker), so the console works whichever host the project is configured with.
+ * `/api/py/stations/*`, the prefix the Python used; this client keeps the
+ * prefixed form it has always called.
+ *
+ * TRANSITIONAL: the console calls the stations Worker's own host directly.
+ * Weather is to be served behind the gateway (one way in), which forwards the
+ * station routes to the Worker with the protocol unchanged; then `API_BASE`
+ * becomes the gateway's origin. Nothing on `weather.mukoko.com` serves these
+ * routes any more (the Python behind it is deleted), so a project that still
+ * sets `NEXT_PUBLIC_WEATHER_API_BASE` to `https://weather.mukoko.com` must
+ * unset it.
  */
 
 export const API_BASE =

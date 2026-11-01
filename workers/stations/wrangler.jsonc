@@ -7,14 +7,9 @@
 // forecast/wrangler.jsonc), and create the queues and the bucket
 // (workers/README.md, "Owner steps").
 //
-// Consoles already configured with the old upload URL
-// (https://weather.mukoko.com/api/py/stations/ingest) land here too: the route
-// "weather.mukoko.com/api/py/stations/*" (zone mukoko.com, where the DNS
-// record for weather is proxied) takes the four station paths before they
-// reach Vercel, and the Worker sees the visitor's own address for its per-IP
-// limits. Until this Worker is deployed with that route, vercel.json rewrites
-// the one path a console in the field uses (/api/py/stations/ingest) to the
-// custom domain below.
+// Cutover (not yet): when the existing stations are copied into D1, add the
+// route "weather.mukoko.com/api/py/stations/*" (zone weather.mukoko.com)
+// so consoles already configured with weather.mukoko.com land here.
 {
   "name": "mukoko-weather-stations",
   "main": "build/index.js",
@@ -31,13 +26,7 @@
     "logs": { "enabled": true, "invocation_logs": true },
     "traces": { "enabled": true },
   },
-  "routes": [
-    { "pattern": "weather-ingest.nyuchi.com", "custom_domain": true },
-    {
-      "pattern": "weather.mukoko.com/api/py/stations/*",
-      "zone_name": "mukoko.com",
-    },
-  ],
+  "routes": [{ "pattern": "weather-ingest.nyuchi.com", "custom_domain": true }],
   "vars": {
     "ENVIRONMENT": "production",
     "CORS_ORIGINS": "https://weatherstations.nyuchi.com,https://weather.mukoko.com",

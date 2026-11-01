@@ -1,6 +1,6 @@
 //! Weather-station ingest: protocol parsing, unit conversion, QC and ingest
-//! keys. Ported from the Python `_stations.py` (deleted) so stations already
-//! registered keep working with the keys they were given.
+//! keys. Ported from `api/py/_stations.py` so stations already registered keep
+//! working with the keys they were given.
 
 use std::collections::BTreeMap;
 
@@ -251,7 +251,7 @@ where
 }
 
 /// A manual reading from an analog station, as posted by the station
-/// console (`POST /stations/manual`).
+/// console (`POST /api/py/stations/manual`).
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManualReading {
@@ -308,7 +308,7 @@ impl ManualReading {
     }
 }
 
-/// A station registration request (`POST /stations/register`).
+/// A station registration request (`POST /api/py/stations/register`).
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Registration {
