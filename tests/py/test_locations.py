@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch, MagicMock, AsyncMock, PropertyMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
-import httpx
 import pytest
 from fastapi import HTTPException
 
-from py._db import is_valid_coords
+from py._db import SLUG_RE, is_valid_coords
 from py._locations import (
     _generate_slug,
     _generate_province_slug,
@@ -24,13 +23,8 @@ from py._locations import (
     _enrich_location_with_ai,
     _resolve_slug_collision,
     _CITY_STATES,
-    list_locations,
-    search_locations,
     geo_lookup,
     add_location,
-    MAX_LOCATIONS_LIMIT,
-    DEFAULT_LOCATIONS_LIMIT,
-    SLUG_RE,
     DEDUP_RADIUS_KM,
 )
 from py._places_resolver import find_nearest_locations, search_locations_by_name
@@ -489,250 +483,9 @@ class TestGetElevation:
 # ---------------------------------------------------------------------------
 
 
-class TestListLocations:
-    """Phase 0G: reads now flow through places.placesGeo via the resolver."""
-
-    @pytest.mark.asyncio
-    @patch("py._locations.find_location")
-    async def test_single_location_by_slug(self, mock_find):
-        mock_find.return_value = {"slug": "harare", "name": "Harare"}
-        result = await list_locations(slug="harare")
-        assert result["location"]["slug"] == "harare"
-
-    @pytest.mark.asyncio
-    @patch("py._locations.find_location")
-    async def test_slug_not_found_raises_404(self, mock_find):
-        mock_find.return_value = None
-        with pytest.raises(HTTPException) as exc_info:
-            await list_locations(slug="nonexistent")
-        assert exc_info.value.status_code == 404
-
-    @pytest.mark.asyncio
-    @patch("py._locations.find_locations_by_tag")
-    async def test_tag_filter(self, mock_find):
-        mock_find.return_value = [{"slug": "chinhoyi", "name": "Chinhoyi", "tags": ["farming"]}]
-        result = await list_locations(tag="farming")
-        assert result["total"] == 1
-        assert result["locations"][0]["slug"] == "chinhoyi"
-
-    @pytest.mark.asyncio
-    @patch("py._locations.find_locations_in_country")
-    async def test_country_filter_uppercased(self, mock_find):
-        mock_find.return_value = []
-        await list_locations(country="zw")
-        # Verify the helper was called with the uppercased ISO code
-        call_args = mock_find.call_args[0]
-        assert call_args[0] == "zw"  # original case preserved at call site
-        # The helper itself uppercases internally.
-
-    @pytest.mark.asyncio
-    @patch("py._locations.places_geo_collection")
-    @patch("py._locations.count_all_locations")
-    async def test_stats_mode(self, mock_count, mock_coll):
-        mock_count.return_value = 100
-        mock_coll.return_value.distinct.side_effect = [
-            ["Province1", "Province2"],  # provinces
-            ["ZW", "KE"],  # countries
-        ]
-
-        result = await list_locations(mode="stats")
-        assert result["totalLocations"] == 100
-        assert result["totalProvinces"] == 2
-        assert result["totalCountries"] == 2
-
-    @pytest.mark.asyncio
-    @patch("py._locations.places_geo_collection")
-    async def test_tags_mode(self, mock_coll):
-        mock_coll.return_value.aggregate.return_value = [
-            {"_id": "city", "count": 50},
-            {"_id": "farming", "count": 30},
-        ]
-
-        result = await list_locations(mode="tags")
-        assert result["tags"]["city"] == 50
-        assert result["tags"]["farming"] == 30
-
-    @pytest.mark.asyncio
-    @patch("py._locations.find_all_locations")
-    @patch("py._locations.count_all_locations")
-    async def test_limit_clamped_to_max(self, mock_count, mock_find):
-        mock_find.return_value = []
-        mock_count.return_value = 0
-        result = await list_locations(limit=500)
-        assert result["limit"] == MAX_LOCATIONS_LIMIT
-
-    @pytest.mark.asyncio
-    @patch("py._locations.find_all_locations")
-    @patch("py._locations.count_all_locations")
-    async def test_limit_clamped_to_min_1(self, mock_count, mock_find):
-        mock_find.return_value = []
-        mock_count.return_value = 0
-        result = await list_locations(limit=-5)
-        assert result["limit"] == 1
-
-    @pytest.mark.asyncio
-    @patch("py._locations.find_all_locations")
-    @patch("py._locations.count_all_locations")
-    async def test_skip_clamped_to_zero(self, mock_count, mock_find):
-        mock_find.return_value = []
-        mock_count.return_value = 0
-        result = await list_locations(skip=-10)
-        assert result["skip"] == 0
-
-
 # ---------------------------------------------------------------------------
 # search_locations endpoint
 # ---------------------------------------------------------------------------
-
-
-class TestSearchLocations:
-    """Phase 0G: search queries placesGeo (regex on name/slug + mukokoSlug)."""
-
-    @pytest.mark.asyncio
-    @patch("py._locations._forward_geocode", return_value=[])
-    @patch("py._places_resolver.places_geo_collection")
-    async def test_text_search(self, mock_coll, _mock_geo):
-        # placesGeo doc shape — adapter converts to legacy LocationDoc shape.
-        # Query now runs inside search_locations_by_name (py._places_resolver),
-        # shared with the Shamwari chat tool's search_locations.
-        placesgeo_doc = {
-            "_id": "uuid-harare",
-            "name": "Harare",
-            "slug": "harare-a1b2c3",
-            "geoType": "city",
-            "geo": {"type": "Point", "coordinates": [31.05, -17.83]},
-            "sourceProvenance": {"mukokoSlug": "harare", "mukokoTags": ["city"]},
-        }
-        mock_cursor = MagicMock()
-        mock_cursor.sort.return_value.skip.return_value.limit.return_value.max_time_ms.return_value = [
-            placesgeo_doc
-        ]
-        mock_coll.return_value.find.return_value = mock_cursor
-
-        result = await search_locations(q="harare")
-        assert result["source"] == "mongodb"
-        assert len(result["locations"]) == 1
-        # Score should not be in adapted output
-        assert "score" not in result["locations"][0]
-
-    @pytest.mark.asyncio
-    @patch("py._locations.find_nearest_locations")
-    async def test_geospatial_search(self, mock_nearest):
-        """The geo branch delegates to the canonical resolver helper (100km)."""
-        mock_nearest.return_value = [
-            {"slug": "harare", "name": "Harare", "tags": ["city"]},
-        ]
-
-        result = await search_locations(lat="-17.83", lon="31.05")
-        assert result["source"] == "mongodb"
-        assert len(result["locations"]) == 1
-        mock_nearest.assert_called_once_with(-17.83, 31.05, limit=20, max_km=100)
-
-    @pytest.mark.asyncio
-    @patch("py._locations.find_locations_by_tag")
-    async def test_tag_search(self, mock_find):
-        mock_find.return_value = [
-            {"slug": "chinhoyi", "name": "Chinhoyi", "tags": ["farming"]},
-        ]
-        result = await search_locations(tag="farming")
-        assert result["total"] == 1
-
-    @pytest.mark.asyncio
-    async def test_missing_query_raises_400(self):
-        with pytest.raises(HTTPException) as exc_info:
-            await search_locations(q="", tag=None)
-        assert exc_info.value.status_code == 400
-
-    @pytest.mark.asyncio
-    @patch("py._locations.places_geo_collection")
-    async def test_tags_mode(self, mock_coll):
-        mock_coll.return_value.aggregate.return_value = [
-            {"_id": "city", "count": 50},
-        ]
-        result = await search_locations(mode="tags")
-        assert "tags" in result
-
-
-class TestSearchGeocodedTopUp:
-    """Search hits outside the seeded geography must render (global scope)."""
-
-    @pytest.fixture(autouse=True)
-    def _isolate_geocode_cache_and_budget(self):
-        from py import _locations
-
-        _locations._geocode_cache.clear()
-        with patch("py._locations.enforce_rate_limit", return_value="1.2.3.4"):
-            yield
-        _locations._geocode_cache.clear()
-
-    LONDON = {
-        "name": "London", "country": "GB", "countryName": "United Kingdom",
-        "admin1": "England", "lat": 51.50853, "lon": -0.12574, "elevation": 25,
-    }
-
-    @pytest.mark.asyncio
-    @patch("py._locations._forward_geocode")
-    @patch("py._locations.search_locations_by_name", return_value=[])
-    async def test_geocoded_candidates_get_spot_slugs(self, _mock_db, mock_geo):
-        mock_geo.return_value = [self.LONDON]
-        result = await search_locations(q="london")
-        assert result["source"] == "geocoded"
-        loc = result["locations"][0]
-        # A `{name}-{country}` slug (london-gb) 404s: nothing backs it. The
-        # spot slug carries its coordinate, so the page always renders.
-        assert loc["slug"].startswith("london--")
-        assert loc["slug"] != "london-gb"
-        assert loc["country"] == "GB"
-        assert loc["province"] == "England"
-
-    @pytest.mark.asyncio
-    @patch("py._locations._forward_geocode")
-    @patch("py._locations.search_locations_by_name")
-    async def test_thin_catalogue_answer_is_topped_up(self, mock_db, mock_geo):
-        mock_db.return_value = [
-            {"slug": "victoria-sc", "name": "Victoria", "lat": -4.62, "lon": 55.45},
-        ]
-        mock_geo.return_value = [
-            {"name": "Victoria", "country": "SC", "admin1": "", "lat": -4.62, "lon": 55.455},
-            {"name": "Victoria", "country": "CA", "admin1": "British Columbia",
-             "lat": 48.43, "lon": -123.37},
-        ]
-        result = await search_locations(q="victoria")
-        slugs = [r["slug"] for r in result["locations"]]
-        assert result["source"] == "mixed"
-        assert slugs[0] == "victoria-sc"  # catalogue match stays first
-        assert len(slugs) == 2  # the Seychelles geocode duplicate is dropped
-        assert result["locations"][1]["country"] == "CA"
-
-    @pytest.mark.asyncio
-    @patch("py._locations._forward_geocode")
-    @patch("py._locations.search_locations_by_name", return_value=[])
-    async def test_placeholder_elevation_never_reaches_a_candidate(self, _mock_db, mock_geo):
-        mock_geo.return_value = [{**self.LONDON, "elevation": -9999.0}]
-        result = await search_locations(q="london")
-        assert result["locations"][0]["elevation"] is None
-
-    @pytest.mark.asyncio
-    @patch("py._locations._forward_geocode")
-    @patch("py._locations.search_locations_by_name", return_value=[])
-    async def test_open_breaker_skips_geocoding(self, _mock_db, mock_geo):
-        from py._circuit_breaker import open_meteo_breaker
-
-        with patch.object(type(open_meteo_breaker), "is_allowed", new_callable=PropertyMock, return_value=False):
-            result = await search_locations(q="london")
-        mock_geo.assert_not_called()
-        assert result["locations"] == []
-
-    @pytest.mark.asyncio
-    @patch("py._locations._forward_geocode")
-    @patch("py._locations.search_locations_by_name")
-    async def test_full_catalogue_answer_skips_geocoding(self, mock_db, mock_geo):
-        mock_db.return_value = [
-            {"slug": f"harare-{i}", "name": "Harare", "lat": -17.8, "lon": 31.0}
-            for i in range(3)
-        ]
-        await search_locations(q="harare")
-        mock_geo.assert_not_called()
 
 
 class TestSearchLocationsByName:
@@ -825,41 +578,6 @@ class TestGeoLookup:
         with patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 4}):
             yield
 
-    @pytest.mark.asyncio
-    @patch("py._locations._reverse_geocode")
-    @patch("py._locations.find_nearest_location")
-    async def test_nearest_location_returned(self, mock_nearest, mock_geocode):
-        mock_nearest.return_value = {"slug": "harare", "name": "Harare", "country": "ZW"}
-        result = await geo_lookup(-17.83, 31.05)
-        assert result["nearest"]["slug"] == "harare"
-        assert result["isNew"] is False
-
-    @pytest.mark.asyncio
-    @patch("py._locations.find_nearest_location")
-    async def test_returns_nearest_by_distance(self, mock_nearest):
-        """Fast path returns the placesGeo $nearSphere closest entry."""
-        # The helper returns the nearest single doc — mock as Maputo
-        mock_nearest.return_value = {"slug": "maputo", "name": "Maputo", "country": "MZ"}
-        result = await geo_lookup(-17.83, 31.05)
-        assert result["nearest"]["slug"] == "maputo"
-
-    @pytest.mark.asyncio
-    @patch("py._locations.find_nearest_location")
-    async def test_ip_geo_caps_nearest_search_radius(self, mock_nearest):
-        """The autoCreate=false (IP-geo) fast path must cap `max_km` to a
-        realistic IP-geolocation accuracy radius. IP-derived lat/lon can be
-        off by hundreds of km, and with an unbounded/near-planetary cap
-        `$nearSphere` always returns SOME seed location — even one on
-        another continent — which then gets presented to the user as their
-        detected location. A tight cap makes a genuinely-far match fall
-        through to the 404 (retry with autoCreate=true) instead."""
-        mock_nearest.return_value = None
-        with patch("py._locations._find_only_spot", return_value=None), \
-             patch("py._locations.nearest_seed", return_value=None), \
-             pytest.raises(HTTPException):
-            await geo_lookup(-17.83, 31.05)
-
-        assert mock_nearest.call_args.kwargs["max_km"] <= 200
 
     @pytest.mark.asyncio
     @patch("py._db.check_rate_limit")
@@ -873,25 +591,13 @@ class TestGeoLookup:
         assert exc_info.value.status_code == 429
         mock_rate.assert_called_once_with("unknown", "location-create", 5, 3600)
 
-    @pytest.mark.asyncio
-    @patch("py._db.check_rate_limit")
-    @patch("py._locations.find_nearest_location")
-    async def test_find_only_path_is_not_rate_limited(self, mock_nearest, mock_rate):
-        """The cheap find-only path (autoCreate=false, e.g. IP-geo) must stay
-        unlimited — only auto-create does expensive work worth throttling."""
-        mock_nearest.return_value = {"slug": "harare", "name": "Harare", "country": "ZW"}
-        result = await geo_lookup(-17.83, 31.05, autoCreate=False)
-        assert result["nearest"]["slug"] == "harare"
-        mock_rate.assert_not_called()
 
     @pytest.mark.asyncio
     @patch("py._locations._find_duplicate")
     @patch("py._locations._reverse_geocode")
-    @patch("py._locations.find_nearest_location")
-    async def test_duplicate_detection(self, mock_nearest, mock_geocode, mock_dedup):
+    async def test_duplicate_detection(self, mock_geocode, mock_dedup):
         """Auto-create should return existing location when a 1km same-name
         duplicate is found."""
-        mock_nearest.return_value = None
         mock_geocode.return_value = {"country": "ZW", "name": "Harare", "admin1": "Harare"}
         # The tight 1km _find_duplicate call returns the existing entry.
         mock_dedup.return_value = {"slug": "harare", "name": "Harare"}
@@ -906,14 +612,11 @@ class TestGeoLookup:
     @patch("py._locations._get_elevation")
     @patch("py._locations._find_duplicate")
     @patch("py._locations._reverse_geocode")
-    @patch("py._locations.find_nearest_location")
     @patch("py._locations.places_geo_collection")
     async def test_auto_create_success(
-        self, mock_coll, mock_nearest, mock_geocode, mock_dedup,
-        mock_elev, mock_enrich, mock_upsert,
+        self, mock_coll, mock_geocode, mock_dedup, mock_elev, mock_enrich, mock_upsert,
     ):
         """Auto-create should write to placesGeo when no duplicate exists."""
-        mock_nearest.return_value = None
         mock_geocode.return_value = {
             "country": "ZW",
             "countryName": "Zimbabwe",
@@ -935,31 +638,11 @@ class TestGeoLookup:
         mock_upsert.assert_called_once()
         mock_enrich.assert_called_once_with("ZW", -19.0, 32.0)
 
-    @pytest.mark.asyncio
-    @patch("py._locations._reverse_geocode")
-    @patch("py._locations.find_nearest_location")
-    async def test_global_coordinates_accepted(self, mock_nearest, mock_geocode):
-        """Any valid global coordinates should be accepted (no region restrictions)."""
-        mock_nearest.return_value = None
-        mock_geocode.return_value = {
-            "country": "US", "countryName": "United States",
-            "name": "New York", "admin1": "New York",
-            "lat": 40.71, "lon": -74.01, "elevation": 10,
-        }
-        # With autoCreate=false and the on-demand naming unavailable, should
-        # raise 404 (no nearby location, not a region error).
-        with patch("py._locations._find_only_spot", return_value=None), \
-             pytest.raises(HTTPException) as exc_info:
-            await geo_lookup(40.71, -74.01)
-        assert exc_info.value.status_code == 404
-        assert "autoCreate" in exc_info.value.detail
 
     @pytest.mark.asyncio
     @patch("py._locations._reverse_geocode")
-    @patch("py._locations.find_nearest_location")
-    async def test_autocreate_skips_uncapped_nearest(self, mock_nearest, mock_geocode):
+    async def test_autocreate_skips_uncapped_nearest(self, mock_geocode):
         """With autoCreate=true and no nearby match, reverse-geocode is invoked."""
-        mock_nearest.return_value = None  # No nearby within 50km
         mock_geocode.return_value = None  # Simulate geocode failure to simplify
         with pytest.raises(HTTPException) as exc_info:
             await geo_lookup(40.71, -74.01, autoCreate=True)
@@ -972,14 +655,11 @@ class TestGeoLookup:
     @patch("py._locations._get_elevation")
     @patch("py._locations._find_duplicate")
     @patch("py._locations._reverse_geocode")
-    @patch("py._locations.find_nearest_location")
     @patch("py._locations.places_geo_collection")
     async def test_slug_collision_uses_suburb(
-        self, mock_coll, mock_nearest, mock_geocode, mock_dedup,
-        mock_elev, mock_enrich, mock_upsert,
+        self, mock_coll, mock_geocode, mock_dedup, mock_elev, mock_enrich, mock_upsert,
     ):
         """Slug collision should try suburb-enriched slug before falling back."""
-        mock_nearest.return_value = None
         mock_geocode.return_value = {
             "country": "SG", "countryName": "Singapore",
             "name": "Woodlands", "admin1": "North",
@@ -1005,14 +685,11 @@ class TestGeoLookup:
     @patch("py._locations._get_elevation")
     @patch("py._locations._find_duplicate")
     @patch("py._locations._reverse_geocode")
-    @patch("py._locations.find_nearest_location")
     @patch("py._locations.places_geo_collection")
     async def test_slug_collision_falls_back_to_road(
-        self, mock_coll, mock_nearest, mock_geocode, mock_dedup,
-        mock_elev, mock_enrich, mock_upsert,
+        self, mock_coll, mock_geocode, mock_dedup, mock_elev, mock_enrich, mock_upsert,
     ):
         """When suburb slug also collides, try road-enriched slug."""
-        mock_nearest.return_value = None
         mock_geocode.return_value = {
             "country": "SG", "countryName": "Singapore",
             "name": "Woodlands", "admin1": "North",
@@ -1043,11 +720,9 @@ class TestGeoLookup:
     @patch("py._locations._get_elevation")
     @patch("py._locations._find_duplicate")
     @patch("py._locations._reverse_geocode")
-    @patch("py._locations.find_nearest_location")
     @patch("py._locations.places_geo_collection")
     async def test_autocreate_does_not_snap_to_nearby_city(
-        self, mock_coll, mock_nearest, mock_geocode, mock_dedup,
-        mock_elev, mock_enrich, mock_upsert,
+        self, mock_coll, mock_geocode, mock_dedup, mock_elev, mock_enrich, mock_upsert,
     ):
         """GPS autoCreate must reverse-geocode to the user's EXACT place and
         create a distinct fine-grained entry — never snap to a nearby city,
@@ -1056,7 +731,6 @@ class TestGeoLookup:
         """
         # Even if a same-named city existed nearby, the autoCreate path ignores
         # it entirely — no find_nearest_location call is made.
-        mock_nearest.return_value = {"slug": "harare", "name": "Harare", "country": "ZW"}
         # Reverse geocode (zoom=18) resolves to a specific road, not the city.
         mock_geocode.return_value = {
             "country": "ZW",
@@ -1081,7 +755,6 @@ class TestGeoLookup:
         mock_geocode.assert_called_once()
         mock_upsert.assert_called_once()
         # No distance snap: nearest-location lookup is never used for autoCreate.
-        mock_nearest.assert_not_called()
         # Exactly one (tight, 1km) dedup check — no wider radius check.
         assert mock_dedup.call_count == 1
         assert mock_dedup.call_args.args[2] == DEDUP_RADIUS_KM
@@ -1090,9 +763,8 @@ class TestGeoLookup:
     @patch("py._locations.upsert_placesgeo_city")
     @patch("py._locations._find_duplicate")
     @patch("py._locations._reverse_geocode")
-    @patch("py._locations.find_nearest_location")
     async def test_autocreate_repeat_request_returns_existing_fine_grained(
-        self, mock_nearest, mock_geocode, mock_dedup, mock_upsert,
+        self, mock_geocode, mock_dedup, mock_upsert,
     ):
         """A second identical GPS autoCreate request for the SAME spot (within
         the tight 1km same-name dedup) returns the EXISTING fine-grained entry
@@ -1117,23 +789,6 @@ class TestGeoLookup:
         # Dedup short-circuits BEFORE any write, using the tight 1km radius.
         mock_upsert.assert_not_called()
         assert mock_dedup.call_args.args[2] == DEDUP_RADIUS_KM
-
-    @pytest.mark.asyncio
-    @patch("py._locations._reverse_geocode")
-    @patch("py._locations.find_nearest_location")
-    async def test_find_only_returns_nearest_existing(
-        self, mock_nearest, mock_geocode,
-    ):
-        """autoCreate=false (IP-geo find-only) returns the nearest EXISTING
-        entry with no coarse cap, and never reverse-geocodes.
-        """
-        mock_nearest.return_value = {"slug": "harare", "name": "Harare", "country": "ZW"}
-
-        result = await geo_lookup(-17.78, 31.12, autoCreate=False)
-
-        assert result["isNew"] is False
-        assert result["nearest"]["slug"] == "harare"
-        mock_geocode.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -2243,17 +1898,15 @@ class TestGeoLookupPoiRefinement:
     @patch("py._locations._find_duplicate")
     @patch("py._locations._match_nearby_poi")
     @patch("py._locations._reverse_geocode")
-    @patch("py._locations.find_nearest_location")
     @patch("py._locations.places_geo_collection")
     async def test_poi_is_context_only_and_never_overrides_name(
-        self, mock_coll, mock_nearest, mock_geocode, mock_poi, mock_dedup,
-        mock_elev, mock_enrich, mock_upsert,
+        self, mock_coll, mock_geocode, mock_poi, mock_dedup, mock_elev, mock_enrich,
+        mock_upsert,
     ):
         """A close POI surfaces as context (poiType) but the reverse-geocoded
         road/address always wins as the location's name — this is passive GPS
         detection, not a search-and-pick flow, so the user never chose the
         POI and must not have their street silently relabeled as it."""
-        mock_nearest.return_value = None
         mock_geocode.return_value = {
             "country": "ZW", "countryName": "Zimbabwe",
             "name": "Fourth Street",  # raw reverse-geocode name
@@ -2281,14 +1934,12 @@ class TestGeoLookupPoiRefinement:
     @patch("py._locations._find_duplicate")
     @patch("py._locations._match_nearby_poi")
     @patch("py._locations._reverse_geocode")
-    @patch("py._locations.find_nearest_location")
     @patch("py._locations.places_geo_collection")
     async def test_no_poi_keeps_reverse_geocode_name(
-        self, mock_coll, mock_nearest, mock_geocode, mock_poi, mock_dedup,
-        mock_elev, mock_enrich, mock_upsert,
+        self, mock_coll, mock_geocode, mock_poi, mock_dedup, mock_elev, mock_enrich,
+        mock_upsert,
     ):
         """No nearby POI — the reverse-geocode result is used unchanged (fallback)."""
-        mock_nearest.return_value = None
         mock_geocode.return_value = {
             "country": "ZW", "countryName": "Zimbabwe",
             "name": "Fourth Street", "admin1": "Harare",
@@ -2306,213 +1957,8 @@ class TestGeoLookupPoiRefinement:
         assert mock_upsert.call_args.kwargs["mukoko_poi_type"] is None
 
 
-class TestSearchInputBoundsAndGeocodeBudget:
-    """Review: /api/py/search caps q, clamps limit, caches and budgets the
-    third-party geocoder top-up, and dedupes candidates against each other."""
-
-    @pytest.fixture(autouse=True)
-    def _clear_cache(self):
-        from py import _locations
-
-        _locations._geocode_cache.clear()
-        yield
-        _locations._geocode_cache.clear()
-
-    @pytest.mark.asyncio
-    async def test_overlong_query_is_400(self):
-        with pytest.raises(HTTPException) as exc:
-            await search_locations(q="x" * 101)
-        assert exc.value.status_code == 400
-
-    @pytest.mark.asyncio
-    @patch("py._locations._forward_geocode", return_value=[])
-    @patch("py._locations.search_locations_by_name", return_value=[])
-    async def test_limit_is_clamped_to_one_through_fifty(self, mock_db, _geo):
-        await search_locations(q="harare", limit=0)
-        assert mock_db.call_args.kwargs["limit"] == 1
-        await search_locations(q="harare", limit=500)
-        assert mock_db.call_args.kwargs["limit"] == 50
-        await search_locations(q="harare", limit=-3, skip=-9)
-        assert mock_db.call_args.kwargs["skip"] == 0
-
-    @pytest.mark.asyncio
-    @patch("py._locations.enforce_rate_limit", return_value="1.2.3.4")
-    @patch("py._locations._forward_geocode")
-    @patch("py._locations.search_locations_by_name", return_value=[])
-    async def test_repeat_query_is_served_from_cache(self, _db, mock_geo, mock_rate):
-        mock_geo.return_value = [TestSearchGeocodedTopUp.LONDON]
-        await search_locations(q="London")
-        await search_locations(q="  london ")
-        assert mock_geo.call_count == 1
-        assert mock_rate.call_count == 1  # cache hits are not metered
-        assert mock_rate.call_args[0][1] == "search-geocode"
-        assert mock_rate.call_args.kwargs["require_ip"] is False
-
-    @pytest.mark.asyncio
-    @patch("py._locations.enforce_rate_limit", side_effect=HTTPException(status_code=429))
-    @patch("py._locations._forward_geocode")
-    @patch("py._locations.search_locations_by_name")
-    async def test_over_budget_skips_top_up_but_still_answers(self, mock_db, mock_geo, _rate):
-        mock_db.return_value = [{"slug": "victoria-sc", "name": "Victoria", "lat": -4.6, "lon": 55.4}]
-        result = await search_locations(q="victoria")
-        mock_geo.assert_not_called()
-        assert [r["slug"] for r in result["locations"]] == ["victoria-sc"]
-
-    @pytest.mark.asyncio
-    @patch("py._locations.enforce_rate_limit", return_value="1.2.3.4")
-    @patch("py._locations._forward_geocode")
-    @patch("py._locations.search_locations_by_name", return_value=[])
-    async def test_geocoded_candidates_dedupe_against_each_other(self, _db, mock_geo, _rate):
-        mock_geo.return_value = [
-            {"name": "Springfield", "country": "US", "admin1": "Illinois", "lat": 39.80, "lon": -89.64},
-            {"name": "Springfield", "country": "US", "admin1": "Illinois", "lat": 39.81, "lon": -89.65},
-            {"name": "Springfield", "country": "US", "admin1": "Missouri", "lat": 37.21, "lon": -93.29},
-        ]
-        result = await search_locations(q="springfield")
-        assert [r["province"] for r in result["locations"]] == ["Illinois", "Missouri"]
-
-
 # ---------------------------------------------------------------------------
-# /api/py/geo find-only fallback — name the spot on demand (#302)
-# ---------------------------------------------------------------------------
-
-from py import _locations as _locs  # noqa: E402
-from py._circuit_breaker import nominatim_breaker  # noqa: E402
-
-PHUKET_NOMINATIM = {
-    "name": "Phuket", "country": "TH", "countryName": "Thailand",
-    "admin1": "Phuket Province", "nominatimAddress": {},
-    "lat": 7.89, "lon": 98.40, "elevation": 0,
-}
-
-
-class TestFindOnlySpot:
-    @pytest.fixture(autouse=True)
-    def _clean(self):
-        _locs._find_only_cache.clear()
-        nominatim_breaker.reset()
-        # Seed fallback off by default (Phuket is a seed city); its own tests
-        # re-enable the real lookup.
-        with patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9}), \
-             patch("py._locations.nearest_seed", return_value=None):
-            yield
-        _locs._find_only_cache.clear()
-        nominatim_breaker.reset()
-
-    @pytest.mark.asyncio
-    @patch("py._locations._reverse_geocode_nominatim", return_value=PHUKET_NOMINATIM)
-    @patch("py._locations.find_nearest_location", return_value=None)
-    async def test_phuket_find_only_returns_a_spot_not_404(self, _nearest, mock_rev):
-        """The production gap: find-only 404'd at Phuket's own coordinates."""
-        result = await geo_lookup(7.89059, 98.3981)
-        spot = result["nearest"]
-        assert result["synthesized"] is True and result["isNew"] is False
-        assert spot["name"] == "Phuket" and spot["country"] == "TH"
-        assert spot["province"] == "Phuket Province"
-        assert spot["slug"].startswith("phuket--")
-        assert result["redirectTo"] == f"/{spot['slug']}"
-        # Snapped to the ~1 km grid; city-level reverse geocode only.
-        assert (spot["lat"], spot["lon"]) == (7.89, 98.4)
-        assert mock_rev.call_args.args == (7.89, 98.4)
-        assert mock_rev.call_args.kwargs["zoom"] == 10
-        # No measured height: None (never a fake 0 m), flagged approximate.
-        assert spot["elevation"] is None and spot["elevationApproximate"] is True
-
-    @pytest.mark.asyncio
-    @patch("py._locations._reverse_geocode_nominatim", return_value=PHUKET_NOMINATIM)
-    @patch("py._locations.find_nearest_location", return_value=None)
-    async def test_cell_is_cached(self, _nearest, mock_rev):
-        await geo_lookup(7.89059, 98.3981)
-        await geo_lookup(7.8912, 98.3990)
-        assert mock_rev.call_count == 1
-
-    @pytest.mark.asyncio
-    @patch("py._locations._reverse_geocode_nominatim")
-    @patch("py._locations.find_nearest_location")
-    async def test_stored_place_wins_without_upstream(self, mock_nearest, mock_rev):
-        mock_nearest.return_value = {"slug": "harare", "name": "Harare"}
-        result = await geo_lookup(-17.83, 31.05)
-        assert result["nearest"]["slug"] == "harare"
-        assert "synthesized" not in result
-        mock_rev.assert_not_called()
-
-    @pytest.mark.asyncio
-    @patch("py._locations._reverse_geocode_nominatim")
-    @patch("py._locations.find_nearest_location", return_value=None)
-    async def test_upstream_failure_is_404_and_counts_against_breaker(self, _n, mock_rev):
-        mock_rev.side_effect = lambda *a, report=None, **k: (
-            report.update(kind=_locs.NOMINATIM_UPSTREAM) or None
-        )
-        with pytest.raises(HTTPException) as exc:
-            await geo_lookup(7.89059, 98.3981)
-        assert exc.value.status_code == 404
-        from py._circuit_breaker import _get_state
-        assert len(_get_state("nominatim-osm").failures) == 1
-
-    @pytest.mark.asyncio
-    @patch("py._locations._reverse_geocode_nominatim")
-    @patch("py._locations.find_nearest_location", return_value=None)
-    async def test_over_per_ip_budget_is_404_not_429(self, _n, mock_rev):
-        with patch("py._db.check_rate_limit", return_value={"allowed": False, "remaining": 0}):
-            with pytest.raises(HTTPException) as exc:
-                await geo_lookup(7.89059, 98.3981)
-        assert exc.value.status_code == 404
-        mock_rev.assert_not_called()
-
-    @pytest.mark.asyncio
-    @patch("py._locations._reverse_geocode_nominatim")
-    @patch("py._locations.find_nearest_location", return_value=None)
-    async def test_global_budget_is_checked(self, _n, mock_rev):
-        calls = []
-
-        def rate(ip, action, limit, window):
-            calls.append((ip, action, limit))
-            return {"allowed": action != "geo-find-geocode-global", "remaining": 0}
-
-        with patch("py._db.check_rate_limit", side_effect=rate), \
-             patch("py._locations.check_rate_limit", side_effect=rate):
-            with pytest.raises(HTTPException):
-                await geo_lookup(7.89059, 98.3981)
-        assert ("all", "geo-find-geocode-global", _locs.FIND_ONLY_GEOCODE_GLOBAL) in calls
-        mock_rev.assert_not_called()
-
-    @pytest.mark.asyncio
-    @patch("py._locations._reverse_geocode_nominatim")
-    @patch("py._locations.find_nearest_location", return_value=None)
-    async def test_open_breaker_skips_upstream(self, _n, mock_rev):
-        for _ in range(5):
-            nominatim_breaker.record_failure()
-        with pytest.raises(HTTPException):
-            await geo_lookup(7.89059, 98.3981)
-        mock_rev.assert_not_called()
-
-    @pytest.mark.asyncio
-    @patch("py._locations._reverse_geocode_nominatim", return_value={**PHUKET_NOMINATIM, "name": ""})
-    @patch("py._locations.find_nearest_location", return_value=None)
-    async def test_unnamed_point_is_404(self, _n, _r):
-        with pytest.raises(HTTPException) as exc:
-            await geo_lookup(-40.0, -20.0)
-        assert exc.value.status_code == 404
-
-    @pytest.mark.asyncio
-    @patch("py._locations._find_only_spot")
-    @patch("py._locations._create_location_from_coords")
-    @patch("py._locations.find_nearest_location", return_value=None)
-    async def test_autocreate_never_uses_the_find_only_spot(self, _n, mock_create, mock_spot):
-        mock_create.return_value = {"status": "created", "location": {"slug": "x--osm-n1"}}
-        result = await geo_lookup(7.89, 98.39, autoCreate=True)
-        assert result["isNew"] is True
-        mock_spot.assert_not_called()
-
-    def test_find_only_never_writes(self):
-        """A coarse IP position must never create a record."""
-        import inspect
-        src = inspect.getsource(_locs._find_only_spot)
-        assert "upsert" not in src and "insert" not in src and "_create_location" not in src
-
-
-# ---------------------------------------------------------------------------
-# Search never offers a country/region centroid as a place (#302)
+# The add-location search never offers a country/region centroid as a place (#302)
 # ---------------------------------------------------------------------------
 
 from py._locations import is_area_feature  # noqa: E402
@@ -2550,94 +1996,7 @@ class TestAreaFeatures:
         assert _forward_geocode("thailand")[0]["featureCode"] == "PCLI"
 
 
-class TestSearchCountryQuery:
-    @pytest.fixture(autouse=True)
-    def _isolate(self):
-        from py import _locations
-
-        _locations._geocode_cache.clear()
-        with patch("py._locations.enforce_rate_limit", return_value="1.2.3.4"):
-            yield
-        _locations._geocode_cache.clear()
-
-    @pytest.mark.asyncio
-    @patch("py._locations.find_locations_in_country", return_value=[])
-    @patch("py._locations._forward_geocode", return_value=[THAILAND_HIT])
-    @patch("py._locations.search_locations_by_name", return_value=[])
-    async def test_empty_country_falls_back_to_the_seed_catalogue(self, _db, _geo, _cc):
-        """The real empty case: placesGeo holds nothing for Thailand, so the
-        static seed lists Bangkok, Phuket ... and never the centroid."""
-        result = await search_locations(q="Thailand")
-        slugs = [r["slug"] for r in result["locations"]]
-        assert "bangkok-th" in slugs and "phuket-th" in slugs
-        assert not any(s.startswith("thailand") for s in slugs)
-        assert all(r["country"] == "TH" for r in result["locations"])
-        assert result["locations"][0]["tags"] and "city" in result["locations"][0]["tags"]
-        assert result["source"] == "mongodb"
-
-    @pytest.mark.asyncio
-    @patch("py._locations.find_locations_in_country", return_value=[])
-    @patch("py._locations._forward_geocode",
-           return_value=[{**THAILAND_HIT, "name": "Atlantis", "country": "XX"}])
-    @patch("py._locations.search_locations_by_name", return_value=[])
-    async def test_country_with_no_stored_and_no_seed_places_is_empty(self, _db, _geo, _cc):
-        result = await search_locations(q="Atlantis")
-        assert result["locations"] == []
-
-    @pytest.mark.asyncio
-    @patch("py._locations.find_locations_in_country", return_value=[])
-    @patch("py._locations._forward_geocode", return_value=[])
-    @patch("py._locations.search_locations_by_name", return_value=[])
-    async def test_geocoder_is_over_fetched(self, _db, mock_geo, _cc):
-        """Area hits are dropped after the fetch, so ask for more than wanted."""
-        await search_locations(q="Thailand", limit=20)
-        assert mock_geo.call_args.args[1] == 60
-        mock_geo.reset_mock()
-        from py import _locations
-        _locations._geocode_cache.clear()
-        await search_locations(q="Thailand", limit=3)
-        assert mock_geo.call_args.args[1] == 10
-
-    @pytest.mark.asyncio
-    @patch("py._locations._forward_geocode", return_value=[
-        {**THAILAND_HIT, "name": "Phuket Province", "featureCode": "ADM1"},
-        {**THAILAND_HIT, "name": "Phuket", "featureCode": "ADM2"},
-        PHUKET_HIT,
-    ])
-    @patch("py._locations.search_locations_by_name", return_value=[])
-    async def test_admin_area_centroids_are_dropped(self, _db, _geo):
-        result = await search_locations(q="Phuket")
-        names = [r["name"] for r in result["locations"]]
-        assert names == ["Phuket"]
-        # A shipped seed city: its canonical slug, not a spot beside it.
-        assert result["locations"][0]["slug"] == "phuket-th"
-
-    @pytest.mark.asyncio
-    @patch("py._locations.find_locations_in_country")
-    @patch("py._locations._forward_geocode", return_value=[THAILAND_HIT, PHUKET_HIT])
-    @patch("py._locations.search_locations_by_name", return_value=[])
-    async def test_country_query_lists_stored_places_cities_first(self, _db, _geo, mock_cc):
-        mock_cc.return_value = [
-            {"_id": "x", "slug": "krabi-th", "name": "Krabi", "tags": ["tourism"], "lat": 8.1, "lon": 98.9},
-            {"_id": "y", "slug": "bangkok-th", "name": "Bangkok", "tags": ["city"], "lat": 13.75, "lon": 100.5},
-        ]
-        result = await search_locations(q="Thailand")
-        slugs = [r["slug"] for r in result["locations"]]
-        assert slugs[:2] == ["bangkok-th", "krabi-th"]
-        assert slugs[2] == "phuket-th"  # seed city, not a spot slug
-        assert not any(s.startswith("thailand") for s in slugs)
-        assert all("_id" not in r for r in result["locations"])
-        mock_cc.assert_called_once_with("TH", limit=20)
-        assert result["source"] == "mongodb"  # no geocoded candidate survived
-
-    @pytest.mark.asyncio
-    @patch("py._locations._forward_geocode",
-           return_value=[{**THAILAND_HIT, "name": "Europe", "country": "", "featureCode": "CONT"}])
-    @patch("py._locations.search_locations_by_name", return_value=[])
-    async def test_continent_is_not_offered(self, _db, _geo):
-        result = await search_locations(q="Europe")
-        assert result["locations"] == []
-
+class TestAddLocationSearchSkipsAreas:
     @pytest.mark.asyncio
     @patch("py._locations._forward_geocode", return_value=[THAILAND_HIT, PHUKET_HIT])
     async def test_add_location_candidates_skip_areas(self, _geo):
@@ -2661,133 +2020,25 @@ class TestSearchCountryQuery:
         assert [r["name"] for r in result["results"]] == ["Phuket"]
 
 
-class TestFindOnlySeedAndFailures:
-    """Find-only reuses a shipped seed city, and only outages open the breaker."""
-
-    @pytest.fixture(autouse=True)
-    def _clean(self):
-        _locs._find_only_cache.clear()
-        nominatim_breaker.reset()
-        with patch("py._db.check_rate_limit", return_value={"allowed": True, "remaining": 9}):
-            yield
-        _locs._find_only_cache.clear()
-        nominatim_breaker.reset()
+class TestFindOnlyMovedToTheWorker:
+    """The find-only half of GET /api/py/geo is served by the Rust places
+    Worker (workers/places, GET /v1/geo). Python only creates places now."""
 
     @pytest.mark.asyncio
-    @patch("py._locations._reverse_geocode_nominatim")
-    @patch("py._locations.find_nearest_location", return_value=None)
-    async def test_seed_city_within_50km_is_returned_without_upstream(self, _n, mock_rev):
-        result = await geo_lookup(7.89059, 98.3981)
-        assert result["nearest"]["slug"] == "phuket-th"
-        assert result["redirectTo"] == "/phuket-th"
-        assert result["isNew"] is False and "synthesized" not in result
-        mock_rev.assert_not_called()
+    @patch("py._db.check_rate_limit")
+    async def test_find_only_is_404_and_names_the_worker(self, mock_rate):
+        with pytest.raises(HTTPException) as exc_info:
+            await geo_lookup(-17.83, 31.05)
+        assert exc_info.value.status_code == 404
+        assert "weather-api.mukoko.com/v1/geo" in exc_info.value.detail
+        # Not metered and no upstream: it answers before any work.
+        mock_rate.assert_not_called()
 
-    @pytest.mark.asyncio
-    @patch("py._locations._reverse_geocode_nominatim", return_value=PHUKET_NOMINATIM)
-    @patch("py._locations.find_nearest_location", return_value=None)
-    async def test_beyond_50km_of_any_seed_is_a_spot(self, _n, _r):
-        # Mid-Atlantic, nowhere near a seed city.
-        result = await geo_lookup(0.0, -30.0)
-        assert result["synthesized"] is True
+    def test_the_read_routes_are_gone(self):
+        from py import _locations
 
-    def _http(self, status=200, body=None, exc=None):
-        client = MagicMock()
-        if exc:
-            client.get.side_effect = exc
-        else:
-            resp = MagicMock(status_code=status)
-            resp.json.return_value = body if body is not None else {}
-            client.get.return_value = resp
-        return client
-
-    def _kind(self, client):
-        report: dict = {}
-        with patch("py._locations._get_http", return_value=client):
-            out = _locs._reverse_geocode_nominatim(7.89, 98.4, zoom=10, report=report)
-        return out, report.get("kind")
-
-    def test_error_body_names_nothing(self):
-        out, kind = self._kind(self._http(body={"error": "Unable to geocode"}))
-        assert out is None and kind == _locs.NOMINATIM_NOTHING_HERE
-
-    def test_body_without_address_names_nothing(self):
-        out, kind = self._kind(self._http(body={"name": "x", "lat": "1", "lon": "2"}))
-        assert out is None and kind == _locs.NOMINATIM_NOTHING_HERE
-
-    @pytest.mark.parametrize("status", [400, 403, 404, 429])
-    def test_4xx_is_not_an_outage(self, status):
-        out, kind = self._kind(self._http(status=status))
-        assert out is None and kind == _locs.NOMINATIM_CLIENT_ERROR
-
-    @pytest.mark.parametrize("status", [500, 502, 503])
-    def test_5xx_is_an_outage(self, status):
-        out, kind = self._kind(self._http(status=status))
-        assert out is None and kind == _locs.NOMINATIM_UPSTREAM
-
-    @pytest.mark.parametrize("exc", [httpx.ConnectError("x"), httpx.ReadTimeout("t")])
-    def test_transport_error_and_timeout_are_outages(self, exc):
-        out, kind = self._kind(self._http(exc=exc))
-        assert out is None and kind == _locs.NOMINATIM_UPSTREAM
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("status", [400, 429])
-    @patch("py._locations.nearest_seed", return_value=None)
-    @patch("py._locations.find_nearest_location", return_value=None)
-    async def test_4xx_does_not_record_a_breaker_failure(self, _n, _s, status):
-        with patch("py._locations._get_http", return_value=self._http(status=status)):
-            with pytest.raises(HTTPException) as exc:
-                await geo_lookup(0.0, -30.0)
-        assert exc.value.status_code == 404
-        from py._circuit_breaker import _get_state
-        assert len(_get_state("nominatim-osm").failures) == 0
-
-    @pytest.mark.asyncio
-    @patch("py._locations.nearest_seed", return_value=None)
-    @patch("py._locations.find_nearest_location", return_value=None)
-    async def test_5xx_records_a_breaker_failure(self, _n, _s):
-        with patch("py._locations._get_http", return_value=self._http(status=503)):
-            with pytest.raises(HTTPException):
-                await geo_lookup(0.0, -30.0)
-        from py._circuit_breaker import _get_state
-        assert len(_get_state("nominatim-osm").failures) == 1
-
-    @pytest.mark.asyncio
-    @patch("py._locations.nearest_seed", return_value=None)
-    @patch("py._locations.find_nearest_location", return_value=None)
-    async def test_error_body_is_404_and_not_a_failure(self, _n, _s):
-        with patch("py._locations._get_http",
-                   return_value=self._http(body={"error": "Unable to geocode"})):
-            with pytest.raises(HTTPException) as exc:
-                await geo_lookup(0.0, -30.0)
-        assert exc.value.status_code == 404
-        from py._circuit_breaker import _get_state
-        assert len(_get_state("nominatim-osm").failures) == 0
-
-    @pytest.mark.asyncio
-    @patch("py._locations.nearest_seed", return_value=None)
-    @patch("py._locations.find_nearest_location", return_value=None)
-    async def test_unknown_name_is_404(self, _n, _s):
-        body = {"address": {"country_code": "xx", "country": "Nowhere"}, "lat": "0", "lon": "-30"}
-        with patch("py._locations._get_http", return_value=self._http(body=body)):
-            with pytest.raises(HTTPException) as exc:
-                await geo_lookup(0.0, -30.0)
-        assert exc.value.status_code == 404
-
-    def test_cache_is_safe_under_concurrent_writers(self):
-        import threading
-
-        errors: list[Exception] = []
-        with patch.object(_locs, "FIND_ONLY_CACHE_MAX", 8):
-            def work(n):
-                try:
-                    for i in range(300):
-                        _locs._remember_find_only((float(n), float(i)), None, 60)
-                except Exception as e:  # noqa: BLE001
-                    errors.append(e)
-
-            threads = [threading.Thread(target=work, args=(n,)) for n in range(8)]
-            [t.start() for t in threads]
-            [t.join() for t in threads]
-        assert errors == []
-        assert len(_locs._find_only_cache) <= 8 + 8
+        assert not hasattr(_locations, "list_locations")
+        assert not hasattr(_locations, "search_locations")
+        assert not hasattr(_locations, "_find_only_spot")
+        paths = {getattr(r, "path", "") for r in _locations.router.routes}
+        assert paths == {"/api/py/geo", "/api/py/locations/add"}

@@ -13,7 +13,7 @@ export interface GeoResult {
   isNew?: boolean;
   /**
    * True when nothing is stored near the fix and the find-only lookup named
-   * the spot on demand without storing it (`/api/py/geo` `synthesized`,
+   * the spot on demand without storing it (`/v1/geo` `synthesized`,
    * #302). A GPS caller then asks again with `autoCreate` to store the place.
    */
   synthesized?: boolean;
@@ -36,7 +36,7 @@ const DEFAULT_TIMEOUT_MS = 10000;
 /** Default browser position-cache window — 1 minute. */
 const DEFAULT_MAXIMUM_AGE_MS = 60000;
 /**
- * Cap on the /api/py/geo round-trip after the fix arrives. Find-only is a
+ * Cap on the /v1/geo round-trip after the fix arrives. Find-only is a
  * cheap DB read; create-on-demand reverse-geocodes (Overpass, then Nominatim)
  * so it gets longer. Without a cap, a hung lookup left the visitor on a
  * "Finding your location…" screen indefinitely.
@@ -62,7 +62,7 @@ export interface DetectUserLocationOptions {
 
 /**
  * Request the user's position via the browser Geolocation API
- * and snap to the nearest location via the /api/py/geo endpoint.
+ * and snap to the nearest location via the Worker's /v1/geo endpoint.
  */
 export function detectUserLocation({
   autoCreate = false,

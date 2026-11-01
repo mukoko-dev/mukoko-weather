@@ -614,7 +614,7 @@ export async function resolveLocationSlug(
   }
 
   // 1b) Exact match on the platform's own slug (`harare-a1b2c3`). Search and
-  // the GPS lookup hand these out (`/api/py/search` returns placesGeo slugs),
+  // the GPS lookup hand these out (`/v1/search` can return placesGeo slugs),
   // so a visitor picking "Bulawayo" from search lands on `/bulawayo-e7b1f4`.
   // Without this step that URL fell through to a name guess of
   // "Bulawayo E7b1f4" and rendered "Location not found".

@@ -58,9 +58,9 @@ describe("developers page — documented public endpoints", () => {
   const endpoints = [
     "/api/embed/current",
     "/api/py/weather?lat=",
-    "/api/py/geo?lat=",
-    "/api/py/locations?slug=",
-    "/api/py/search?q=",
+    "/v1/geo?lat=",
+    "/v1/locations?slug=",
+    "/v1/search?q=",
     "/api/py/airquality?lat=",
     "/v1/airports/nearest?lat=",
   ];

@@ -417,46 +417,6 @@ def count_all_locations() -> int:
         return 0
 
 
-def find_locations_in_country(iso: str, *, limit: int = 200) -> list[dict]:
-    """Return placesGeo entries whose parent country matches ``iso``.
-
-    Resolves the country's ``placesGeo._id`` via the cached ISO map, then
-    queries for child docs with that parent id. Returns ``[]`` if the
-    country isn't registered.
-    """
-    if not iso:
-        return []
-    iso_upper = iso.strip().upper()
-    # Reverse the cache lookup — get id by iso
-    _ensure_country_cache()
-    parent_id: Optional[str] = None
-    for pid, country_iso in _COUNTRY_ISO_BY_ID.items():
-        if country_iso == iso_upper:
-            parent_id = pid
-            break
-    if not parent_id:
-        return []
-    try:
-        cursor = (
-            places_geo_collection()
-            .find({
-                "parentPlaceId": parent_id,
-                "geoType": {"$in": ["city", "town", "village"]},
-            })
-            .sort("name", 1)
-            .limit(max(1, min(limit, 500)))
-        )
-        adapted: list[dict] = []
-        for doc in cursor:
-            adapted_doc = adapt_placesgeo_to_location(doc)
-            if adapted_doc:
-                adapted.append(adapted_doc)
-        return adapted
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("placesGeo country query failed: %s", exc)
-        return []
-
-
 def find_nearest_locations(
     lat: float,
     lon: float,
