@@ -218,7 +218,7 @@ export interface CardSummary {
 }
 
 /**
- * Minimal shape of `/api/py/weather` the card needs. Kept structural so the
+ * Minimal shape of `/v1/weather` the card needs. Kept structural so the
  * helper accepts any WeatherData-compatible payload without importing it.
  */
 export interface CardWeatherInput {

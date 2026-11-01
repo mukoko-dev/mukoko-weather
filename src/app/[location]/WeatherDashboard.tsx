@@ -389,7 +389,7 @@ export function WeatherDashboard({
   ]);
 
   // Fetch the selected model's baseline + multi-model comparison + minutely
-  // nowcast through our own /api/py/weather (cached, single writer).
+  // nowcast through the Worker's /v1/weather (cached, single writer).
   // Best-effort — failures are swallowed so the seeded page is never affected.
   // The selected model is unioned into the comparison set so the user's pick
   // is always shown.

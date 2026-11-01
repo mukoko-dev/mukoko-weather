@@ -17,7 +17,7 @@ import { AQI_SCALE, aqiScaleBand } from "@/lib/weather-scales";
  *
  * Shows all 7 pollutants (PM2.5, PM10, O₃, NO₂, SO₂, CO, NH₃) in a `.baobab`
  * card grid alongside each concentration's EPA AQI sub-index, severity bar,
- * and WHO 2021 guideline reference value. Fetches the same `/api/py/airquality`
+ * and WHO 2021 guideline reference value. Fetches the same `/v1/air-quality`
  * endpoint as the compact `AirQualityCard` — caching means the second hit is
  * served from cache.
  */

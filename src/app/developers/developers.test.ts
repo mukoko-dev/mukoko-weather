@@ -57,11 +57,11 @@ describe("developers page — structure", () => {
 describe("developers page — documented public endpoints", () => {
   const endpoints = [
     "/api/embed/current",
-    "/api/py/weather?lat=",
+    "/v1/weather?lat=",
     "/v1/geo?lat=",
     "/v1/locations?slug=",
     "/v1/search?q=",
-    "/api/py/airquality?lat=",
+    "/v1/air-quality?lat=",
     "/v1/airports/nearest?lat=",
   ];
 

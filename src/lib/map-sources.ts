@@ -171,8 +171,8 @@ export interface MapModel {
 }
 
 /**
- * The blend members (api/py/_model_blend.py), highest start weight first.
- * Ids are the ones /api/py/weather accepts (`KNOWN_FORECAST_MODELS`).
+ * The blend members (`weather_core::blend`), highest start weight first.
+ * Ids are the ones /v1/weather accepts (`KNOWN_FORECAST_MODELS`).
  */
 export const MAP_MODELS: readonly MapModel[] = [
   { id: "ecmwf_ifs", label: "ECMWF IFS", provider: "ecmwf" },

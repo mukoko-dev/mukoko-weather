@@ -119,7 +119,7 @@ export interface PlaceOffset {
 
 /**
  * Reads the place's real (DST-aware) UTC offset from our cached
- * `/api/py/weather` — the same row the location page already filled, so a
+ * `/v1/weather` on the Worker — the same row the location page already filled, so a
  * visit from there costs a cache hit. Null on any failure; the caller keeps
  * its estimate. Never calls a provider directly.
  */

@@ -44,7 +44,6 @@ Social: Twitter @mukokoafrica, Instagram @mukoko.africa
 - **Testing:** Vitest 4.0.18 (TypeScript, `@vitest/coverage-v8` for coverage) + pytest 8.3 (Python)
 - **CI/CD:** GitHub Actions (single `ci` job: lint → typecheck → TypeScript tests → Python tests, all steps visible in one check on push/PR; CodeQL security scanning for JS/TS, Python, and Actions; Claude AI review on PRs; post-deploy DB init; `workers.yml` checks the Rust Workers; `workers-deploy.yml` deploys them by hand only, in service-binding order, behind the `workers-production` GitHub Environment; the Workers' runtime secrets are Cloudflare Secrets Store bindings, one `MUKOKO_WEATHER_*` store secret per key shared by every Worker that needs it, read via `weather_edge::secret` — see CONTRIBUTING.md "Deploying the Workers"). All workflows use `concurrency` groups with `cancel-in-progress: true` to prevent zombie runs from rapid pushes, except `workers-deploy.yml`, which never cancels a deploy in flight, and `db-init.yml`, whose job-level `db-init-production` group (`cancel-in-progress: false`) never cancels a seed in flight. **`main` never holds `CLAUDE.md` or a `.claude/` directory** (development guidance, not production code): `release-pr.yml` removes them from every release branch and `no-dev-files-on-main.yml` fails any PR or push to `main` that tracks one, so never reference them from code, tests or workflows that run on `main`. `db-init.yml` runs only for the exact environment `Production – mukoko-weather` (en dash): two Vercel projects deploy from this repo, so a `Production` prefix would also seed after a `Production – mukoko-station-console` deploy
 - **Deployment:** Vercel (with `@vercel/functions` for MongoDB connection pooling)
-- **Edge layer (optional):** Cloudflare Workers with Hono (`worker/` directory)
 
 ## Key Commands
 
@@ -496,15 +495,6 @@ mukoko-weather/
 │                                  # Styling per Mzizi doctrine: canonical Nyuchi L1 tokens in src/app/globals.css + registry L2 primitives in src/components/ui/ (Button, Input, Label, Card, Badge, Alert, RadioGroup) + vendored L7 shell (src/components/shell/nyuchi-header.tsx, nyuchi-footer.tsx from the Mzizi registry, wired app-wide in layout.tsx with a local @/lib/harness shim until the real harness package ships; icons via @/lib/icons, never lucide direct) — pages are pure composition, no hand-rolled CSS classes; theme via next-themes (class-based dark mode); fonts Noto Sans/Serif + JetBrains Mono via next/font. The seven-mineral brand ribbon is ALWAYS VERTICAL: fixed 4px .minerals-stripe down the left viewport edge (same as the main app), never a horizontal strip
 ├── infra/
 │   └── open-meteo/                # Self-hosted Open-Meteo on Railway (EU West, Amsterdam) — NOT deployed yet: api/ (unmodified upstream image + sync loop, sync.conf), gateway/ (Caddy header-key auth), smoke.sh, compose.yaml, README.md runbook (sizing, cost, AGPL, provisioning)
-├── worker/                        # Cloudflare Workers edge API (optional)
-│   ├── src/
-│   │   ├── index.ts               # Hono app, route mounting, CORS
-│   │   ├── routes/                # weather, ai, geo, locations, embed
-│   │   ├── data/locations.ts      # Static locations data
-│   │   └── types.ts
-│   ├── wrangler.toml              # KV bindings, env vars, environments
-│   ├── tsconfig.json
-│   └── package.json               # Hono 4, Wrangler 4 (no AI SDK — AI goes through the Python backend)
 ├── public/
 │   ├── manifest.json              # PWA manifest (installable, shortcuts)
 │   └── favicon.*, icon-*.png      # Favicon + PWA icons (copied from mukoko-news — source of truth)
@@ -1233,7 +1223,7 @@ All skeletons include `role="status"` and `aria-label="Loading"` for screen read
 - **AI through the weather Worker (owner rule: the backend uses the Workers AI binding; no frontend ever passes directly to Cloudflare AI):** every model call goes through `api/py/_ai_gateway.py` → `POST {WEATHER_SERVICE_URL}/internal/ai/chat/completions` on `mukoko-weather-internal` (`weather-internal.mukoko.com`) with `Authorization: Bearer <WEATHER_SERVICE_API_KEY>` (the same service key the Nyuchi API uses there; `WEATHER_AI_URL` overrides the URL). That Worker forwards over its `AI_SERVICE` service binding to `mukoko-weather-ai`, which runs the call with the native `env.AI` binding through the `shamwari` AI Gateway (`gateway: {id: "shamwari"}`) — no Cloudflare token anywhere, and Vercel holds none. The wire format is OpenAI chat completions (`messages`, `tools`, `max_tokens`, optional `model`), so the Python tool loops are unchanged. The Worker puts the Nyuchi guardrails first in the system prompt (no guardrails → `503`, fails closed), refuses user turns carrying personal data (`422 personal_data_detected`), and returns `content` only — never the model's `reasoning_content`. Logic: `workers/crates/weather-core/src/ai/completions.rs`. If the env is incomplete, a warning is logged once and every AI endpoint degrades to its existing fallback — nothing breaks
 - **Token budget (the configured model is a reasoning model):** the Worker adds `REASONING_HEADROOM` (1024) to the caller's `max_tokens` for reasoning models and sends `reasoning_effort: "low"` (the model cannot switch reasoning off), so the answer is never starved (a 600-token summary used ~360 tokens). Callers keep asking for the answer length they want
 - **Error mapping:** `429` → `rate_limited`; `400`/`413`/`422` (bad shape, personal data, a gateway guardrails block) → `api_error` without tripping `ai_breaker` (the Worker is healthy); `401`/`5xx`/transport errors → `api_error` and a breaker failure
-- **Backend-only AI (owner rule):** only the AI Worker (and the Python backend, through it) may call AI. Browser code, Next.js server/client components, `NEXT_PUBLIC_*` vars, the edge `worker/` and the embed never call Cloudflare AI directly — UI surfaces call our backend routes (`/api/ai/*`, `/api/py/chat`, `/api/py/explore/search`), and `worker/` has no AI route (the summary is signed-in only). `src/lib/ai-backend-only.test.ts` fails if `src/`, `worker/`, `api/py` or a built client bundle references the gateway host, a Workers AI call, an AI SDK or a Cloudflare AI token env name
+- **Backend-only AI (owner rule):** only the AI Worker (and the Python backend, through it) may call AI. Browser code, Next.js server/client components, `NEXT_PUBLIC_*` vars and the embed never call Cloudflare AI directly — UI surfaces call our backend routes (`/api/ai/*`, `/api/py/chat`, `/api/py/explore/search`). `src/lib/ai-backend-only.test.ts` fails if `src/`, `api/py` or a built client bundle references the gateway host, a Workers AI call, an AI SDK or a Cloudflare AI token env name
 - **Model ids:** the Worker owns the model (`AI_MODEL` var in `workers/ai/wrangler.jsonc`, `@cf/` ids only via `allowed_model`; default `DEFAULT_MODEL` in `weather_core::ai`). `ai_prompts.model` in the DB is not forwarded (one Worker var moves every surface); `seed-ai-prompts.ts` seeds the same id for reference. The model still reasons (low/high/max, cannot be disabled), so it gets the reasoning headroom and `reasoning_effort: "low"`
 - **Tool use** (`_chat.py`, `_explore_search.py`) is OpenAI-style: `tools=[{type: "function", function: {...}}]`, the model returns `tool_calls`, results go back as `role: "tool"` messages keyed by `tool_call_id`
 - AI persona: "Shamwari Weather" (Ubuntu philosophy, region-aware context)
@@ -2326,10 +2316,6 @@ An unknown slug is **rewritten** to `LOCATION_NOT_FOUND_REWRITE` (`/__mukoko/loc
 2. Use `t("key.path")` in components
 3. For interpolation: `t("weather.current", { location: name })`
 
-### Cloudflare Workers (optional edge layer)
-
-The `worker/` directory contains an independent Hono-based API that mirrors the Next.js API routes. It uses Cloudflare KV for caching instead of MongoDB. This is an optional deployment target — the primary deployment is Vercel.
-
 ## Removed / Migrated / Renamed Files
 
 The following TypeScript files were **removed** during the Python backend migration:
@@ -2340,6 +2326,7 @@ The following TypeScript files were **removed** during the Python backend migrat
 - `src/lib/kv-cache.ts` — KV cache (replaced by MongoDB `src/lib/db.ts`, then migrated to Python)
 - `src/lib/tomorrow.ts` — Tomorrow.io client + WMO mapping (issue #101 — the canonical implementation is `api/py/_weather.py`; the TS copy was a second cache writer with a drifted shape/mapping)
 - `src/types/cloudflare.d.ts` — KV types (no longer needed)
+- `worker/` — the legacy Hono edge API (`nyuchi-weather-api`): never deployed (placeholder KV ids), a mirror of Next routes from an earlier architecture; the Rust Workers in `workers/` replaced it
 - All TypeScript API routes under `src/app/api/` except `og/` and `db-init/` — replaced by Python endpoints under `api/py/`
 
 The following files were **renamed**:
