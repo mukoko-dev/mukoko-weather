@@ -742,6 +742,35 @@ pub fn sanitize_baseline_model(model: Option<&str>) -> Option<&'static str> {
         .find(|known| *known == m && *known != "best_match")
 }
 
+/// How long a served blend or picked-model baseline is cached (seconds).
+pub const BLEND_TTL_SECONDS: u64 = 900;
+/// How long a `best_match` answer is cached: less, so a blend missed to a
+/// passing upstream problem is back within minutes, not a quarter of an hour.
+pub const BEST_MATCH_TTL_SECONDS: u64 = 300;
+
+/// The forecast KV key for a point: `wx:v2:` + the 0.05° cell key. The version
+/// is part of it: `wx:v1:` rows hold a Tomorrow.io-or-best_match document and
+/// must never be served as a blend. A user-picked model appends `::<model>`,
+/// so a single-model row can never be served as the blend (or the reverse).
+pub fn forecast_cache_key(lat: f64, lon: f64, model: Option<&str>) -> String {
+    let base = format!("wx:v2:{}", crate::geo::cache_key(lat, lon));
+    match model {
+        Some(m) => format!("{base}::{m}"),
+        None => base,
+    }
+}
+
+/// KV lifetime of an answer by its `X-Weather-Provider`: a blend and a picked
+/// model [`BLEND_TTL_SECONDS`], the `best_match` fallback
+/// [`BEST_MATCH_TTL_SECONDS`].
+pub fn cache_ttl_seconds(provider: &str) -> u64 {
+    if provider == PROVIDER_BEST_MATCH {
+        BEST_MATCH_TTL_SECONDS
+    } else {
+        BLEND_TTL_SECONDS
+    }
+}
+
 /// `X-Weather-Provider` for a single-model baseline: `open-meteo:<model>`.
 pub fn single_model_provider(model: &str) -> String {
     format!("open-meteo:{model}")
@@ -1778,6 +1807,29 @@ mod tests {
                 other => panic!("expected a fallback, got {other:?}"),
             }
         }
+    }
+
+    #[test]
+    fn a_picked_model_has_its_own_forecast_row() {
+        let blend = forecast_cache_key(-17.83, 31.05, None);
+        let picked = forecast_cache_key(-17.83, 31.05, Some("ecmwf_ifs"));
+        assert_eq!(blend, "wx:v2:cell:-17.85_31.05");
+        assert_eq!(picked, "wx:v2:cell:-17.85_31.05::ecmwf_ifs");
+        assert_ne!(blend, picked);
+        // Two models in one cell never share a row, two points in one cell do.
+        assert_ne!(picked, forecast_cache_key(-17.83, 31.05, Some("gfs_seamless")));
+        assert_eq!(blend, forecast_cache_key(-17.8292, 31.0522, None));
+        // A different cell is a different row.
+        assert_ne!(blend, forecast_cache_key(11.28, 49.18, None));
+    }
+
+    #[test]
+    fn a_blend_and_a_picked_model_are_cached_fifteen_minutes_and_best_match_five() {
+        assert_eq!(BLEND_TTL_SECONDS, 900);
+        assert_eq!(BEST_MATCH_TTL_SECONDS, 300);
+        assert_eq!(cache_ttl_seconds(PROVIDER_BLEND), 900);
+        assert_eq!(cache_ttl_seconds(&single_model_provider("jma_gsm")), 900);
+        assert_eq!(cache_ttl_seconds(PROVIDER_BEST_MATCH), 300);
     }
 
     #[test]
