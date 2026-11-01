@@ -72,12 +72,26 @@ const DEFAULT_ELEVATION_M: f64 = 1200.0;
 pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let origin = req.headers().get("Origin")?.unwrap_or_default();
     let cors_origin = cors::allowed_origin(&env, &origin);
+    // The documented public read routes are open to any website (a GET, no
+    // credentials), as the Python routes they replace were. A listed origin
+    // still gets its own origin echoed; everything else keeps the allowlist.
+    let open_route = matches!(req.method(), Method::Get | Method::Options)
+        && weather_core::cors::is_open_read_route(&req.path());
+    let allow_origin = cors_origin
+        .clone()
+        .or_else(|| open_route.then(|| "*".to_owned()));
     let is_ai = is_ai_path(&req.path());
 
     let resp = if req.method() == Method::Options {
         cors::preflight(
-            cors_origin.is_some(),
-            "GET, POST, PATCH, OPTIONS",
+            allow_origin.is_some(),
+            // An open route to a foreign origin is a read; only the listed
+            // origins may write.
+            if cors_origin.is_some() {
+                "GET, POST, PATCH, OPTIONS"
+            } else {
+                "GET, OPTIONS"
+            },
             "Content-Type, Authorization, X-Mukoko-Client, X-API-Key, X-Client-Id, X-Client-Secret",
         )
     } else if is_ai {
@@ -111,7 +125,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     }?;
     cors::apply(
         resp,
-        cors_origin.as_deref(),
+        allow_origin.as_deref(),
         Some(
             "X-Cache, X-Weather-Provider, X-Weather-Blend, X-Enrichment, X-Current-Source, \
              X-Fetched-At, X-AQ-Source",
