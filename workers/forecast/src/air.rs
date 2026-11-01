@@ -1,5 +1,6 @@
 //! `GET /air-quality?lat=&lon=`: the EPA AQI from Open-Meteo's Air Quality
-//! API (ported from `api/py/_air_quality.py`).
+//! API (ported from `api/py/_air_quality.py`), with today's US AQI against
+//! yesterday's at the same hour (`todayUsAqi`, `yesterdayAqi`, `trend`).
 //!
 //! KV cache for an hour, keyed to about 11 m. Open-Meteo calls go through the
 //! same circuit breaker as the forecast: when it is open the answer is `503`;
@@ -37,6 +38,7 @@ pub async fn air_quality(req: &Request, env: &Env, ctx: &Context) -> Result<Resp
         if let Ok(Some(mut hit)) = kv.get(&key).json::<Value>().await {
             hit["source"] = Value::from("cache");
             hit["whoGuidelines"] = aq::who_guidelines();
+            aq::fill_trend_defaults(&mut hit);
             return respond(&hit, "HIT", "cache");
         }
     }
@@ -57,7 +59,7 @@ pub async fn air_quality(req: &Request, env: &Env, ctx: &Context) -> Result<Resp
         return error(502, "upstream_error", "Failed to fetch air quality data.");
     };
 
-    let mut body = aq::payload(&aq::pollutants_from_open_meteo(&raw));
+    let mut body = aq::payload_from_open_meteo(&raw);
     body["fetchedAt"] = Value::from(now_rfc3339());
     if let Some(kv) = kv {
         if let Ok(text) = serde_json::to_string(&body) {
