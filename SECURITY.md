@@ -76,11 +76,11 @@ All rate-limited endpoints use a MongoDB-backed IP rate limiter (`check_rate_lim
 | -------------------------- | ----------- |
 | `/api/py/chat`             | 20 req/hour |
 | `/api/py/ai/followup`      | 30 req/hour |
-| `/api/py/explore/search`   | 15 req/hour |
-| `/api/py/history/analyze`  | 10 req/hour |
 | `/api/py/locations/add`    | 5 req/hour  |
 | `/api/py/reports` (submit) | 5 req/hour  |
 | `/api/py/reports/clarify`  | 10 req/hour |
+
+The routes on the Rust Workers keep their limits in the Workers' own D1 table `rate_events` (`weather_core::budget`; the client is a SHA-256 of the visitor's address, never the address). The AI location search (`/v1/ai/explore/search`, 15 an hour per client) and the AI history analysis (`/v1/ai/history/analyze`, 10 an hour per client) fail closed: when the budget cannot be read, the model is not called. See `workers/README.md`.
 
 ### Circuit Breaker System
 

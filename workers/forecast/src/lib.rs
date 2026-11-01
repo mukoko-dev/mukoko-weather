@@ -16,6 +16,7 @@
 //! GET /sg-air[?lat=&lon=]                          official Singapore NEA PSI and PM2.5
 //! GET /model-grid?lat=&lon=[&model=]               one model's 3-hourly forecast on a 7×7 grid
 //! GET /profile?slug=|lat=&lon=[&country=]          a place's knowledge and current context
+//! GET /profile-block?slug=|lat=&lon=[&country=]   the same, cache-only, as the text block the AI Worker puts in a prompt
 //! GET /health                                      which bindings are configured
 //! ```
 //!
@@ -79,6 +80,7 @@ pub async fn fetch(req: Request, env: Env, ctx: Context) -> Result<Response> {
         "/sg-air" => sg_air::sg_air(&req, &env, &ctx).await,
         "/model-grid" => model_grid::model_grid(&req, &env, &ctx).await,
         "/profile" => profile::profile(&req, &env, &ctx).await,
+        "/profile-block" => profile::prompt_block(&req, &env).await,
         "/health" => health(&req, &env).await,
         _ => error(404, "not_found", "No such route."),
     }

@@ -65,6 +65,7 @@ export type WorkerRoute =
   | "aviation/nearest-metar"
   | "suitability"
   | "ai/history/analyze"
+  | "ai/explore/search"
   | "devices"
   | `devices/${string}`;
 
@@ -121,6 +122,64 @@ export async function fetchWorker(
     }
   }
   throw lastError;
+}
+
+/**
+ * A model call is slower than a read (the search makes up to three rounds),
+ * so the AI routes get a longer ceiling.
+ */
+export const WORKER_AI_TIMEOUT_MS = 40_000;
+
+/**
+ * POST JSON to a Worker route (the AI routes). Never retried: a model call
+ * costs, and an hourly budget counts every attempt.
+ */
+export function postWorker(
+  route: WorkerRoute,
+  body: unknown,
+  {
+    env = process.env,
+    fetcher = fetch,
+    timeoutMs = WORKER_AI_TIMEOUT_MS,
+    signal,
+  }: {
+    env?: Env;
+    fetcher?: typeof fetch;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+  } = {},
+): Promise<Response> {
+  return fetchWorker(
+    route,
+    "",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    },
+    { env, fetcher, timeoutMs, retries: 0 },
+  );
+}
+
+/**
+ * The sentence a failed Worker answer carries: the Workers' envelope
+ * (`error_description`, else `error`), else the status.
+ */
+export async function workerErrorMessage(res: Response): Promise<string> {
+  const body: unknown = await res.json().catch(() => null);
+  const field = (key: string): string | null => {
+    const value =
+      typeof body === "object" && body !== null
+        ? (body as Record<string, unknown>)[key]
+        : null;
+    return typeof value === "string" && value ? value : null;
+  };
+  return (
+    field("error_description") ??
+    field("error") ??
+    `Request failed (${res.status})`
+  );
 }
 
 /** A places call (`search`, `geo`, `locations`) on the Worker. */
