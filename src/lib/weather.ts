@@ -88,7 +88,7 @@ export interface WeatherData {
   daily: DailyWeather;
   current_units: Record<string, string>;
   /**
-   * Activity-specific insights. `/api/py/weather` always derives them from the
+   * Activity-specific insights. `/v1/weather` always derives them from the
    * model baseline (issue #246) and merges Tomorrow.io enrichment on top when
    * its budget allows; the TS direct-Open-Meteo path uses
    * `synthesizeOpenMeteoInsights`.
@@ -104,7 +104,7 @@ export interface WeatherData {
   models_time?: string[];
   /**
    * The LOCATION's UTC offset in seconds (Open-Meteo `utc_offset_seconds`).
-   * `/api/py/weather` always sets it (provider value, else a longitude
+   * `/v1/weather` always sets it (provider value, else a longitude
    * estimate). Every "current hour" and hour label must read the forecast in
    * this offset — see `src/lib/location-time.ts` — never the viewer's clock.
    */
@@ -131,7 +131,7 @@ export interface WeatherData {
  *
  * `best_match` is the stored default preference and now means the server's
  * Africa-weighted multi-model BLEND (ECMWF IFS + AIFS heaviest, then GFS,
- * ICON, GEM, ARPEGE — `api/py/_model_blend.py`). Picking any other model
+ * ICON, GEM, ARPEGE — `weather_core::blend`). Picking any other model
  * makes that single model the baseline.
  */
 export enum ForecastModel {
@@ -252,7 +252,7 @@ export function wmoToInsightHazards(code: number): {
 /**
  * Derive the full WeatherInsights set from model data — no Tomorrow.io.
  *
- * Mirror of `derive_insights` in `api/py/_insights.py` (issue #246): wind,
+ * Mirror of `derive_insights` in `weather_core::insights` (issue #246): wind,
  * visibility (metres → km, the unit the suitability thresholds use), dew
  * point (model value or Magnus), heat index, UV, precipitation type, a
  * thunderstorm proxy (WMO codes + CAPE/lifted index over the next 6 h,
