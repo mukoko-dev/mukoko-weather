@@ -20,7 +20,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use weather_core::blend::{self, Attempt, Upstream};
+use weather_core::blend::{self, Attempt, NotBlended, Upstream};
 use weather_core::breaker::{self, Breaker};
 use weather_core::{geo, normalize, Source};
 use weather_edge::{get_with_timeout, now, now_ms, now_rfc3339};
@@ -61,12 +61,30 @@ pub fn cache_key(lat: f64, lon: f64) -> String {
     format!("wx:v2:{}", geo::cache_key(lat, lon))
 }
 
+/// The KV key of a user-picked model: the blend's cell key plus `::<model>`,
+/// so a single-model row can never be served as the blend (or the reverse).
+pub fn model_cache_key(lat: f64, lon: f64, model: &str) -> String {
+    format!("{}::{model}", cache_key(lat, lon))
+}
+
 /// The forecast for a point, or `None` when the cache is cold and every
 /// provider failed. `refresh` skips the cache read (the answer is still
-/// cached): the jobs Worker uses it to keep popular places warm.
-pub async fn forecast(env: &Env, ctx: &Context, lat: f64, lon: f64, refresh: bool) -> Option<Got> {
+/// cached): the jobs Worker uses it to keep popular places warm. `model` is
+/// the caller's single-model baseline (`?model=`, already sanitised with
+/// [`blend::sanitize_baseline_model`]); `None` is the Africa-weighted blend.
+pub async fn forecast(
+    env: &Env,
+    ctx: &Context,
+    lat: f64,
+    lon: f64,
+    refresh: bool,
+    model: Option<&str>,
+) -> Option<Got> {
     let kv = env.kv(CACHE_BINDING).ok();
-    let key = cache_key(lat, lon);
+    let key = match model {
+        Some(m) => model_cache_key(lat, lon, m),
+        None => cache_key(lat, lon),
+    };
 
     if let Some(kv) = kv.as_ref().filter(|_| !refresh) {
         if let Ok(Some(mut hit)) = kv.get(&key).json::<Got>().await {
@@ -75,8 +93,10 @@ pub async fn forecast(env: &Env, ctx: &Context, lat: f64, lon: f64, refresh: boo
         }
     }
 
-    let (data, provider, blend_header) = baseline(env, lat, lon).await?;
-    let ttl = if blend_header.is_some() {
+    let (data, provider, blend_header) = baseline(env, lat, lon, model).await?;
+    // A blend and a picked model are cached a quarter of an hour; the
+    // `best_match` fallback for less, so the real baseline is back soon.
+    let ttl = if blend_header.is_some() || provider != blend::PROVIDER_BEST_MATCH {
         BLEND_TTL_SECONDS
     } else {
         BEST_MATCH_TTL_SECONDS
@@ -84,7 +104,7 @@ pub async fn forecast(env: &Env, ctx: &Context, lat: f64, lon: f64, refresh: boo
     let got = Got {
         data,
         source: Source::OpenMeteo,
-        provider: provider.to_owned(),
+        provider,
         blend: blend_header,
         fetched_at: now_rfc3339(),
         cache_hit: false,
@@ -132,9 +152,24 @@ async fn fetch(url: &str) -> Fetched {
 
 /// The baseline: the blend when at least four members answered (every member
 /// that returned data is used, weights renormalised over those present), else
-/// `best_match`, marked as such. `None` when Open-Meteo gave nothing usable
-/// (the caller answers 503; this Worker never invents data).
-async fn baseline(env: &Env, lat: f64, lon: f64) -> Option<(Value, &'static str, Option<String>)> {
+/// `best_match`, marked as such. With `model` set (the caller's own pick) the
+/// baseline is that one model, nulls filled from `best_match`; when it has no
+/// data here, or its request fails, the answer is `best_match` too. `None` when
+/// Open-Meteo gave nothing usable (the caller answers 503; this Worker never
+/// invents data).
+async fn baseline(
+    env: &Env,
+    lat: f64,
+    lon: f64,
+    model: Option<&str>,
+) -> Option<(Value, String, Option<String>)> {
+    if let Some(model) = model {
+        return match single_model(lat, lon, model).await {
+            Some(payload) => Some((payload, blend::single_model_provider(model), None)),
+            None => best_match(lat, lon, NotBlended::SelectedModelUnavailable).await,
+        };
+    }
+
     let region = blend::region_for(lat, lon);
     // The compiled-in weights, or the `weather.modelBlendConfig` override.
     let weights = crate::blend_config::weights(env, region).await;
@@ -159,7 +194,11 @@ async fn baseline(env: &Env, lat: f64, lon: f64) -> Option<(Value, &'static str,
     let why = match attempt {
         Attempt::Blended(out) => {
             record_open_meteo(true);
-            return Some((out.payload, blend::PROVIDER_BLEND, Some(out.header)));
+            return Some((
+                out.payload,
+                blend::PROVIDER_BLEND.to_owned(),
+                Some(out.header),
+            ));
         }
         Attempt::Fallback {
             why,
@@ -173,7 +212,40 @@ async fn baseline(env: &Env, lat: f64, lon: f64) -> Option<(Value, &'static str,
             why
         }
     };
+    best_match(lat, lon, why).await
+}
 
+/// The baseline from the one model the caller picked: `models=<model>,
+/// best_match` in one request, the model taking all the weight and
+/// `best_match` filling what it does not publish. `None` when the model has no
+/// data here (not an outage: no breaker failure), the breaker is open, or the
+/// request was rejected or failed (only a failure counts against the breaker).
+async fn single_model(lat: f64, lon: f64, model: &str) -> Option<Value> {
+    if !open_meteo_allowed() {
+        return None;
+    }
+    let url = blend::open_meteo_url(lat, lon, &blend::single_model_request(model));
+    match fetch(&url).await {
+        Fetched::Ok(raw) => {
+            let payload = blend::build_single_model(&raw, model, now())?;
+            record_open_meteo(true);
+            Some(payload)
+        }
+        Fetched::Rejected => None,
+        Fetched::Failed => {
+            record_open_meteo(false);
+            None
+        }
+    }
+}
+
+/// The `best_match` baseline, marked with why it is not the blend (or the
+/// picked model).
+async fn best_match(
+    lat: f64,
+    lon: f64,
+    why: NotBlended,
+) -> Option<(Value, String, Option<String>)> {
     if !open_meteo_allowed() {
         return None;
     }
@@ -183,7 +255,7 @@ async fn baseline(env: &Env, lat: f64, lon: f64) -> Option<(Value, &'static str,
             // A 200 with no temperatures is "no data here", not an outage.
             let payload = blend::best_match_payload(&raw, why, now())?;
             record_open_meteo(true);
-            Some((payload, blend::PROVIDER_BEST_MATCH, None))
+            Some((payload, blend::PROVIDER_BEST_MATCH.to_owned(), None))
         }
         Fetched::Rejected => None,
         Fetched::Failed => {

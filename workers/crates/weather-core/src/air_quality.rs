@@ -6,7 +6,14 @@
 //! sub-index (the dominant pollutant). The breakpoint tables are EPA's,
 //! converted from ppb/ppm to µg/m³ at 25 °C and 1 atm. NH3 has no EPA
 //! breakpoints: its concentration is reported but does not score.
+//!
+//! The same request also asks for the hourly US AQI with `past_days=1`, so the
+//! answer can say whether the air is better or worse than at this hour
+//! yesterday ([`us_aqi_same_hour_pair`], [`trend`]). Both are pinned to the
+//! Python by `tests/fixtures/air-quality-trend.json`, whose `expected` values
+//! the real functions produced (`scripts/gen_weather_core_fixtures.py`).
 
+use chrono::{Duration, NaiveDate, NaiveDateTime};
 use serde_json::{json, Map, Value};
 
 /// The Open-Meteo Air Quality endpoint.
@@ -161,11 +168,13 @@ pub fn compute(pollutants: &[(&str, Option<f64>)]) -> Value {
     }
 }
 
-/// The Open-Meteo Air Quality request for a point (current values only).
+/// The Open-Meteo Air Quality request for a point: the current pollutant
+/// values, and the hourly US AQI for yesterday and today (one request, so the
+/// trend costs no second round trip).
 pub fn open_meteo_url(lat: f64, lon: f64) -> String {
     let fields: Vec<&str> = POLLUTANT_FIELDS.iter().map(|(f, _)| *f).collect();
     format!(
-        "{OPEN_METEO_AQ_URL}?latitude={lat}&longitude={lon}&current={}&timezone=auto",
+        "{OPEN_METEO_AQ_URL}?latitude={lat}&longitude={lon}&current={}&hourly=us_aqi&past_days=1&timezone=auto",
         fields.join(",")
     )
 }
@@ -197,6 +206,127 @@ pub fn payload(pollutants: &[(&str, Option<f64>)]) -> Value {
         .collect();
     out["pollutants"] = Value::Object(map);
     out
+}
+
+/// A change of more than this many US AQI points since the same hour
+/// yesterday is "better" or "worse"; anything within the band is "similar".
+pub const AQI_TREND_BAND: i64 = 10;
+
+/// Today's and yesterday's US AQI at the current local hour.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SameHourPair {
+    pub today: Option<i64>,
+    pub yesterday: Option<i64>,
+}
+
+/// The local time of an ISO timestamp, to the hour, or `None` when it is not
+/// one. Port of `datetime.fromisoformat` for the shapes Open-Meteo sends
+/// (`2026-11-01T03:00`, with seconds, a space, a zone suffix, or a date only).
+fn parse_local_hour(s: &str) -> Option<NaiveDateTime> {
+    let s = s.trim();
+    let date = NaiveDate::parse_from_str(s.get(..10)?, "%Y-%m-%d").ok()?;
+    let rest = s.get(10..)?;
+    if rest.is_empty() {
+        return date.and_hms_opt(0, 0, 0);
+    }
+    if !(rest.starts_with('T') || rest.starts_with(' ')) {
+        return None;
+    }
+    let hour: u32 = rest.get(1..3)?.parse().ok()?;
+    let after = rest.get(3..)?;
+    if !after
+        .chars()
+        .all(|c| c.is_ascii_digit() || ":.+-Z".contains(c))
+    {
+        return None;
+    }
+    date.and_hms_opt(hour, 0, 0)
+}
+
+/// An integer AQI from a JSON number or numeric string, rounding half to even
+/// (Python's `int(round(float(x)))`).
+fn aqi_int(v: &Value) -> Option<i64> {
+    let f = match v {
+        Value::Number(n) => n.as_f64()?,
+        Value::String(s) => s.trim().parse::<f64>().ok()?,
+        _ => return None,
+    };
+    f.is_finite().then(|| f.round_ties_even() as i64)
+}
+
+/// Today's and yesterday's US AQI at the current local hour, from the hourly
+/// `us_aqi` series requested with `past_days=1` (port of
+/// `_us_aqi_same_hour_pair`). Both values come from Open-Meteo's own US AQI,
+/// so the comparison is like-for-like. A missing series, one of a different
+/// length from `hourly.time`, or an unreadable `current.time` gives `None`
+/// for both.
+pub fn us_aqi_same_hour_pair(raw: &Value) -> SameHourPair {
+    let empty = SameHourPair::default();
+    let Some(current_time) = raw
+        .pointer("/current/time")
+        .and_then(Value::as_str)
+        .filter(|t| !t.is_empty())
+    else {
+        return empty;
+    };
+    let times = raw
+        .pointer("/hourly/time")
+        .and_then(Value::as_array)
+        .map_or(&[][..], Vec::as_slice);
+    let values = raw
+        .pointer("/hourly/us_aqi")
+        .and_then(Value::as_array)
+        .map_or(&[][..], Vec::as_slice);
+    if times.len() != values.len() {
+        return empty;
+    }
+    let Some(now) = parse_local_hour(current_time) else {
+        return empty;
+    };
+    // Match on "YYYY-MM-DDTHH" so a minute or second suffix never breaks it.
+    // The last matching hour wins, as the Python's dict does.
+    let at = |when: NaiveDateTime| -> Option<i64> {
+        let key = when.format("%Y-%m-%dT%H").to_string();
+        let i = times.iter().rposition(|t| {
+            t.as_str()
+                .is_some_and(|t| t.chars().take(13).collect::<String>() == key)
+        })?;
+        aqi_int(&values[i])
+    };
+    SameHourPair {
+        today: at(now),
+        yesterday: at(now - Duration::days(1)),
+    }
+}
+
+/// Today's US AQI against yesterday's at the same hour: `"better"` when more
+/// than [`AQI_TREND_BAND`] points lower, `"worse"` when more than that higher,
+/// else `"similar"`; `None` when either value is missing.
+pub fn trend(today: Option<i64>, yesterday: Option<i64>) -> Option<&'static str> {
+    let delta = today? - yesterday?;
+    Some(if delta < -AQI_TREND_BAND {
+        "better"
+    } else if delta > AQI_TREND_BAND {
+        "worse"
+    } else {
+        "similar"
+    })
+}
+
+/// Put `todayUsAqi`, `yesterdayAqi` and `trend` on a payload (JSON `null` for
+/// what is missing, so the shape never changes).
+pub fn add_trend(body: &mut Value, pair: SameHourPair) {
+    body["todayUsAqi"] = pair.today.map_or(Value::Null, |v| json!(v));
+    body["yesterdayAqi"] = pair.yesterday.map_or(Value::Null, |v| json!(v));
+    body["trend"] = trend(pair.today, pair.yesterday).map_or(Value::Null, |t| json!(t));
+}
+
+/// The whole answer body (less `source`, `whoGuidelines` and `fetchedAt`,
+/// which the Worker adds) from an Open-Meteo Air Quality response.
+pub fn payload_from_open_meteo(raw: &Value) -> Value {
+    let mut body = payload(&pollutants_from_open_meteo(raw));
+    add_trend(&mut body, us_aqi_same_hour_pair(raw));
+    body
 }
 
 /// The WHO guideline values as a JSON object.
@@ -307,6 +437,71 @@ mod tests {
         assert!(body["pollutants"]["o3"].is_null());
         assert_eq!(body["dominantPollutant"], "pm2_5");
         assert_eq!(who_guidelines()["pm2_5"], 15.0);
+    }
+
+    fn trend_fx() -> Value {
+        serde_json::from_str(include_str!(
+            "../../../../tests/fixtures/air-quality-trend.json"
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn the_trend_band_is_the_pythons() {
+        assert_eq!(trend_fx()["band"], AQI_TREND_BAND);
+    }
+
+    #[test]
+    fn the_trend_matches_the_python() {
+        let fx = trend_fx();
+        let rows = fx["trend"].as_array().unwrap();
+        assert!(rows.len() >= 12);
+        for r in rows {
+            let got = trend(r["today"].as_i64(), r["yesterday"].as_i64());
+            assert_eq!(
+                got.map_or(Value::Null, Value::from),
+                r["expected"],
+                "{} vs {}",
+                r["today"],
+                r["yesterday"]
+            );
+        }
+    }
+
+    #[test]
+    fn the_same_hour_pair_and_the_whole_payload_match_the_python() {
+        let fx = trend_fx();
+        let cases = fx["cases"].as_array().unwrap();
+        assert!(cases.len() >= 15);
+        for c in cases {
+            let pair = us_aqi_same_hour_pair(&c["raw"]);
+            let side = |k: &str| c["side"].get(k).cloned().unwrap_or(Value::Null);
+            assert_eq!(
+                pair.today.map_or(Value::Null, |v| json!(v)),
+                side("todayUsAqi"),
+                "{} (today)",
+                c["name"]
+            );
+            assert_eq!(
+                pair.yesterday.map_or(Value::Null, |v| json!(v)),
+                side("yesterdayAqi"),
+                "{} (yesterday)",
+                c["name"]
+            );
+            assert_eq!(
+                payload_from_open_meteo(&c["raw"]),
+                c["expected"],
+                "{}",
+                c["name"]
+            );
+        }
+    }
+
+    #[test]
+    fn the_request_asks_for_yesterday_and_today() {
+        let url = open_meteo_url(-17.8, 31.0);
+        assert!(url.contains("hourly=us_aqi"));
+        assert!(url.contains("past_days=1"));
     }
 
     #[test]

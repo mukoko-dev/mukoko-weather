@@ -720,6 +720,120 @@ pub fn build_blend(
     })
 }
 
+// ---------------------------------------------------------------------------
+// The user's single-model baseline (`?model=`)
+// ---------------------------------------------------------------------------
+
+/// The model a caller named as the baseline (`selectedForecastModel`), or
+/// `None` for the Africa-weighted blend. Port of `_sanitize_baseline_model`:
+/// an empty value, `best_match` (the stored default preference) and anything
+/// outside [`crate::normalize::KNOWN_FORECAST_MODELS`] mean the blend, and a
+/// legacy id maps through [`MODEL_ALIASES`] first, so stored preferences keep
+/// working.
+pub fn sanitize_baseline_model(model: Option<&str>) -> Option<&'static str> {
+    let m = model?.trim();
+    let m = MODEL_ALIASES
+        .iter()
+        .find(|(old, _)| *old == m)
+        .map_or(m, |(_, new)| *new);
+    crate::normalize::KNOWN_FORECAST_MODELS
+        .iter()
+        .copied()
+        .find(|known| *known == m && *known != "best_match")
+}
+
+/// `X-Weather-Provider` for a single-model baseline: `open-meteo:<model>`.
+pub fn single_model_provider(model: &str) -> String {
+    format!("open-meteo:{model}")
+}
+
+/// The models to request for a single-model baseline: the picked model, and
+/// `best_match` beside it so the response stays suffixed and `best_match` can
+/// fill the variables the model does not publish (ECMWF has no UV index).
+pub fn single_model_request(model: &str) -> Vec<String> {
+    vec![model.to_owned(), "best_match".to_owned()]
+}
+
+/// Fill the nulls of `payload[section]` arrays from the same arrays of
+/// `filler`, position by position (an index past the filler's end keeps its
+/// null).
+fn fill_section_nulls(payload: &mut Value, filler: &Value, section: &str) {
+    let Some(base) = payload.get_mut(section).and_then(Value::as_object_mut) else {
+        return;
+    };
+    let fill = filler.get(section);
+    for (var, arr) in base.iter_mut() {
+        let Some(items) = arr.as_array_mut() else {
+            continue;
+        };
+        let other = fill
+            .and_then(|f| f.get(var))
+            .and_then(Value::as_array)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        for (i, v) in items.iter_mut().enumerate() {
+            if v.is_null() {
+                if let Some(o) = other.get(i) {
+                    *v = o.clone();
+                }
+            }
+        }
+    }
+}
+
+/// The baseline from ONE user-selected model, nulls filled from `best_match`
+/// (port of `_fetch_single_model`).
+///
+/// `raw` is the response to a `models=<model>,best_match` request. The picked
+/// model gets all the weight; `best_match` only fills the variables the model
+/// does not publish. `None` when the model returned no temperature at this
+/// point (not an outage: the caller falls back to `best_match` without
+/// recording a breaker failure). The payload is the Python's, plus a
+/// `baseline` marker saying which model it is.
+pub fn build_single_model(raw: &Value, model: &str, now: DateTime<Utc>) -> Option<Value> {
+    if members_with_data(raw, &[model.to_owned()]).is_empty() {
+        return None;
+    }
+    let mut payload = blend_payload(raw, &[(model.to_owned(), 1.0)], false);
+    let filler = blend_payload(raw, &[("best_match".to_owned(), 1.0)], false);
+    for section in ["hourly", "daily"] {
+        fill_section_nulls(&mut payload, &filler, section);
+    }
+    // Null `current` values come from the current hour of the hourly series.
+    let hourly = payload.get("hourly").cloned().unwrap_or_else(|| json!({}));
+    let idx = insights::current_hour_index(
+        &hourly,
+        payload.pointer("/current/time").and_then(Value::as_str),
+    );
+    if let Some(current) = payload.get_mut("current").and_then(Value::as_object_mut) {
+        for (var, value) in current.iter_mut() {
+            if value.is_null() {
+                if let Some(v) = hourly
+                    .get(var)
+                    .and_then(Value::as_array)
+                    .and_then(|a| a.get(idx))
+                {
+                    *value = v.clone();
+                }
+            }
+        }
+    }
+    let mut payload = finalize_baseline(&payload, now);
+    payload["minutely"] = parse_minutely_any(
+        raw,
+        &[model.to_owned(), "best_match".to_owned()],
+        MINUTELY_STEPS_FETCHED,
+    )
+    .unwrap_or(Value::Null);
+    payload["baseline"] = json!({
+        "provider": single_model_provider(model),
+        "blend": false,
+        "model": model,
+        "reason": "selected_model",
+    });
+    Some(payload)
+}
+
 /// A served blend and what it was made of.
 #[derive(Debug, Clone)]
 pub struct BlendOutcome {
@@ -740,6 +854,9 @@ pub enum NotBlended {
     CircuitOpen,
     /// The request was rejected (4xx): our request, not an outage.
     Rejected,
+    /// The model the caller picked (`?model=`) returned no data at this point
+    /// or its request failed; the answer is `best_match`.
+    SelectedModelUnavailable,
 }
 
 impl NotBlended {
@@ -749,6 +866,7 @@ impl NotBlended {
             NotBlended::UpstreamError => "upstream_error",
             NotBlended::CircuitOpen => "circuit_open",
             NotBlended::Rejected => "request_rejected",
+            NotBlended::SelectedModelUnavailable => "selected_model_unavailable",
         }
     }
 }
@@ -1517,5 +1635,76 @@ mod tests {
         let later = Utc.with_ymd_and_hms(2026, 10, 31, 14, 0, 0).unwrap();
         assert_eq!(fresh_minutely(&m, 7200, later), Value::Null);
         assert_eq!(fresh_minutely(&Value::Null, 0, now), Value::Null);
+    }
+
+    // -- the single-model baseline (`?model=`) -------------------------------
+
+    fn single_fx() -> Value {
+        serde_json::from_str(include_str!("../../../../tests/fixtures/single-model.json")).unwrap()
+    }
+
+    fn single_now() -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339(single_fx()["now"].as_str().unwrap())
+            .unwrap()
+            .with_timezone(&Utc)
+    }
+
+    #[test]
+    fn the_baseline_model_is_sanitised_like_the_python() {
+        let fx = single_fx();
+        let rows = fx["baseline_model"].as_array().unwrap();
+        assert!(rows.len() >= 15);
+        for row in rows {
+            let got = sanitize_baseline_model(row["input"].as_str());
+            assert_eq!(
+                got.map(Value::from).unwrap_or(Value::Null),
+                row["expected"],
+                "{}",
+                row["input"]
+            );
+        }
+        // Not in the fixture: a missing value is the blend too.
+        assert_eq!(sanitize_baseline_model(None), None);
+    }
+
+    #[test]
+    fn a_single_model_matches_the_python_fetch_single_model() {
+        let fx = single_fx();
+        let cases = fx["single_model"].as_array().unwrap();
+        assert!(cases.len() >= 8);
+        for c in cases {
+            let model = c["model"].as_str().unwrap();
+            let got = build_single_model(&c["raw"], model, single_now());
+            match c["expected"].as_object() {
+                None => assert!(got.is_none(), "{}", c["name"]),
+                Some(want) => {
+                    let mut got = got.unwrap_or_else(|| panic!("{} gave no baseline", c["name"]));
+                    // `baseline` is ours (which model this is); the rest is the Python's.
+                    assert_eq!(got["baseline"]["provider"], single_model_provider(model));
+                    assert_eq!(got["baseline"]["blend"], false);
+                    assert_eq!(got["baseline"]["model"], model);
+                    got.as_object_mut().unwrap().remove("baseline");
+                    assert_eq!(got, Value::Object(want.clone()), "{}", c["name"]);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_single_model_is_requested_with_best_match_beside_it() {
+        assert_eq!(
+            single_model_request("ecmwf_ifs"),
+            vec!["ecmwf_ifs".to_owned(), "best_match".to_owned()]
+        );
+        let url = open_meteo_url(-17.83, 31.05, &single_model_request("jma_gsm"));
+        assert!(url.contains("models=jma_gsm,best_match"));
+        assert_eq!(
+            single_model_provider("gfs_seamless"),
+            "open-meteo:gfs_seamless"
+        );
+        assert_eq!(
+            NotBlended::SelectedModelUnavailable.reason(),
+            "selected_model_unavailable"
+        );
     }
 }
