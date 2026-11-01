@@ -63,11 +63,11 @@ describe("reconcileElevation (#302)", () => {
     expect(home).toContain("elevationApproximate: true");
   });
 
-  it("matches the Python writer's field", () => {
-    const py = readFileSync(
-      resolve(__dirname, "../../api/py/_model_blend.py"),
+  it("matches the Worker's field", () => {
+    const rust = readFileSync(
+      resolve(__dirname, "../../workers/crates/weather-core/src/blend.rs"),
       "utf-8",
     );
-    expect(py).toContain('out["elevation"] = elevation');
+    expect(rust).toContain('out.insert("elevation".into(), json!(e));');
   });
 });

@@ -30,7 +30,7 @@ def _haversine_km(lat1, lon1, lat2, lon2):
 
 class TestKeyFunction:
     def test_shared_vectors(self):
-        """Same vectors as src/lib/weather-cache-key.test.ts (reader/writer parity)."""
+        """Same vectors as the Rust tests (weather_core::geo), so the key cannot drift."""
         fx = json.loads(FIXTURE.read_text())
         assert fx["gridDeg"] == GRID_DEG
         assert len(fx["vectors"]) >= 10

@@ -802,14 +802,14 @@ describe("WeatherHistoryDoc insights field", () => {
     expect(source).toContain('insights?: WeatherData["insights"]');
   });
 
-  it("history recording lives in the Python weather endpoint (single writer)", async () => {
+  it("history recording lives in the jobs Worker (single writer)", async () => {
     const fs = await import("fs");
-    // TS no longer writes weather_history (issue #101) — the Python endpoint
-    // records it, insights included.
+    // TS no longer writes weather_history (issue #101) — the jobs Worker
+    // records the daily row from the forecast.
     const source = fs.readFileSync("src/lib/db.ts", "utf-8");
     expect(source).not.toContain("recordWeatherHistory");
-    const py = fs.readFileSync("api/py/_weather.py", "utf-8");
-    expect(py).toContain("_record_weather_history");
+    const rust = fs.readFileSync("workers/jobs/src/tasks.rs", "utf-8");
+    expect(rust).toContain("async fn place_history");
   });
 });
 

@@ -64,7 +64,7 @@ import { workerUrl } from "@/lib/weather-api";
 // ---------------------------------------------------------------------------
 
 export interface WeatherCacheDoc {
-  /** Coordinate-cell key (`weatherCacheKey`), not a place slug (#252). */
+  /** Coordinate-cell key (`cell:<lat>_<lon>`, 0.05 degrees), not a place slug (#252). */
   locationSlug: string;
   lat: number;
   lon: number;
@@ -742,26 +742,7 @@ export function entityMembershipsCollection() {
 }
 
 // ---------------------------------------------------------------------------
-// Weather cache operations
-// ---------------------------------------------------------------------------
-
-/**
- * Read a live cache row by its key. Rows are keyed by coordinate grid cell
- * (`weatherCacheKey(lat, lon)`, issue #252), never by place slug, and the
- * column keeps its historical name `locationSlug`.
- */
-export async function getCachedWeather(
-  cacheKey: string,
-): Promise<WeatherData | null> {
-  const doc = await weatherCacheCollection().findOne({
-    locationSlug: cacheKey,
-    expiresAt: { $gt: new Date() },
-  });
-  return doc?.data ?? null;
-}
-
-// ---------------------------------------------------------------------------
-// Unified weather fetch — cache read, then the canonical Python endpoint
+// Unified weather fetch — the Worker, hedged by a direct Open-Meteo read
 // ---------------------------------------------------------------------------
 
 export interface WeatherResult {
@@ -954,8 +935,8 @@ export function isSummaryStale(
 }
 
 // ---------------------------------------------------------------------------
-// Historical weather reads (recording happens in api/py/_weather.py — the
-// single writer; see getWeatherForLocation)
+// Historical weather reads (recorded days are written by the jobs Worker and
+// read through the places Worker's /v1/history)
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------

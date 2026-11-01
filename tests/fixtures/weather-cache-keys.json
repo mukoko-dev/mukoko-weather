@@ -1,5 +1,5 @@
 {
-  "_comment": "Shared weather_cache key vectors (issue #252). Read by tests/py/test_weather_cache_key.py and src/lib/weather-cache-key.test.ts so the Python writer and the TypeScript SSR reader can never derive different keys.",
+  "_comment": "Shared weather_cache key vectors (issue #252). Read by tests/py/test_weather_cache_key.py and the Rust tests (weather_core::geo, weather_core::history), so the Python helper and the Worker can never derive different keys.",
   "gridDeg": 0.05,
   "vectors": [
     {
