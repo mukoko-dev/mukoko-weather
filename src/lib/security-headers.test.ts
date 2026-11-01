@@ -111,6 +111,15 @@ describe("CORS (B06)", () => {
       expect(sources).toContain(s);
   });
 
+  it("no longer opens the deleted Python geo and search routes", () => {
+    // They moved to the Worker (/v1/geo, /v1/search), whose open routes are
+    // `weather_core::cors::OPEN_READ_ROUTES`, not this table.
+    expect(CORS_POLICY.open).not.toContain("/api/py/geo");
+    expect(CORS_POLICY.open).not.toContain("/api/py/search");
+    expect(sources).not.toContain("/api/py/geo");
+    expect(sources).not.toContain("/api/py/search");
+  });
+
   it("never sends credentials with the wildcard", () => {
     for (const r of wildcard)
       expect(

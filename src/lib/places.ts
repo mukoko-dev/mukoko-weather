@@ -217,8 +217,8 @@ const GEO_TYPE_RANK: Record<string, number> = {
 
 /**
  * Countries where the city IS the country, so `places.placesGeo` carries the
- * name only on a `geoType: "country"` document. Mirrors `_CITY_STATES` in
- * `api/py/_locations.py` — keep the two in sync.
+ * name only on a `geoType: "country"` document. Mirrors `CITY_STATES` in
+ * `weather_core::locations` (the Worker) — keep the two in sync.
  */
 export const CITY_STATE_COUNTRIES = new Set([
   "SG",

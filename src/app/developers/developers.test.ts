@@ -69,8 +69,30 @@ describe("developers page — documented public endpoints", () => {
     expect(pageSource).toContain(endpoint);
   });
 
-  it("notes the open CORS policy", () => {
+  it("names exactly the CORS-open routes (the Worker's OPEN_READ_ROUTES)", () => {
     expect(pageSource).toContain("Access-Control-Allow-Origin: *");
+    for (const open of [
+      "/v1/weather",
+      "/v1/air-quality",
+      "/v1/air-quality/grid",
+      "/v1/geo",
+      "/v1/search",
+    ]) {
+      expect(pageSource, open).toContain(
+        `<code className="termite">${open}</code>`,
+      );
+    }
+  });
+
+  it("does not claim the closed routes are CORS-open", () => {
+    // Location lookup and nearest airports answer first-party origins only.
+    const intro = pageSource.slice(
+      pageSource.indexOf("are served with"),
+      pageSource.indexOf("All coordinates are WGS 84"),
+    );
+    expect(intro).not.toContain("/v1/locations");
+    expect(intro).not.toContain("/v1/airports");
+    expect(intro).toContain("our own sites only");
   });
 
   it("mentions the weather provider response headers", () => {
