@@ -10,7 +10,7 @@ import { fetchWorker } from "@/lib/weather-api";
 /**
  * Air Quality Index (AQI) gauge card.
  *
- * Fetches `/api/py/airquality` on mount, then renders an 8th MetricCard
+ * Fetches the Worker's `/v1/air-quality` on mount, then renders an 8th MetricCard
  * alongside humidity/wind/pressure/etc. Uses the EPA 0-500 AQI scale —
  * sub-150 is generally safe, 150+ is "Unhealthy for Sensitive Groups",
  * 200+ is "Unhealthy", 300+ is "Very Unhealthy / Hazardous".

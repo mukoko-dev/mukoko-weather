@@ -211,13 +211,13 @@ curl "https://weather.mukoko.com/api/py/search?q=nairobi"`}
         <section className="mt-10">
           <h2 className="eagle">Air quality</h2>
           <p className="mt-2 text-base text-text-secondary">
-            <code className="termite">GET /v1/air-quality?lat=&amp;lon=</code>{" "}
-            — the EPA-standard Air Quality Index (0–500) plus a seven-pollutant
+            <code className="termite">GET /v1/air-quality?lat=&amp;lon=</code> —
+            the EPA-standard Air Quality Index (0–500) plus a seven-pollutant
             breakdown (PM2.5, PM10, O₃, NO₂, SO₂, CO, NH₃), and whether the air
             is <code className="termite">better</code>,{" "}
             <code className="termite">worse</code> or{" "}
-            <code className="termite">similar</code> than at this hour
-            yesterday (<code className="termite">trend</code>).
+            <code className="termite">similar</code> than at this hour yesterday
+            (<code className="termite">trend</code>).
           </p>
           <CodeBlock
             code={`curl "https://weather-api.mukoko.com/v1/air-quality?lat=-17.83&lon=31.05"`}

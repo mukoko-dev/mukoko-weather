@@ -7,10 +7,11 @@
  *   (none)             — derive location from the request IP via Vercel's
  *                        `x-vercel-ip-latitude` / `x-vercel-ip-longitude` headers
  *
- * This route is a thin public shaper: it reads IP-geo headers, calls the
- * EXISTING internal `/api/py/geo` (name lookup) and `/api/py/weather`
- * (weather by lat/lon) endpoints, and returns a compact embed-friendly JSON
- * payload (current conditions + up to 7 daily entries for the forecast cards).
+ * This route is a thin public shaper: it reads IP-geo headers, calls the Rust
+ * weather Worker (`weather-api.mukoko.com`): `/v1/locations` and `/v1/geo`
+ * (name lookup) and `/v1/weather` (weather by lat/lon), and returns a compact
+ * embed-friendly JSON payload (current conditions + up to 7 daily entries for
+ * the forecast cards).
  *
  * It is a PUBLIC embed endpoint: permissive CORS, resilient fallbacks, and
  * cache-control tuned so IP-derived responses are never shared-cached.
@@ -69,7 +70,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     source = "coords";
   } else if (slug && LOCATION_SLUG_RE.test(slug)) {
     // 2. Known location slug — resolve to coordinates via internal locations API.
-    // `/api/py/locations?slug=` returns a `{ location: {…} }` WRAPPER (not the
+    // `/v1/locations?slug=` returns a `{ location: {…} }` WRAPPER (not the
     // bare doc), so unwrap it — reading `loc.lat` directly yields undefined → NaN
     // → a silent Harare fallback for every non-Harare embed.
     const loc = await fetchJson<

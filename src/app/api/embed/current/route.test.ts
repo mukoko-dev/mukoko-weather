@@ -151,10 +151,11 @@ describe("route structure", () => {
     expect(source).toContain("x-vercel-ip-longitude");
   });
 
-  it("calls the existing internal geo + weather endpoints", () => {
-    expect(source).toContain("/api/py/weather");
-    expect(source).toContain("/api/py/geo");
-    expect(source).toContain("/api/py/locations");
+  it("calls the Worker's geo, locations and weather routes (never /api/py)", () => {
+    expect(source).toContain('workerUrl("weather"');
+    expect(source).toContain('workerUrl("geo"');
+    expect(source).toContain('workerUrl("locations"');
+    expect(source).not.toContain("/api/py/weather");
   });
 
   it("unwraps the { location: {…} } wrapper from the locations endpoint", () => {
