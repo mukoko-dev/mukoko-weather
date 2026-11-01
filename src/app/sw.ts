@@ -66,9 +66,10 @@ const serwist = new Serwist({
       }),
     },
 
-    // Weather API — NetworkFirst (15min cache for offline)
+    // Weather API (the Rust Worker's /v1/weather) — NetworkFirst (15min cache
+    // for offline)
     {
-      matcher: ({ url }) => url.pathname.startsWith("/api/py/weather"),
+      matcher: ({ url }) => url.pathname.startsWith("/v1/weather"),
       handler: new NetworkFirst({
         cacheName: "weather-api",
         networkTimeoutSeconds: 5,

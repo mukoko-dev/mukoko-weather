@@ -10,7 +10,7 @@ import { SITE_URL } from "@/lib/site";
 
 export const DEFAULT_SITE = SITE_URL;
 
-// Weather shapes we consume from /api/py/weather (only the fields we use).
+// Weather shapes we consume from the Worker's /v1/weather (only the fields we use).
 export interface WeatherCurrent {
   temperature_2m?: number;
   apparent_temperature?: number;
