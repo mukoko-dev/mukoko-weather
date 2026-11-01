@@ -140,7 +140,7 @@ function formatSunTime(iso: string): string {
 }
 
 /**
- * User-facing copy for a failed /api/py/history request. Exported for tests.
+ * User-facing copy for a failed /v1/history request. Exported for tests.
  * The raw server detail is shown only for client errors (it's our own,
  * human-readable validation text); 5xx gets a plain retry message.
  */

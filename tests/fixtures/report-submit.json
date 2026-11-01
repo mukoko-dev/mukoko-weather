@@ -1,0 +1,370 @@
+{
+  "cases": [
+    {
+      "current": {
+        "precipitation": 0.5,
+        "relative_humidity_2m": 65,
+        "temperature_2m": 25,
+        "weather_code": 61,
+        "wind_speed_10m": 12
+      },
+      "expected": {
+        "doc": {
+          "description": "Light drizzle started.",
+          "lat": -17.83,
+          "locationName": "Harare",
+          "locationSlug": "harare",
+          "lon": 31.05,
+          "reportType": "light-rain",
+          "reportedBy": "d861b7e91033ebc1",
+          "severity": "mild",
+          "verified": true,
+          "weatherSnapshot": {
+            "humidity": 65,
+            "precipitation": 0.5,
+            "temperature": 25,
+            "weatherCode": 61,
+            "windSpeed": 12
+          }
+        },
+        "ttl": 86400,
+        "verified": true
+      },
+      "location": {
+        "lat": -17.83,
+        "lon": 31.05,
+        "name": "Harare",
+        "slug": "harare"
+      },
+      "name": "described mild rain, snapshot confirms",
+      "request": {
+        "description": "Light drizzle started.",
+        "locationSlug": "harare",
+        "reportType": "light-rain",
+        "severity": "mild"
+      }
+    },
+    {
+      "current": null,
+      "expected": {
+        "doc": {
+          "description": "",
+          "lat": -17.83,
+          "locationName": "Harare",
+          "locationSlug": "harare",
+          "lon": 31.05,
+          "reportType": "clear-skies",
+          "reportedBy": "d861b7e91033ebc1",
+          "severity": "moderate",
+          "verified": false,
+          "weatherSnapshot": {}
+        },
+        "ttl": 172800,
+        "verified": false
+      },
+      "location": {
+        "lat": -17.83,
+        "lon": 31.05,
+        "name": "Harare",
+        "slug": "harare"
+      },
+      "name": "no cached forecast: no snapshot, not verified",
+      "request": {
+        "locationSlug": "harare",
+        "reportType": "clear-skies"
+      }
+    },
+    {
+      "current": {
+        "precipitation": 2.0,
+        "relative_humidity_2m": 80,
+        "temperature_2m": 21.5,
+        "weather_code": 95,
+        "wind_speed_10m": 30
+      },
+      "expected": {
+        "doc": {
+          "description": "",
+          "lat": -17.83,
+          "locationName": "Harare",
+          "locationSlug": "harare",
+          "lon": 31.05,
+          "reportType": "thunderstorm",
+          "reportedBy": "d861b7e91033ebc1",
+          "severity": "moderate",
+          "verified": true,
+          "weatherSnapshot": {
+            "humidity": 80,
+            "precipitation": 2.0,
+            "temperature": 21.5,
+            "weatherCode": 95,
+            "windSpeed": 30
+          }
+        },
+        "ttl": 172800,
+        "verified": true
+      },
+      "location": {
+        "lat": -17.83,
+        "lon": 31.05,
+        "name": "Harare",
+        "slug": "harare"
+      },
+      "name": "unknown severity falls to moderate",
+      "request": {
+        "locationSlug": "harare",
+        "reportType": "thunderstorm",
+        "severity": "unknown-level"
+      }
+    },
+    {
+      "current": {
+        "precipitation": 0,
+        "relative_humidity_2m": 90,
+        "temperature_2m": 1.5,
+        "weather_code": 0,
+        "wind_speed_10m": 3
+      },
+      "expected": {
+        "doc": {
+          "description": "",
+          "lat": -17.83,
+          "locationName": "Harare",
+          "locationSlug": "harare",
+          "lon": 31.05,
+          "reportType": "frost",
+          "reportedBy": "d861b7e91033ebc1",
+          "severity": "severe",
+          "verified": true,
+          "weatherSnapshot": {
+            "humidity": 90,
+            "precipitation": 0,
+            "temperature": 1.5,
+            "weatherCode": 0,
+            "windSpeed": 3
+          }
+        },
+        "ttl": 259200,
+        "verified": true
+      },
+      "location": {
+        "lat": -17.83,
+        "lon": 31.05,
+        "name": "Harare",
+        "slug": "harare"
+      },
+      "name": "severe frost with a cold snapshot",
+      "request": {
+        "locationSlug": "harare",
+        "reportType": "frost",
+        "severity": "severe"
+      }
+    },
+    {
+      "current": {
+        "temperature_2m": 18,
+        "weather_code": 3
+      },
+      "expected": {
+        "doc": {
+          "description": "",
+          "lat": -17.83,
+          "locationName": "Harare",
+          "locationSlug": "harare",
+          "lon": 31.05,
+          "reportType": "strong-wind",
+          "reportedBy": "d861b7e91033ebc1",
+          "severity": "moderate",
+          "verified": false,
+          "weatherSnapshot": {
+            "humidity": null,
+            "precipitation": null,
+            "temperature": 18,
+            "weatherCode": 3,
+            "windSpeed": null
+          }
+        },
+        "ttl": 172800,
+        "verified": false
+      },
+      "location": {
+        "lat": -17.83,
+        "lon": 31.05,
+        "name": "Harare",
+        "slug": "harare"
+      },
+      "name": "snapshot with missing numbers reads as the defaults",
+      "request": {
+        "locationSlug": "harare",
+        "reportType": "strong-wind"
+      }
+    },
+    {
+      "current": {
+        "precipitation": 0,
+        "relative_humidity_2m": 99,
+        "temperature_2m": 12,
+        "weather_code": 45,
+        "wind_speed_10m": 4
+      },
+      "expected": {
+        "doc": {
+          "description": "",
+          "lat": -7.368478775024414,
+          "locationName": "West Paddock",
+          "locationSlug": "geo:kqwy4dd",
+          "lon": 20.85531234741211,
+          "reportType": "fog",
+          "reportedBy": "d861b7e91033ebc1",
+          "severity": "moderate",
+          "verified": true,
+          "weatherSnapshot": {
+            "humidity": 99,
+            "precipitation": 0,
+            "temperature": 12,
+            "weatherCode": 45,
+            "windSpeed": 4
+          }
+        },
+        "ttl": 172800,
+        "verified": true
+      },
+      "location": {
+        "_id": "geo:kqwy4dd",
+        "elevation": null,
+        "lat": -7.368478775024414,
+        "lon": 20.85531234741211,
+        "name": "West Paddock",
+        "province": "",
+        "slug": "west-paddock--kqwy4dd7",
+        "tags": []
+      },
+      "name": "a spot is stored by its cell, not its name",
+      "request": {
+        "locationSlug": "west-paddock--kqwy4dd7",
+        "reportType": "fog",
+        "severity": "moderate"
+      }
+    },
+    {
+      "current": null,
+      "expected": {
+        "doc": {
+          "description": "",
+          "lat": -17.9,
+          "locationName": "Harare",
+          "locationSlug": "harare",
+          "lon": 31.1,
+          "reportType": "hail",
+          "reportedBy": "d861b7e91033ebc1",
+          "severity": "moderate",
+          "verified": false,
+          "weatherSnapshot": {}
+        },
+        "ttl": 172800,
+        "verified": false
+      },
+      "location": {
+        "lat": -17.83,
+        "lon": 31.05,
+        "name": "Harare",
+        "slug": "harare"
+      },
+      "name": "client coordinates replace the place's",
+      "request": {
+        "lat": -17.9,
+        "locationSlug": "harare",
+        "lon": 31.1,
+        "reportType": "hail"
+      }
+    },
+    {
+      "current": null,
+      "expected": {
+        "doc": {
+          "description": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "lat": -17.83,
+          "locationName": "Harare",
+          "locationSlug": "harare",
+          "lon": 31.05,
+          "reportType": "dust",
+          "reportedBy": "d861b7e91033ebc1",
+          "severity": "moderate",
+          "verified": false,
+          "weatherSnapshot": {}
+        },
+        "ttl": 172800,
+        "verified": false
+      },
+      "location": {
+        "lat": -17.83,
+        "lon": 31.05,
+        "name": "Harare",
+        "slug": "harare"
+      },
+      "name": "a description of exactly 300 characters is kept whole",
+      "request": {
+        "description": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "locationSlug": "harare",
+        "reportType": "dust"
+      }
+    },
+    {
+      "current": null,
+      "expected": {
+        "error": {
+          "detail": "Description too long (max 300 characters)",
+          "status": 400
+        }
+      },
+      "location": {
+        "lat": -17.83,
+        "lon": 31.05,
+        "name": "Harare",
+        "slug": "harare"
+      },
+      "name": "301 characters is refused",
+      "request": {
+        "description": "ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "locationSlug": "harare",
+        "reportType": "dust"
+      }
+    },
+    {
+      "current": null,
+      "expected": {
+        "error": {
+          "detail": "Invalid report type. Must be one of: clear-skies, cloudy, dust, flooding, fog, frost, hail, haze, heavy-rain, light-rain, mist, strong-wind, thunderstorm",
+          "status": 400
+        }
+      },
+      "location": {
+        "lat": -17.83,
+        "lon": 31.05,
+        "name": "Harare",
+        "slug": "harare"
+      },
+      "name": "an unknown report type is refused",
+      "request": {
+        "locationSlug": "harare",
+        "reportType": "tornado"
+      }
+    },
+    {
+      "current": null,
+      "expected": {
+        "error": {
+          "detail": "Unknown location",
+          "status": 404
+        }
+      },
+      "location": null,
+      "name": "an unknown place is refused",
+      "request": {
+        "locationSlug": "nowhere-land",
+        "reportType": "fog"
+      }
+    }
+  ],
+  "ip": "203.0.113.9"
+}

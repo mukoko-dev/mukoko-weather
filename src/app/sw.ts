@@ -135,7 +135,7 @@ const serwist = new Serwist({
 
     // History data — NetworkFirst (offline browsing)
     {
-      matcher: ({ url }) => url.pathname.startsWith("/api/py/history"),
+      matcher: ({ url }) => url.pathname.startsWith("/v1/history"),
       handler: new NetworkFirst({
         cacheName: "history-data",
         networkTimeoutSeconds: 5,
@@ -151,7 +151,7 @@ const serwist = new Serwist({
     // Community reports (GET) — NetworkFirst
     {
       matcher: ({ url, request }) =>
-        url.pathname.startsWith("/api/py/reports") && request.method === "GET",
+        url.pathname.startsWith("/v1/reports") && request.method === "GET",
       handler: new NetworkFirst({
         cacheName: "reports-data",
         networkTimeoutSeconds: 3,
