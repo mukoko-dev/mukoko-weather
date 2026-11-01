@@ -1,6 +1,7 @@
 import { roundCoord } from "@/lib/location-privacy";
 import type { WeatherData } from "./weather";
 import { fetchWeather } from "./weather";
+import { servedProviderFor } from "./forecast-sources";
 import { fetchWorker } from "./weather-api";
 
 /** How long the home page waits on our own weather API before falling back. */
@@ -97,7 +98,9 @@ export async function fetchModelWeather(
       const data: unknown = await res.json();
       if (isRenderableWeather(data)) {
         const provider = res.headers.get("X-Weather-Provider") ?? "";
-        const servedModel = provider === `open-meteo:${model}`;
+        // `open-meteo:<model>` for an Open-Meteo model, the provider's own
+        // name for one it does not serve (Apple Weather).
+        const servedModel = provider === servedProviderFor(model);
         return { data, baseline: servedModel ? data : null };
       }
     }

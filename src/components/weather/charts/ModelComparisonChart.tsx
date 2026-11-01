@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { TimeSeriesChart, type SeriesConfig } from "./TimeSeriesChart";
 import { formatTime } from "@/lib/i18n";
+import { ForecastCredit } from "@/components/layout/ForecastCredit";
 import {
   FORECAST_MODEL_LABELS,
   ForecastModel,
@@ -26,6 +27,7 @@ export const MODEL_COLORS: Record<string, string> = {
   [ForecastModel.ICON]: "var(--chart-3)", // Malachite
   [ForecastModel.MeteoFrance]: "var(--chart-4)", // Gold
   [ForecastModel.BestMatch]: "var(--chart-5)", // Terracotta
+  [ForecastModel.AppleWeatherKit]: "var(--chart-7)", // Copper
 };
 
 /** Static token-backed swatch classes (no dynamic class construction). */
@@ -36,6 +38,7 @@ export const MODEL_SWATCH_CLASS: Record<string, string> = {
   [ForecastModel.ICON]: "bg-[var(--chart-3)]",
   [ForecastModel.MeteoFrance]: "bg-[var(--chart-4)]",
   [ForecastModel.BestMatch]: "bg-[var(--chart-5)]",
+  [ForecastModel.AppleWeatherKit]: "bg-[var(--chart-7)]",
 };
 
 const FALLBACK_COLOR = "var(--chart-5)";
@@ -140,6 +143,13 @@ export function ModelComparisonChart({
           </li>
         ))}
       </ul>
+      {/* Apple Weather's trademark and legal link, whenever its series is
+          plotted (a requirement of its terms, not decoration). */}
+      <ForecastCredit
+        models={models.map((m) => m.model)}
+        use="plotted"
+        className="mt-2"
+      />
     </section>
   );
 }

@@ -59,16 +59,34 @@ pub fn valid_coordinates(lat: f64, lon: f64) -> bool {
 /// pinned to `tests/fixtures/weather-cache-keys.json`. Built from integer cell
 /// indices (round half up), never from formatted floats.
 pub fn cell_key(lat: f64, lon: f64) -> String {
-    const PER_DEG: f64 = 20.0;
+    let (lat_i, lon_i) = cell_indices(lat, lon);
+    format!(
+        "cell:{}_{}",
+        hundredths_label(lat_i),
+        hundredths_label(lon_i)
+    )
+}
+
+/// The centre of the 0.05° cell a coordinate falls in, as `(lat, lon)`: the
+/// point the cell key is named after (`cell:-17.85_31.05` is centred on
+/// -17.85, 31.05). A provider that is asked about the cell, not about the
+/// visitor, answers the same for everyone in it, so a cached answer does not
+/// depend on who asked first, and the provider is sent a point about 5 km
+/// coarse instead of the visitor's exact one.
+pub fn cell_center(lat: f64, lon: f64) -> (f64, f64) {
+    let (lat_i, lon_i) = cell_indices(lat, lon);
+    ((lat_i * 5) as f64 / 100.0, (lon_i * 5) as f64 / 100.0)
+}
+
+/// Cells per degree: 0.05° is 1/20.
+const CELLS_PER_DEG: f64 = 20.0;
+
+/// The integer cell indices (round half up) of a coordinate, latitude clamped
+/// to the poles and longitude wrapped across the antimeridian.
+fn cell_indices(lat: f64, lon: f64) -> (i64, i64) {
     const LAT_MAX: i64 = 90 * 20;
     const LON_MAX: i64 = 180 * 20;
-    let idx = |v: f64| (v * PER_DEG + 0.5).floor() as i64;
-    let fmt = |i: i64| {
-        let hundredths = i * 5;
-        let sign = if hundredths < 0 { "-" } else { "" };
-        let a = hundredths.abs();
-        format!("{sign}{}.{:02}", a / 100, a % 100)
-    };
+    let idx = |v: f64| (v * CELLS_PER_DEG + 0.5).floor() as i64;
     let lat_i = idx(lat).clamp(-LAT_MAX, LAT_MAX);
     let mut lon_i = idx(lon);
     if lon_i >= LON_MAX {
@@ -76,7 +94,16 @@ pub fn cell_key(lat: f64, lon: f64) -> String {
     } else if lon_i < -LON_MAX {
         lon_i += 2 * LON_MAX;
     }
-    format!("cell:{}_{}", fmt(lat_i), fmt(lon_i))
+    (lat_i, lon_i)
+}
+
+/// A cell index as degrees with two decimals, built from integers so no
+/// formatted float can disagree between implementations.
+fn hundredths_label(i: i64) -> String {
+    let hundredths = i * 5;
+    let sign = if hundredths < 0 { "-" } else { "" };
+    let a = hundredths.abs();
+    format!("{sign}{}.{:02}", a / 100, a % 100)
 }
 
 #[cfg(test)]
@@ -115,6 +142,31 @@ mod tests {
         assert!(valid_coordinates(-17.8, 31.0));
         assert!(!valid_coordinates(91.0, 0.0));
         assert!(!valid_coordinates(0.0, f64::NAN));
+    }
+
+    #[test]
+    fn a_cell_centre_is_the_point_its_key_is_named_after() {
+        // Everyone in the cell gets the same centre, and the key reads back
+        // as that centre.
+        for (lat, lon) in [
+            (-17.8312, 31.0499),
+            (-17.86, 31.03),
+            (51.5072, -0.1276),
+            (0.0, 0.0),
+            (-0.01, 179.99),
+        ] {
+            let (clat, clon) = cell_center(lat, lon);
+            assert_eq!(cell_key(clat, clon), cell_key(lat, lon), "{lat},{lon}");
+            // The centre is within half a cell of the point.
+            let dlon = (clon - lon).abs().min(360.0 - (clon - lon).abs());
+            assert!((clat - lat).abs() <= 0.025 + 1e-9, "{lat}");
+            assert!(dlon <= 0.025 + 1e-9, "{lon}");
+        }
+        assert_eq!(cell_center(-17.8312, 31.0499), (-17.85, 31.05));
+        // Across the antimeridian the centre wraps like the key does.
+        assert_eq!(cell_center(10.0, 180.0), (10.0, -180.0));
+        // A pole stays on the globe.
+        assert_eq!(cell_center(90.0, 10.0).0, 90.0);
     }
 
     #[test]

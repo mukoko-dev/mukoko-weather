@@ -9,6 +9,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MAP_MODELS } from "./map-sources";
+import { APPLE_WEATHERKIT_MODEL } from "./forecast-sources";
+import { ForecastModel } from "./weather";
 
 const rust = readFileSync(
   join(process.cwd(), "workers/crates/weather-core/src/community.rs"),
@@ -33,9 +35,24 @@ describe("device profile forecast models (Rust Worker allowlist)", () => {
       expect(accepted.has(id)).toBe(true);
   });
 
+  it("accepts Apple Weather before anything serves it", () => {
+    // A device on a newer client may store it; refusing would fail every
+    // preference sync for that device. Whether a person is OFFERED it is the
+    // `apple_weatherkit` feature flag, not this list.
+    expect(accepted.has(APPLE_WEATHERKIT_MODEL)).toBe(true);
+  });
+
   it("is not an open list", () => {
     expect(accepted.has("gpt")).toBe(false);
-    expect(accepted.size).toBe(11);
+    expect(accepted.size).toBe(12);
+  });
+});
+
+describe("every model the My Weather picker can store is accepted", () => {
+  it("accepts each ForecastModel value (a refusal would break device sync)", () => {
+    for (const m of Object.values(ForecastModel)) {
+      expect(accepted.has(m), m).toBe(true);
+    }
   });
 });
 

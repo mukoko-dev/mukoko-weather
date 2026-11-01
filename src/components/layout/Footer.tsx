@@ -4,6 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useChromeClaimed } from "@/components/layout/chrome-context";
 import { isFeatureEnabled } from "@/lib/feature-flags";
+import { ForecastCredit } from "@/components/layout/ForecastCredit";
+import { APPLE_WEATHERKIT_MODEL } from "@/lib/forecast-sources";
 import { navDestination, type NavDestinationId } from "@/lib/nav-destinations";
 
 /**
@@ -17,6 +19,7 @@ export function Footer() {
 export function SiteFooter() {
   const year = new Date().getFullYear();
   const shamwariEnabled = isFeatureEnabled("shamwari_chat");
+  const appleWeatherEnabled = isFeatureEnabled("apple_weatherkit");
 
   const col = "flex flex-col gap-1";
   const heading =
@@ -283,6 +286,11 @@ export function SiteFooter() {
             </a>{" "}
             (NASA LaRC POWER Project) and Open-Meteo ERA5
           </p>
+          {/* Apple Weather's trademark and legal link: its data can be on any
+              page once it is offered (the baseline notice is the strict form). */}
+          {appleWeatherEnabled && (
+            <ForecastCredit models={[APPLE_WEATHERKIT_MODEL]} use="baseline" />
+          )}
         </div>
       </div>
     </footer>

@@ -513,6 +513,17 @@
         "selectedForecastModel": "meteofrance_seamless"
       },
       "error": null
+    },
+    {
+      "input": {
+        "theme": "system",
+        "selectedLocation": "harare",
+        "savedLocations": [],
+        "selectedActivities": [],
+        "hasOnboarded": false,
+        "selectedForecastModel": "apple_weatherkit"
+      },
+      "error": null
     }
   ]
 }

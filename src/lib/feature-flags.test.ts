@@ -65,6 +65,7 @@ describe("feature-flags", () => {
         "map_layers",
         "premium_maps",
         "model_map_layers",
+        "apple_weatherkit",
         "vector_search",
         "multi_language",
       ];
@@ -88,6 +89,9 @@ describe("feature-flags", () => {
       // match how weather apps work. AI stays available as an ambient
       // enhancement (inline summaries, AI-powered explore search) instead.
       expect(FLAGS.shamwari_chat).toBe(false);
+      // Not offered until Gwaihir serves it and the owner has confirmed the
+      // Developer Program terms: a picker entry that does nothing is a lie.
+      expect(FLAGS.apple_weatherkit).toBe(false);
     });
   });
 

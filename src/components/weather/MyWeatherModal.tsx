@@ -44,11 +44,9 @@ import {
 } from "@/lib/current-slug";
 import { cn } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
-import {
-  ForecastModel,
-  FORECAST_MODEL_LABELS,
-  normalizeForecastModel,
-} from "@/lib/weather";
+import { normalizeForecastModel } from "@/lib/weather";
+import { modelOptions } from "@/lib/forecast-model-options";
+import { ForecastCredit } from "@/components/layout/ForecastCredit";
 import { t } from "@/lib/i18n";
 import { Spinner } from "@/components/ui/spinner";
 import { SelectRow } from "./SelectRow";
@@ -880,36 +878,14 @@ function SettingsTab() {
 
 // ── Forecast model selector ─────────────────────────────────────────────────
 
-/** The blend (best_match) first, then the individual national/agency models. */
-const MODEL_OPTIONS: { value: ForecastModel; label: string }[] = [
-  {
-    value: ForecastModel.BestMatch,
-    label: FORECAST_MODEL_LABELS[ForecastModel.BestMatch],
-  },
-  {
-    value: ForecastModel.ECMWF,
-    label: FORECAST_MODEL_LABELS[ForecastModel.ECMWF],
-  },
-  {
-    value: ForecastModel.AIFS,
-    label: FORECAST_MODEL_LABELS[ForecastModel.AIFS],
-  },
-  { value: ForecastModel.GFS, label: FORECAST_MODEL_LABELS[ForecastModel.GFS] },
-  {
-    value: ForecastModel.ICON,
-    label: FORECAST_MODEL_LABELS[ForecastModel.ICON],
-  },
-  {
-    value: ForecastModel.MeteoFrance,
-    label: FORECAST_MODEL_LABELS[ForecastModel.MeteoFrance],
-  },
-];
-
 function ModelSelector() {
   const selectedForecastModel = useAppStore((s) => s.selectedForecastModel);
   const setSelectedForecastModel = useAppStore(
     (s) => s.setSelectedForecastModel,
   );
+  // The blend and the Open-Meteo models always; Apple Weather only while it is
+  // offered (a feature flag: a row that does nothing would be a lie).
+  const options = modelOptions();
 
   return (
     <div className="mt-6">
@@ -923,7 +899,7 @@ function ModelSelector() {
         role="radiogroup"
         aria-label="Forecast model preference"
       >
-        {MODEL_OPTIONS.map((option) => {
+        {options.map((option) => {
           const isSelected =
             normalizeForecastModel(selectedForecastModel) === option.value;
           return (
@@ -941,6 +917,13 @@ function ModelSelector() {
           );
         })}
       </div>
+      {/* The credit an external provider requires, outside the rows (a link
+          inside a radio button is not valid). Rendered for the models offered. */}
+      <ForecastCredit
+        models={options.map((o) => o.value)}
+        use="baseline"
+        className="mt-3"
+      />
     </div>
   );
 }

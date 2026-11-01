@@ -58,4 +58,48 @@ describe("fetchModelWeather (issue #246)", () => {
     ]);
     expect(baseline).toBeNull();
   });
+
+  it("takes Apple Weather's own provider name as the chosen model (not open-meteo:)", async () => {
+    const fetchMock = vi.fn(async () => respond("apple-weatherkit"));
+    vi.stubGlobal("fetch", fetchMock);
+    const { baseline } = await fetchModelWeather(
+      -17.83,
+      31.05,
+      "apple_weatherkit",
+      ["apple_weatherkit", "ecmwf_ifs"],
+    );
+    const url = String((fetchMock.mock.calls[0] as unknown[])[0]);
+    expect(url).toContain("model=apple_weatherkit");
+    expect(baseline).not.toBeNull();
+  });
+
+  it("an Apple pick answered with the blend is not swapped onto Apple", async () => {
+    // Not configured, over budget, circuit open: the Worker serves the blend
+    // and says so; the page must not label it Apple's forecast.
+    for (const provider of ["open-meteo:blend", "open-meteo:best_match"]) {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => respond(provider)),
+      );
+      const { baseline } = await fetchModelWeather(
+        -17.83,
+        31.05,
+        "apple_weatherkit",
+        ["apple_weatherkit"],
+      );
+      expect(baseline, provider).toBeNull();
+    }
+    // And an Open-Meteo-looking header is never read as Apple.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => respond("open-meteo:apple_weatherkit")),
+    );
+    const { baseline } = await fetchModelWeather(
+      -17.83,
+      31.05,
+      "apple_weatherkit",
+      ["apple_weatherkit"],
+    );
+    expect(baseline).toBeNull();
+  });
 });
