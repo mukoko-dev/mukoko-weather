@@ -99,7 +99,11 @@ export const BASELINE_HEADERS = [
 
 export const FRAME_HEADER = { key: "X-Frame-Options", value: "SAMEORIGIN" };
 
-/** Origins allowed to call the first-party API cross-origin (Python CORS list). */
+/**
+ * Origins allowed to call the first-party API cross-origin: the Workers'
+ * `CORS_ORIGINS` (`workers/public-api` and `workers/stations`). The Python CORS
+ * list, still being retired, is a subset (it no longer lists the station console).
+ */
 export const FIRST_PARTY_ORIGINS = [
   "https://weather.mukoko.com",
   "https://weatherstations.nyuchi.com",
@@ -117,8 +121,6 @@ export const FIRST_PARTY_ORIGINS = [
 export const CORS_POLICY = {
   open: [
     "/api/py/weather",
-    "/api/py/geo",
-    "/api/py/search",
     "/api/py/airquality/:path*",
     "/api/embed/:path*",
     "/embed/:path*",

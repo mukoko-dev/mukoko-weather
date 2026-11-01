@@ -101,24 +101,6 @@ const serwist = new Serwist({
       }),
     },
 
-    // Location search — NetworkFirst (short cache for offline browsing)
-    {
-      matcher: ({ url }) =>
-        url.pathname.startsWith("/api/py/search") ||
-        url.pathname.startsWith("/api/py/locations") ||
-        url.pathname.startsWith("/api/py/geo"),
-      handler: new NetworkFirst({
-        cacheName: "location-data",
-        networkTimeoutSeconds: 3,
-        plugins: [
-          new ExpirationPlugin({
-            maxEntries: 50,
-            maxAgeSeconds: 30 * 60,
-          }),
-        ],
-      }),
-    },
-
     // Map tiles — CacheFirst (expensive, stable data)
     {
       matcher: ({ url }) => url.pathname.startsWith("/v1/map-tiles"),
@@ -133,25 +115,19 @@ const serwist = new Serwist({
       }),
     },
 
-    // History data — NetworkFirst (offline browsing)
+    // History data — NetworkOnly. The Worker marks a degraded answer (a store
+    // unreadable, a budget spent) `no-store` and the page offers a retry;
+    // Workbox ignores Cache-Control, so a cached copy would be served again
+    // after Retry. Only the Worker may decide what is complete.
     {
-      matcher: ({ url }) => url.pathname.startsWith("/api/py/history"),
-      handler: new NetworkFirst({
-        cacheName: "history-data",
-        networkTimeoutSeconds: 5,
-        plugins: [
-          new ExpirationPlugin({
-            maxEntries: 20,
-            maxAgeSeconds: 60 * 60,
-          }),
-        ],
-      }),
+      matcher: ({ url }) => url.pathname.startsWith("/v1/history"),
+      handler: new NetworkOnly(),
     },
 
     // Community reports (GET) — NetworkFirst
     {
       matcher: ({ url, request }) =>
-        url.pathname.startsWith("/api/py/reports") && request.method === "GET",
+        url.pathname.startsWith("/v1/reports") && request.method === "GET",
       handler: new NetworkFirst({
         cacheName: "reports-data",
         networkTimeoutSeconds: 3,

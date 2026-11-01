@@ -42,8 +42,8 @@ describe("CommunityLane structure", () => {
 
   it("loads rules through the shared suitability cache and reports from the API", () => {
     expect(source).toContain("fetchSuitabilityRules");
-    expect(source).toContain("/api/py/reports?location=");
-    expect(source).toContain("hours=24");
+    expect(source).toContain("reportsListUrl(slug)");
+    expect(source).not.toContain("/api/py/reports");
   });
 
   it("uses the shared report-type labels and icons", () => {
