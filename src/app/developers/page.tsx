@@ -73,7 +73,14 @@ export default async function DevelopersPage() {
         <section className="mt-10">
           <h2 className="eagle">Base URL</h2>
           <p className="mt-2 text-base text-text-secondary">
-            All endpoints are relative to the production origin:
+            The weather data endpoints (<code className="termite">/v1/…</code>)
+            are served by our own edge API:
+          </p>
+          <CodeBlock code={`https://weather-api.mukoko.com`} />
+          <p className="mt-4 text-base text-text-secondary">
+            The embeddable widget&apos;s endpoint (
+            <code className="termite">/api/embed/current</code>) is on the
+            production site:
           </p>
           <CodeBlock code={`https://weather.mukoko.com`} />
         </section>
@@ -122,11 +129,12 @@ curl "https://weather.mukoko.com/api/embed/current?lat=-17.83&lon=31.05"`}
         <section className="mt-10">
           <h2 className="eagle">Full forecast</h2>
           <p className="mt-2 text-base text-text-secondary">
-            <code className="termite">GET /api/py/weather?lat=&amp;lon=</code> —
-            the complete forecast: current conditions plus 24-hour hourly and
-            7-day daily arrays. The baseline is an Africa-weighted blend of
-            global models (ECMWF IFS and AIFS weighted highest, then NOAA GFS,
-            DWD ICON, ECCC GEM and Météo-France ARPEGE). Add{" "}
+            <code className="termite">GET /v1/weather?lat=&amp;lon=</code> — the
+            complete forecast: current conditions plus hourly and 7-day daily
+            arrays. The baseline is an Africa-weighted blend of nine global
+            models (ECMWF IFS and AIFS weighted highest, then NOAA GFS, DWD
+            ICON, the UK Met Office, CMA, ECCC GEM, Météo-France ARPEGE and
+            JMA), served only when at least four of them answer. Add{" "}
             <code className="termite">&amp;model=</code> (for example{" "}
             <code className="termite">ecmwf_ifs</code>) to base the forecast on
             one model instead, and <code className="termite">&amp;models=</code>{" "}
@@ -140,13 +148,13 @@ curl "https://weather.mukoko.com/api/embed/current?lat=-17.83&lon=31.05"`}
           </p>
           <CodeBlock
             code={`# Full forecast for Harare
-curl "https://weather.mukoko.com/api/py/weather?lat=-17.83&lon=31.05"
+curl "https://weather-api.mukoko.com/v1/weather?lat=-17.83&lon=31.05"
 
 # With a multi-model comparison
-curl "https://weather.mukoko.com/api/py/weather?lat=-17.83&lon=31.05&models=gfs_seamless,ecmwf_ifs"
+curl "https://weather-api.mukoko.com/v1/weather?lat=-17.83&lon=31.05&models=gfs_seamless,ecmwf_ifs"
 
 # Based on a single model
-curl "https://weather.mukoko.com/api/py/weather?lat=-17.83&lon=31.05&model=ecmwf_ifs"`}
+curl "https://weather-api.mukoko.com/v1/weather?lat=-17.83&lon=31.05&model=ecmwf_ifs"`}
           />
           <p className="mt-4 text-base text-text-secondary">
             The response carries headers that tell you which provider served
@@ -203,14 +211,16 @@ curl "https://weather.mukoko.com/api/py/search?q=nairobi"`}
         <section className="mt-10">
           <h2 className="eagle">Air quality</h2>
           <p className="mt-2 text-base text-text-secondary">
-            <code className="termite">
-              GET /api/py/airquality?lat=&amp;lon=
-            </code>{" "}
+            <code className="termite">GET /v1/air-quality?lat=&amp;lon=</code>{" "}
             — the EPA-standard Air Quality Index (0–500) plus a seven-pollutant
-            breakdown (PM2.5, PM10, O₃, NO₂, SO₂, CO, NH₃).
+            breakdown (PM2.5, PM10, O₃, NO₂, SO₂, CO, NH₃), and whether the air
+            is <code className="termite">better</code>,{" "}
+            <code className="termite">worse</code> or{" "}
+            <code className="termite">similar</code> than at this hour
+            yesterday (<code className="termite">trend</code>).
           </p>
           <CodeBlock
-            code={`curl "https://weather.mukoko.com/api/py/airquality?lat=-17.83&lon=31.05"`}
+            code={`curl "https://weather-api.mukoko.com/v1/air-quality?lat=-17.83&lon=31.05"`}
           />
         </section>
 
