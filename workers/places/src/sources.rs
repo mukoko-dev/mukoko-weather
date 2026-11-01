@@ -8,11 +8,15 @@ use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 use weather_core::budget::Action;
 use weather_core::cache::Slot;
-use weather_core::locations::{encode_geohash, LocationDoc, GEOHASH_PRECISION};
+use weather_core::locations::{
+    community_lookup, encode_geohash, CommunityLookup, LocationDoc, GEOHASH_PRECISION,
+};
 use weather_core::places::slugify;
 use weather_core::secrets;
 use weather_edge::{config, get_with_timeout, secret};
-use worker::{Env, Headers, Url};
+use worker::{Env, Headers, Method, Url};
+
+use crate::bridge::{self, Answer};
 
 const CACHE: &str = "CACHE";
 const TIMEOUT: Duration = Duration::from_secs(5);
@@ -127,6 +131,29 @@ pub async fn nyuchi_place(env: &Env, slug: &str) -> Result<Option<LocationDoc>, 
         .and_then(|b| LocationDoc::from_nyuchi_place(&b));
     store_slot(env, &key, &found, if found.is_some() { DAY } else { 3_600 }).await;
     Ok(found)
+}
+
+/// A community place from `places.placesGeo`, by the slug the app stamped on
+/// it (`windsor-avenue-zw`), through the MongoDB bridge: this Worker holds no
+/// database connection. `Ok(None)` is the platform saying it has no such
+/// place; `Err` is the bridge not answering or the read not being permitted,
+/// which is NEVER "not found" (the caller fails closed). Not cached here: the
+/// bridge keeps its own short cache.
+pub async fn community_place(env: &Env, slug: &str) -> Result<Option<LocationDoc>, ()> {
+    if !weather_core::slug::valid_slug(slug) {
+        return Ok(None);
+    }
+    // `slug` is [a-z0-9-] only, so it is safe in a query string.
+    let (status, body) =
+        match bridge::call(env, Method::Get, &format!("/places?slug={slug}"), None).await {
+            Answer::Relay { status, body } => (status, body),
+            Answer::Unavailable { .. } => return Err(()),
+        };
+    match community_lookup(status, &body) {
+        CommunityLookup::Found(place) => Ok(Some(*place)),
+        CommunityLookup::NotFound => Ok(None),
+        CommunityLookup::Unavailable => Err(()),
+    }
 }
 
 /// Canonical places whose name matches `q`.

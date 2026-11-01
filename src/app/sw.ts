@@ -133,19 +133,13 @@ const serwist = new Serwist({
       }),
     },
 
-    // History data — NetworkFirst (offline browsing)
+    // History data — NetworkOnly. The Worker marks a degraded answer (a store
+    // unreadable, a budget spent) `no-store` and the page offers a retry;
+    // Workbox ignores Cache-Control, so a cached copy would be served again
+    // after Retry. Only the Worker may decide what is complete.
     {
       matcher: ({ url }) => url.pathname.startsWith("/v1/history"),
-      handler: new NetworkFirst({
-        cacheName: "history-data",
-        networkTimeoutSeconds: 5,
-        plugins: [
-          new ExpirationPlugin({
-            maxEntries: 20,
-            maxAgeSeconds: 60 * 60,
-          }),
-        ],
-      }),
+      handler: new NetworkOnly(),
     },
 
     // Community reports (GET) — NetworkFirst

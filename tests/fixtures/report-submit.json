@@ -1,4 +1,9 @@
 {
+  "_generated": {
+    "by": "scripts/gen_report_submit_fixtures.py",
+    "commit": "4091aa3c69120077c38a753fcd7d98f6927d696b",
+    "source": "api/py/_reports.py submit_report"
+  },
   "cases": [
     {
       "current": {

@@ -11,6 +11,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::budget::Decision;
 use crate::slug::valid_slug;
 
 pub const REPORT_TYPES: [&str; 13] = [
@@ -130,6 +131,12 @@ pub struct Snapshot {
 }
 
 impl Snapshot {
+    /// From a forecast Worker KV entry (`weather_core::geo::forecast_cache_key`):
+    /// `{data: WeatherData, source, provider, ...}`. `None` for anything else.
+    pub fn from_forecast_cache(entry: &serde_json::Value) -> Option<Snapshot> {
+        Snapshot::from_current(entry.get("data")?.get("current")?)
+    }
+
     /// From the `current` block of a `WeatherData` document.
     pub fn from_current(current: &serde_json::Value) -> Option<Snapshot> {
         let obj = current.as_object().filter(|o| !o.is_empty())?;
@@ -366,6 +373,92 @@ pub fn build_report(
 /// `hours` of a list request, clamped to 1..=72.
 pub fn clamp_hours(hours: i64) -> i64 {
     hours.clamp(1, MAX_LIST_HOURS)
+}
+
+/// The `hours` query value: 24 when absent or empty, clamped when a whole
+/// number, the `422` detail otherwise.
+pub fn list_hours(raw: Option<&str>) -> Result<i64, String> {
+    match raw.map(str::trim).filter(|v| !v.is_empty()) {
+        None => Ok(24),
+        Some(v) => v
+            .parse::<i64>()
+            .map(clamp_hours)
+            .map_err(|_| "`hours` must be an integer.".to_owned()),
+    }
+}
+
+/// A place's data is stored under its own slug only when a record backs it:
+/// the seed list, the Nyuchi API, or a community place from `placesGeo`. A
+/// `{name}--{geohash}` spot (source `geocoded` or `geolocation`) is a
+/// coordinate, stored by its cell ([`storage_slug`]).
+pub fn is_catalogue(source: &str) -> bool {
+    matches!(source, "seed" | "places" | "community")
+}
+
+/// The bridge's path for listing a slug's reports: the slug and, for a spot,
+/// its cell ([`read_keys`]), newest first, at most [`LIST_LIMIT`].
+pub fn bridge_list_path(location: &str, hours: i64) -> String {
+    let mut path = format!("/reports?hours={hours}&limit={LIST_LIMIT}");
+    for key in read_keys(location) {
+        path.push_str("&slug=");
+        path.push_str(&key);
+    }
+    path
+}
+
+/// The list answer: the bridge's `reports` (an empty list when it sent none)
+/// and the slug that was asked about, as the Python answered.
+pub fn list_body(bridge: &serde_json::Value, location: &str) -> serde_json::Value {
+    serde_json::json!({
+        "reports": bridge.get("reports").cloned().unwrap_or_else(|| serde_json::json!([])),
+        "location": location,
+    })
+}
+
+/// What a write limited per client and per hour says when it was not taken.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Limited {
+    Reports,
+    Devices,
+}
+
+/// A refused write: the HTTP status, the error code and the description.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Refusal {
+    pub status: u16,
+    pub code: &'static str,
+    pub description: &'static str,
+}
+
+/// The answer to a refused spend (`None` when it was granted). The client's
+/// own hour is a `429`. The service's hour is a `503`, and so is a budget the
+/// database could not read or write: `budget::take_units` reports that as
+/// [`Decision::GlobalLimit`], so the write fails CLOSED and a database outage
+/// never lifts a limit.
+pub fn limit_refusal(decision: Decision, what: Limited) -> Option<Refusal> {
+    match (decision, what) {
+        (Decision::Allow, _) => None,
+        (Decision::ClientLimit, Limited::Reports) => Some(Refusal {
+            status: 429,
+            code: "rate_limited",
+            description: "Too many reports. Try again later.",
+        }),
+        (Decision::ClientLimit, Limited::Devices) => Some(Refusal {
+            status: 429,
+            code: "rate_limited",
+            description: "Too many device profiles created. Try again later.",
+        }),
+        (Decision::GlobalLimit, Limited::Reports) => Some(Refusal {
+            status: 503,
+            code: "unavailable",
+            description: "Community reports are unavailable.",
+        }),
+        (Decision::GlobalLimit, Limited::Devices) => Some(Refusal {
+            status: 503,
+            code: "unavailable",
+            description: "Device sync is unavailable.",
+        }),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -783,6 +876,12 @@ mod tests {
     #[test]
     fn a_submission_is_what_the_python_stored() {
         let f = report_fixture();
+        // The oracle names the pinned git commit it was generated from.
+        let commit = f["_generated"]["commit"].as_str().unwrap();
+        assert!(
+            commit.len() == 40 && commit.bytes().all(|b| b.is_ascii_hexdigit()),
+            "the fixture records the commit it was generated from"
+        );
         let ip = f["ip"].as_str().unwrap();
         let mut built = 0;
         for case in f["cases"].as_array().unwrap() {
@@ -907,6 +1006,108 @@ mod tests {
         );
         assert_eq!(sub.body["weatherSnapshot"], serde_json::json!({}));
         assert!(!sub.verified, "nothing to confirm it against");
+    }
+
+    #[test]
+    fn the_hours_query_defaults_clamps_and_refuses() {
+        assert_eq!(list_hours(None), Ok(24));
+        assert_eq!(list_hours(Some("")), Ok(24));
+        assert_eq!(list_hours(Some("  ")), Ok(24));
+        assert_eq!(list_hours(Some("6")), Ok(6));
+        assert_eq!(list_hours(Some("0")), Ok(1));
+        assert_eq!(list_hours(Some("-5")), Ok(1));
+        assert_eq!(list_hours(Some("100")), Ok(72));
+        assert_eq!(
+            list_hours(Some("abc")),
+            Err("`hours` must be an integer.".to_owned())
+        );
+        assert!(list_hours(Some("1.5")).is_err());
+    }
+
+    #[test]
+    fn a_places_data_is_kept_under_its_slug_only_when_a_record_backs_it() {
+        // Every source a LocationDoc can carry. The three with a record keep
+        // their slug; a spot (named by a geocoder or a GPS fix) is a cell.
+        for source in ["seed", "places", "community"] {
+            assert!(is_catalogue(source), "{source}");
+            assert_eq!(storage_slug("harare", is_catalogue(source)), "harare");
+        }
+        for source in ["geocoded", "geolocation", "", "Seed"] {
+            assert!(!is_catalogue(source), "{source}");
+        }
+        let spot = "west-paddock--kqwy4dd7";
+        assert_eq!(
+            storage_slug(spot, is_catalogue("geolocation")),
+            "geo:kqwy4dd"
+        );
+        // A community place with a spot-shaped slug is still its own record.
+        assert_eq!(storage_slug(spot, is_catalogue("community")), spot);
+    }
+
+    #[test]
+    fn the_bridge_list_path_names_the_slug_and_a_spots_cell() {
+        assert_eq!(
+            bridge_list_path("harare", 24),
+            "/reports?hours=24&limit=20&slug=harare"
+        );
+        assert_eq!(
+            bridge_list_path("west-paddock--kqwy4dd7", 6),
+            "/reports?hours=6&limit=20&slug=west-paddock--kqwy4dd7&slug=geo:kqwy4dd"
+        );
+    }
+
+    #[test]
+    fn the_list_answer_echoes_the_slug_and_defaults_to_no_reports() {
+        let body = serde_json::json!({"reports": [{"id": "x"}]});
+        assert_eq!(
+            list_body(&body, "harare"),
+            serde_json::json!({"reports": [{"id": "x"}], "location": "harare"})
+        );
+        assert_eq!(
+            list_body(&serde_json::json!({}), "harare"),
+            serde_json::json!({"reports": [], "location": "harare"})
+        );
+    }
+
+    #[test]
+    fn a_limited_write_is_a_429_for_the_client_and_a_503_for_the_service_or_a_blind_budget() {
+        for what in [Limited::Reports, Limited::Devices] {
+            assert_eq!(limit_refusal(Decision::Allow, what), None);
+            let client = limit_refusal(Decision::ClientLimit, what).unwrap();
+            assert_eq!((client.status, client.code), (429, "rate_limited"));
+            // `take_units` answers GlobalLimit for a D1 failure too: closed.
+            let service = limit_refusal(Decision::GlobalLimit, what).unwrap();
+            assert_eq!((service.status, service.code), (503, "unavailable"));
+            assert_ne!(client.description, service.description);
+        }
+        assert_eq!(
+            limit_refusal(Decision::GlobalLimit, Limited::Devices)
+                .unwrap()
+                .description,
+            "Device sync is unavailable."
+        );
+    }
+
+    #[test]
+    fn a_forecast_cache_entry_gives_the_snapshot_of_its_current_block() {
+        let entry = serde_json::json!({
+            "data": {"current": {
+                "temperature_2m": 21.5, "weather_code": 61, "precipitation": 0.4,
+                "wind_speed_10m": 9.0, "relative_humidity_2m": 55.0
+            }},
+            "source": "open_meteo", "provider": "open-meteo:blend"
+        });
+        let s = Snapshot::from_forecast_cache(&entry).unwrap();
+        assert_eq!(s.weather_code, Some(61));
+        assert_eq!(s.temperature, Some(21.5));
+        for bad in [
+            serde_json::json!({}),
+            serde_json::json!({"data": {}}),
+            serde_json::json!({"data": {"current": {}}}),
+            serde_json::Value::Null,
+        ] {
+            assert!(Snapshot::from_forecast_cache(&bad).is_none(), "{bad}");
+        }
     }
 
     #[test]

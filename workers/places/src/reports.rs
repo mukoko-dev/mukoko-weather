@@ -13,16 +13,23 @@
 //! A report is a document in MongoDB (`weather.weather_reports`), written and
 //! read by `mukoko-weather-mongo-bridge` through the `MONGO_BRIDGE` service
 //! binding (never D1). This Worker validates the request with the rules of
-//! `weather_core::community`, applies the per-client limit (5 submissions an
-//! hour, D1 `rate_events`), resolves the place and reads the forecast the page
-//! already cached (KV `wx:v2:`, cache only: no provider call, no cost) to
-//! cross-validate the report. The reporter and the upvoter are the first 16
-//! hex characters of the SHA-256 of their address, never the address.
+//! `weather_core::community`, takes the per-client budget (5 submissions an
+//! hour, ONE guarded statement in D1 `rate_events`, fails closed), resolves the
+//! place (seed, spot, Nyuchi API or a community place from `placesGeo` through
+//! the bridge) and reads the forecast the page already cached (KV `wx:v2:`,
+//! cache only: no provider call, no cost) to cross-validate the report. The
+//! reporter and the upvoter are the first 16 hex characters of the SHA-256 of
+//! their address, never the address.
+//!
+//! Everything that can be decided without I/O is in `weather_core::community`
+//! and tested natively; this file only moves bytes.
 
 use serde_json::{json, Value};
+use weather_core::budget::Action;
 use weather_core::community::{
-    build_report, check_submit, clamp_hours, hash_ip, read_keys, storage_slug, valid_report_id,
-    ReportPlace, Snapshot, SubmitRequest, UpvoteRequest, LIST_LIMIT, SUBMIT_PER_HOUR,
+    bridge_list_path, build_report, check_submit, hash_ip, is_catalogue, limit_refusal, list_body,
+    list_hours, storage_slug, valid_report_id, Limited, ReportPlace, Snapshot, SubmitRequest,
+    UpvoteRequest,
 };
 use weather_core::geo;
 use weather_core::slug::valid_slug;
@@ -30,11 +37,9 @@ use weather_edge::{client_ip, error, json, query_pairs};
 use worker::{Env, Method, Request, Response, Result};
 
 use crate::bridge::{self, Answer};
-use crate::limits;
+use crate::budget::{self, Caller};
 
 const CACHE: &str = "CACHE";
-/// The forecast Worker's KV key for a point (`forecast::chain::cache_key`).
-const FORECAST_KEY_PREFIX: &str = "wx:v2:";
 
 pub async fn reports(req: &mut Request, env: &Env) -> Result<Response> {
     let path = req.path();
@@ -66,9 +71,9 @@ fn relay(answer: Answer) -> Result<Response> {
 /// (cold cache, unreadable value, no `current` block). A report is then
 /// stored without a snapshot and cannot be verified.
 async fn snapshot_at(env: &Env, lat: f64, lon: f64) -> Option<Snapshot> {
-    let key = format!("{FORECAST_KEY_PREFIX}{}", geo::cache_key(lat, lon));
+    let key = geo::forecast_cache_key(lat, lon);
     let cached: Value = env.kv(CACHE).ok()?.get(&key).json().await.ok().flatten()?;
-    Snapshot::from_current(cached.get("data")?.get("current")?)
+    Snapshot::from_forecast_cache(&cached)
 }
 
 async fn submit(req: &mut Request, env: &Env) -> Result<Response> {
@@ -81,28 +86,35 @@ async fn submit(req: &mut Request, env: &Env) -> Result<Response> {
     let Some(ip) = client_ip(req) else {
         return error(400, "invalid_request", "Could not determine the client.");
     };
-    // The limiter is a write; when D1 cannot take it the report is not stored
-    // either, so one outage never lifts the limit.
-    match limits::allow(env, &ip, "weather-report", SUBMIT_PER_HOUR).await {
-        Ok(true) => {}
-        Ok(false) => return error(429, "rate_limited", "Too many reports. Try again later."),
-        Err(_) => return error(503, "unavailable", "Community reports are unavailable."),
-    }
-
     // A slug no place can have is unknown without asking anyone.
     if !valid_slug(&body.location_slug) {
         return error(404, "not_found", "Unknown location");
     }
+    // ONE guarded statement (budget::SPEND_SQL): parallel cold requests cannot
+    // all read the same count and all pass. A budget D1 cannot read or write
+    // refuses too (fails closed): `limit_refusal` says 429 or 503.
+    let decision = budget::take(
+        env,
+        Action::WeatherReport,
+        &Caller {
+            subject: None,
+            ip: ip.clone(),
+        },
+    )
+    .await;
+    if let Some(r) = limit_refusal(decision, Limited::Reports) {
+        return error(r.status, r.code, r.description);
+    }
+
     let place = match crate::find_location(env, &body.location_slug).await {
         Ok(Some(place)) => place,
         Ok(None) => return error(404, "not_found", "Unknown location"),
         Err(()) => return error(503, "places_unavailable", "Location data unavailable"),
     };
 
-    // The seed list and the Nyuchi API's places are catalogue places and keep
-    // their slug; a `{name}--{geohash}` spot is a coordinate, stored by its cell.
-    let is_catalogue = matches!(place.source.as_str(), "seed" | "places");
-    let storage_key = storage_slug(&body.location_slug, is_catalogue);
+    // The seed list, the Nyuchi API and community places keep their slug; a
+    // `{name}--{geohash}` spot is a coordinate, stored by its cell.
+    let storage_key = storage_slug(&body.location_slug, is_catalogue(&place.source));
     let snapshot = snapshot_at(env, place.lat, place.lon).await;
     let submission = build_report(
         &body,
@@ -133,21 +145,12 @@ async fn list(req: &Request, env: &Env) -> Result<Response> {
     if !valid_slug(&location) {
         return error(400, "invalid_request", "Invalid location slug");
     }
-    let hours = match get("hours").map_or(Ok(24), |h| h.parse::<i64>()) {
-        Ok(h) => clamp_hours(h),
-        Err(_) => return error(422, "invalid_request", "`hours` must be an integer."),
+    let hours = match list_hours(get("hours").as_deref()) {
+        Ok(h) => h,
+        Err(detail) => return error(422, "invalid_request", &detail),
     };
-    // The reports of the slug itself and, for a spot, of its cell.
-    let mut path = format!("/reports?hours={hours}&limit={LIST_LIMIT}");
-    for key in read_keys(&location) {
-        path.push_str("&slug=");
-        path.push_str(&key);
-    }
-    match bridge::call(env, Method::Get, &path, None).await {
-        Answer::Relay { status: 200, body } => json(
-            200,
-            &json!({"reports": body.get("reports").cloned().unwrap_or(json!([])), "location": location}),
-        ),
+    match bridge::call(env, Method::Get, &bridge_list_path(&location, hours), None).await {
+        Answer::Relay { status: 200, body } => json(200, &list_body(&body, &location)),
         other => relay(other),
     }
 }
