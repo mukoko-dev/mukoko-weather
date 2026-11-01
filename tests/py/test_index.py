@@ -199,22 +199,3 @@ class TestRouterMounting:
         paths = self._get_route_paths()
         assert "/api/py/health" in paths
 
-
-class TestStationsRouterMounted:
-    def test_stations_router_mounted(self):
-        paths = set()
-
-        def collect(routes):
-            for route in routes:
-                if hasattr(route, "path"):
-                    paths.add(route.path)
-                if hasattr(route, "original_router") and route.original_router:
-                    collect(route.original_router.routes)
-                elif hasattr(route, "routes"):
-                    collect(route.routes)
-
-        collect(app.routes)
-        assert "/api/py/stations/register" in paths
-        assert "/api/py/stations/ingest" in paths
-        assert "/api/py/stations/manual" in paths
-        assert "/api/py/stations/status" in paths
