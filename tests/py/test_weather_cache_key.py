@@ -1,15 +1,14 @@
-"""weather_cache grid key (issue #252): coordinate cells, not nearest places."""
+"""weather_cache grid key (issue #252): coordinate cells, not nearest places.
+
+The Rust forecast Worker derives the same key (`weather_core::geo::cache_key`),
+pinned to the same fixture.
+"""
 
 from __future__ import annotations
 
 import json
 import math
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
-
-from py._weather import get_weather
 from py._weather_cache_key import (
     GRID_DEG,
     KEY_PREFIX,
@@ -101,105 +100,3 @@ class TestKeyFunction:
         assert weather_cache_key_for(None) is None
         assert weather_cache_key_for({"slug": "x"}) is None
         assert weather_cache_key_for({"lat": None, "lon": 1}) is None
-
-
-class TestEndpointUsesGridKey:
-    def _patches(self, store: dict, nearest):
-        def get_cached(key):
-            return store.get(key)
-
-        def set_cached(key, lat, lon, data, provider):
-            store[key] = {"data": {**data, "_lat": lat}, "provider": provider}
-
-        def fetch(lat, lon):
-            return {"current": {"temperature_2m": lat}, "hourly": {}, "daily": {}}
-
-        return [
-            patch("py._weather._get_cached_weather", side_effect=get_cached),
-            patch("py._weather._set_cached_weather", side_effect=set_cached),
-            # The blend baseline (#246) is stubbed out so these requests take
-            # the best_match path deterministically, with no network.
-            patch("py._weather._fetch_blend", return_value=None),
-            patch("py._weather.enrichment.enrich", return_value=(None, "none")),
-            patch("py._weather.open_meteo_breaker", MagicMock(is_allowed=True)),
-            patch("py._weather._fetch_open_meteo", side_effect=fetch),
-            patch("py._weather._fetch_open_meteo_extras", return_value=None),
-            patch("py._weather.nearest_station_observation", return_value=None),
-            patch("py._weather._find_nearest_location", return_value=nearest),
-            patch("py._weather._record_weather_history"),
-        ]
-
-    async def _run(self, store, nearest, **kwargs):
-        ps = self._patches(store, nearest)
-        for p in ps:
-            p.start()
-        try:
-            return await get_weather(**kwargs)
-        finally:
-            for p in ps:
-                p.stop()
-
-    @pytest.mark.asyncio
-    async def test_karachi_is_not_served_from_bosaso_row(self):
-        """Old behaviour: both requests keyed under the nearest place
-        ``boosaaso-ca70bb``, so the second got the first's weather."""
-        store: dict = {}
-        bosaso = {"slug": "boosaaso-ca70bb", "lat": 11.28, "lon": 49.18}
-        r1 = await self._run(store, bosaso, lat=11.28, lon=49.18)
-        r2 = await self._run(store, bosaso, lat=24.86, lon=67.01)
-        assert r1.headers["X-Cache"] == "MISS"
-        assert r2.headers["X-Cache"] == "MISS"
-        assert "boosaaso-ca70bb" not in store
-        assert set(store) == {"cell:11.30_49.20", "cell:24.85_67.00"}
-        assert json.loads(r2.body)["current"]["temperature_2m"] == 24.86
-
-    @pytest.mark.asyncio
-    async def test_two_requests_in_one_cell_share_the_row(self):
-        store: dict = {}
-        r1 = await self._run(store, None, lat=-17.8292, lon=31.0522)
-        r2 = await self._run(store, None, lat=-17.8350, lon=31.0600)
-        assert r1.headers["X-Cache"] == "MISS"
-        assert r2.headers["X-Cache"] == "HIT"
-        assert list(store) == ["cell:-17.85_31.05"]
-
-    @pytest.mark.asyncio
-    async def test_far_nearest_place_elevation_not_used(self):
-        """Elevation from a place thousands of km away must not feed the
-        seasonal fallback (same 25 km cap as history)."""
-        store: dict = {}
-        far = {"slug": "boosaaso-ca70bb", "lat": 11.28, "lon": 49.18, "elevation": 3}
-        with patch("py._weather._create_fallback_weather", return_value={"current": {"x": 1}}) as fb, \
-             patch("py._weather.open_meteo_breaker", MagicMock(is_allowed=False)):
-            ps = self._patches(store, far)
-            ps = [p for p in ps if "open_meteo_breaker" not in str(p.attribute)]
-            for p in ps:
-                p.start()
-            try:
-                await get_weather(lat=24.86, lon=67.01)
-            finally:
-                for p in ps:
-                    p.stop()
-        assert fb.call_args[0][2] == 1200
-
-
-class TestValidationAndElevation:
-    @pytest.mark.asyncio
-    async def test_nan_coordinates_are_rejected_not_500(self):
-        from fastapi import HTTPException
-
-        for lat, lon in [(float("nan"), 31.0), (-17.0, float("nan")), (float("inf"), 0.0)]:
-            with pytest.raises(HTTPException) as exc:
-                await get_weather(lat=lat, lon=lon)
-            assert exc.value.status_code == 400
-
-    @pytest.mark.asyncio
-    async def test_validated_hint_supplies_fallback_elevation(self):
-        hinted = {"slug": "kariba", "lat": -16.52, "lon": 28.80, "elevation": 485}
-        with patch("py._weather._create_fallback_weather", return_value={"current": {"x": 1}}) as fb, \
-             patch("py._weather._get_cached_weather", return_value=None), \
-             patch("py._weather.open_meteo_breaker", MagicMock(is_allowed=False)), \
-             patch("py._weather.nearest_station_observation", return_value=None), \
-             patch("py._weather._find_nearest_location", return_value=None), \
-             patch("py._weather.find_location", return_value=hinted):
-            await get_weather(lat=-16.52, lon=28.80, location="kariba")
-        assert fb.call_args[0][2] == 485

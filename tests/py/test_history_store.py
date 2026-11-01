@@ -340,8 +340,15 @@ class TestBackfillReviewFixes:
         hs.backfill_history("harare", -17.83, 31.05, 4, [], http_client=http, breaker=_breaker(), now=NOW)
         assert http.get.call_count == 2
 
-    def test_offset_estimate_matches_weather_endpoint(self):
-        from py._weather import _estimate_utc_offset
-
-        for lon in (31.05, 77.2, 87.6, -75.0, 103.8):
-            assert hs.estimate_utc_offset_seconds(lon) == _estimate_utc_offset(lon)
+    def test_offset_estimate_is_the_solar_meridian_in_quarter_hours(self):
+        """Values the former /api/py/weather estimator produced (the Rust
+        `blend::estimate_utc_offset` is pinned to the same numbers)."""
+        expected = {
+            31.05: 7200, 77.2: 18900, 87.6: 20700, -75.0: -18000,
+            103.8: 25200, -77.0: -18900, 0.0: 0, 180.0: 43200, -180.0: -43200,
+        }
+        for lon, seconds in expected.items():
+            assert hs.estimate_utc_offset_seconds(lon) == seconds
+        assert hs.estimate_utc_offset_seconds(float("nan")) == 0
+        assert hs.estimate_utc_offset_seconds(float("inf")) == 0
+        assert hs.estimate_utc_offset_seconds("x") == 0

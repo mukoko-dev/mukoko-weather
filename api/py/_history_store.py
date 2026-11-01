@@ -85,9 +85,10 @@ def _collection():
 
 
 def estimate_utc_offset_seconds(lon: float) -> int:
-    """Longitude-based UTC offset — the SAME estimator ``/api/py/weather``
-    uses when a provider gives no offset, so the writer and reader agree on
-    "today" whenever neither has the real one.
+    """Longitude-based UTC offset — the SAME estimator the forecast Worker
+    (``weather_core::blend::estimate_utc_offset``) uses when a provider gives
+    no offset, so the writer and reader agree on "today" whenever neither has
+    the real one.
 
     Where the writer DID have the provider's real offset (e.g. India +5:30,
     western China +8) the reader's estimate can be up to a day out at the
@@ -96,14 +97,13 @@ def estimate_utc_offset_seconds(lon: float) -> int:
     are unique per location.
     """
     try:
-        from ._weather import _estimate_utc_offset
-
-        return int(_estimate_utc_offset(float(lon)))
-    except Exception:  # noqa: BLE001
-        try:
-            return int(round(float(lon) / 15.0)) * 3600
-        except (TypeError, ValueError):
-            return 0
+        lon_f = float(lon)
+    except (TypeError, ValueError):
+        return 0
+    if lon_f != lon_f or lon_f in (float("inf"), float("-inf")):
+        return 0
+    # Solar-meridian estimate: 15 degrees an hour, in quarter-hour steps.
+    return int(round(lon_f / 15 * 4)) * 900
 
 
 def local_date(utc_offset_seconds: Optional[int], now: Optional[datetime] = None) -> str:

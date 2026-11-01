@@ -37,7 +37,7 @@ class TestCorsPreflight:
     def test_preflight_allows_mobile_client_headers(self):
         client = TestClient(app)
         resp = client.options(
-            "/api/py/weather",
+            "/api/py/health",
             headers={
                 "Origin": "http://localhost:8081",
                 "Access-Control-Request-Method": "GET",
@@ -163,9 +163,11 @@ class TestRouterMounting:
         paths = self._get_route_paths()
         assert "/api/py/embeddings/status" in paths
 
-    def test_weather_router_mounted(self):
+    def test_weather_and_air_quality_routes_are_gone(self):
+        """They live on the Rust Worker (/v1/weather, /v1/air-quality)."""
         paths = self._get_route_paths()
-        assert "/api/py/weather" in paths
+        assert "/api/py/weather" not in paths
+        assert "/api/py/airquality" not in paths
 
     def test_ai_router_mounted(self):
         paths = self._get_route_paths()

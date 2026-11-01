@@ -111,15 +111,15 @@ export const FIRST_PARTY_ORIGINS = [
  *
  * `open` routes are the documented public browser API (developers page) and the
  * embed endpoints: `Access-Control-Allow-Origin: *`, never with credentials.
+ * The weather and air-quality routes of that API are on the Rust API Worker now
+ * (`weather_core::cors::OPEN_READ_ROUTES`), which carries the same policy.
  * Every other route is same-origin plus {@link FIRST_PARTY_ORIGINS}, echoed by
  * the API layer (FastAPI CORSMiddleware).
  */
 export const CORS_POLICY = {
   open: [
-    "/api/py/weather",
     "/api/py/geo",
     "/api/py/search",
-    "/api/py/airquality/:path*",
     "/api/embed/:path*",
     "/embed/:path*",
   ],

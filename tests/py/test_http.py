@@ -63,12 +63,3 @@ class TestModuleTimeouts:
         from py import _overpass
 
         assert _overpass.HTTP_TIMEOUT_S == 6.0
-
-    def test_air_quality_timeout(self):
-        from py import _air_quality
-
-        with patch("py._air_quality.get_http_client") as get:
-            get.return_value.get.return_value.json.return_value = {"current": {}}
-            _air_quality._fetch_open_meteo_air_quality(-17.8, 31.0)
-        get.assert_called_once_with(10.0)
-
