@@ -26,8 +26,9 @@ describe("RecentReports structure", () => {
 });
 
 describe("data fetching", () => {
-  it("fetches reports from GET /api/py/reports", () => {
-    expect(source).toContain("/api/py/reports?location=");
+  it("fetches reports from the Worker's GET /v1/reports", () => {
+    expect(source).toContain("reportsListUrl(locationSlug)");
+    expect(source).not.toContain("/api/py/reports");
   });
 
   it("accepts locationSlug prop", () => {
@@ -68,8 +69,9 @@ describe("report display", () => {
 });
 
 describe("upvoting", () => {
-  it("calls POST /api/py/reports/upvote", () => {
-    expect(source).toContain("/api/py/reports/upvote");
+  it("calls the Worker's POST /v1/reports/upvote", () => {
+    expect(source).toContain("reportsUpvoteUrl()");
+    expect(source).not.toContain("/api/py/reports");
   });
 
   it("upvote button has aria-label", () => {

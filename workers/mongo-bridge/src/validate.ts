@@ -463,6 +463,24 @@ export function validateUpvote(
   return ok({ reportId: input.reportId.toLowerCase(), voter: input.voter });
 }
 
+// --- community places (read only) ---------------------------------------------
+//
+// GET /places?slug=<slug>: the place the Python backend resolved from
+// `places.placesGeo` by the slug the app stamped on it
+// (`sourceProvenance.mukokoSlug`), so the community places people created
+// (windsor-avenue-zw, church-road-zw) keep working. One validated slug in; the
+// filter and the projection are built in the store, never taken from the caller.
+
+export function validatePlaceQuery(
+  params: URLSearchParams,
+): Checked<{ slug: string }> {
+  const slugs = params.getAll("slug");
+  if (slugs.length !== 1) return err("Give exactly one slug parameter");
+  const slug = slugs[0]!;
+  if (!validSlug(slug)) return err("Invalid location slug");
+  return ok({ slug });
+}
+
 // --- weather history ---------------------------------------------------------
 //
 // weather.weather_history: one document per (locationSlug, date), unique. The

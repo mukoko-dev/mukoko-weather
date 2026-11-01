@@ -1,34 +1,27 @@
 """
-User weather reporting endpoints — Waze-style community weather observations.
+Community weather reports — the AI follow-up questions only.
 
-POST /api/py/reports          — Submit a weather report
-GET  /api/py/reports          — List recent reports near a location
-POST /api/py/reports/upvote   — Upvote a report
+``POST /api/py/reports`` (submit), ``GET /api/py/reports`` (list) and
+``POST /api/py/reports/upvote`` are gone: they are the Rust Worker's
+``/v1/reports`` and ``/v1/reports/upvote`` (``workers/places/src/reports.rs``,
+rules in ``weather_core::community``, MongoDB through the bridge).
 
-Reports are stored in the weather_reports collection with TTL-based
-expiration. AI clarification uses the system:report_clarification prompt.
+What stays is ``POST /api/py/reports/clarify``, the model's one-or-two
+follow-up questions in the report wizard, until the AI batch ports it to the AI
+Worker (#333). The Rust rules for it are already in ``weather_core::community``
+(``clarify_prompt``, ``parse_questions``, ``fallback_questions``). It uses the
+``system:report_clarification`` prompt.
 """
 
 from __future__ import annotations
 
-import hashlib
-from datetime import datetime, timezone, timedelta
-from typing import Optional
-
-from bson import ObjectId
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from ._db import (
-    enforce_rate_limit,
-    get_client_ip,
-    weather_reports_collection,
-    weather_cache_collection,
-)
+from ._db import enforce_rate_limit
 from ._ai_prompts import get_ai_prompt
-from ._weather_cache_key import weather_cache_key_for
 from ._ai_gateway import call_ai, first_text
-from ._places_resolver import find_location, spot_storage_key, storage_slug
+from ._places_resolver import find_location
 
 router = APIRouter()
 
@@ -39,18 +32,6 @@ router = APIRouter()
 REPORT_TYPES = {
     "light-rain", "heavy-rain", "thunderstorm", "hail", "flooding",
     "strong-wind", "clear-skies", "cloudy", "fog", "mist", "haze", "dust", "frost",
-}
-
-SEVERITY_LEVELS = {"mild", "moderate", "severe"}
-
-SUBMIT_RATE_LIMIT = 5
-SUBMIT_RATE_WINDOW = 3600  # 1 hour
-
-# TTL by severity
-SEVERITY_TTL = {
-    "mild": 86400,      # 24h
-    "moderate": 172800,  # 48h
-    "severe": 259200,    # 72h
 }
 
 _FALLBACK_CLARIFICATION_PROMPT = """You are helping a user submit a weather report for {locationName}. They selected: {reportType}.
@@ -65,224 +46,14 @@ Rules:
 - Keep questions under 15 words each"""
 
 
-def _hash_ip(ip: str) -> str:
-    """Hash an IP address for anonymous identification."""
-    return hashlib.sha256(ip.encode()).hexdigest()[:16]
-
-
 # ---------------------------------------------------------------------------
-# Request/response models
+# Request model
 # ---------------------------------------------------------------------------
-
-
-class SubmitReportRequest(BaseModel):
-    locationSlug: str
-    reportType: str
-    severity: str = "moderate"
-    description: str = ""
-    lat: Optional[float] = None
-    lon: Optional[float] = None
 
 
 class ClarifyRequest(BaseModel):
     locationSlug: str
     reportType: str
-
-
-class UpvoteRequest(BaseModel):
-    reportId: str
-
-
-# ---------------------------------------------------------------------------
-# POST /api/py/reports — Submit a weather report
-# ---------------------------------------------------------------------------
-
-
-@router.post("/api/py/reports")
-async def submit_report(body: SubmitReportRequest, request: Request):
-    """Submit a community weather report."""
-    # Rate limiting
-    ip = enforce_rate_limit(request, "weather_report", SUBMIT_RATE_LIMIT, SUBMIT_RATE_WINDOW)
-
-    # Validate description length server-side (client maxLength=300 can be bypassed)
-    if body.description and len(body.description) > 300:
-        raise HTTPException(status_code=400, detail="Description too long (max 300 characters)")
-
-    # Validate report type
-    if body.reportType not in REPORT_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid report type. Must be one of: {', '.join(sorted(REPORT_TYPES))}")
-
-    # Validate severity
-    severity = body.severity if body.severity in SEVERITY_LEVELS else "moderate"
-
-    # Verify location exists (Phase 0G: places.placesGeo via canonical resolver)
-    loc = find_location(body.locationSlug)
-    if not loc:
-        raise HTTPException(status_code=404, detail="Unknown location")
-
-    # Get weather snapshot for cross-validation
-    weather_snapshot = {}
-    try:
-        key = weather_cache_key_for(loc)
-        cached = weather_cache_collection().find_one(
-            {"locationSlug": key},
-            {"_id": 0, "data.current": 1},
-        ) if key else None
-        if cached and cached.get("data", {}).get("current"):
-            curr = cached["data"]["current"]
-            weather_snapshot = {
-                "temperature": curr.get("temperature_2m"),
-                "weatherCode": curr.get("weather_code"),
-                "precipitation": curr.get("precipitation"),
-                "windSpeed": curr.get("wind_speed_10m"),
-                "humidity": curr.get("relative_humidity_2m"),
-            }
-    except Exception:
-        pass
-
-    # Cross-validate report with API data
-    verified = _cross_validate(body.reportType, weather_snapshot)
-
-    now = datetime.now(timezone.utc)
-    ttl = SEVERITY_TTL.get(severity, 172800)
-
-    report = {
-        # A synthesized spot is a coordinate path: its reports are keyed by
-        # its cell (``geo:<geohash>``), never by the spellable name half.
-        "locationSlug": storage_slug(body.locationSlug, loc),
-        "locationName": loc.get("name", body.locationSlug),
-        "lat": body.lat or loc.get("lat"),
-        "lon": body.lon or loc.get("lon"),
-        "reportType": body.reportType,
-        "severity": severity,
-        "description": body.description[:300] if body.description else "",
-        "weatherSnapshot": weather_snapshot,
-        "reportedBy": _hash_ip(ip),
-        "reportedAt": now,
-        "expiresAt": now + timedelta(seconds=ttl),
-        "upvotes": 0,
-        "upvotedBy": [],
-        "verified": verified,
-    }
-
-    result = weather_reports_collection().insert_one(report)
-
-    return {
-        "id": str(result.inserted_id),
-        "verified": verified,
-        "expiresIn": ttl,
-    }
-
-
-def _cross_validate(report_type: str, snapshot: dict) -> bool:
-    """Cross-reference user report with API weather data."""
-    if not snapshot:
-        return False
-
-    precip = snapshot.get("precipitation", 0) or 0
-    wind = snapshot.get("windSpeed", 0) or 0
-    code = snapshot.get("weatherCode", 0) or 0
-    temp = snapshot.get("temperature", 20) or 20
-
-    if report_type in ("light-rain", "heavy-rain") and (precip > 0 or code in range(51, 83)):
-        return True
-    if report_type == "thunderstorm" and code in (95, 96, 99):
-        return True
-    if report_type == "strong-wind" and wind > 20:
-        return True
-    if report_type == "clear-skies" and code in (0, 1) and precip == 0:
-        return True
-    if report_type == "cloudy" and code in (2, 3):
-        return True
-    if report_type in ("fog", "mist", "haze") and code in (45, 48):
-        return True
-    if report_type == "frost" and temp <= 3:
-        return True
-
-    return False
-
-
-# ---------------------------------------------------------------------------
-# GET /api/py/reports — List recent reports for a location
-# ---------------------------------------------------------------------------
-
-
-@router.get("/api/py/reports")
-async def list_reports(location: str, hours: int = 24):
-    """Get recent reports for a location (within TTL window)."""
-    if not location:
-        raise HTTPException(status_code=400, detail="Missing location parameter")
-
-    hours = min(max(hours, 1), 72)
-    # Read the key the submit path stored under. A spot slug with a placesGeo
-    # record keeps its own slug and one without is keyed by its cell; the
-    # list reads both (a pure parse, no DB lookup) so neither is hidden.
-    keys = [location]
-    cell = spot_storage_key(location)
-    if cell:
-        keys.append(cell)
-
-    try:
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
-
-        reports = list(
-            weather_reports_collection()
-            .find(
-                {
-                    "locationSlug": {"$in": keys},
-                    "reportedAt": {"$gte": cutoff},
-                    "expiresAt": {"$gt": datetime.now(timezone.utc)},
-                },
-                {"_id": 1, "reportType": 1, "severity": 1, "description": 1,
-                 "reportedAt": 1, "upvotes": 1, "verified": 1, "locationName": 1},
-            )
-            .sort("reportedAt", -1)
-            .limit(20)
-        )
-
-        for r in reports:
-            r["id"] = str(r.pop("_id"))
-            if isinstance(r.get("reportedAt"), datetime):
-                r["reportedAt"] = r["reportedAt"].isoformat()
-
-        return {"reports": reports, "location": location}
-
-    except Exception:
-        raise HTTPException(status_code=502, detail="Failed to fetch reports")
-
-
-# ---------------------------------------------------------------------------
-# POST /api/py/reports/upvote — Upvote a report
-# ---------------------------------------------------------------------------
-
-
-@router.post("/api/py/reports/upvote")
-async def upvote_report(body: UpvoteRequest, request: Request):
-    """Upvote a report (IP-based dedup — one vote per IP per report)."""
-    ip = get_client_ip(request)
-    if not ip:
-        raise HTTPException(status_code=400, detail="Could not determine IP")
-
-    ip_hash = _hash_ip(ip)
-
-    try:
-        oid = ObjectId(body.reportId)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid report ID")
-
-    # Atomic update — only add upvote if this IP hasn't voted yet
-    result = weather_reports_collection().update_one(
-        {"_id": oid, "upvotedBy": {"$ne": ip_hash}},
-        {
-            "$inc": {"upvotes": 1},
-            "$push": {"upvotedBy": ip_hash},
-        },
-    )
-
-    if result.modified_count == 0:
-        return {"upvoted": False, "reason": "Already upvoted or report not found"}
-
-    return {"upvoted": True}
 
 
 # ---------------------------------------------------------------------------

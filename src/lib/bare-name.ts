@@ -10,9 +10,8 @@
  * or the geocoder is over budget or unavailable, does the visitor get the
  * server-rendered 404.
  *
- * Vercel is frontend only and `api/py` is frozen, so the resolve exists only
- * in the Worker: with `NEXT_PUBLIC_WEATHER_API_URL` unset the feature is off
- * and every unknown slug 404s exactly as before (`src/lib/weather-api.ts`).
+ * Vercel is frontend only, so the resolve exists only in the Worker
+ * (`src/lib/weather-api.ts`: the production Worker is the default origin).
  *
  * Render-only: nothing is stored. The redirect target is a spot (or a
  * shipped seed), which renders from its slug alone.

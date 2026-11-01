@@ -16,14 +16,16 @@
 
 use serde::Deserialize;
 use serde_json::json;
+use weather_core::budget::Action;
 use weather_core::community::{
-    self, apply_patch, valid_device_id, validate_preferences, Preferences, PreferencesPatch,
+    self, apply_patch, valid_device_id, validate_preferences, Limited, Preferences,
+    PreferencesPatch,
 };
 use weather_edge::{error, json};
 use worker::{Env, Method, Request, Response, Result};
 
 use crate::bridge::{self, Answer};
-use crate::limits;
+use crate::budget::{self, Caller};
 
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
@@ -91,18 +93,14 @@ async fn create(req: &mut Request, env: &Env) -> Result<Response> {
         let Some(ip) = weather_edge::client_ip(req) else {
             return error(400, "invalid_request", "Could not determine the client.");
         };
-        match limits::allow(env, &ip, "device-create", community::DEVICE_CREATE_PER_HOUR).await {
-            Ok(true) => {}
-            Ok(false) => {
-                return error(
-                    429,
-                    "rate_limited",
-                    "Too many device profiles created. Try again later.",
-                )
-            }
-            // The limiter is a write; when D1 cannot take it the profile is
-            // not created either, so one outage never mints unlimited ids.
-            Err(_) => return error(503, "unavailable", "Device sync is unavailable."),
+        // ONE guarded statement (budget::SPEND_SQL), so parallel first launches
+        // cannot all read the same count and all pass. The limiter is a write;
+        // when D1 cannot take it the profile is not created either, so one
+        // outage never mints unlimited ids.
+        let caller = Caller { subject: None, ip };
+        let decision = budget::take(env, Action::DeviceCreate, &caller).await;
+        if let Some(r) = community::limit_refusal(decision, Limited::Devices) {
+            return error(r.status, r.code, r.description);
         }
     }
     let device_id = match body.device_id.filter(|d| !d.is_empty()) {
