@@ -56,8 +56,10 @@ describe("search flow", () => {
     expect(source).toContain("e.preventDefault()");
   });
 
-  it("sends POST to /api/py/explore/search", () => {
-    expect(source).toContain('fetch("/api/py/explore/search"');
+  it("sends POST to the Worker's /v1/ai/explore/search, never /api/py", () => {
+    expect(source).toContain('postWorker("ai/explore/search"');
+    expect(source).not.toContain("/api/py/");
+    expect(source).toContain("workerErrorMessage(res)");
   });
 
   it("sends query in request body", () => {

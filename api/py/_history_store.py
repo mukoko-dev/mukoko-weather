@@ -21,8 +21,8 @@ Two provenances share the collection, marked by ``source``:
   Historical/Archive API (ERA5 / best-match reanalysis). Inserted with
   ``$setOnInsert`` only, so it never overwrites a recorded day.
 
-Document shape mirrors the TS ``WeatherHistoryDoc`` the HistoryDashboard and
-``_history_analyze`` read: ``current`` (WeatherData current fields),
+Document shape mirrors the TS ``WeatherHistoryDoc`` the HistoryDashboard
+reads: ``current`` (WeatherData current fields),
 ``daily`` (WeatherData daily arrays, sliced to the one day), ``insights``.
 """
 

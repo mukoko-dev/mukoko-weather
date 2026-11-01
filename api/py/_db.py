@@ -189,10 +189,6 @@ def weather_reports_collection():
     return weather_db()["weather_reports"]
 
 
-def history_analysis_collection():
-    return weather_db()["history_analysis"]
-
-
 def metar_cache_collection():
     return weather_db()["metar_cache"]
 

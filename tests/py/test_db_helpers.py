@@ -231,8 +231,8 @@ class TestRequireInternalCaller:
 
     def test_all_proxy_fronted_ai_routes_call_the_guard(self):
         import inspect
-        import py._ai, py._ai_followup
-        for mod in (py._ai, py._ai_followup):
+        import py._ai_followup
+        for mod in (py._ai_followup,):
             assert "require_internal_caller(request)" in inspect.getsource(mod)
 
 

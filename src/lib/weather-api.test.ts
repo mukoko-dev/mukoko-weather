@@ -2,9 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   DEFAULT_WEATHER_API_URL,
+  WORKER_AI_TIMEOUT_MS,
+  WORKER_TIMEOUT_MS,
   fetchPlaces,
   fetchWorker,
+  postWorker,
   weatherApiBase,
+  workerErrorMessage,
   workerUrl,
 } from "./weather-api";
 
@@ -135,6 +139,78 @@ describe("fetchWorker", () => {
   });
 });
 
+describe("postWorker (the AI routes)", () => {
+  const opts = (fetcher: unknown, extra = {}) => ({
+    env: {},
+    fetcher: fetcher as never,
+    ...extra,
+  });
+
+  it("POSTs JSON to /v1/<route> on the Worker, once", async () => {
+    const fetcher = vi.fn(
+      async (_u: string, _i?: RequestInit) => new Response("{}"),
+    );
+    await postWorker("ai/explore/search", { query: "warm" }, opts(fetcher));
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(String(fetcher.mock.calls[0][0])).toBe(
+      "https://weather-api.mukoko.com/v1/ai/explore/search",
+    );
+    const init = fetcher.mock.calls[0][1];
+    expect(init?.method).toBe("POST");
+    expect(init?.body).toBe('{"query":"warm"}');
+    expect(new Headers(init?.headers).get("content-type")).toBe(
+      "application/json",
+    );
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("never retries: a model call costs and counts against an hourly budget", async () => {
+    const fetcher = vi.fn(
+      async (_u: string, _i?: RequestInit) =>
+        new Response("{}", { status: 503 }),
+    );
+    const out = await postWorker("ai/history/analyze", {}, opts(fetcher));
+    expect(out.status).toBe(503);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const failing = vi.fn().mockRejectedValue(new TypeError("network"));
+    await expect(
+      postWorker("ai/history/analyze", {}, opts(failing)),
+    ).rejects.toThrow("network");
+    expect(failing).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives a model call a longer ceiling than a read", () => {
+    expect(WORKER_AI_TIMEOUT_MS).toBeGreaterThan(WORKER_TIMEOUT_MS);
+  });
+});
+
+describe("workerErrorMessage", () => {
+  const msg = (body: unknown, status = 400) =>
+    workerErrorMessage(
+      new Response(typeof body === "string" ? body : JSON.stringify(body), {
+        status,
+      }),
+    );
+
+  it("reads the Workers' envelope", async () => {
+    expect(
+      await msg(
+        { error: "rate_limited", error_description: "Try later." },
+        429,
+      ),
+    ).toBe("Try later.");
+    expect(await msg({ error: "no_history" }, 404)).toBe("no_history");
+  });
+
+  it("falls back to the status for anything else", async () => {
+    expect(await msg("<html>", 502)).toBe("Request failed (502)");
+    expect(await msg({ error: 5, error_description: "" }, 500)).toBe(
+      "Request failed (500)",
+    );
+    expect(await msg(null, 500)).toBe("Request failed (500)");
+  });
+});
+
 describe("fetchPlaces", () => {
   it("is a Worker call", async () => {
     const fetcher = vi.fn(
@@ -163,9 +239,11 @@ describe("no /api/py for the routes the Worker serves", () => {
     "src/components/weather/AirQualityDetails.tsx",
     "src/components/weather/AtmosphericSummary.tsx",
     "src/components/weather/AgricultureHistory.tsx",
+    "src/components/weather/HistoryAnalysis.tsx",
+    "src/components/explore/ExploreSearch.tsx",
   ];
   const served =
-    /["'`]\/api\/py\/(weather|airquality(?!\/grid)|search|geo|locations(?!\/profile)|history(?!\/analyze)|metar|airports)/;
+    /["'`]\/api\/py\/(weather|airquality(?!\/grid)|search|geo|locations(?!\/profile)|history|explore|metar|airports)/;
   it.each(files)("%s", (file) => {
     const source = readFileSync(file, "utf8")
       .split("\n")

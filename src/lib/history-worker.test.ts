@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 const root = resolve(__dirname, "../..");
 const read = (p: string) => readFileSync(resolve(root, p), "utf-8");
 const worker = read("workers/places/src/history.rs");
-const budget = read("workers/places/src/budget.rs");
+const budget = read("workers/crates/weather-edge/src/budget.rs");
 const coreBudget = read("workers/crates/weather-core/src/budget.rs");
 const bridge = read("workers/mongo-bridge/src/stores.ts");
 

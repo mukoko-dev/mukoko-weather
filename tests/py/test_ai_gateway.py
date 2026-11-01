@@ -321,7 +321,7 @@ class TestHelpers:
 # ---------------------------------------------------------------------------
 
 API_DIR = Path(__file__).resolve().parent.parent.parent / "api" / "py"
-AI_MODULES = ["_ai.py", "_ai_followup.py", "_explore_search.py", "_reports.py", "_history_analyze.py"]
+AI_MODULES = ["_ai.py", "_ai_followup.py", "_reports.py"]
 
 
 class TestEveryEndpointUsesHelper:
