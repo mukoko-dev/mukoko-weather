@@ -540,12 +540,16 @@ pub fn history_prompt(location_name: &str, days: u32) -> String {
         .replace("{days}", &days.to_string())
 }
 
-/// The history analysis user message.
+/// The history analysis user message. `profile` is the place-profile block
+/// with its grounding rule (`place_profile::with_profile`), or `""` when the
+/// place has none; it goes straight after the activities note, as in the
+/// Python.
 pub fn history_request(
     location_name: &str,
     elevation: f64,
     season: &Season,
     activities: &[String],
+    profile: &str,
     stats: &str,
 ) -> String {
     let note = if activities.is_empty() {
@@ -560,7 +564,7 @@ pub fn history_request(
     format!(
         "Analyze this weather history for {location_name} (elevation: {elevation}m).
 Season: {name} ({name}) — {desc}
-{note}
+{note}{profile}
 
 Statistical summary:
 {stats}",
@@ -670,9 +674,81 @@ mod tests {
     #[test]
     fn history_prompts() {
         assert!(history_prompt("Harare", 30).contains("over 30 days"));
-        let r = history_request("Harare", 1490.0, &season(-17.8, at(10)), &[], "stats");
+        let r = history_request("Harare", 1490.0, &season(-17.8, at(10)), &[], "", "stats");
         assert!(r.starts_with("Analyze this weather history for Harare (elevation: 1490m)."));
         assert!(r.ends_with("Statistical summary:\nstats"));
+    }
+
+    /// `tests/fixtures/ai-place-profile.json`: the text the model is sent for
+    /// a history analysis was produced by the real Python
+    /// `_history_analyze.analyze_history` (and `with_profile` by the real
+    /// `_place_knowledge.with_profile`), with and without a place profile.
+    const PROFILE_FIXTURE: &str =
+        include_str!("../../../../../tests/fixtures/ai-place-profile.json");
+
+    #[test]
+    fn the_grounding_rule_and_its_splice_are_the_pythons() {
+        let f: Value = serde_json::from_str(PROFILE_FIXTURE).unwrap();
+        assert_eq!(
+            crate::place_profile::PROFILE_GROUNDING_RULE,
+            f["groundingRule"].as_str().unwrap()
+        );
+        for case in f["withProfile"].as_array().unwrap() {
+            assert_eq!(
+                crate::place_profile::with_profile(case["block"].as_str().unwrap()),
+                case["out"].as_str().unwrap(),
+                "{}",
+                case["block"]
+            );
+        }
+    }
+
+    #[test]
+    fn the_history_message_with_a_place_profile_is_the_pythons() {
+        use crate::ai::history::{aggregate, Record};
+        let f: Value = serde_json::from_str(PROFILE_FIXTURE).unwrap();
+        let summer = Season {
+            name: "Summer",
+            description: "Hot and wet.",
+        };
+        let cases = f["history"].as_array().unwrap();
+        assert!(cases.len() >= 5);
+        for case in cases {
+            let records: Vec<Record> = case["records"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|r| Record {
+                    date: r["date"].as_str().unwrap().to_owned(),
+                    current: r["current"].clone(),
+                    daily: r["daily"].clone(),
+                    insights: r["insights"].clone(),
+                    source: None,
+                })
+                .collect();
+            let stats = aggregate(&records);
+            assert_eq!(stats, case["stats"].as_str().unwrap(), "the statistics");
+            let activities: Vec<String> = case["activities"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|a| a.as_str().unwrap().to_owned())
+                .collect();
+            let got = history_request(
+                case["name"].as_str().unwrap(),
+                case["elevation"].as_f64().unwrap(),
+                &summer,
+                &activities,
+                &crate::place_profile::with_profile(case["block"].as_str().unwrap()),
+                &stats,
+            );
+            assert_eq!(
+                got,
+                case["userContent"].as_str().unwrap(),
+                "{}",
+                case["name"]
+            );
+        }
     }
 }
 

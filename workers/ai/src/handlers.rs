@@ -9,13 +9,14 @@ use weather_core::ai::history::{aggregate, fingerprint, Record};
 use weather_core::ai::prompts::{self, ClientPlace, Season};
 use weather_core::ai::{activities, conversation, Invalid, Turn, REFUSAL};
 use weather_core::budget::{Action, Decision};
+use weather_core::place_profile;
 use weather_core::places::{resolve_seed, slugify};
 use weather_core::{geo, Place};
 use weather_edge::{error, json, now, now_rfc3339, responses};
 use worker::{Env, Response, Result};
 
-use crate::budget;
 use crate::gateway::{self, Call, ModelError};
+use crate::{budget, profile};
 use crate::{CACHE_BINDING, FORECAST_BINDING, PLACES_BINDING};
 
 /// Summaries live 30 minutes; the fallback text only a minute, so one
@@ -444,11 +445,25 @@ pub async fn history(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
 
     let name = place.name.clone().unwrap_or_else(|| place.slug.clone());
     let season: Season = prompts::season(place.lat, now());
+    // What is known about the place (season calendar, crop stage, normals,
+    // climate zone), cache-only and bounded: no profile is no block, and a
+    // profile never slows or fails the analysis.
+    let profile = place_profile::with_profile(
+        &profile::block(
+            ctx.env,
+            Some(&place.slug),
+            place.lat,
+            place.lon,
+            place.country.as_deref(),
+        )
+        .await,
+    );
     let request = prompts::history_request(
         &name,
         place.elevation.unwrap_or(0.0),
         &season,
         &acts,
+        &profile,
         &stats,
     );
     let system = system_prompt(
