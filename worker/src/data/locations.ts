@@ -967,10 +967,10 @@ export function getLocationBySlug(slug: string): WeatherLocation | undefined {
  * Find the nearest location by Haversine distance.
  *
  * NOTE: The worker bundle only contains the 98 ZW seed locations — it does NOT
- * include global locations or community-created locations (those live in MongoDB
- * and are served by the Python backend at /api/py/geo). For global coordinates,
- * this function will return the nearest ZW location, which is incorrect. All
- * production geo lookups should go through /api/py/geo instead.
+ * include global locations or community-created locations (those are served by
+ * the Rust places Worker at https://weather-api.mukoko.com/v1/geo). For global
+ * coordinates, this function will return the nearest ZW location, which is
+ * incorrect. All production geo lookups should go through /v1/geo instead.
  */
 export function findNearestLocation(
   lat: number,

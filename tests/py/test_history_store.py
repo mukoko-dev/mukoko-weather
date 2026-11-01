@@ -1,22 +1,17 @@
-"""Tests for _history_store.py — the weather_history writer, reader and backfill."""
+"""Tests for _history_store.py — the weather_history writer and reader.
+
+The archive backfill and ``GET /api/py/history`` are gone (the Rust Worker's
+``/v1/history`` does both).
+"""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from py import _history_store as hs
 
 NOW = datetime(2026, 10, 10, 8, 0, tzinfo=timezone.utc)  # 10:00 in Harare
-
-
-@pytest.fixture(autouse=True)
-def _reset_cooldowns():
-    hs._backfill_attempts.clear()
-    yield
-    hs._backfill_attempts.clear()
 
 
 def _coll(mock_db):
@@ -140,208 +135,19 @@ class TestReadHistory:
 
 
 # ---------------------------------------------------------------------------
-# Backfill
+# Which keys a place's days are stored under
 # ---------------------------------------------------------------------------
 
-ARCHIVE_PAYLOAD = {
-    "utc_offset_seconds": 7200,
-    "daily": {
-        "time": ["2026-10-07", "2026-10-08", "2026-10-09"],
-        "weather_code": [51, 51, 3],
-        "temperature_2m_max": [26.6, 25.6, None],  # newest day not yet in ERA5
-        "temperature_2m_min": [16.0, 16.4, None],
-        "temperature_2m_mean": [20.7, 20.5, None],
-        "apparent_temperature_max": [28.4, 27.0, None],
-        "apparent_temperature_min": [16.0, 16.9, None],
-        "apparent_temperature_mean": [21.4, 20.8, None],
-        "precipitation_sum": [0.3, 0.4, None],
-        "sunrise": ["2026-10-07T05:32", "2026-10-08T05:32", "2026-10-09T05:31"],
-        "sunset": ["2026-10-07T17:54", "2026-10-08T17:54", "2026-10-09T17:54"],
-        "wind_speed_10m_max": [12.4, 13.0, None],
-        "wind_gusts_10m_max": [25.9, 34.2, None],
-        "wind_direction_10m_dominant": [72, 70, None],
-        "wind_speed_10m_mean": [7.1, 7.4, None],
-        "relative_humidity_2m_mean": [69, 71, None],
-        "cloud_cover_mean": [45, 46, None],
-        "surface_pressure_mean": [858.2, 858.4, None],
-        "dew_point_2m_mean": [14.1, 14.6, None],
-        "et0_fao_evapotranspiration": [5.1, 5.0, None],
-    },
-}
+HARARE = {"slug": "harare", "lat": -17.8292, "lon": 31.0522, "platformSlug": "harare-35c223"}
 
 
-def _http(payload=ARCHIVE_PAYLOAD, status=200):
-    client = MagicMock()
-    client.get.return_value = MagicMock(status_code=status, json=MagicMock(return_value=payload))
-    return client
+class TestHistorySlugs:
+    def test_the_platform_alias_follows_the_canonical_slug(self):
+        assert hs.history_slugs("harare", HARARE) == ["harare", "harare-35c223"]
 
+    def test_without_an_alias_there_is_one_key(self):
+        assert hs.history_slugs("harare", {"slug": "harare"}) == ["harare"]
 
-def _breaker(allowed=True):
-    return MagicMock(is_allowed=allowed)
-
-
-class TestMissingPastDates:
-    def test_excludes_today_and_existing(self):
-        out = hs.missing_past_dates(["2026-10-08"], 4, lon=31.05, now=NOW)
-        assert out == ["2026-10-07", "2026-10-09"]
-
-    def test_days_one_needs_nothing(self):
-        assert hs.missing_past_dates([], 1, lon=31.05, now=NOW) == []
-
-
-class TestBuildArchiveDocs:
-    def test_shape_matches_dashboard_contract(self):
-        docs = hs.build_archive_docs("harare", ARCHIVE_PAYLOAD, ["2026-10-07", "2026-10-08", "2026-10-09"], now=NOW)
-        # Null ERA5 day skipped
-        assert [d["date"] for d in docs] == ["2026-10-07", "2026-10-08"]
-        d = docs[0]
-        assert d["source"] == "open-meteo-archive"
-        assert d["daily"]["temperature_2m_max"] == [26.6]
-        assert d["daily"]["sunrise"] == ["2026-10-07T05:32"]
-        assert d["current"]["relative_humidity_2m"] == 69
-        assert d["current"]["surface_pressure"] == 858.2
-        assert d["current"]["weather_code"] == 51
-        assert d["current"]["uv_index"] is None
-        assert d["insights"] == {"dewPoint": 14.1, "evapotranspiration": 5.1}
-
-    def test_only_wanted_dates(self):
-        docs = hs.build_archive_docs("harare", ARCHIVE_PAYLOAD, ["2026-10-08"], now=NOW)
-        assert [d["date"] for d in docs] == ["2026-10-08"]
-
-
-class TestBackfillHistory:
-    @patch("py._history_store.get_db")
-    def test_single_request_for_missing_span_and_set_on_insert(self, mock_db):
-        coll = _coll(mock_db)
-        http, breaker = _http(), _breaker()
-        docs = hs.backfill_history(
-            "harare", -17.83, 31.05, 4, ["2026-10-08"],
-            http_client=http, breaker=breaker, now=NOW,
-        )
-        http.get.assert_called_once()
-        params = http.get.call_args[1]["params"]
-        assert params["start_date"] == "2026-10-07"
-        assert params["end_date"] == "2026-10-09"
-        assert http.get.call_args[0][0] == hs.ARCHIVE_URL
-        breaker.record_success.assert_called_once()
-        # 2026-10-08 already existed; 2026-10-09 is null in ERA5
-        assert [d["date"] for d in docs] == ["2026-10-07"]
-        ops = coll.bulk_write.call_args[0][0]
-        assert len(ops) == 1
-        # Never overwrites a recorded day: insert-only update
-        assert coll.bulk_write.call_args[1] == {"ordered": False}
-
-    def test_upsert_uses_set_on_insert_only(self):
-        captured = {}
-
-        def fake_update_one(flt, upd, upsert):
-            captured.update(flt=flt, upd=upd, upsert=upsert)
-            return ("op", flt, upd)
-
-        with patch("pymongo.UpdateOne", side_effect=fake_update_one), patch("py._history_store.get_db") as mock_db:
-            _coll(mock_db)
-            hs._upsert_archive_docs([{"locationSlug": "harare", "date": "2026-10-07", "source": "open-meteo-archive"}])
-        assert captured["flt"] == {"locationSlug": "harare", "date": "2026-10-07"}
-        assert set(captured["upd"]) == {"$setOnInsert"}
-        assert "locationSlug" not in captured["upd"]["$setOnInsert"]
-        assert captured["upsert"] is True
-
-    def test_nothing_missing_makes_no_request(self):
-        http = _http()
-        existing = ["2026-10-07", "2026-10-08", "2026-10-09"]
-        assert hs.backfill_history("harare", -17.83, 31.05, 4, existing, http_client=http, breaker=_breaker(), now=NOW) == []
-        http.get.assert_not_called()
-
-    def test_open_breaker_skips(self):
-        http = _http()
-        assert hs.backfill_history("harare", -17.83, 31.05, 4, [], http_client=http, breaker=_breaker(False), now=NOW) == []
-        http.get.assert_not_called()
-
-    def test_rate_limited_ip_skips(self):
-        http = _http()
-        limiter = MagicMock(return_value={"allowed": False})
-        out = hs.backfill_history(
-            "harare", -17.83, 31.05, 4, [], http_client=http, breaker=_breaker(),
-            client_ip="1.2.3.4", rate_limiter=limiter, now=NOW,
-        )
-        assert out == []
-        http.get.assert_not_called()
-        limiter.assert_called_once_with("1.2.3.4", "history-backfill", hs.BACKFILL_RATE_LIMIT, hs.BACKFILL_RATE_WINDOW_S)
-
-    @patch("py._history_store.get_db")
-    def test_cooldown_blocks_same_range_but_not_wider(self, mock_db):
-        _coll(mock_db)
-        http = _http()
-        hs.backfill_history("harare", -17.83, 31.05, 4, [], http_client=http, breaker=_breaker(), now=NOW)
-        hs.backfill_history("harare", -17.83, 31.05, 4, [], http_client=http, breaker=_breaker(), now=NOW)
-        assert http.get.call_count == 1
-        # A wider window (user picked 30 days) is a new attempt.
-        hs.backfill_history("harare", -17.83, 31.05, 30, [], http_client=http, breaker=_breaker(), now=NOW)
-        assert http.get.call_count == 2
-
-    def test_http_error_records_failure_and_never_raises(self):
-        http = MagicMock()
-        http.get.side_effect = Exception("timeout")
-        breaker = _breaker()
-        assert hs.backfill_history("harare", -17.83, 31.05, 4, [], http_client=http, breaker=breaker, now=NOW) == []
-        breaker.record_failure.assert_called_once()
-
-    def test_non_200_records_failure(self):
-        breaker = _breaker()
-        assert hs.backfill_history("harare", -17.83, 31.05, 4, [], http_client=_http(status=429), breaker=breaker, now=NOW) == []
-        breaker.record_failure.assert_called_once()
-
-    @patch("py._history_store.get_db")
-    def test_span_capped_to_one_request(self, mock_db):
-        _coll(mock_db)
-        http = _http({"daily": {"time": []}})
-        hs.backfill_history("harare", -17.83, 31.05, 365, [], http_client=http, breaker=_breaker(), now=NOW)
-        assert http.get.call_count == 1
-        params = http.get.call_args[1]["params"]
-        assert params["start_date"] == "2025-10-11"
-        assert params["end_date"] == "2026-10-09"
-
-
-class TestBackfillPersistFailure:
-    @patch("py._history_store.get_db")
-    def test_fetched_days_returned_even_if_save_fails(self, mock_db):
-        coll = _coll(mock_db)
-        coll.bulk_write.side_effect = Exception("over quota")
-        docs = hs.backfill_history(
-            "harare", -17.83, 31.05, 4, [], http_client=_http(), breaker=_breaker(), now=NOW,
-        )
-        assert [d["date"] for d in docs] == ["2026-10-07", "2026-10-08"]
-
-
-class TestBackfillReviewFixes:
-    def test_client_error_does_not_trip_shared_breaker(self):
-        """A 4xx is our request, not an Open-Meteo outage — it must not open
-        the breaker that also gates the forecast fallback."""
-        breaker = _breaker()
-        assert hs.backfill_history("harare", -17.83, 31.05, 4, [], http_client=_http(status=400), breaker=breaker, now=NOW) == []
-        breaker.record_failure.assert_not_called()
-
-    def test_failed_fetch_sets_no_cooldown(self):
-        http = MagicMock()
-        http.get.side_effect = [Exception("timeout"), MagicMock(status_code=200, json=MagicMock(return_value=ARCHIVE_PAYLOAD))]
-        with patch("py._history_store.get_db") as mock_db:
-            _coll(mock_db)
-            assert hs.backfill_history("harare", -17.83, 31.05, 4, [], http_client=http, breaker=_breaker(), now=NOW) == []
-            # Retried straight away on the next view — no hour-long lockout.
-            docs = hs.backfill_history("harare", -17.83, 31.05, 4, [], http_client=http, breaker=_breaker(), now=NOW)
-        assert [d["date"] for d in docs] == ["2026-10-07", "2026-10-08"]
-
-    @patch("py._history_store.get_db")
-    def test_failed_persist_sets_no_cooldown(self, mock_db):
-        coll = _coll(mock_db)
-        coll.bulk_write.side_effect = Exception("over quota")
-        http = _http()
-        hs.backfill_history("harare", -17.83, 31.05, 4, [], http_client=http, breaker=_breaker(), now=NOW)
-        hs.backfill_history("harare", -17.83, 31.05, 4, [], http_client=http, breaker=_breaker(), now=NOW)
-        assert http.get.call_count == 2
-
-    def test_offset_estimate_matches_weather_endpoint(self):
-        from py._weather import _estimate_utc_offset
-
-        for lon in (31.05, 77.2, 87.6, -75.0, 103.8):
-            assert hs.estimate_utc_offset_seconds(lon) == _estimate_utc_offset(lon)
+    def test_a_synthesized_spot_is_keyed_by_its_cell_not_its_name(self):
+        spot = {"slug": "west-paddock--kqwy4dd7", "_id": "geo:kqwy4dd"}
+        assert hs.history_slugs("west-paddock--kqwy4dd7", spot) == ["geo:kqwy4dd"]

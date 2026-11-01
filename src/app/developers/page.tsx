@@ -11,7 +11,7 @@ import { SITE_URL } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Developers & Public API",
   description:
-    "Free, no-auth public weather API for developers. Current conditions, full forecasts, geo lookup, location search, air quality, and nearest airports — CORS-open and browser-callable, with real curl examples and response shapes.",
+    "Free, no-auth public weather API for developers. Current conditions, full forecasts, geo lookup, location search, air quality, and nearest airports — the weather, air quality, geo and search routes are CORS-open and browser-callable, with real curl examples and response shapes.",
   alternates: {
     canonical: `${SITE_URL}/developers`,
   },
@@ -25,7 +25,7 @@ export default async function DevelopersPage() {
     "@type": "TechArticle",
     headline: "mukoko weather Public API",
     description:
-      "Free, no-auth public weather API — current conditions, forecasts, geo lookup, location search, air quality, and nearest airports. CORS-open and browser-callable.",
+      "Free, no-auth public weather API — current conditions, forecasts, geo lookup, location search, air quality, and nearest airports. The weather, air quality, geo and search routes are CORS-open and browser-callable.",
     inLanguage: "en",
     isPartOf: {
       "@type": "WebSite",
@@ -55,12 +55,18 @@ export default async function DevelopersPage() {
                 The API is free and open — call it directly, no key needed.
               </strong>{" "}
               mukoko weather runs on a set of public JSON endpoints with no
-              account and no auth. They&apos;re served with{" "}
+              account and no auth. The weather, air quality, geo lookup and
+              search routes (<code className="termite">/v1/weather</code>,{" "}
+              <code className="termite">/v1/air-quality</code>,{" "}
+              <code className="termite">/v1/air-quality/grid</code>,{" "}
+              <code className="termite">/v1/geo</code> and{" "}
+              <code className="termite">/v1/search</code>) are served with{" "}
               <code className="termite">Access-Control-Allow-Origin: *</code>,
               so you can call them straight from the browser, cross-origin, from
-              any site or app. All coordinates are WGS 84 decimal degrees; all
-              timestamps are ISO 8601. Want a drop-in widget instead of raw
-              JSON? See the{" "}
+              any site or app. The other routes (location lookup, nearest
+              airports) answer our own sites only: call them from your server.
+              All coordinates are WGS 84 decimal degrees; all timestamps are ISO
+              8601. Want a drop-in widget instead of raw JSON? See the{" "}
               <Link href="/embed" prefetch={false} className="sunbird">
                 embed page
               </Link>
@@ -180,12 +186,12 @@ curl "https://weather-api.mukoko.com/v1/weather?lat=-17.83&lon=31.05&model=ecmwf
         <section className="mt-10">
           <h2 className="eagle">Nearest location (geo lookup)</h2>
           <p className="mt-2 text-base text-text-secondary">
-            <code className="termite">GET /api/py/geo?lat=&amp;lon=</code> —
-            resolves coordinates to the nearest known location (name, slug,
-            province, country). Handy for turning a device GPS fix into a place.
+            <code className="termite">GET /v1/geo?lat=&amp;lon=</code> —
+            resolves coordinates to a place (name, slug, province, country),
+            anywhere on Earth. Handy for turning a device GPS fix into a place.
           </p>
           <CodeBlock
-            code={`curl "https://weather.mukoko.com/api/py/geo?lat=-17.83&lon=31.05"`}
+            code={`curl "https://weather-api.mukoko.com/v1/geo?lat=-17.83&lon=31.05"`}
           />
         </section>
 
@@ -193,17 +199,17 @@ curl "https://weather-api.mukoko.com/v1/weather?lat=-17.83&lon=31.05&model=ecmwf
         <section className="mt-10">
           <h2 className="eagle">Location lookup &amp; search</h2>
           <p className="mt-2 text-base text-text-secondary">
-            <code className="termite">GET /api/py/locations?slug=</code> fetches
-            a single location by slug.{" "}
-            <code className="termite">GET /api/py/search?q=</code> runs a text
+            <code className="termite">GET /v1/locations?slug=</code> fetches a
+            single location by slug.{" "}
+            <code className="termite">GET /v1/search?q=</code> runs a text
             search across supported locations.
           </p>
           <CodeBlock
             code={`# Look up a location by slug
-curl "https://weather.mukoko.com/api/py/locations?slug=harare"
+curl "https://weather-api.mukoko.com/v1/locations?slug=harare"
 
 # Search locations by name
-curl "https://weather.mukoko.com/api/py/search?q=nairobi"`}
+curl "https://weather-api.mukoko.com/v1/search?q=nairobi"`}
           />
         </section>
 

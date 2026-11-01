@@ -156,6 +156,8 @@ describe("route structure", () => {
     expect(source).toContain('workerUrl("geo"');
     expect(source).toContain('workerUrl("locations"');
     expect(source).not.toContain("/api/py/weather");
+    expect(source).not.toContain("/api/py/geo");
+    expect(source).not.toContain("/api/py/locations");
   });
 
   it("unwraps the { location: {…} } wrapper from the locations endpoint", () => {

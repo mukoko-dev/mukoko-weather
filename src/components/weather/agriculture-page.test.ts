@@ -63,7 +63,7 @@ describe("agriculture page components", () => {
     expect(src).not.toContain("/api/py/ai");
   });
 
-  it("history compares /api/py/history with the Worker's normals", () => {
+  it("history compares the Worker's /v1/history with its normals", () => {
     const src = read("AgricultureHistory.tsx");
     expect(src).toContain('"history"');
     expect(src).toContain("location=${encodeURIComponent(slug)}&days=30");

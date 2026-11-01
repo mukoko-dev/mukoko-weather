@@ -47,7 +47,7 @@ const { resetLocationGateCache } = await import("@/lib/location-gate");
 const { resetBareNameCache } = await import("@/lib/bare-name");
 const { buildSmartSlug } = await import("@/lib/smart-slug");
 
-/** The geocoder behind /api/py/search?mode=resolve, stubbed (#317). Every
+/** The geocoder behind /v1/search?mode=resolve, stubbed (#317). Every
  * test starts with "nothing found", so the 404 tests below are unaffected. */
 const mockResolveFetch = vi.fn(async (_url: string, _init?: RequestInit) =>
   Response.json({
