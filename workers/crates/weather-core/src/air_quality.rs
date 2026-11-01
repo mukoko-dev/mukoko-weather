@@ -321,6 +321,17 @@ pub fn add_trend(body: &mut Value, pair: SameHourPair) {
     body["trend"] = trend(pair.today, pair.yesterday).map_or(Value::Null, |t| json!(t));
 }
 
+/// Give a cached body the three trend fields (JSON `null`) when it was
+/// written before they existed, so the shape never depends on when the row
+/// was cached. Fields already present are left alone.
+pub fn fill_trend_defaults(body: &mut Value) {
+    for field in ["todayUsAqi", "yesterdayAqi", "trend"] {
+        if body.get(field).is_none() {
+            body[field] = Value::Null;
+        }
+    }
+}
+
 /// The whole answer body (less `source`, `whoGuidelines` and `fetchedAt`,
 /// which the Worker adds) from an Open-Meteo Air Quality response.
 pub fn payload_from_open_meteo(raw: &Value) -> Value {
@@ -495,6 +506,22 @@ mod tests {
                 c["name"]
             );
         }
+    }
+
+    #[test]
+    fn an_older_cached_row_gets_null_trend_fields_and_a_newer_one_keeps_its_own() {
+        let mut old = json!({"aqi": 40, "level": "good"});
+        fill_trend_defaults(&mut old);
+        assert!(old["todayUsAqi"].is_null());
+        assert!(old["yesterdayAqi"].is_null());
+        assert!(old["trend"].is_null());
+        assert_eq!(old["aqi"], 40);
+
+        let mut new = json!({"todayUsAqi": 61, "yesterdayAqi": 50, "trend": "worse"});
+        fill_trend_defaults(&mut new);
+        assert_eq!(new["todayUsAqi"], 61);
+        assert_eq!(new["yesterdayAqi"], 50);
+        assert_eq!(new["trend"], "worse");
     }
 
     #[test]

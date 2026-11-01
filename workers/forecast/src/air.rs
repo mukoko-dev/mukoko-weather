@@ -38,13 +38,7 @@ pub async fn air_quality(req: &Request, env: &Env, ctx: &Context) -> Result<Resp
         if let Ok(Some(mut hit)) = kv.get(&key).json::<Value>().await {
             hit["source"] = Value::from("cache");
             hit["whoGuidelines"] = aq::who_guidelines();
-            // A row cached before the trend existed has no such fields: the
-            // shape must not depend on when the row was written.
-            for field in ["todayUsAqi", "yesterdayAqi", "trend"] {
-                if hit.get(field).is_none() {
-                    hit[field] = Value::Null;
-                }
-            }
+            aq::fill_trend_defaults(&mut hit);
             return respond(&hit, "HIT", "cache");
         }
     }

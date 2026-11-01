@@ -221,19 +221,31 @@ async fn baseline(
 /// data here (not an outage: no breaker failure), the breaker is open, or the
 /// request was rejected or failed (only a failure counts against the breaker).
 async fn single_model(lat: f64, lon: f64, model: &str) -> Option<Value> {
-    if !open_meteo_allowed() {
-        return None;
-    }
-    let url = blend::open_meteo_url(lat, lon, &blend::single_model_request(model));
-    match fetch(&url).await {
-        Fetched::Ok(raw) => {
-            let payload = blend::build_single_model(&raw, model, now())?;
+    let upstream = if open_meteo_allowed() {
+        let url = blend::open_meteo_url(lat, lon, &blend::single_model_request(model));
+        Some(fetch(&url).await)
+    } else {
+        None
+    };
+    // The decision (and the breaker accounting) is `weather_core`'s.
+    match blend::attempt_single_model(
+        match &upstream {
+            Some(Fetched::Ok(raw)) => Upstream::Body(raw),
+            Some(Fetched::Rejected) => Upstream::Rejected,
+            Some(Fetched::Failed) => Upstream::Failed,
+            None => Upstream::BreakerOpen,
+        },
+        model,
+        now(),
+    ) {
+        blend::SingleAttempt::Built(payload) => {
             record_open_meteo(true);
             Some(payload)
         }
-        Fetched::Rejected => None,
-        Fetched::Failed => {
-            record_open_meteo(false);
+        blend::SingleAttempt::Fallback { breaker_failure } => {
+            if breaker_failure {
+                record_open_meteo(false);
+            }
             None
         }
     }

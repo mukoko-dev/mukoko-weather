@@ -382,20 +382,16 @@ async fn weather(req: &Request, env: &Env) -> Result<Response> {
 
     let mut q = format!("/weather?lat={lat}&lon={lon}&extras=1");
     // The forecast Worker keeps only known model ids; send just the
-    // characters a model id can have.
-    let model_chars = |s: &str, max: usize| -> String {
-        s.chars()
-            .filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == ',')
-            .take(max)
-            .collect()
-    };
+    // characters a model id can have (`weather_core::blend::safe_model_param`).
     if let Some(models) = get("models") {
         q.push_str("&models=");
-        q.push_str(&model_chars(models, 200));
+        q.push_str(&weather_core::blend::safe_model_param(models, 200));
     }
     // The user's own baseline model (`selectedForecastModel`); `best_match`
     // and anything unknown mean the blend, decided by the forecast Worker.
-    let picked = get("model").map(|m| model_chars(m, 64)).unwrap_or_default();
+    let picked = get("model")
+        .map(|m| weather_core::blend::safe_model_param(m, 64))
+        .unwrap_or_default();
     if !picked.is_empty() {
         q.push_str("&model=");
         q.push_str(&picked);
@@ -415,20 +411,13 @@ async fn weather(req: &Request, env: &Env) -> Result<Response> {
                 ] {
                     copy_header(upstream.headers(), resp.headers(), h)?;
                 }
-                // Only the full blend, or the model the caller asked for, is
-                // worth five minutes at the edge. A degraded answer
-                // (best_match) is short-lived, so the blend comes back as soon
-                // as it recovers.
+                // The edge lifetime follows the baseline that served it
+                // (`weather_core::blend::edge_cache_control`).
                 let provider = upstream.headers().get("X-Weather-Provider")?;
-                let blended = provider.as_deref().is_some_and(|p| {
-                    p.starts_with("open-meteo:") && p != weather_core::blend::PROVIDER_BEST_MATCH
-                });
-                let cache = if blended {
-                    "public, max-age=300"
-                } else {
-                    "public, max-age=30"
-                };
-                resp.headers().set("Cache-Control", cache)?;
+                resp.headers().set(
+                    "Cache-Control",
+                    weather_core::blend::edge_cache_control(provider.as_deref()),
+                )?;
                 return Ok(resp);
             }
         }
