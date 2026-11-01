@@ -170,7 +170,7 @@ async fn weather(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
         let requested: Vec<&str> = get("models")
             .map(|m| m.split(',').filter(|s| !s.trim().is_empty()).collect())
             .unwrap_or_default();
-        attach_comparison(&mut got.data, lat, lon, &requested).await;
+        attach_comparison(env, ctx, &mut got.data, lat, lon, &requested).await;
     }
 
     // The offset must ALWAYS be present, and the nowcast must not start in
@@ -204,7 +204,14 @@ async fn weather(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
 /// `_attach_comparison`). The blend already carries its members' series; only
 /// when the caller asks for a model that is not there is the extras call made,
 /// best effort, breaker gated, never failing the response.
-async fn attach_comparison(data: &mut Value, lat: f64, lon: f64, requested: &[&str]) {
+async fn attach_comparison(
+    env: &Env,
+    ctx: &Context,
+    data: &mut Value,
+    lat: f64,
+    lon: f64,
+    requested: &[&str],
+) {
     let wanted: Option<Vec<String>> =
         (!requested.is_empty()).then(|| normalize::sanitize_models(requested));
     let have: Vec<String> = data["models_available"]
@@ -242,7 +249,7 @@ async fn attach_comparison(data: &mut Value, lat: f64, lon: f64, requested: &[&s
         return;
     }
     let models = normalize::sanitize_models(requested);
-    let Some(extras) = chain::extras(lat, lon, &models).await else {
+    let Some(extras) = chain::extras_cached(env, ctx, lat, lon, &models).await else {
         return;
     };
     if data["minutely"].is_null() {

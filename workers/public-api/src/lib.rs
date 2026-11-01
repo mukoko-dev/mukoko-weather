@@ -7,7 +7,7 @@
 //! - mukoko-api, which binds to this Worker for consumer reuse.
 //!
 //! ```text
-//! GET /v1/weather?lat=&lon=[&models=a,b]   full WeatherData, the shape of /api/py/weather
+//! GET /v1/weather?lat=&lon=[&model=m][&models=a,b]   full WeatherData, the shape of /api/py/weather (`model` = the caller's own baseline model)
 //! GET /v1/forecast?location=|lat=&lon=[&days=1..7]   the daily forecast contract
 //! GET /v1/locations/profile?slug=|lat=&lon=[&country=]   a place's knowledge (seasons, crops, climate, soil) and today's context
 //! GET /v1/agriculture?lat=&lon=[&location=][&country=][&crops=]   farm windows, rain, soil, water balance, frost and heat risk (the shape of /api/py/agriculture)

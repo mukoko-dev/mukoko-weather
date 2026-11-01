@@ -748,7 +748,8 @@ pub const BLEND_TTL_SECONDS: u64 = 900;
 /// passing upstream problem is back within minutes, not a quarter of an hour.
 pub const BEST_MATCH_TTL_SECONDS: u64 = 300;
 
-/// The forecast KV key for a point: `wx:v2:` + the 0.05° cell key. The version
+/// The forecast KV key for a point: `wx:v2:` + the point rounded to 0.01°
+/// (about 1 km, `geo::cache_key`). The version
 /// is part of it: `wx:v1:` rows hold a Tomorrow.io-or-best_match document and
 /// must never be served as a blend. A user-picked model appends `::<model>`,
 /// so a single-model row can never be served as the blend (or the reverse).
@@ -1813,13 +1814,16 @@ mod tests {
     fn a_picked_model_has_its_own_forecast_row() {
         let blend = forecast_cache_key(-17.83, 31.05, None);
         let picked = forecast_cache_key(-17.83, 31.05, Some("ecmwf_ifs"));
-        assert_eq!(blend, "wx:v2:cell:-17.85_31.05");
-        assert_eq!(picked, "wx:v2:cell:-17.85_31.05::ecmwf_ifs");
+        assert_eq!(blend, "wx:v2:-17.83_31.05");
+        assert_eq!(picked, "wx:v2:-17.83_31.05::ecmwf_ifs");
         assert_ne!(blend, picked);
-        // Two models in one cell never share a row, two points in one cell do.
-        assert_ne!(picked, forecast_cache_key(-17.83, 31.05, Some("gfs_seamless")));
+        // Two models at one point never share a row, two nearby points do.
+        assert_ne!(
+            picked,
+            forecast_cache_key(-17.83, 31.05, Some("gfs_seamless"))
+        );
         assert_eq!(blend, forecast_cache_key(-17.8292, 31.0522, None));
-        // A different cell is a different row.
+        // A different place is a different row.
         assert_ne!(blend, forecast_cache_key(11.28, 49.18, None));
     }
 
