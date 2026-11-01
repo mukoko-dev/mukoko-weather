@@ -58,7 +58,7 @@ pub struct Got {
 /// The forecast KV key. The version is part of it: `wx:v1:` rows hold a
 /// Tomorrow.io-or-best_match document and must never be served as a blend.
 pub fn cache_key(lat: f64, lon: f64) -> String {
-    format!("wx:v2:{}", geo::cache_key(lat, lon))
+    geo::forecast_cache_key(lat, lon)
 }
 
 /// The forecast for a point, or `None` when the cache is cold and every

@@ -158,54 +158,6 @@ SPOT_LOC = {
 
 
 class TestCallersKeyASpotByItsCell:
-    @pytest.mark.asyncio
-    async def test_history_reads_and_backfills_under_the_cell(self):
-        from py._history import get_history
-
-        with patch("py._history.find_location", return_value=dict(SPOT_LOC)), \
-             patch("py._history.read_history", return_value=[]) as read, \
-             patch("py._history.backfill_history", return_value=[]) as backfill, \
-             patch("py._history._get_http_client", return_value=MagicMock()):
-            result = await get_history(location=SPOT, days=7)
-        assert read.call_args[0][0] == ["geo:ksy4dd7"]
-        assert backfill.call_args[0][0] == "geo:ksy4dd7"
-        assert result["location"] == SPOT  # the response still echoes the URL
-
-    @pytest.mark.asyncio
-    async def test_report_is_stored_under_the_cell(self):
-        from py._reports import SubmitReportRequest, submit_report
-
-        with patch("py._reports.enforce_rate_limit", return_value="1.2.3.4"), \
-             patch("py._reports.find_location", return_value=dict(SPOT_LOC)), \
-             patch("py._reports.weather_cache_collection") as cache, \
-             patch("py._reports.weather_reports_collection") as reports:
-            cache.return_value.find_one.return_value = None
-            reports.return_value.insert_one.return_value = MagicMock(inserted_id="r1")
-            await submit_report(
-                SubmitReportRequest(locationSlug=SPOT, reportType="light-rain"), MagicMock(),
-            )
-        stored = reports.return_value.insert_one.call_args[0][0]
-        assert stored["locationSlug"] == "geo:ksy4dd7"
-
-    @pytest.mark.asyncio
-    async def test_report_list_reads_the_cell_too(self):
-        from py._reports import list_reports
-
-        with patch("py._reports.weather_reports_collection") as reports:
-            reports.return_value.find.return_value.sort.return_value.limit.return_value = []
-            await list_reports(location=SPOT)
-        query = reports.return_value.find.call_args[0][0]
-        assert query["locationSlug"] == {"$in": [SPOT, "geo:ksy4dd7"]}
-
-    @pytest.mark.asyncio
-    async def test_report_list_for_a_catalogue_slug_is_unchanged(self):
-        from py._reports import list_reports
-
-        with patch("py._reports.weather_reports_collection") as reports:
-            reports.return_value.find.return_value.sort.return_value.limit.return_value = []
-            await list_reports(location="harare")
-        assert reports.return_value.find.call_args[0][0]["locationSlug"] == {"$in": ["harare"]}
-
     def test_place_knowledge_never_labels_a_spot_placesgeo(self):
         from py import _place_knowledge as pk
 

@@ -70,16 +70,16 @@ The Shamwari chatbot endpoint has layered security controls:
 
 ### Rate Limiting
 
-All rate-limited endpoints use a MongoDB-backed IP rate limiter (`check_rate_limit` in `api/py/_db.py`) with atomic `findOneAndUpdate` and TTL index:
+The Python endpoints use a MongoDB-backed IP rate limiter (`check_rate_limit` in `api/py/_db.py`) with atomic `findOneAndUpdate` and TTL index; the Workers' hourly limits (`/v1/reports` here) are kept in D1 `rate_events`, per client address hash:
 
-| Endpoint                   | Limit       |
-| -------------------------- | ----------- |
-| `/api/py/chat`             | 20 req/hour |
-| `/api/py/ai/followup`      | 30 req/hour |
-| `/api/py/explore/search`   | 15 req/hour |
-| `/api/py/history/analyze`  | 10 req/hour |
-| `/api/py/reports` (submit) | 5 req/hour  |
-| `/api/py/reports/clarify`  | 10 req/hour |
+| Endpoint                  | Limit       |
+| ------------------------- | ----------- |
+| `/api/py/chat`            | 20 req/hour |
+| `/api/py/ai/followup`     | 30 req/hour |
+| `/api/py/explore/search`  | 15 req/hour |
+| `/api/py/history/analyze` | 10 req/hour |
+| `/v1/reports` (submit)    | 5 req/hour  |
+| `/api/py/reports/clarify` | 10 req/hour |
 
 ### Circuit Breaker System
 

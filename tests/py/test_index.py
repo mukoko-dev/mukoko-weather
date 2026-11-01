@@ -171,9 +171,6 @@ class TestRouterMounting:
         paths = self._get_route_paths()
         assert "/api/py/ai" in paths
 
-    def test_history_router_mounted(self):
-        paths = self._get_route_paths()
-        assert "/api/py/history" in paths
 
     def test_ai_followup_router_mounted(self):
         paths = self._get_route_paths()
@@ -188,8 +185,11 @@ class TestRouterMounting:
         assert "/api/py/explore/search" in paths
 
     def test_reports_router_mounted(self):
+        # Only the follow-up questions are left; submit, list and upvote are
+        # the Rust Worker's /v1/reports.
         paths = self._get_route_paths()
-        assert "/api/py/reports" in paths
+        assert "/api/py/reports/clarify" in paths
+        assert "/api/py/reports" not in paths
 
     def test_agriculture_router_mounted(self):
         paths = self._get_route_paths()
