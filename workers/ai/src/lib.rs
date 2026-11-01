@@ -26,6 +26,7 @@
 mod gateway;
 mod handlers;
 mod passthrough;
+mod profile;
 
 use weather_edge::{error, json, responses};
 use worker::{event, Context, Env, Method, Request, Response, Result};
