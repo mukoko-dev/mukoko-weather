@@ -166,7 +166,8 @@ describe("postWorker (the AI routes)", () => {
 
   it("never retries: a model call costs and counts against an hourly budget", async () => {
     const fetcher = vi.fn(
-      async (_u: string, _i?: RequestInit) => new Response("{}", { status: 503 }),
+      async (_u: string, _i?: RequestInit) =>
+        new Response("{}", { status: 503 }),
     );
     const out = await postWorker("ai/history/analyze", {}, opts(fetcher));
     expect(out.status).toBe(503);
@@ -193,7 +194,10 @@ describe("workerErrorMessage", () => {
 
   it("reads the Workers' envelope", async () => {
     expect(
-      await msg({ error: "rate_limited", error_description: "Try later." }, 429),
+      await msg(
+        { error: "rate_limited", error_description: "Try later." },
+        429,
+      ),
     ).toBe("Try later.");
     expect(await msg({ error: "no_history" }, 404)).toBe("no_history");
   });
