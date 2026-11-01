@@ -323,43 +323,10 @@ async fn resolve_route(req: &Request, env: &Env, q: &Query) -> Result<Response> 
     }
 }
 
-/// A spot as `/geo` answers it: the document plus what a caller needs to
-/// know. `elevationApproximate`: nothing measured the height. `named: false`
-/// only for a DEFINITIVE "nothing here" (open water, polar ice, empty desert);
-/// `namingSkipped: true` when naming was skipped (over budget, the geocoder
-/// down, or the caller asked not to spend a lookup), which says nothing about
-/// the point and must not be read as `named: false`.
-fn spot_json(spot: &LocationDoc, kind: SpotKind) -> Value {
-    let mut doc = serde_json::to_value(spot).unwrap_or(Value::Null);
-    if let Some(obj) = doc.as_object_mut() {
-        obj.insert("elevationApproximate".into(), true.into());
-        match kind {
-            SpotKind::Named => {}
-            SpotKind::NothingHere => {
-                obj.insert("named".into(), false.into());
-            }
-            SpotKind::NamingSkipped => {
-                obj.insert("namingSkipped".into(), true.into());
-            }
-        }
-    }
-    doc
-}
-
-/// The `/geo` response for a [`PointAnswer`].
+/// The `/geo` response for a [`PointAnswer`] (the body, and which flags it
+/// carries, are `weather_core::resolve::point_body`, tested natively).
 fn point_response(answer: PointAnswer) -> Result<Response> {
-    let (nearest, is_new, synthesized, slug) = match answer {
-        PointAnswer::Seed(loc) => (json!(loc), false, false, loc.slug),
-        PointAnswer::Created(loc) => (json!(loc), true, false, loc.slug),
-        PointAnswer::Spot { spot, kind } => {
-            (spot_json(&spot, kind), false, true, spot.slug.clone())
-        }
-    };
-    let mut body = json!({"nearest": nearest, "redirectTo": format!("/{slug}"), "isNew": is_new});
-    if synthesized {
-        body["synthesized"] = true.into();
-    }
-    json(200, &body)
+    json(200, &resolve::point_body(answer))
 }
 
 /// Name a point for find-only: the cached ~1 km cell, else (when allowed and

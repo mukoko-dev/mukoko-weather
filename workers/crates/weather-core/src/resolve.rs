@@ -19,6 +19,7 @@ use crate::locations::{
     GEOHASH_PRECISION,
 };
 use crate::places::slugify;
+use serde_json::{json, Value};
 
 /// `country` for a GeoNames political entity (`PCL*`), `region` for another
 /// area (territory, continent, ocean, sea, region, first- and second-order
@@ -394,6 +395,56 @@ pub fn create_answer(lat: f64, lon: f64, naming: &Naming) -> Option<PointAnswer>
     }
 }
 
+// --- The JSON a point answers ------------------------------------------------
+
+/// A place as `/geo` answers it: the document plus what a caller needs to
+/// know. `elevationApproximate: true` whenever nothing MEASURED the height
+/// (a spot, and a place just named by the geocoder, whose `elevation` is a
+/// placeholder 0): the app's `reconcileElevation` replaces a flagged height
+/// with the forecast's terrain height, and leaves an unflagged one alone, so
+/// a missing flag shows "0 m". `named: false` only for a DEFINITIVE "nothing
+/// here" (open water, polar ice, empty desert); `namingSkipped: true` when
+/// naming was skipped (over budget, the geocoder down, or the caller asked
+/// not to spend a lookup), which says nothing about the point and must not be
+/// read as `named: false`.
+fn approximate_json(doc: &LocationDoc, kind: Option<SpotKind>) -> Value {
+    let mut value = serde_json::to_value(doc).unwrap_or(Value::Null);
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert("elevationApproximate".into(), true.into());
+        match kind {
+            None | Some(SpotKind::Named) => {}
+            Some(SpotKind::NothingHere) => {
+                obj.insert("named".into(), false.into());
+            }
+            Some(SpotKind::NamingSkipped) => {
+                obj.insert("namingSkipped".into(), true.into());
+            }
+        }
+    }
+    value
+}
+
+/// The `/geo` response body for a [`PointAnswer`]: `nearest`, `redirectTo`,
+/// `isNew`, and `synthesized` for a spot. A seed is a stored place with a
+/// measured height, so it carries no `elevationApproximate`.
+pub fn point_body(answer: PointAnswer) -> Value {
+    let (nearest, is_new, synthesized, slug) = match answer {
+        PointAnswer::Seed(loc) => (json!(loc), false, false, loc.slug),
+        PointAnswer::Created(loc) => (approximate_json(&loc, None), true, false, loc.slug),
+        PointAnswer::Spot { spot, kind } => (
+            approximate_json(&spot, Some(kind)),
+            false,
+            true,
+            spot.slug.clone(),
+        ),
+    };
+    let mut body = json!({"nearest": nearest, "redirectTo": format!("/{slug}"), "isNew": is_new});
+    if synthesized {
+        body["synthesized"] = true.into();
+    }
+    body
+}
+
 // --- Search -----------------------------------------------------------------
 
 /// Below this many catalogue matches, search tops up from the geocoder.
@@ -482,7 +533,6 @@ pub fn reserve_area_slots(limit: usize, areas: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     fn hit(name: &str, lat: f64, lon: f64, code: &str, cc: &str) -> LocationDoc {
         LocationDoc::from_open_meteo(&json!({
@@ -880,5 +930,76 @@ mod tests {
         let got = compose_search(vec![], &[zimbabwe], 1);
         assert_eq!(got.len(), 1);
         assert!(got[0].area.is_none());
+    }
+
+    // --- point_body: the flags a caller relies on -----------------------------
+
+    fn named_doc(name: &str, lat: f64, lon: f64) -> LocationDoc {
+        LocationDoc::from_nominatim(
+            &json!({
+                "name": name, "lat": lat.to_string(), "lon": lon.to_string(),
+                "address": {"road": name, "city": "Harare", "state": "Harare",
+                             "country": "Zimbabwe", "country_code": "zw"}
+            }),
+            lat,
+            lon,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_created_place_is_flagged_elevation_approximate() {
+        // Regression: GPS "Use my location" answered `elevation: 0` with no
+        // flag, so `reconcileElevation` never replaced it with the forecast's
+        // terrain height and the page said "0 m".
+        let doc = named_doc("Waltow Close", -17.78, 31.12);
+        assert_eq!(doc.elevation, 0.0);
+        let body = point_body(PointAnswer::Created(doc));
+        assert_eq!(body["isNew"], true);
+        assert_eq!(body["nearest"]["elevation"], 0.0);
+        assert_eq!(body["nearest"]["elevationApproximate"], true);
+        assert!(body.get("synthesized").is_none());
+        let slug = body["nearest"]["slug"].as_str().unwrap();
+        assert_eq!(body["redirectTo"], format!("/{slug}"));
+        // A created place is named, not a coordinate label.
+        assert!(body["nearest"].get("named").is_none());
+        assert!(body["nearest"].get("namingSkipped").is_none());
+    }
+
+    #[test]
+    fn a_seed_answer_carries_no_approximate_flag() {
+        let seed = nearest_seeds(-17.83, 31.05, 1.0, 1)[0].clone();
+        let body = point_body(PointAnswer::Seed(seed));
+        assert_eq!(body["isNew"], false);
+        assert!(body["nearest"].get("elevationApproximate").is_none());
+        assert!(body.get("synthesized").is_none());
+        assert_eq!(body["redirectTo"], "/harare");
+    }
+
+    #[test]
+    fn a_spot_is_synthesized_approximate_and_flags_its_naming() {
+        let spot = coordinate_spot(0.0, -30.0).unwrap();
+        for (kind, key, other, value) in [
+            (SpotKind::NothingHere, "named", "namingSkipped", false),
+            (SpotKind::NamingSkipped, "namingSkipped", "named", true),
+        ] {
+            let body = point_body(PointAnswer::Spot {
+                spot: spot.clone(),
+                kind,
+            });
+            assert_eq!(body["isNew"], false);
+            assert_eq!(body["synthesized"], true);
+            assert_eq!(body["nearest"]["elevationApproximate"], true);
+            // `named: false` and `namingSkipped: true` are different claims.
+            assert_eq!(body["nearest"][key], value, "{key}");
+            assert!(body["nearest"].get(other).is_none(), "{other}");
+        }
+        let named = point_body(PointAnswer::Spot {
+            spot,
+            kind: SpotKind::Named,
+        });
+        assert_eq!(named["nearest"]["elevationApproximate"], true);
+        assert!(named["nearest"].get("named").is_none());
+        assert!(named["nearest"].get("namingSkipped").is_none());
     }
 }

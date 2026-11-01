@@ -78,7 +78,6 @@ The Python endpoints use a MongoDB-backed IP rate limiter (`check_rate_limit` in
 | `/api/py/ai/followup`     | 30 req/hour |
 | `/api/py/explore/search`  | 15 req/hour |
 | `/api/py/history/analyze` | 10 req/hour |
-| `/api/py/locations/add`   | 5 req/hour  |
 | `/v1/reports` (submit)    | 5 req/hour  |
 | `/api/py/reports/clarify` | 10 req/hour |
 
