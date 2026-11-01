@@ -25,8 +25,8 @@ Out of scope:
   where it is needed. That work is tracked separately, so no archive config
   lives here.
 - Geocoding and the `/v1/elevation` lookup in `api/py/_locations.py`.
-- The optional edge layers (`worker/`, `workers/`). They still call the
-  public API and can be moved in a follow-up.
+- The Rust Workers (`workers/`). They call the public Open-Meteo hosts
+  today and can be moved in a follow-up.
 
 ## Architecture
 
