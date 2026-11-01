@@ -206,15 +206,6 @@ class TestCallersKeyASpotByItsCell:
             await list_reports(location="harare")
         assert reports.return_value.find.call_args[0][0]["locationSlug"] == {"$in": ["harare"]}
 
-    @pytest.mark.asyncio
-    async def test_locations_endpoint_flags_a_synthesized_spot(self):
-        from py._locations import list_locations
-
-        with patch("py._locations.find_location", return_value=dict(SPOT_LOC)):
-            result = await list_locations(slug=SPOT)
-        assert result["location"]["synthesized"] is True
-        assert "_id" not in result["location"]
-
     def test_place_knowledge_never_labels_a_spot_placesgeo(self):
         from py import _place_knowledge as pk
 

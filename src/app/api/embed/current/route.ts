@@ -8,7 +8,7 @@
  *                        `x-vercel-ip-latitude` / `x-vercel-ip-longitude` headers
  *
  * This route is a thin public shaper: it reads IP-geo headers, calls the
- * EXISTING internal `/api/py/geo` (name lookup) and `/api/py/weather`
+ * Worker's `/v1/geo` (name lookup) and the internal `/api/py/weather`
  * (weather by lat/lon) endpoints, and returns a compact embed-friendly JSON
  * payload (current conditions + up to 7 daily entries for the forecast cards).
  *
@@ -68,8 +68,8 @@ export async function GET(req: NextRequest): Promise<Response> {
     lon = qsLon;
     source = "coords";
   } else if (slug && LOCATION_SLUG_RE.test(slug)) {
-    // 2. Known location slug — resolve to coordinates via internal locations API.
-    // `/api/py/locations?slug=` returns a `{ location: {…} }` WRAPPER (not the
+    // 2. Known location slug — resolve to coordinates via the Worker's locations API.
+    // `/v1/locations?slug=` returns a `{ location: {…} }` WRAPPER (not the
     // bare doc), so unwrap it — reading `loc.lat` directly yields undefined → NaN
     // → a silent Harare fallback for every non-Harare embed.
     const loc = await fetchJson<

@@ -53,7 +53,7 @@ function AirportSearch({
   value: LocationResult | null;
   onChange: (loc: LocationResult | null) => void;
 }) {
-  // Shared debounced /api/py/search hook — same debounce, AbortController
+  // Shared debounced /v1/search hook — same debounce, AbortController
   // cancellation, and error surfacing as every other quick location search
   // (issue #103). minLength 2 preserves this picker's previous behavior.
   const {
