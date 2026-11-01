@@ -58,6 +58,17 @@ export const FLAGS = {
    * localStorage.setItem("ff:model_map_layers", "true").
    */
   model_map_layers: false,
+  /**
+   * Apple Weather (WeatherKit) as a forecast model: a pick in My Weather and
+   * a series in the model comparison. OFF until two things are true: the
+   * Servers API origin (Gwaihir) serves `apple_weatherkit` (a picker entry
+   * that does nothing would be a lie), and the owner has confirmed that the
+   * Apple Developer Program terms allow the 15-minute cache and the blended
+   * use. It also needs Apple's official mark (`forecast-sources.ts`
+   * `markAssetUrl`); a test refuses the flag on without it. Try it locally
+   * with localStorage.setItem("ff:apple_weatherkit", "true").
+   */
+  apple_weatherkit: false,
   /** Vector semantic search for locations */
   vector_search: false,
   /** Multi-language support (Shona, Ndebele) */

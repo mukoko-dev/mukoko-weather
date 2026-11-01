@@ -172,6 +172,8 @@ locations) allows. Response headers: `X-Weather-Provider`
 DWD, ECCC, Météo-France, UK Met Office, CMA, JMA via Open-Meteo.com (CC BY 4.0). Open-Meteo's free API
 is non-commercial only — see issue #246 for the licensing options.
 
+**Apple Weather (WeatherKit) — coming, off for now** ([#408](https://github.com/mukoko-dev/mukoko-weather/issues/408)) — the Apple Developer Program membership includes 500,000 WeatherKit calls a month, and `apple_weatherkit` ("Apple Weather") is being added to the model list: a model you can pick in My Weather and a series in the model comparison, not a member of the default blend. The provider rules are built and tested (`weather_core::weatherkit`: conversion to our names and units, the condition-code map, the developer token with an injected signer, the call budget, the 15-minute cache rule), but nothing serves the model yet (the weather backend is moving to Gwaihir, a server of the Nyuchi Servers API), so the picker row is behind `FLAGS.apple_weatherkit` and stays off. Wherever Apple data is shown the app credits it (Apple Weather trademark, the legal link, and a notice when the data was modified) from `src/lib/forecast-sources.ts`. Apple's account steps and the secrets are in CONTRIBUTING.md, "Apple WeatherKit".
+
 **Three-layer error isolation** — `page.tsx` wraps fetching in try/catch so the
 server always renders something; each weather section sits inside a
 `ChartErrorBoundary`; `error.tsx` pages are the last resort, with retry counts

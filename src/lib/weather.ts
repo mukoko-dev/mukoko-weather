@@ -21,6 +21,10 @@ import {
   moonPhase,
 } from "./derived-insights";
 import { openMeteoForecastUrl, openMeteoHeaders } from "./open-meteo-endpoint";
+import {
+  appleWeatherEnabled,
+  isExternalForecastModel,
+} from "./forecast-sources";
 import { UV_SCALE, uvBand } from "./weather-scales";
 
 export interface CurrentWeather {
@@ -141,6 +145,12 @@ export enum ForecastModel {
   GFS = "gfs_seamless",
   ICON = "icon_global",
   MeteoFrance = "meteofrance_seamless",
+  /**
+   * Apple WeatherKit. Not an Open-Meteo model, so it is never sent to
+   * Open-Meteo (`isExternalForecastModel`), and it is only a valid preference
+   * while its feature flag is on (`normalizeForecastModel`).
+   */
+  AppleWeatherKit = "apple_weatherkit",
 }
 
 /** Human-readable labels for each forecast model (short national/agency names). */
@@ -151,6 +161,7 @@ export const FORECAST_MODEL_LABELS: Record<ForecastModel, string> = {
   [ForecastModel.GFS]: "GFS (NOAA, USA)",
   [ForecastModel.ICON]: "ICON (DWD, Germany)",
   [ForecastModel.MeteoFrance]: "Météo-France",
+  [ForecastModel.AppleWeatherKit]: "Apple Weather",
 };
 
 /**
@@ -162,12 +173,22 @@ const LEGACY_MODEL_IDS: Record<string, ForecastModel> = {
   icon_seamless: ForecastModel.ICON,
 };
 
-/** A stored model preference in its current form (unknown → best_match). */
+/**
+ * A stored model preference in its current form (unknown → best_match).
+ *
+ * Apple Weather is a valid preference only while it is offered
+ * (`appleWeatherEnabled`): a device can carry `apple_weatherkit` from a newer
+ * client, and with the model not served the page would ask the Worker for a
+ * forecast it does not have. Until it is on, that preference reads as the blend.
+ */
 export function normalizeForecastModel(
   model: string | null | undefined,
 ): ForecastModel {
   const m = (model ?? "").trim();
   if (m in LEGACY_MODEL_IDS) return LEGACY_MODEL_IDS[m];
+  if (m === ForecastModel.AppleWeatherKit && !appleWeatherEnabled()) {
+    return ForecastModel.BestMatch;
+  }
   return (Object.values(ForecastModel) as string[]).includes(m)
     ? (m as ForecastModel)
     : ForecastModel.BestMatch;
@@ -407,10 +428,12 @@ export async function fetchWeather(
   models?: string[],
   timeoutMs = 10_000,
 ): Promise<WeatherData> {
-  // Only forward real model ids to Open-Meteo — `best_match` is the unsuffixed
-  // baseline the API always returns, so it isn't sent as an explicit model.
+  // Only forward real Open-Meteo model ids — `best_match` is the unsuffixed
+  // baseline the API always returns, so it isn't sent as an explicit model, and
+  // a model another provider serves (Apple Weather) is unknown to Open-Meteo,
+  // which would answer the whole request with a 400.
   const requestedModels = (models ?? []).filter(
-    (m) => m && m !== ForecastModel.BestMatch,
+    (m) => m && m !== ForecastModel.BestMatch && !isExternalForecastModel(m),
   );
 
   const params = new URLSearchParams({

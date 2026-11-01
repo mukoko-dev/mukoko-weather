@@ -40,6 +40,11 @@ pub const OPEN_METEO: Config = Config {
 /// failures in 5 min open it for 2 min. Only 5xx, 429, transport errors and
 /// timeouts count.
 pub const NASA_POWER: Config = DEFAULT;
+/// Apple WeatherKit: the default, 3 failures in 5 min open it for 2 min. Only a
+/// 5xx, a 429, a timeout, a transport error or an unreadable body counts; a
+/// 4xx is our request (or our token) and never does
+/// (`weatherkit::Outcome::counts_against_breaker`).
+pub const APPLE_WEATHERKIT: Config = DEFAULT;
 /// ISRIC SoilGrids: 3 failures in 10 min open it for 15 min.
 pub const SOILGRIDS: Config = Config {
     failure_threshold: 3,

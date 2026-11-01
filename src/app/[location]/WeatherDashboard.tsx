@@ -30,6 +30,7 @@ import {
 import { Header } from "@/components/layout/Header";
 import { useLocationSwipe } from "@/components/layout/LocationPager";
 import { Footer } from "@/components/layout/Footer";
+import { ForecastCredit } from "@/components/layout/ForecastCredit";
 import { CurrentConditions } from "@/components/weather/CurrentConditions";
 import { AtmosphericSummary } from "@/components/weather/AtmosphericSummary";
 import { HourlyScrollCards } from "@/components/weather/HourlyScrollCards";
@@ -519,6 +520,16 @@ export function WeatherDashboard({
                 weather={weather}
                 placeName={location.name}
               />
+            </div>
+          )}
+
+          {/* The credit an external forecast provider requires, while the
+              server has confirmed its forecast as the baseline on screen
+              (Apple Weather: trademark, legal link and the notice that its
+              data was modified). Nothing for the blend or an Open-Meteo model. */}
+          {modelBaseline && (
+            <div className="kestrel-ink">
+              <ForecastCredit models={[model]} use="baseline" />
             </div>
           )}
 

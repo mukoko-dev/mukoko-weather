@@ -279,6 +279,30 @@ Create each one with `npx wrangler secrets-store secret create 56f84bfa8a564c54a
 
 Before a release goes to `main`, deploy the Workers from `staging` by hand with wrangler, using the Cloudflare token from the environment (no GitHub Actions): `npm ci` in `workers/mongo-bridge`, then `npx wrangler@4.138.0 deploy` in each Worker directory in the order above, with `CLOUDFLARE_ACCOUNT_ID` set. There are no separate staging Workers, so this is a production deploy: record each Worker's live version first (`wrangler deployments list --name <script>`) as the rollback target, stop at the first failure, and check each custom domain's `/health` (and `/health?probe=mongo` on the public API) after it. Test the changed routes against the live Workers, and delete any test data you created. Only then merge the release PR to `main`; that is the minor bump, tagged with `tag-release`.
 
+## Apple WeatherKit
+
+Apple Weather (`apple_weatherkit`) is a forecast model from the 500,000 WeatherKit calls a month the Apple Developer Program membership includes ([#408](https://github.com/mukoko-dev/mukoko-weather/issues/408)). The rules are `weather_core::weatherkit` (workers/README.md, "Apple WeatherKit"); it is served by Gwaihir, the weather server of the Nyuchi Servers API, not by a Cloudflare Worker, so no `wrangler` secret or Worker deploy is involved. The model is off in the app (`FLAGS.apple_weatherkit`) and in the My Weather picker until Gwaihir serves it.
+
+Owner steps (checked against Apple's account help on 2026-11-01; Apple changes these pages, so follow the page if it differs):
+
+1. In the Apple Developer account, as Account Holder or Admin, open **Certificates, Identifiers & Profiles → Keys**, add a key with a unique name and the **WeatherKit** checkbox ticked, confirm, and **download the `.p8` once** (Apple does not keep it and will not offer it again). Note the 10-character **Key ID** shown under the key name, and the 10-character **Team ID** from the membership details.
+2. Under **Identifiers**, add a **Services ID**: a description and a reverse-domain identifier such as `africa.nyuchi.mukoko.weatherkit`. All registered Services IDs are eligible for a WeatherKit-enabled key, so nothing is configured on the Services ID itself.
+3. Give the four values to the Servers API origin without pasting them anywhere. The names are the contract (`weather_core::weatherkit::SECRETS`); the origin may add its own prefix. The private key is read from the file, so it never appears in a command or in shell history:
+
+   ```bash
+   fly secrets set --app nyuchi-servers-api \
+     MUKOKO_WEATHER_WEATHERKIT_TEAM_ID=<Team ID> \
+     MUKOKO_WEATHER_WEATHERKIT_SERVICE_ID=<Services ID> \
+     MUKOKO_WEATHER_WEATHERKIT_KEY_ID=<Key ID>
+   fly secrets set --app nyuchi-servers-api \
+     MUKOKO_WEATHER_WEATHERKIT_PRIVATE_KEY="$(cat /path/to/AuthKey_<KeyID>.p8)"
+   ```
+
+   Then delete the `.p8` from the machine you downloaded it to, or keep it only in the owner's password manager. To rotate, create a new key tied to the Services ID, switch the secrets, then revoke the old key.
+
+4. Confirm in the Apple Developer Program licence and the WeatherKit terms that a 15-minute cache and the blended use (values filled from another model, insights derived from them) are allowed, and tell the maintainers. Until then nothing Apple is kept longer than the cache.
+5. Before the flag is switched on: wire Apple's official Weather mark (from the Attribution endpoint) into `forecast-sources.ts` and allow its host in the CSP, compare the first real response with the documented fixture, and check the usage report for what counts as a call.
+
 ## Reporting Issues
 
 Use the [GitHub Issues](https://github.com/nyuchitech/mukoko-weather/issues) page. We have templates for:

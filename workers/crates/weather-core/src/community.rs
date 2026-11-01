@@ -254,8 +254,13 @@ pub const MAX_ACTIVITIES: usize = 30;
 pub const MAX_SAVED_LOCATIONS: usize = 10;
 
 /// Every forecast model id a device may store (the blend members, the map's
-/// picker and the legacy ids older devices still carry).
-pub const FORECAST_MODELS: [&str; 11] = [
+/// picker, Apple Weather, and the legacy ids older devices still carry).
+///
+/// `apple_weatherkit` is accepted before anything serves it: a device on a newer
+/// client may store it, and refusing it would fail every preference sync for
+/// that device with a 400. Whether a person is OFFERED it is the app's feature
+/// flag (`apple_weatherkit`), not this list.
+pub const FORECAST_MODELS: [&str; 12] = [
     "best_match",
     "ecmwf_ifs",
     "ecmwf_ifs025",
@@ -265,6 +270,7 @@ pub const FORECAST_MODELS: [&str; 11] = [
     "gem_global",
     "meteofrance_arpege_world",
     "meteofrance_seamless",
+    "apple_weatherkit",
     "ecmwf_ifs04",
     "icon_seamless",
 ];
@@ -563,6 +569,7 @@ mod tests {
             "meteofrance_arpege_world",
             "ecmwf_ifs025",
             "meteofrance_seamless",
+            "apple_weatherkit",
             "ecmwf_ifs04",
             "icon_seamless",
         ] {
