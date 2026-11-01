@@ -7,7 +7,7 @@
 //! - mukoko-api, which binds to this Worker for consumer reuse.
 //!
 //! ```text
-//! GET /v1/weather?lat=&lon=[&models=a,b]   full WeatherData, the shape of /api/py/weather
+//! GET /v1/weather?lat=&lon=[&model=m][&models=a,b]   full WeatherData, the shape of /api/py/weather (`model` = the caller's own baseline model)
 //! GET /v1/forecast?location=|lat=&lon=[&days=1..7]   the daily forecast contract
 //! GET /v1/locations/profile?slug=|lat=&lon=[&country=]   a place's knowledge (seasons, crops, climate, soil) and today's context
 //! GET /v1/agriculture?lat=&lon=[&location=][&country=][&crops=]   farm windows, rain, soil, water balance, frost and heat risk (the shape of /api/py/agriculture)
@@ -395,16 +395,20 @@ async fn weather(req: &Request, env: &Env) -> Result<Response> {
     }
 
     let mut q = format!("/weather?lat={lat}&lon={lon}&extras=1");
+    // The forecast Worker keeps only known model ids; send just the
+    // characters a model id can have (`weather_core::blend::safe_model_param`).
     if let Some(models) = get("models") {
-        // The forecast Worker keeps only known model ids; send just the
-        // characters a model id can have.
-        let safe: String = models
-            .chars()
-            .filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == ',')
-            .take(200)
-            .collect();
         q.push_str("&models=");
-        q.push_str(&safe);
+        q.push_str(&weather_core::blend::safe_model_param(models, 200));
+    }
+    // The user's own baseline model (`selectedForecastModel`); `best_match`
+    // and anything unknown mean the blend, decided by the forecast Worker.
+    let picked = get("model")
+        .map(|m| weather_core::blend::safe_model_param(m, 64))
+        .unwrap_or_default();
+    if !picked.is_empty() {
+        q.push_str("&model=");
+        q.push_str(&picked);
     }
 
     if let Some(mut upstream) = service::ask(env, FORECAST_BINDING, &q).await? {
@@ -421,17 +425,13 @@ async fn weather(req: &Request, env: &Env) -> Result<Response> {
                 ] {
                     copy_header(upstream.headers(), resp.headers(), h)?;
                 }
-                // Only the full blend is worth five minutes at the edge. A
-                // degraded answer (single model, best_match) is short-lived,
-                // so the blend comes back as soon as it recovers.
-                let blended = upstream.headers().get("X-Weather-Provider")?.as_deref()
-                    == Some("open-meteo:blend");
-                let cache = if blended {
-                    "public, max-age=300"
-                } else {
-                    "public, max-age=30"
-                };
-                resp.headers().set("Cache-Control", cache)?;
+                // The edge lifetime follows the baseline that served it
+                // (`weather_core::blend::edge_cache_control`).
+                let provider = upstream.headers().get("X-Weather-Provider")?;
+                resp.headers().set(
+                    "Cache-Control",
+                    weather_core::blend::edge_cache_control(provider.as_deref()),
+                )?;
                 return Ok(resp);
             }
         }

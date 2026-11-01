@@ -4,7 +4,7 @@
 //! workers.dev address: the API Workers reach it through service bindings.
 //!
 //! ```text
-//! GET /weather?lat=&lon=[&models=a,b][&extras=1][&refresh=1][&priority=1]   full WeatherData (the app's shape)
+//! GET /weather?lat=&lon=[&model=m][&models=a,b][&extras=1][&refresh=1][&priority=1]   full WeatherData (the app's shape)
 //! GET /daily?location=|lat=&lon=[&days=1..7]       the daily forecast contract
 //! GET /air-quality?lat=&lon=                       the EPA AQI (Open-Meteo air quality)
 //! GET /agriculture?lat=&lon=[&location=][&country=][&crops=]  farm windows, rain, soil, water balance, frost and heat risk
@@ -22,7 +22,11 @@
 //! Provider chain (ported from `api/py/_weather.py`, issue #246): KV cache
 //! (`wx:v2:`, 15 min), then the Open-Meteo Africa-weighted blend of nine global
 //! models (served only when at least FOUR members return data), then Open-Meteo
-//! `best_match`, marked as not a blend. Tomorrow.io is ENRICHMENT ONLY: it adds
+//! `best_match`, marked as not a blend. `model=<id>` (the user's
+//! `selectedForecastModel`) makes that one model the baseline instead
+//! (`X-Weather-Provider: open-meteo:<id>`, its own KV row, `best_match`
+//! filling the variables it does not publish); with no data for it here the
+//! answer is `best_match`. Tomorrow.io is ENRICHMENT ONLY: it adds
 //! a few insights fields behind a D1 budget (12 an hour and 250 a day for
 //! normal traffic) and never provides the baseline. A validated StationKit
 //! observation within 50 km and 60 min overlays `current`. When every provider
@@ -145,7 +149,10 @@ async fn weather(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
     }
 
     let refresh = get("refresh") == Some("1");
-    let Some(mut got) = chain::forecast(env, ctx, lat, lon, refresh).await else {
+    // The caller's own model (`selectedForecastModel`); `best_match`, an
+    // empty value and anything unknown mean the Africa-weighted blend.
+    let model = weather_core::blend::sanitize_baseline_model(get("model"));
+    let Some(mut got) = chain::forecast(env, ctx, lat, lon, refresh, model).await else {
         return error(
             503,
             "providers_unavailable",
@@ -163,7 +170,7 @@ async fn weather(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
         let requested: Vec<&str> = get("models")
             .map(|m| m.split(',').filter(|s| !s.trim().is_empty()).collect())
             .unwrap_or_default();
-        attach_comparison(&mut got.data, lat, lon, &requested).await;
+        attach_comparison(env, ctx, &mut got.data, lat, lon, &requested).await;
     }
 
     // The offset must ALWAYS be present, and the nowcast must not start in
@@ -197,7 +204,14 @@ async fn weather(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
 /// `_attach_comparison`). The blend already carries its members' series; only
 /// when the caller asks for a model that is not there is the extras call made,
 /// best effort, breaker gated, never failing the response.
-async fn attach_comparison(data: &mut Value, lat: f64, lon: f64, requested: &[&str]) {
+async fn attach_comparison(
+    env: &Env,
+    ctx: &Context,
+    data: &mut Value,
+    lat: f64,
+    lon: f64,
+    requested: &[&str],
+) {
     let wanted: Option<Vec<String>> =
         (!requested.is_empty()).then(|| normalize::sanitize_models(requested));
     let have: Vec<String> = data["models_available"]
@@ -235,7 +249,7 @@ async fn attach_comparison(data: &mut Value, lat: f64, lon: f64, requested: &[&s
         return;
     }
     let models = normalize::sanitize_models(requested);
-    let Some(extras) = chain::extras(lat, lon, &models).await else {
+    let Some(extras) = chain::extras_cached(env, ctx, lat, lon, &models).await else {
         return;
     };
     if data["minutely"].is_null() {
@@ -275,7 +289,7 @@ async fn daily(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
             }
         },
     };
-    let Some(got) = chain::forecast(env, ctx, place.lat, place.lon, false).await else {
+    let Some(got) = chain::forecast(env, ctx, place.lat, place.lon, false, None).await else {
         return error(
             503,
             "providers_unavailable",
