@@ -256,12 +256,8 @@
   --chart-5: #c1440e; /* Terracotta — earth/alert */
   --chart-6: #283593; /* Sodalite — ECMWF AIFS series */
 
-  /* Temperature bar gradient — warm spectrum */
-  --color-temp-cold: #0047ab;
-  --color-temp-cool: #00897b;
-  --color-temp-mild: #f9a825;
-  --color-temp-warm: #ef6c00;
-  --color-temp-hot: #c62828;
+  /* Temperature range bar: the track behind each day's blended pill (the pill
+     itself is the --wx-temp-* scale, see DailyForecast) */
   --color-temp-bar-track: rgba(0, 0, 0, 0.06);
 
   /* Rain probability — text + chart fill. #0277bd keeps >= 4.5:1 on the
@@ -361,6 +357,16 @@
   --size-insight-square-min: 10.5rem;
   --size-insight-dial-max: 14rem;
   --size-insight-moon-max: 9rem;
+
+  /* Weather scale bars (GradientScale: the AQI card, the UV tile, the air
+     quality sheet). Fixed sizes: a scale is a thin bar with a small marker on
+     a phone and on a 1280px desktop alike, never a share of the card's width
+     (the old SVG scaled its whole viewBox with the card, so a wide card drew a
+     48px track and an 85px marker). On a wide card the bar stops at the max
+     width and sits left, under the number. Same in light and dark. */
+  --wx-scale-track-height: 0.75rem;
+  --wx-scale-marker-size: 1.25rem;
+  --wx-scale-max-width: 24rem;
 
   /* Moon disc — lit limb and shadowed disc (metric-card MoonDisc) */
   --color-moon-lit: #f3ecd6;
@@ -484,12 +490,7 @@
   --chart-5: #d4a574; /* Terracotta light */
   --chart-6: #3d5afe; /* Sodalite light */
 
-  /* Temperature bar gradient — dark mode warm spectrum */
-  --color-temp-cold: #42a5f5;
-  --color-temp-cool: #26a69a;
-  --color-temp-mild: #fdd835;
-  --color-temp-warm: #ff9800;
-  --color-temp-hot: #ef5350;
+  /* Temperature range bar track (dark) */
   --color-temp-bar-track: rgba(255, 255, 255, 0.08);
 
   /* Rain probability */
@@ -670,11 +671,6 @@
   --color-frost-severe-bg: var(--color-frost-severe-bg);
   --color-frost-high-bg: var(--color-frost-high-bg);
   --color-frost-moderate-bg: var(--color-frost-moderate-bg);
-  --color-temp-cold: var(--color-temp-cold);
-  --color-temp-cool: var(--color-temp-cool);
-  --color-temp-mild: var(--color-temp-mild);
-  --color-temp-warm: var(--color-temp-warm);
-  --color-temp-hot: var(--color-temp-hot);
   --color-temp-bar-track: var(--color-temp-bar-track);
   --color-rain: var(--color-rain);
   --color-severity-low: var(--color-severity-low);

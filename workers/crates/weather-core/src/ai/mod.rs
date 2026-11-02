@@ -11,6 +11,7 @@
 
 pub mod agriculture;
 pub mod completions;
+pub mod explore;
 pub mod guardrails;
 pub mod history;
 pub mod pii;

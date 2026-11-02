@@ -128,7 +128,7 @@ describe("resolveLocationSlug — seed fallback", () => {
 });
 
 describe("CITY_STATE_COUNTRIES", () => {
-  it("mirrors the _CITY_STATES set in api/py/_locations.py", async () => {
+  it("mirrors CITY_STATES in weather_core::locations", async () => {
     const { CITY_STATE_COUNTRIES } = await import("./places");
     expect([...CITY_STATE_COUNTRIES].sort()).toEqual(
       [

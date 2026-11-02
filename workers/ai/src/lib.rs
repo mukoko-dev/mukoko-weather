@@ -19,6 +19,8 @@
 //! POST /v1/ai/chat              {message, history, activities} → {response, references}
 //! POST /v1/ai/history/analyze   {location, days 7..365, activities}
 //!                               → {analysis, stats, cached, dataPoints}
+//! POST /v1/ai/explore/search    {query} → {locations, summary, source}
+//!                               (the model with two tools, else a text match)
 //! POST /internal/chat/completions  OpenAI-style {messages, tools?, max_tokens?, model?}
 //!                               → an OpenAI chat completion. Only from
 //!                                 mukoko-weather-internal (service key checked
@@ -32,6 +34,7 @@
 //! guardrails_unavailable`. Messages carrying personal data are refused
 //! before any call (`422 personal_data_detected`).
 
+mod explore;
 mod gateway;
 mod handlers;
 mod passthrough;
@@ -62,6 +65,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
                 "ai": env.ai("AI").is_ok(),
                 "cache": env.kv(CACHE_BINDING).is_ok(),
                 "history": env.service(PLACES_BINDING).is_ok(),
+                "budget": env.d1("WEATHER_DB").is_ok(),
             }),
         );
     }
@@ -71,6 +75,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
         "/internal/agriculture" => Route::Agriculture,
         "/v1/ai/chat" => Route::Chat,
         "/v1/ai/history/analyze" => Route::History,
+        "/v1/ai/explore/search" => Route::Explore,
         "/internal/chat/completions" => Route::Completions,
         _ => return error(404, "not_found", "No such route."),
     };
@@ -102,6 +107,13 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
         return error(400, "invalid_request", "The body must be JSON.");
     };
 
+    // The search is the one route that still answers without the model (the
+    // text match), so it decides for itself what a missing block means.
+    if matches!(route, Route::Explore) {
+        let guardrails = gateway::guardrails(&env).await;
+        return explore::handle(&env, guardrails, &Caller::from_request(&req), body).await;
+    }
+
     // Fail closed: no guardrails block, no model call on any route.
     let Some(guardrails) = gateway::guardrails(&env).await else {
         return error(
@@ -114,19 +126,24 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     // it checked the WorkOS session and `mukoko-weather-internal` checked the
     // service key. These paths are not reachable from the public API, which
     // forwards `/v1/ai/*` only and builds its own request.
-    let caller = route.app().then(|| {
+    let caller = if route.app() {
         let subject = req
             .headers()
             .get(weather_core::ai::USER_ID_HEADER)
             .ok()
             .flatten()
             .and_then(|s| weather_core::ai::valid_subject(&s));
-        Caller::with_subject(&req, subject)
-    });
+        Some(Caller::with_subject(&req, subject))
+    } else if matches!(route, Route::History) {
+        // The public history analysis is keyed by the visitor's address.
+        Some(Caller::from_request(&req))
+    } else {
+        None
+    };
     let ctx = handlers::Ctx {
         env: &env,
         guardrails,
-        client_ip: req.headers().get("CF-Connecting-IP").ok().flatten(),
+        client_ip: weather_edge::client_ip(&req),
         caller,
     };
     match route {
@@ -136,6 +153,8 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
         Route::Chat => handlers::chat(&ctx, body).await,
         Route::History => handlers::history(&ctx, body).await,
         Route::Completions => passthrough::handle(&env, &ctx.guardrails, &body).await,
+        // Answered above, before the guardrails gate.
+        Route::Explore => error(404, "not_found", "No such route."),
     }
 }
 
@@ -145,6 +164,7 @@ enum Route {
     Agriculture,
     Chat,
     History,
+    Explore,
     Completions,
 }
 

@@ -31,7 +31,7 @@ describe("HistoryAnalysis", () => {
       resolve(__dirname, "HistoryAnalysis.tsx"),
       "utf-8",
     );
-    expect(source).toContain("/api/py/history/analyze");
+    expect(source).toContain('postWorker("ai/history/analyze"');
   });
 
   it("includes location and days in request body", async () => {
@@ -137,18 +137,16 @@ describe("HistoryAnalysis", () => {
 });
 
 describe("HistoryAnalysis data source (#268)", () => {
-  it("asks the Worker first (it reads the same history the page shows) and falls back to Python", async () => {
+  it("asks only the Worker (it reads the same history the page shows): no Python fallback", async () => {
     const { readFileSync } = await import("fs");
     const { resolve } = await import("path");
     const source = readFileSync(
       resolve(__dirname, "HistoryAnalysis.tsx"),
       "utf-8",
     );
-    expect(source).toContain('fetchWorker("ai/history/analyze"');
-    expect(source).toContain("res.status >= 500");
-    expect(source).toContain("body?.error_description");
-    expect(source.indexOf("ai/history/analyze")).toBeLessThan(
-      source.indexOf('fetch("/api/py/history/analyze"'),
-    );
+    expect(source).toContain('postWorker("ai/history/analyze"');
+    expect(source).toContain("workerErrorMessage(res)");
+    expect(source).not.toContain("/api/py/");
+    expect(source).not.toContain("res.status >= 500");
   });
 });

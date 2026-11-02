@@ -36,7 +36,13 @@ pub fn tomorrow_to_wmo(code: i64) -> i64 {
 /// Plain-language label for a WMO code, matching `weatherCodeToInfo` in
 /// `src/lib/weather.ts` so the app and the API describe a day the same way.
 pub fn description(code: i64) -> &'static str {
-    match code {
+    known_description(code).unwrap_or("Unknown")
+}
+
+/// The label of a code the table knows (the same table as the former
+/// `WMO_LABELS`), `None` for any other code.
+pub fn known_description(code: i64) -> Option<&'static str> {
+    Some(match code {
         0 => "Clear sky",
         1 => "Mainly clear",
         2 => "Partly cloudy",
@@ -46,6 +52,8 @@ pub fn description(code: i64) -> &'static str {
         51 => "Light drizzle",
         53 => "Moderate drizzle",
         55 => "Dense drizzle",
+        56 => "Light freezing drizzle",
+        57 => "Dense freezing drizzle",
         61 => "Slight rain",
         63 => "Moderate rain",
         65 => "Heavy rain",
@@ -63,8 +71,8 @@ pub fn description(code: i64) -> &'static str {
         95 => "Thunderstorm",
         96 => "Thunderstorm with slight hail",
         99 => "Thunderstorm with heavy hail",
-        _ => "Unknown",
-    }
+        _ => return None,
+    })
 }
 
 #[cfg(test)]
@@ -89,5 +97,9 @@ mod tests {
             assert_ne!(description(tomorrow_to_wmo(code)), "Unknown", "{code}");
         }
         assert_eq!(description(42), "Unknown");
+        assert_eq!(known_description(42), None);
+        // Freezing drizzle has labels too (the app's table and the former Python's).
+        assert_eq!(description(56), "Light freezing drizzle");
+        assert_eq!(description(57), "Dense freezing drizzle");
     }
 }

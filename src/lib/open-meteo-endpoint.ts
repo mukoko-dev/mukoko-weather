@@ -1,6 +1,7 @@
 /**
  * Where the TypeScript direct-fetch fallback sends its Open-Meteo forecast
- * request. Mirror of `api/py/_open_meteo.py` (forecast half only).
+ * request. Mirror of the former `api/py/_open_meteo.py` (forecast half only);
+ * the Rust Workers call the public API (see CLAUDE.md, Weather Data).
  *
  * Default: the public API. On the SERVER only, `OPEN_METEO_BASE_URL` points
  * the call at our self-hosted Open-Meteo (`infra/open-meteo/`), with the
@@ -13,7 +14,7 @@
 
 export const PUBLIC_FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
 export const FORECAST_PATH = "/v1/forecast";
-/** Must match `infra/open-meteo/gateway/Caddyfile` and `api/py/_open_meteo.py`. */
+/** Must match `infra/open-meteo/gateway/Caddyfile`. */
 export const KEY_HEADER = "X-Mukoko-OM-Key";
 
 const PUBLIC_DOMAIN = "open-meteo.com";

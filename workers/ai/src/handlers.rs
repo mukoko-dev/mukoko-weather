@@ -1,6 +1,8 @@
 //! The four routes. Each validates its body, gathers the weather it needs,
 //! builds the prompt (guardrails first) and calls the model once.
 
+use std::time::Duration;
+
 use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -83,7 +85,7 @@ fn turns(v: &Value) -> Vec<Turn> {
 }
 
 /// The full `WeatherData` for a point, from the forecast Worker.
-async fn weather(env: &Env, lat: f64, lon: f64) -> Option<Value> {
+pub(crate) async fn weather(env: &Env, lat: f64, lon: f64) -> Option<Value> {
     let fetcher = env.service(FORECAST_BINDING).ok()?;
     let mut resp = fetcher
         .fetch(
@@ -282,8 +284,14 @@ struct CachedExplanation {
     generated_at: String,
 }
 
+/// The longest the farm data is waited for. The forecast Worker answers from
+/// its KV cache or one Open-Meteo request (its own breaker gives up after 8 s),
+/// so this bounds a hung Worker; the person's budget unit is already spent.
+const FARM_DATA_TIMEOUT: Duration = Duration::from_secs(10);
+
 /// The farm data for a point from the forecast Worker (`GET /agriculture`).
-/// Any failure is `available: false`, so the route degrades to its fallback.
+/// Any failure, or waiting longer than [`FARM_DATA_TIMEOUT`], is
+/// `available: false`, so the route degrades to its fallback.
 async fn farm_data(
     env: &Env,
     lat: f64,
@@ -302,7 +310,7 @@ async fn farm_data(
     if !crops.is_empty() {
         url.push_str(&format!("&crops={}", crops.join(",")));
     }
-    let answer = async {
+    let answer = profile::within(FARM_DATA_TIMEOUT, async {
         let mut resp = env
             .service(FORECAST_BINDING)
             .ok()?
@@ -313,8 +321,9 @@ async fn farm_data(
             return None;
         }
         resp.json::<Value>().await.ok()
-    }
-    .await;
+    })
+    .await
+    .flatten();
     answer
         .filter(Value::is_object)
         .unwrap_or_else(|| json!({"available": false, "reason": "provider_error"}))
@@ -323,7 +332,9 @@ async fn farm_data(
 /// `POST /internal/agriculture`, from the signed-in app: the model explains the
 /// forecast Worker's deterministic farm data (`weather_core::ai::agriculture`).
 /// The entitlement hook runs before the cache is read; a cache hit is free and
-/// only a call that reaches the model is counted against the person's hour.
+/// a miss is counted against the person's hour before the farm data is
+/// fetched, as the Python counted it (even when the answer ends up being the
+/// model-free fallback), so the hour also bounds the lookups a person causes.
 /// As for the summary, what the client says about the place decides the cache
 /// key (`place_identity`), so no caller reads text another caller steered.
 pub async fn agriculture(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
@@ -489,11 +500,25 @@ pub async fn chat(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
             }
         }
     }
-    let fetched = join_all(places.iter().map(|p| weather(ctx.env, p.lat, p.lon))).await;
+    // Each place's forecast and, beside it, what is known about the place (the
+    // Python's `placeProfile`): cache-only and bounded, so no profile is no
+    // block and a profile never slows or fails the answer.
+    let fetched = join_all(places.iter().map(|p| async move {
+        let (data, block) = futures::join!(
+            weather(ctx.env, p.lat, p.lon),
+            profile::block(ctx.env, Some(&p.slug), p.lat, p.lon, p.country.as_deref()),
+        );
+        Some((data?, block))
+    }))
+    .await;
     let facts: Vec<String> = places
         .iter()
         .zip(&fetched)
-        .filter_map(|(p, d)| d.as_ref().map(|d| prompts::weather_facts(p, d)))
+        .filter_map(|(p, d)| {
+            d.as_ref().map(|(data, block)| {
+                prompts::facts_with_profile(&prompts::weather_facts(p, data), block)
+            })
+        })
         .collect();
     let references: Vec<Value> = places
         .iter()
@@ -593,6 +618,7 @@ async fn history_records(ctx: &Ctx<'_>, slug: &str, window: &str) -> Option<Vec<
             current: d["current"].clone(),
             daily: d["daily"].clone(),
             insights: d["insights"].clone(),
+            source: d["source"].as_str().map(str::to_owned),
         })
         .collect();
     records.sort_by(|a, b| a.date.cmp(&b.date));
@@ -667,17 +693,64 @@ pub async fn history(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
     }
 
     let stats = aggregate(&records);
+
+    // A model call is a budgeted spend (10 an hour per client, as the Python
+    // backend had); an analysis answered from the cache above was free. Over
+    // the client's hour is a 429; the service's hour spent, or a budget that
+    // cannot be read (it fails closed), answers with the statistics alone.
+    // No caller (it is always set on this route) would be refused: the budget
+    // fails closed.
+    let decision = match ctx.caller.as_ref() {
+        Some(caller) => budget::take(ctx.env, Action::HistoryAnalysis, caller).await,
+        None => Decision::GlobalLimit,
+    };
+    match decision {
+        Decision::Allow => {}
+        Decision::ClientLimit => {
+            return responses::rate_limited(
+                900,
+                "You have used this hour's AI analyses. Please try again later.",
+            )
+        }
+        Decision::GlobalLimit => {
+            return json(
+                200,
+                &json!({
+                    "analysis": "AI analysis is busy right now. The statistical summary is available above.",
+                    "stats": stats,
+                    "cached": false,
+                    "error": true,
+                    "dataPoints": points,
+                }),
+            )
+        }
+    }
+
     let name = place.name.clone().unwrap_or_else(|| place.slug.clone());
     let season: Season = season_for(
         place.country.as_deref().filter(|c| c.chars().count() == 2),
         place.lat,
         now(),
     );
+    // What is known about the place (season calendar, crop stage, normals,
+    // climate zone), cache-only and bounded: no profile is no block, and a
+    // profile never slows or fails the analysis.
+    let profile = with_profile(
+        &profile::block(
+            ctx.env,
+            Some(&place.slug),
+            place.lat,
+            place.lon,
+            place.country.as_deref(),
+        )
+        .await,
+    );
     let request = prompts::history_request(
         &name,
         place.elevation.unwrap_or(0.0),
         &season,
         &acts,
+        &profile,
         &stats,
     );
     let system = system_prompt(

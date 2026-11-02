@@ -16,7 +16,7 @@ import type { MinutelyData, ModelForecast, WeatherData } from "@/lib/weather";
 export const MODEL_EXTRAS_ROOT_MARGIN = "1200px";
 
 /**
- * Whether to fetch /api/py/weather?models=… now.
+ * Whether to fetch /v1/weather?models=… now.
  *
  * - A picked forecast model (anything but the default blend) becomes the
  *   baseline for the whole page, so it is fetched at once.
@@ -34,7 +34,7 @@ export function shouldFetchModelExtras(
 /** Longest wait (ms) for an idle moment before the extras fetch starts. */
 export const MODEL_EXTRAS_IDLE_TIMEOUT_MS = 2500;
 
-/** What one /api/py/weather?models=… response contributes to the page. */
+/** What one /v1/weather?models=… response contributes to the page. */
 export interface ModelExtras {
   /** The place + model this was fetched for (modelExtrasKey). */
   key: string;

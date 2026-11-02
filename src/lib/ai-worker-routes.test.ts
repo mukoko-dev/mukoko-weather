@@ -70,7 +70,7 @@ describe("the AI summary is not public", () => {
 describe("the model budget", () => {
   const summary = aiHandlers.slice(
     aiHandlers.indexOf("pub async fn summary("),
-    aiHandlers.indexOf("/// `POST /v1/ai/followup`"),
+    aiHandlers.indexOf("/// `POST /internal/followup`"),
   );
 
   it("counts a summary only when the cache missed, and before the model", () => {
@@ -87,16 +87,39 @@ describe("the model budget", () => {
     expect(aiHandlers).toContain("Decision::GlobalLimit");
   });
 
+  it("the summary slice is the summary handler alone (its end anchor exists)", () => {
+    // indexOf returns -1 for a missing anchor, and slice(start, -1) would then
+    // run to the end of the file and let the follow-up's code satisfy the
+    // summary's assertions.
+    expect(aiHandlers).toContain("/// `POST /internal/followup`");
+    expect(summary).not.toContain("pub async fn followup(");
+    expect(summary).not.toContain("pub async fn agriculture(");
+  });
+
+  it("the farm data is waited for at most 10 s, so a hung forecast Worker cannot hold a spent budget unit", () => {
+    expect(aiHandlers).toContain(
+      "const FARM_DATA_TIMEOUT: Duration = Duration::from_secs(10);",
+    );
+    expect(aiHandlers).toContain("profile::within(FARM_DATA_TIMEOUT");
+  });
+
   it("the AI Worker binds the D1 database the budgets live in", () => {
     expect(aiWrangler).toMatch(/"binding":\s*"WEATHER_DB"/);
     expect(aiWrangler).toContain("9a8846ea-ee34-4479-bc4c-790ee2beabee");
   });
 
   it("only the signed-in routes spend a budget (the public ones keep the per-minute limiter)", () => {
-    expect(aiLib).toContain("route.app().then(");
+    // The signed-in app's routes (summary, follow-up, agriculture) are keyed by
+    // the person's id; the public history analysis and the AI search are keyed
+    // by the visitor's address. Chat has no budget of its own (the per-minute
+    // limiter), so no caller is built.
+    expect(aiLib).toContain("if route.app() {");
     expect(aiLib).toMatch(
       /fn app\(&self\) -> bool \{\s*matches!\(\s*self,\s*Route::Summary \| Route::Followup \| Route::Agriculture\s*\)/,
     );
+    expect(aiLib).toContain("Some(Caller::with_subject(&req, subject))");
+    expect(aiLib).toContain("matches!(route, Route::History)");
+    expect(aiLib).toContain("Some(Caller::from_request(&req))");
     expect(aiLib).toContain("if !route.internal() {");
   });
 });
@@ -104,7 +127,7 @@ describe("the model budget", () => {
 describe("the place profile grounds the summary prompt", () => {
   const summary = aiHandlers.slice(
     aiHandlers.indexOf("pub async fn summary("),
-    aiHandlers.indexOf("/// `POST /v1/ai/followup`"),
+    aiHandlers.indexOf("/// `POST /internal/followup`"),
   );
 
   it("the summary splices the block with its grounding rule, from the point and never the client's slug", () => {

@@ -37,7 +37,7 @@ class TestCorsPreflight:
     def test_preflight_allows_mobile_client_headers(self):
         client = TestClient(app)
         resp = client.options(
-            "/api/py/weather",
+            "/api/py/health",
             headers={
                 "Origin": "http://localhost:8081",
                 "Access-Control-Request-Method": "GET",
@@ -154,64 +154,26 @@ class TestRouterMounting:
         collect(app.routes)
         return paths
 
-
-    def test_chat_router_mounted(self):
+    def test_weather_and_air_quality_routes_are_gone(self):
+        """They live on the Rust Worker (/v1/weather, /v1/air-quality)."""
         paths = self._get_route_paths()
-        assert "/api/py/chat" in paths
+        assert "/api/py/weather" not in paths
+        assert "/api/py/airquality" not in paths
 
-    def test_embeddings_router_mounted(self):
-        paths = self._get_route_paths()
-        assert "/api/py/embeddings/status" in paths
-
-    def test_weather_router_mounted(self):
-        paths = self._get_route_paths()
-        assert "/api/py/weather" in paths
-
-    def test_locations_router_mounted(self):
-        paths = self._get_route_paths()
-        assert "/api/py/locations" in paths
-
-    def test_history_router_mounted(self):
-        paths = self._get_route_paths()
-        assert "/api/py/history" in paths
 
     def test_the_ai_routes_are_gone_they_run_on_the_ai_worker(self):
         paths = self._get_route_paths()
         for gone in ("/api/py/ai", "/api/py/ai/followup", "/api/py/ai/agriculture"):
             assert gone not in paths
 
-    def test_history_analyze_router_mounted(self):
-        paths = self._get_route_paths()
-        assert "/api/py/history/analyze" in paths
-
-    def test_explore_search_router_mounted(self):
-        paths = self._get_route_paths()
-        assert "/api/py/explore/search" in paths
-
     def test_reports_router_mounted(self):
+        # Only the follow-up questions are left; submit, list and upvote are
+        # the Rust Worker's /v1/reports.
         paths = self._get_route_paths()
-        assert "/api/py/reports" in paths
+        assert "/api/py/reports/clarify" in paths
+        assert "/api/py/reports" not in paths
 
     def test_health_endpoint_mounted(self):
         paths = self._get_route_paths()
         assert "/api/py/health" in paths
 
-
-class TestStationsRouterMounted:
-    def test_stations_router_mounted(self):
-        paths = set()
-
-        def collect(routes):
-            for route in routes:
-                if hasattr(route, "path"):
-                    paths.add(route.path)
-                if hasattr(route, "original_router") and route.original_router:
-                    collect(route.original_router.routes)
-                elif hasattr(route, "routes"):
-                    collect(route.routes)
-
-        collect(app.routes)
-        assert "/api/py/stations/register" in paths
-        assert "/api/py/stations/ingest" in paths
-        assert "/api/py/stations/manual" in paths
-        assert "/api/py/stations/status" in paths

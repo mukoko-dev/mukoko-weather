@@ -69,7 +69,7 @@ describe("geolocation source structure", () => {
 
   it("asks the geo endpoint through fetchPlaces (behaviour: geolocation-flow.test.ts)", () => {
     expect(source).toContain("fetchPlaces(");
-    // GPS fixes reach /api/py/geo exactly: exact-place naming and OSM-ref identity depend on them
+    // GPS fixes reach /v1/geo exactly: exact-place naming and OSM-ref identity depend on them
     expect(source).toContain("lat=${latitude}&lon=${longitude}");
     expect(source).not.toContain("roundCoord");
   });

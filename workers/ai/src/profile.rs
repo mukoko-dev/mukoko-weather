@@ -26,7 +26,10 @@ use crate::FORECAST_BINDING;
 pub const PROFILE_TIMEOUT: Duration = Duration::from_secs(4);
 
 /// Wait for `fut` at most `limit`; `None` when it is slower.
-async fn within<T>(limit: Duration, fut: impl std::future::Future<Output = T>) -> Option<T> {
+pub(crate) async fn within<T>(
+    limit: Duration,
+    fut: impl std::future::Future<Output = T>,
+) -> Option<T> {
     match select(Box::pin(fut), Box::pin(Delay::from(limit))).await {
         Either::Left((v, _)) => Some(v),
         Either::Right(_) => None,

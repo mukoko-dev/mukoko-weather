@@ -10,14 +10,16 @@ import {
   type PollutantKey,
 } from "./AirQualityCard";
 import { fetchWorker } from "@/lib/weather-api";
-import { AQI_SCALE, aqiScaleBand } from "@/lib/weather-scales";
+import { aqiScalePct } from "@/lib/air-quality-details";
+import { trackWindow } from "@/lib/scale-blend";
+import { blendGradient } from "./widgets/geometry";
 
 /**
  * Air Quality Details — full pollutant breakdown for the atmosphere sub-route.
  *
  * Shows all 7 pollutants (PM2.5, PM10, O₃, NO₂, SO₂, CO, NH₃) in a `.baobab`
  * card grid alongside each concentration's EPA AQI sub-index, severity bar,
- * and WHO 2021 guideline reference value. Fetches the same `/api/py/airquality`
+ * and WHO 2021 guideline reference value. Fetches the same `/v1/air-quality`
  * endpoint as the compact `AirQualityCard` — caching means the second hit is
  * served from cache.
  */
@@ -38,16 +40,51 @@ const POLLUTANT_ORDER: PollutantKey[] = [
   "nh3",
 ];
 
-/** Map an EPA AQI sub-index to its official band colour (weather-scales.ts). */
-export function severityBarClass(aqi: number | undefined): string {
-  if (aqi === undefined) return "bg-text-tertiary/20";
-  return (aqiScaleBand(aqi) ?? AQI_SCALE.bands[0]).bg;
-}
-
-/** Bar width (0-100%) based on EPA sub-index relative to a 500 max. */
+/**
+ * Fill of a pollutant's bar (0-100%): where its EPA sub-index sits on the same
+ * scale as the Air quality card's bar (each EPA band an equal sixth), so one
+ * value is at one place on both bars.
+ */
 export function severityBarWidth(aqi: number | undefined): number {
   if (aqi === undefined) return 0;
-  return Math.min((aqi / 500) * 100, 100);
+  return aqiScalePct(aqi);
+}
+
+/**
+ * A pollutant's severity bar. The fill is a window onto the one blended AQI
+ * gradient (official EPA colours, green to maroon), so it shows every colour
+ * up to the sub-index and a reading in the middle of a band shows that band's
+ * colour; it is not a single solid band colour any more. Decorative: the
+ * sub-index is printed above it. The fill's width is not animated: the
+ * gradient inside is sized from it, so a width transition would slide the
+ * colours instead of revealing them.
+ */
+export function PollutantBar({ subIndex }: { subIndex: number | undefined }) {
+  const pct = severityBarWidth(subIndex);
+  const win = trackWindow(0, pct);
+  return (
+    <div
+      className="mt-3 h-1.5 w-full rounded-full bg-text-tertiary/15 ring-1 ring-wx-outline"
+      role="presentation"
+      aria-hidden="true"
+    >
+      {pct > 0 && (
+        <div
+          className="relative h-full overflow-hidden rounded-full"
+          style={{ width: `${win.width}%` }}
+        >
+          <div
+            className="absolute inset-y-0"
+            style={{
+              left: `${win.innerLeft}%`,
+              width: `${win.innerWidth}%`,
+              backgroundImage: blendGradient("aqi"),
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
 }
 
 type AQDetailsState =
@@ -164,16 +201,7 @@ export function AirQualityDetails({ lat, lon }: Props) {
                 {formatPollutant(value)}
               </p>
 
-              <div
-                className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-text-tertiary/15 ring-1 ring-wx-outline"
-                role="presentation"
-                aria-hidden="true"
-              >
-                <div
-                  className={`h-full ${severityBarClass(sub)} transition-all duration-500`}
-                  style={{ width: `${severityBarWidth(sub)}%` }}
-                />
-              </div>
+              <PollutantBar subIndex={sub} />
 
               {whoNote && <p className="dove mt-2">{whoNote}</p>}
             </article>

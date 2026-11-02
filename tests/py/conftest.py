@@ -20,7 +20,7 @@ if str(_api_root) not in sys.path:
     sys.path.insert(0, str(_api_root))
 
 # Evict the installed `py` module (single-file, not a package) so that
-# `from py._chat import ...` resolves to `api/py/_chat.py`.
+# `from py._db import ...` resolves to `api/py/_db.py`.
 for _key in list(sys.modules.keys()):
     if _key == "py" or _key.startswith("py."):
         del sys.modules[_key]
@@ -66,30 +66,6 @@ sys.modules["pymongo.errors"] = _mock_pymongo_errors
 
 import pytest  # noqa: E402
 from fastapi import Request  # noqa: E402
-
-
-@pytest.fixture(autouse=True)
-def _no_overpass_network(monkeypatch):
-    """Keep Overpass off the network in every test.
-
-    `_locations._reverse_geocode` now tries Overpass before Nominatim. Tests
-    that patch `py._locations._get_http` do not cover `py._overpass._get_http`,
-    so without this the suite makes real HTTP calls — slow, flaky, and dependent
-    on a public community endpoint.
-
-    Defaulting it to unreachable means the existing Nominatim-path assertions
-    keep testing exactly what they did before. Tests that want the Overpass path
-    patch `py._overpass._get_http` themselves, which overrides this.
-    """
-    try:
-        from py import _overpass
-    except Exception:  # pragma: no cover - module always importable in practice
-        return
-
-    def _unavailable():
-        raise RuntimeError("Overpass disabled in tests")
-
-    monkeypatch.setattr(_overpass, "_get_http", _unavailable)
 
 
 @pytest.fixture(autouse=True)
@@ -144,27 +120,13 @@ def mock_request():
 
 
 @pytest.fixture(autouse=True)
-def _fresh_find_only_cache():
-    """The /api/py/geo find-only fallback keeps a per-instance cell cache
-    (#302); clear it so one test's spot never answers another's lookup."""
-    try:
-        from py import _locations
-    except Exception:  # pragma: no cover
-        yield
-        return
-    _locations._find_only_cache.clear()
-    yield
-    _locations._find_only_cache.clear()
-
-
-@pytest.fixture(autouse=True)
 def _reset_shared_breakers():
     """Breakers are process-wide singletons: a test that opens one (the
     aviation breaker in the METAR and airport-discovery tests) must never leak
     an open circuit into a later test."""
     from py import _circuit_breaker as cb
 
-    names = ("aviation_breaker", "nominatim_breaker")
+    names = ("aviation_breaker",)
     for name in names:
         getattr(cb, name, None) and getattr(cb, name).reset()
     yield
