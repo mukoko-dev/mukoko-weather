@@ -21,7 +21,7 @@
 //!                               → {analysis, stats, cached, dataPoints}
 //! POST /v1/ai/explore/search    {query} → {locations, summary, source}
 //!                               (the model with two tools, else a text match)
-//! POST /v1/reports/clarify      {locationSlug, reportType} → {questions, source}
+//! POST /v1/reports/clarify      {reportType, locationSlug?} → {questions, source}
 //!                               (the report wizard's one or two follow-up
 //!                               questions: the model's, else a fixed pair)
 //! POST /internal/chat/completions  OpenAI-style {messages, tools?, max_tokens?, model?}
@@ -52,8 +52,6 @@ pub(crate) const FORECAST_BINDING: &str = "FORECAST";
 pub(crate) const CACHE_BINDING: &str = "AI_CACHE";
 pub(crate) const PLACES_BINDING: &str = "PLACES";
 const RATE_LIMITER: &str = "RATE_LIMITER";
-/// Bodies larger than this are refused before parsing.
-const MAX_BODY_BYTES: usize = 64 * 1024;
 /// The backend passthrough carries whole tool loops (forecasts as JSON).
 const MAX_INTERNAL_BODY_BYTES: usize = 512 * 1024;
 
@@ -102,8 +100,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     // are a location and a few ids.
     let cap = match route {
         Route::Completions => MAX_INTERNAL_BODY_BYTES,
-        Route::Clarify => weather_core::ai::clarify::MAX_BODY_BYTES,
-        _ => MAX_BODY_BYTES,
+        _ => weather_core::ai::public_body_cap(&path),
     };
     if text.len() > cap {
         return error(413, "payload_too_large", "The request body is too large.");

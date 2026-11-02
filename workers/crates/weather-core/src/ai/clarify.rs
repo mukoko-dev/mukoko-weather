@@ -14,11 +14,12 @@
 //!
 //! - **No client text reaches the prompt.** The Python put the name of the
 //!   place into the prompt after a database lookup, and the raw slug when it
-//!   found none. The Worker takes only a validated slug (`[a-z0-9-]{1,80}`) and
-//!   a report type from a list of 13, and names the place itself ([`place_name`]:
-//!   the seed catalogue's name, else the name part of a `{name}--{geohash}`
-//!   spot, else the slug's words). Nothing a visitor types can say anything to
-//!   the model.
+//!   found none. The Worker takes only a slug (lowercased, `[a-z0-9-]{1,80}`,
+//!   or none) and a report type from a list of 13, and names the place itself
+//!   ([`place_name`]: the seed catalogue's name, else the name part of a
+//!   `{name}--{cell or map ref}` slug, else the slug's words without a trailing
+//!   hash; "your area" with no slug). Nothing a visitor types can say anything
+//!   to the model.
 //! - **A question is cleaned.** The Python kept whatever followed the number:
 //!   an empty question (`1.` alone) and the bracket of `1)`. The Worker drops
 //!   empty questions, strips the bracket, removes emoji (the prompt says never
@@ -30,8 +31,7 @@
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::community::{fallback_questions, parse_questions, valid_report_type, CLARIFY_PROMPT};
-use crate::locations::parse_spot_slug;
+use crate::community::{fallback_questions, numbered_questions, valid_report_type, CLARIFY_PROMPT};
 use crate::places::resolve_seed;
 use crate::reference;
 use crate::slug::valid_slug;
@@ -52,13 +52,16 @@ pub const MAX_QUESTIONS: usize = 2;
 pub const MAX_QUESTION_CHARS: usize = 200;
 /// Longest place name put in the prompt (a slug is at most 80 characters).
 const MAX_NAME_CHARS: usize = 80;
+/// What the prompt calls the place when the request names none.
+pub const UNNAMED_PLACE: &str = "your area";
 
 /// Why a request is refused before anything else happens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Refusal {
-    /// Not a JSON object with two strings.
+    /// Not a JSON object with a `reportType` string (and, when there is one,
+    /// a string or null `locationSlug`).
     Body,
-    /// `locationSlug` is not a slug.
+    /// `locationSlug` is given but is not a slug.
     Slug,
     /// `reportType` is not one of the 13 report types.
     ReportType,
@@ -68,7 +71,7 @@ impl Refusal {
     /// The Python's words for an unknown type; the others are new.
     pub fn description(self) -> &'static str {
         match self {
-            Refusal::Body => "The body must be {\"locationSlug\", \"reportType\"}.",
+            Refusal::Body => "The body must be {\"reportType\"} with an optional \"locationSlug\".",
             Refusal::Slug => "`locationSlug` must be a location slug.",
             Refusal::ReportType => "Invalid report type",
         }
@@ -78,42 +81,76 @@ impl Refusal {
 /// A request that passed [`validate`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Valid {
-    pub slug: String,
+    /// The slug, trimmed and lowercased; `None` when the request has none
+    /// (a visitor with no place chosen yet still gets questions).
+    pub slug: Option<String>,
     pub report_type: String,
 }
 
-/// `{locationSlug, reportType}`: a slug and one of the 13 report types. Any
-/// other field is ignored (never read).
+/// `{reportType, locationSlug?}`: one of the 13 report types and, when given,
+/// a slug. An empty or null slug is no slug. Any other field is ignored
+/// (never read).
 pub fn validate(body: &Value) -> Result<Valid, Refusal> {
-    let (Some(slug), Some(report_type)) = (
-        body.get("locationSlug").and_then(Value::as_str),
-        body.get("reportType").and_then(Value::as_str),
-    ) else {
+    let Some(report_type) = body.get("reportType").and_then(Value::as_str) else {
         return Err(Refusal::Body);
+    };
+    let slug = match body.get("locationSlug") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(s.trim().to_lowercase()).filter(|s| !s.is_empty()),
+        Some(_) => return Err(Refusal::Body),
     };
     if !valid_report_type(report_type) {
         return Err(Refusal::ReportType);
     }
-    if !valid_slug(slug) {
+    if slug.as_deref().is_some_and(|s| !valid_slug(s)) {
         return Err(Refusal::Slug);
     }
     Ok(Valid {
-        slug: slug.to_owned(),
+        slug,
         report_type: report_type.to_owned(),
     })
 }
 
 /// The place's name for the prompt, from the slug alone: the seed
-/// catalogue's name; else the name part of a `{name}--{geohash}` spot; else
-/// the slug's words, capitalised. Only letters and digits (a slug has no
-/// other characters), so it is safe to place in a prompt.
-pub fn place_name(slug: &str) -> String {
+/// catalogue's name; else the words of the slug's name part (before the `--`
+/// of a `{name}--{geohash}` spot or a `{name}--osm-w123` map place) without a
+/// trailing platform hash (`harare-a1b2c3`); [`UNNAMED_PLACE`] with no slug or
+/// no name in it. Only letters and digits (a slug has no other characters), and
+/// never an id, so it is safe to place in a prompt and to show back.
+pub fn place_name(slug: Option<&str>) -> String {
+    let Some(slug) = slug else {
+        return UNNAMED_PLACE.to_owned();
+    };
     let named = resolve_seed(slug)
         .and_then(|p| p.name.clone())
-        .or_else(|| parse_spot_slug(slug).map(|(name, _, _)| name))
         .filter(|n| !n.trim().is_empty())
-        .unwrap_or_else(|| words(slug));
+        .unwrap_or_else(|| {
+            let name_part = match slug.rfind("--") {
+                Some(i) => &slug[..i],
+                None => slug,
+            };
+            words(without_hash(name_part))
+        });
+    if named.is_empty() {
+        return UNNAMED_PLACE.to_owned();
+    }
     named.chars().take(MAX_NAME_CHARS).collect()
+}
+
+/// `harare-a1b2c3` -> `harare`: the platform's six-hex-character suffix (it
+/// has a digit, or it could be a word like `facade`) after at least one word.
+fn without_hash(name: &str) -> &str {
+    match name.rsplit_once('-') {
+        Some((head, tail))
+            if !head.is_empty()
+                && tail.len() == 6
+                && tail.bytes().all(|b| b.is_ascii_hexdigit())
+                && tail.bytes().any(|b| b.is_ascii_digit()) =>
+        {
+            head
+        }
+        _ => name,
+    }
 }
 
 fn words(slug: &str) -> String {
@@ -179,12 +216,13 @@ pub fn fallback(report_type: &str) -> Answer {
     }
 }
 
-/// The questions in a model's answer: the numbered lines, at most two,
-/// cleaned ([`clean`]); the fixed pair when there are none.
+/// The questions in a model's answer: the first two numbered lines that are
+/// still a question once cleaned ([`clean`]); the fixed pair when there are
+/// none. A line that is dropped (emoji only, too long) does not use up one of
+/// the two places.
 pub fn from_model(text: &str, report_type: &str) -> Answer {
-    let questions: Vec<String> = parse_questions(text)
-        .iter()
-        .filter_map(|q| clean(q))
+    let questions: Vec<String> = numbered_questions(text)
+        .filter_map(|q| clean(&q))
         .take(MAX_QUESTIONS)
         .collect();
     if questions.is_empty() {
@@ -410,12 +448,12 @@ mod tests {
     }
 
     #[test]
-    fn a_request_is_a_slug_and_one_of_the_thirteen_types() {
+    fn a_request_is_a_report_type_and_an_optional_slug() {
         let ok = validate(&json!({"locationSlug": "harare", "reportType": "frost"})).unwrap();
         assert_eq!(
             ok,
             Valid {
-                slug: "harare".into(),
+                slug: Some("harare".into()),
                 report_type: "frost".into()
             }
         );
@@ -423,16 +461,27 @@ mod tests {
         let extra = json!({"locationSlug": "harare", "reportType": "fog", "description": "call me on 0771234567"});
         assert!(validate(&extra).is_ok());
 
+        // No place chosen yet (the store starts with ""), or none sent: the
+        // visitor still gets questions.
+        for slug in [json!(""), json!("  "), json!(null)] {
+            let body = json!({"locationSlug": slug, "reportType": "fog"});
+            assert_eq!(validate(&body).unwrap().slug, None, "{body}");
+        }
+        assert_eq!(validate(&json!({"reportType": "fog"})).unwrap().slug, None);
+        // A stored slug in the wrong case is the slug.
+        let upper = validate(&json!({"locationSlug": " Harare ", "reportType": "fog"}));
+        assert_eq!(upper.unwrap().slug.as_deref(), Some("harare"));
+
         for body in [
             json!(null),
             json!([]),
             json!("harare"),
             json!({}),
             json!({"locationSlug": "harare"}),
-            json!({"reportType": "fog"}),
             json!({"locationSlug": 5, "reportType": "fog"}),
+            json!({"locationSlug": ["harare"], "reportType": "fog"}),
             json!({"locationSlug": "harare", "reportType": 5}),
-            json!({"locationSlug": null, "reportType": "fog"}),
+            json!({"locationSlug": "harare", "reportType": null}),
         ] {
             assert_eq!(validate(&body), Err(Refusal::Body), "{body}");
         }
@@ -441,14 +490,14 @@ mod tests {
             validate(&json!({"locationSlug": "Not A Slug", "reportType": "sunny"})),
             Err(Refusal::ReportType)
         );
+        // A slug that is given must be a slug: nothing else is ever named.
         for slug in [
-            "",
-            "Harare",
             "ha rare",
             "ha_rare",
             "harare;drop",
             "{reportType}",
             "x\ny",
+            "caf\u{e9}",
             &"a".repeat(81),
         ] {
             let body = json!({"locationSlug": slug, "reportType": "fog"});
@@ -465,34 +514,85 @@ mod tests {
 
     #[test]
     fn the_place_is_named_from_the_slug_never_from_client_text() {
-        assert_eq!(place_name("harare"), "Harare");
+        let name = |s: &str| place_name(Some(s));
+        assert_eq!(name("harare"), "Harare");
         // A seed with a country suffix.
-        assert_eq!(place_name("nairobi-ke"), "Nairobi");
+        assert_eq!(name("nairobi-ke"), "Nairobi");
         // A spot: the name part of the slug.
-        assert_eq!(place_name("koh-samui--w4bd7qz"), "Koh Samui");
+        assert_eq!(name("koh-samui--w4bd7qz"), "Koh Samui");
         // Anything else: the slug's words.
+        assert_eq!(name("some-small-town"), "Some Small Town");
+        assert_eq!(name("x"), "X");
+        // A map place or a platform place never shows its id (it would also
+        // read as a phone number to the personal-data check).
         assert_eq!(
-            place_name("some-small-town-abc123"),
-            "Some Small Town Abc123"
+            name("canberra-residences--osm-w1234567890"),
+            "Canberra Residences"
         );
-        assert_eq!(place_name("x"), "X");
-        for slug in ["harare", "koh-samui--w4bd7qz", "some-small-town-abc123"] {
-            let n = place_name(slug);
+        assert_eq!(name("canberra-residences--osm-n12"), "Canberra Residences");
+        assert_eq!(name("some-small-town-a1b2c3"), "Some Small Town");
+        assert_eq!(name("harare-metro-123456"), "Harare Metro");
+        // A word that happens to be six hex letters is a word, as is a
+        // six-hex name on its own.
+        assert_eq!(name("sunny-facade"), "Sunny Facade");
+        assert_eq!(name("a1b2c3"), "A1b2c3");
+        // Nothing to name: the unnamed place, never an id.
+        assert_eq!(place_name(None), UNNAMED_PLACE);
+        assert_eq!(name("--ksy4dd7"), UNNAMED_PLACE);
+        assert_eq!(name("-"), UNNAMED_PLACE);
+        for slug in [
+            "harare",
+            "koh-samui--w4bd7qz",
+            "canberra-residences--osm-w1234567890",
+            "some-small-town-a1b2c3",
+        ] {
+            let n = name(slug);
             assert!(
                 n.chars().all(|c| c.is_alphanumeric() || c == ' '),
                 "{slug} -> {n}"
             );
+            assert!(
+                !crate::ai::pii::contains_personal_data(&n),
+                "{slug} -> {n} reads as personal data"
+            );
         }
-        assert!(place_name(&"a".repeat(80)).chars().count() <= MAX_NAME_CHARS);
+        assert!(name(&"a".repeat(80)).chars().count() <= MAX_NAME_CHARS);
 
         // The name goes into the prompt and nothing else of the request does.
-        let p = prompt(&place_name("koh-samui--w4bd7qz"), "heavy-rain");
+        let p = prompt(&name("koh-samui--w4bd7qz"), "heavy-rain");
         assert!(p
             .system
             .contains("report for Koh Samui. They selected: heavy-rain."));
         assert!(!p.system.contains('{'), "no placeholder is left");
         assert_eq!(p.user, "I'm reporting: heavy-rain");
         assert_eq!(p.max_tokens, 150);
+        let unnamed = prompt(&place_name(None), "fog");
+        assert!(unnamed
+            .system
+            .contains("report for your area. They selected: fog."));
+    }
+
+    #[test]
+    fn a_dropped_line_does_not_use_up_one_of_the_two_places() {
+        // The first numbered line is only an emoji, or too long: the next two
+        // real questions are the answer.
+        let emoji = from_model(
+            "1. \u{1F327}\n2. How heavy is the rain?\n3. Is it flooding?\n4. Fourth?",
+            "heavy-rain",
+        );
+        assert_eq!(
+            emoji.questions,
+            vec!["How heavy is the rain?", "Is it flooding?"]
+        );
+        let long = format!(
+            "1. {}?\n2. First?\n3. Second?\n4. Third?",
+            "very ".repeat(60)
+        );
+        assert_eq!(
+            from_model(&long, "fog").questions,
+            vec!["First?", "Second?"]
+        );
+        assert_eq!(from_model(&long, "fog").source, Source::Ai);
     }
 
     #[test]

@@ -1,6 +1,6 @@
 //! `POST /v1/reports/clarify`: the report wizard's follow-up questions.
 //!
-//! `{locationSlug, reportType}` → `{questions: [..], source: "ai" | "fallback"}`.
+//! `{reportType, locationSlug?}` → `{questions: [..], source: "ai" | "fallback"}`.
 //! The model gets a short prompt for the place and the report type and writes
 //! one or two questions (`weather_core::ai::clarify`, pinned to the former
 //! Python by `tests/fixtures/report-clarify.json`).
@@ -16,8 +16,8 @@
 //! - the model fails, is blocked by the gateway, answers with nothing usable,
 //!   or takes longer than [`MODEL_TIMEOUT`].
 //!
-//! Only a request that is not `{locationSlug, reportType}` (a slug, one of the
-//! 13 types) is refused, with `400`. No text from the visitor reaches the
+//! Only a request without one of the 13 report types, or with a
+//! `locationSlug` that is not a slug, is refused, with `400`. No text from the visitor reaches the
 //! prompt, so there is nothing to store and nothing to log: a failed call
 //! writes the route, class and stage only (`weather_core::ai::failure`).
 
@@ -56,7 +56,7 @@ pub async fn handle(
 }
 
 async fn answer(env: &Env, guardrails: Option<Compiled>, caller: &Caller, valid: &Valid) -> Answer {
-    let place = clarify::place_name(&valid.slug);
+    let place = clarify::place_name(valid.slug.as_deref());
     // Shamwari's rule: personal content never reaches cloud inference. The
     // name is made of the slug's words, so this only ever stops a slug that
     // spells a card number.

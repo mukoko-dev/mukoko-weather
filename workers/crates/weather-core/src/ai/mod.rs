@@ -31,6 +31,20 @@ pub fn is_forwarded_path(path: &str) -> bool {
         || ((path == "/v1/ai" || path.starts_with("/v1/ai/")) && !crate::reference::serves(path))
 }
 
+/// Largest body a public AI route takes: a location and a few ids.
+pub const MAX_PUBLIC_BODY_BYTES: usize = 64 * 1024;
+
+/// The largest body the public API relays, and the AI Worker takes, on a
+/// public route: a few kilobytes at most, and far less for the report
+/// wizard's slug and report type ([`clarify::MAX_BODY_BYTES`]).
+pub fn public_body_cap(path: &str) -> usize {
+    if path == clarify::PATH {
+        clarify::MAX_BODY_BYTES
+    } else {
+        MAX_PUBLIC_BODY_BYTES
+    }
+}
+
 /// The header `mukoko-weather-internal` passes on with the id of the signed-in
 /// person, once the app's server has checked the WorkOS session and the Worker
 /// has checked the service key. Keys the person's hourly model budget.
@@ -294,6 +308,14 @@ mod tests {
         ] {
             assert!(!is_forwarded_path(no), "{no}");
         }
+    }
+
+    #[test]
+    fn a_public_body_is_capped_and_the_wizards_far_lower() {
+        assert_eq!(public_body_cap("/v1/ai/chat"), 64 * 1024);
+        assert_eq!(public_body_cap("/v1/ai/explore/search"), 64 * 1024);
+        assert_eq!(public_body_cap(clarify::PATH), clarify::MAX_BODY_BYTES);
+        const { assert!(clarify::MAX_BODY_BYTES < MAX_PUBLIC_BODY_BYTES) };
     }
 
     #[test]

@@ -63,8 +63,6 @@ use worker::{event, Context, Env, Headers, Method, Request, RequestInit, Respons
 const FORECAST_BINDING: &str = "FORECAST";
 const AVIATION_BINDING: &str = "AVIATION";
 const AI_BINDING: &str = "AI_SERVICE";
-/// AI request bodies larger than this are refused here.
-const MAX_AI_BODY_BYTES: usize = 64 * 1024;
 /// Device profile bodies are a few hundred bytes.
 /// Device profile and community report bodies larger than this are refused here.
 const MAX_COMMUNITY_BODY_BYTES: usize = 16 * 1024;
@@ -359,13 +357,7 @@ fn is_ai_path(path: &str) -> bool {
 /// its answer back unchanged.
 async fn forward_ai(req: &mut Request, env: &Env) -> Result<Response> {
     let body = req.text().await.unwrap_or_default();
-    // The wizard's request is a slug and a report type.
-    let cap = if req.path() == weather_core::ai::clarify::PATH {
-        weather_core::ai::clarify::MAX_BODY_BYTES
-    } else {
-        MAX_AI_BODY_BYTES
-    };
-    if body.len() > cap {
+    if body.len() > weather_core::ai::public_body_cap(&req.path()) {
         return error(413, "payload_too_large", "The request body is too large.");
     }
     let headers = Headers::new();
