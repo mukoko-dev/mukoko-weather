@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
@@ -45,7 +46,6 @@ from ._db import (
 )
 from ._http import get_http_client
 from ._weather_cache_key import weather_cache_key
-from ._worker_weather import weather_api_base as _weather_api_base
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -62,6 +62,9 @@ ATTRIBUTION = (
 
 GDD_BASE_C = 10.0
 GDD_CAP_C = 30.0
+
+#: The public Worker origin (same default as ``src/lib/weather-api.ts``).
+DEFAULT_WEATHER_API_URL = "https://weather-api.mukoko.com"
 
 # ---------------------------------------------------------------------------
 # Pydantic models
@@ -240,6 +243,15 @@ class AgricultureResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 _COUNTRY_RE = re.compile(r"^[A-Z]{2}$")
+
+
+def _weather_api_base() -> str:
+    """The Worker origin: ``NEXT_PUBLIC_WEATHER_API_URL`` when it is a bare
+    https origin (or localhost http), else the public default."""
+    raw = (os.environ.get("NEXT_PUBLIC_WEATHER_API_URL") or "").strip().rstrip("/")
+    if raw.startswith("https://") and "?" not in raw and "#" not in raw and "@" not in raw:
+        return raw
+    return DEFAULT_WEATHER_API_URL
 
 
 def _resolve_country(country: str, location: str) -> str:

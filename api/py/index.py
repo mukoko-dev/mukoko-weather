@@ -24,8 +24,6 @@ from ._logging import configure_logging
 
 configure_logging()
 
-from ._chat import router as chat_router
-from ._embeddings import router as embeddings_router
 from ._ai_followup import router as ai_followup_router
 from ._reports import router as reports_router
 from ._agriculture import router as agriculture_router
@@ -85,8 +83,6 @@ app.add_middleware(
 # Mount routers
 # ---------------------------------------------------------------------------
 
-app.include_router(chat_router)
-app.include_router(embeddings_router)
 app.include_router(ai_followup_router)
 app.include_router(reports_router)
 app.include_router(agriculture_router)

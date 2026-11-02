@@ -154,15 +154,6 @@ class TestRouterMounting:
         collect(app.routes)
         return paths
 
-
-    def test_chat_router_mounted(self):
-        paths = self._get_route_paths()
-        assert "/api/py/chat" in paths
-
-    def test_embeddings_router_mounted(self):
-        paths = self._get_route_paths()
-        assert "/api/py/embeddings/status" in paths
-
     def test_weather_and_air_quality_routes_are_gone(self):
         """They live on the Rust Worker (/v1/weather, /v1/air-quality)."""
         paths = self._get_route_paths()
@@ -172,7 +163,6 @@ class TestRouterMounting:
     def test_the_summary_route_is_gone_it_runs_on_the_ai_worker(self):
         paths = self._get_route_paths()
         assert "/api/py/ai" not in paths
-
 
     def test_ai_followup_router_mounted(self):
         paths = self._get_route_paths()
