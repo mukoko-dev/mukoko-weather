@@ -25,7 +25,7 @@
 //! GET /v1/locations, /v1/search, /v1/geo, /v1/history   places (mukoko-weather-places)
 //! POST /v1/devices, GET|PATCH /v1/devices/{id}      device preference profiles
 //! POST|GET /v1/reports, POST /v1/reports/upvote     community weather reports
-//! POST /v1/ai/{followup,chat,history/analyze}   Shamwari Weather (the weather summary is not public: it is
+//! POST /v1/ai/{followup,chat,history/analyze,explore/search}   Shamwari Weather (the weather summary is not public: it is
 //!                                               a signed-in route of the app, reached through mukoko-weather-internal)
 //! GET /health
 //! ```
@@ -75,28 +75,13 @@ const DEFAULT_ELEVATION_M: f64 = 1200.0;
 pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let origin = req.headers().get("Origin")?.unwrap_or_default();
     let cors_origin = cors::allowed_origin(&env, &origin);
-    // The documented public read routes are open to any website (a GET, no
-    // credentials), as the Python routes they replace were. A listed origin
-    // still gets its own origin echoed; everything else keeps the allowlist.
-    // Every CORS decision is `weather_core::cors::cors_decision`, made on the
-    // method the page wants (a preflight names it in `Access-Control-Request-
-    // Method`), so a preflight for a write never gets `*`.
-    let path = req.path();
-    let method = req.method();
-    let requested = req.headers().get("Access-Control-Request-Method")?;
-    let decision = weather_core::cors::cors_decision(
-        weather_core::cors::cors_method(method.as_ref(), requested.as_deref()),
-        &path,
-        cors_origin.as_deref(),
-    );
-    let allow_origin = decision.allow_origin;
-    let is_ai = is_ai_path(&path);
+    let is_ai = is_ai_path(&req.path());
 
     let resp = if req.method() == Method::Options {
         cors::preflight(
-            allow_origin.is_some(),
-            decision.methods,
-            decision.allow_headers,
+            cors_origin.is_some(),
+            "GET, POST, PATCH, OPTIONS",
+            "Content-Type, Authorization, X-Mukoko-Client, X-API-Key, X-Client-Id, X-Client-Secret",
         )
     } else if is_ai {
         if req.method() != Method::Post {
@@ -129,7 +114,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     }?;
     cors::apply(
         resp,
-        allow_origin.as_deref(),
+        cors_origin.as_deref(),
         Some(
             "X-Cache, X-Weather-Provider, X-Weather-Blend, X-Enrichment, X-Current-Source, \
              X-Fetched-At, X-AQ-Source",
@@ -361,6 +346,10 @@ async fn forward_ai(req: &mut Request, env: &Env) -> Result<Response> {
     if let Some(ip) = req.headers().get("CF-Connecting-IP")? {
         headers.set("CF-Connecting-IP", &ip)?;
     }
+    // The AI Worker budgets the model calls per client (an hour of searches
+    // and analyses each), so it must key by the visitor, not by this Worker:
+    // the header every other relay stamps, read when the first is not there.
+    headers.set("X-Mukoko-Client-IP", &client_ip(req))?;
     let mut init = RequestInit::new();
     init.with_method(Method::Post)
         .with_headers(headers)

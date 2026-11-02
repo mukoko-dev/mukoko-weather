@@ -82,7 +82,14 @@ describe("the model budget", () => {
   });
 
   it("only the signed-in routes spend a budget (the public ones keep the per-minute limiter)", () => {
-    expect(aiLib).toContain("matches!(route, Route::Summary).then(");
+    // The summary is keyed by the signed-in person's id; the public history
+    // analysis and the AI search are keyed by the visitor's address. Chat has
+    // no budget of its own (the per-minute limiter), so no caller is built.
+    expect(aiLib).toContain("Route::Summary => {");
+    expect(aiLib).toContain(
+      "Route::History => Some(Caller::from_request(&req)),",
+    );
+    expect(aiLib).toContain("_ => None,");
     expect(aiLib).toContain("Route::Completions | Route::Summary");
   });
 });
