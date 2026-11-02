@@ -7,27 +7,29 @@
 //! - mukoko-api, which binds to this Worker for consumer reuse.
 //!
 //! ```text
-//! GET /v1/weather?lat=&lon=[&model=m][&models=a,b]   full WeatherData, the shape of /api/py/weather (`model` = the caller's own baseline model)
+//! GET /v1/weather?lat=&lon=[&model=m][&models=a,b]   full WeatherData, the shape of Python /weather (`model` = the caller's own baseline model)
 //! GET /v1/forecast?location=|lat=&lon=[&days=1..7]   the daily forecast contract
 //! GET /v1/locations/profile?slug=|lat=&lon=[&country=]   a place's knowledge (seasons, crops, climate, soil) and today's context
-//! GET /v1/agriculture?lat=&lon=[&location=][&country=][&crops=]   farm windows, rain, soil, water balance, frost and heat risk (the shape of /api/py/agriculture)
-//! GET /v1/air-quality?lat=&lon=                     the EPA AQI, the shape of /api/py/airquality
-//! GET /v1/air-quality/grid?lat=&lon=[&radiusKm=&n=]  US AQI on an n x n grid (the shape of /api/py/airquality/grid)
-//! GET /v1/haze?lat=&lon=                             haze panel data (the shape of /api/py/haze)
-//! GET /v1/normals?lat=&lon=[&date=]                  climate normals (the shape of /api/py/normals)
+//! GET /v1/agriculture?lat=&lon=[&location=][&country=][&crops=]   farm windows, rain, soil, water balance, frost and heat risk (the shape of Python /agriculture)
+//! GET /v1/air-quality?lat=&lon=                     the EPA AQI, the shape of Python /airquality
+//! GET /v1/air-quality/grid?lat=&lon=[&radiusKm=&n=]  US AQI on an n x n grid (the shape of Python /airquality/grid)
+//! GET /v1/haze?lat=&lon=                             haze panel data (the shape of Python /haze)
+//! GET /v1/normals?lat=&lon=[&date=]                  climate normals (the shape of Python /normals)
 //! GET /v1/normals/monthly?lat=&lon=                  the twelve monthly normals (temperature, rainfall, rainy days)
-//! GET /v1/enso                                       El Nino / La Nina phase (the shape of /api/py/enso)
-//! GET /v1/sg-air?lat=&lon=                           official Singapore NEA air quality (the shape of /api/py/sg-air)
-//! GET /v1/aviation/nearest-metar?lat=&lon=           nearest airport with a recent METAR (the shape of /api/py/aviation/nearest-metar)
-//! GET /v1/metar?icao=                                METARs and TAF, the shape of /api/py/metar
+//! GET /v1/enso                                       El Nino / La Nina phase (the shape of Python /enso)
+//! GET /v1/sg-air?lat=&lon=                           official Singapore NEA air quality (the shape of Python /sg-air)
+//! GET /v1/aviation/nearest-metar?lat=&lon=           nearest airport with a recent METAR (the shape of Python /aviation/nearest-metar)
+//! GET /v1/metar?icao=                                METARs and TAF, the shape of Python /metar
 //! GET /v1/airports/nearest?lat=&lon=[&count=][&maxDistanceKm=]
-//!                                                    the shape of /api/py/airports/nearest
+//!                                                    the shape of Python /airports/nearest
 //! GET /v1/locations, /v1/search, /v1/geo, /v1/history   places (mukoko-weather-places)
 //! POST /v1/devices, GET|PATCH /v1/devices/{id}      device preference profiles
 //! POST|GET /v1/reports, POST /v1/reports/upvote     community weather reports
 //! POST /v1/ai/{chat,history/analyze,explore/search}   Shamwari Weather (the summary, the follow-up and the agriculture
 //!                                               explanation are not public: they are signed-in routes of the app,
 //!                                               reached through mukoko-weather-internal)
+//! POST /v1/reports/clarify                      the report wizard's follow-up questions (the AI Worker, which
+//!                                               answers a fixed pair whenever the model cannot)
 //! GET /health
 //! ```
 //!
@@ -61,8 +63,6 @@ use worker::{event, Context, Env, Headers, Method, Request, RequestInit, Respons
 const FORECAST_BINDING: &str = "FORECAST";
 const AVIATION_BINDING: &str = "AVIATION";
 const AI_BINDING: &str = "AI_SERVICE";
-/// AI request bodies larger than this are refused here.
-const MAX_AI_BODY_BYTES: usize = 64 * 1024;
 /// Device profile bodies are a few hundred bytes.
 /// Device profile and community report bodies larger than this are refused here.
 const MAX_COMMUNITY_BODY_BYTES: usize = 16 * 1024;
@@ -346,17 +346,18 @@ async fn forward_community(req: &mut Request, env: &Env) -> Result<Response> {
     }
 }
 
-/// Shamwari's POST routes. The two reference-data GETs under `/v1/ai/` are
-/// answered here, not forwarded.
+/// Shamwari's POST routes and the report wizard's follow-up questions. The two
+/// reference-data GETs under `/v1/ai/` are answered here, not forwarded
+/// (`weather_core::ai::is_forwarded_path`).
 fn is_ai_path(path: &str) -> bool {
-    (path == "/v1/ai" || path.starts_with("/v1/ai/")) && !reference::serves(path)
+    weather_core::ai::is_forwarded_path(path)
 }
 
 /// Pass a Shamwari request to `mukoko-weather-ai` with the client's IP, and
 /// its answer back unchanged.
 async fn forward_ai(req: &mut Request, env: &Env) -> Result<Response> {
     let body = req.text().await.unwrap_or_default();
-    if body.len() > MAX_AI_BODY_BYTES {
+    if body.len() > weather_core::ai::public_body_cap(&req.path()) {
         return error(413, "payload_too_large", "The request body is too large.");
     }
     let headers = Headers::new();

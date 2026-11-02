@@ -194,7 +194,7 @@ describe("saved-location surfaces use radius TOKENS only", () => {
     "src/components/weather/LocationWeatherCard.tsx",
     "src/components/weather/MyWeatherModal.tsx",
     "src/components/weather/LocationPromptCard.tsx",
-    "src/components/layout/LocationPager.tsx",
+    "src/components/layout/PlaceLane.tsx",
     "src/components/ui/mzizi-bottom-nav.tsx",
     "src/app/locations/LocationsClient.tsx",
     "src/app/locations/LocationsMenu.tsx",

@@ -1,8 +1,8 @@
 /**
  * Haze panel helpers — pure, framework-free.
  *
- * Vocabulary mirrors `api/py/_haze.py` (levels, types, season + official
- * shapes). Keep the two in sync. Severity classes are static lookups so
+ * Vocabulary mirrors the Worker's `weather_core::haze` (levels, types, season +
+ * official shapes). Keep the two in sync. Severity classes are static lookups so
  * Tailwind can see every class name at build time.
  */
 

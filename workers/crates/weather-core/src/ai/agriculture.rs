@@ -6,7 +6,7 @@
 //! Ported from `api/py/_agriculture.py` (`data_brief`, `fallback_text`,
 //! `farming_activities`, the user prompt of `agriculture_ai`) and pinned to it
 //! by `tests/fixtures/ai-agriculture.json`, whose `expected` values
-//! `scripts/gen_ai_agriculture_fixtures.py` produced by running that Python
+//! the (since deleted, #333) `scripts/gen_ai_agriculture_fixtures.py` produced by running that Python
 //! over the answers pinned in `tests/fixtures/agriculture-analysis.json`.
 //!
 //! The farm data is handled as JSON (`serde_json::Value`): it is the forecast

@@ -55,7 +55,7 @@ pub struct CloudLayer {
     pub base_ft: Option<i64>,
 }
 
-/// One decoded observation, in the shape `/api/py/metar` serves.
+/// One decoded observation, in the shape Python `/metar` serves.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MetarObs {
     pub time: String,

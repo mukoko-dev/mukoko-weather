@@ -1,5 +1,5 @@
 //! Weather map overlay tiles, ported from `api/py/_tiles.py`
-//! (`/api/py/map-tiles`).
+//! (Python `/map-tiles`).
 //!
 //! The tile Worker proxies Tomorrow.io overlay tiles so the provider key
 //! stays server-side. This module holds the parts that need no runtime: the

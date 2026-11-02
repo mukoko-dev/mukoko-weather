@@ -26,17 +26,8 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: "pip"
-
       - name: Install Node dependencies
         run: npm ci
-
-      - name: Install Python dependencies
-        run: pip install -r requirements.txt
 
       - name: Lint
         run: npm run lint:eslint
@@ -46,6 +37,3 @@ jobs:
 
       - name: TypeScript tests
         run: npm test
-
-      - name: Python tests
-        run: python -m pytest tests/py/ -v
