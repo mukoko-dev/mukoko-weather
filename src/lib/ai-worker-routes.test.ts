@@ -27,6 +27,7 @@ const aiProfile = read("workers/ai/src/profile.rs");
 const forecastLib = read("workers/forecast/src/lib.rs");
 const forecastProfile = read("workers/forecast/src/profile.rs");
 const publicApi = read("workers/public-api/src/lib.rs");
+const aiRoutes = read("workers/crates/weather-core/src/ai/mod.rs");
 
 describe("the AI summary is not public", () => {
   it("the AI Worker serves them on /internal/* only", () => {
@@ -43,8 +44,15 @@ describe("the AI summary is not public", () => {
     expect(aiLib).not.toMatch(/"\/v1\/ai"\s*(\||=>)/);
   });
 
-  it("the public API forwards /v1/ai/* only and builds its own request", () => {
-    expect(publicApi).toContain('path.starts_with("/v1/ai/")');
+  it("the public API forwards /v1/ai/* (and the report questions) only and builds its own request", () => {
+    // The set it forwards is one pure function, tested natively
+    // (`weather_core::ai::is_forwarded_path`): /v1/ai/* and the wizard's
+    // /v1/reports/clarify, never an /internal/ path.
+    expect(publicApi).toContain("weather_core::ai::is_forwarded_path(path)");
+    const rule = /pub fn is_forwarded_path[\s\S]*?\n}\n/.exec(aiRoutes)?.[0];
+    expect(rule).toContain('path.starts_with("/v1/ai/")');
+    expect(rule).toContain("path == clarify::PATH");
+    expect(rule).not.toContain("/internal");
     // The path it forwards is the visitor's, so /internal/* is unreachable.
     expect(publicApi).toContain('format!("https://ai{}", req.path())');
     expect(publicApi).not.toContain("/internal/summary");

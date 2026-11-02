@@ -24,7 +24,6 @@ from ._logging import configure_logging
 
 configure_logging()
 
-from ._reports import router as reports_router
 from ._db import get_db
 
 # ---------------------------------------------------------------------------
@@ -78,10 +77,9 @@ app.add_middleware(
 )
 
 # ---------------------------------------------------------------------------
-# Mount routers
+# No routers are left: every route is a Rust Worker route (#333). The report
+# wizard's follow-up questions were the last, now `POST /v1/reports/clarify`.
 # ---------------------------------------------------------------------------
-
-app.include_router(reports_router)
 
 
 # ---------------------------------------------------------------------------

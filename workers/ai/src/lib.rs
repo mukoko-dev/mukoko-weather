@@ -21,6 +21,9 @@
 //!                               → {analysis, stats, cached, dataPoints}
 //! POST /v1/ai/explore/search    {query} → {locations, summary, source}
 //!                               (the model with two tools, else a text match)
+//! POST /v1/reports/clarify      {reportType, locationSlug?} → {questions, source}
+//!                               (the report wizard's one or two follow-up
+//!                               questions: the model's, else a fixed pair)
 //! POST /internal/chat/completions  OpenAI-style {messages, tools?, max_tokens?, model?}
 //!                               → an OpenAI chat completion. Only from
 //!                                 mukoko-weather-internal (service key checked
@@ -34,6 +37,7 @@
 //! guardrails_unavailable`. Messages carrying personal data are refused
 //! before any call (`422 personal_data_detected`).
 
+mod clarify;
 mod explore;
 mod gateway;
 mod handlers;
@@ -48,8 +52,6 @@ pub(crate) const FORECAST_BINDING: &str = "FORECAST";
 pub(crate) const CACHE_BINDING: &str = "AI_CACHE";
 pub(crate) const PLACES_BINDING: &str = "PLACES";
 const RATE_LIMITER: &str = "RATE_LIMITER";
-/// Bodies larger than this are refused before parsing.
-const MAX_BODY_BYTES: usize = 64 * 1024;
 /// The backend passthrough carries whole tool loops (forecasts as JSON).
 const MAX_INTERNAL_BODY_BYTES: usize = 512 * 1024;
 
@@ -76,6 +78,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
         "/v1/ai/chat" => Route::Chat,
         "/v1/ai/history/analyze" => Route::History,
         "/v1/ai/explore/search" => Route::Explore,
+        "/v1/reports/clarify" => Route::Clarify,
         "/internal/chat/completions" => Route::Completions,
         _ => return error(404, "not_found", "No such route."),
     };
@@ -95,10 +98,9 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     let text = req.text().await.unwrap_or_default();
     // Only the backend passthrough carries whole tool loops; the app's routes
     // are a location and a few ids.
-    let cap = if matches!(route, Route::Completions) {
-        MAX_INTERNAL_BODY_BYTES
-    } else {
-        MAX_BODY_BYTES
+    let cap = match route {
+        Route::Completions => MAX_INTERNAL_BODY_BYTES,
+        _ => weather_core::ai::public_body_cap(&path),
     };
     if text.len() > cap {
         return error(413, "payload_too_large", "The request body is too large.");
@@ -112,6 +114,13 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     if matches!(route, Route::Explore) {
         let guardrails = gateway::guardrails(&env).await;
         return explore::handle(&env, guardrails, &Caller::from_request(&req), body).await;
+    }
+
+    // The report questions answer a fixed pair when the model cannot be used,
+    // so a missing guardrails block is not an error here either.
+    if matches!(route, Route::Clarify) {
+        let guardrails = gateway::guardrails(&env).await;
+        return clarify::handle(&env, guardrails, &Caller::from_request(&req), body).await;
     }
 
     // Fail closed: no guardrails block, no model call on any route.
@@ -154,7 +163,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
         Route::History => handlers::history(&ctx, body).await,
         Route::Completions => passthrough::handle(&env, &ctx.guardrails, &body).await,
         // Answered above, before the guardrails gate.
-        Route::Explore => error(404, "not_found", "No such route."),
+        Route::Explore | Route::Clarify => error(404, "not_found", "No such route."),
     }
 }
 
@@ -165,6 +174,7 @@ enum Route {
     Chat,
     History,
     Explore,
+    Clarify,
     Completions,
 }
 

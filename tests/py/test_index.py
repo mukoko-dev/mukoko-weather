@@ -166,12 +166,12 @@ class TestRouterMounting:
         for gone in ("/api/py/ai", "/api/py/ai/followup", "/api/py/ai/agriculture"):
             assert gone not in paths
 
-    def test_reports_router_mounted(self):
-        # Only the follow-up questions are left; submit, list and upvote are
-        # the Rust Worker's /v1/reports.
+    def test_the_reports_routes_are_gone_they_run_on_the_workers(self):
+        # Submit, list, upvote and the wizard's follow-up questions are the
+        # Rust Workers' /v1/reports and /v1/reports/clarify.
         paths = self._get_route_paths()
-        assert "/api/py/reports/clarify" in paths
-        assert "/api/py/reports" not in paths
+        for gone in ("/api/py/reports", "/api/py/reports/upvote", "/api/py/reports/clarify"):
+            assert gone not in paths
 
     def test_health_endpoint_mounted(self):
         paths = self._get_route_paths()

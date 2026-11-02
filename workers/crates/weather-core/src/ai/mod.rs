@@ -10,6 +10,7 @@
 //! compiled in: the Workers never read a database outside their own stores.
 
 pub mod agriculture;
+pub mod clarify;
 pub mod completions;
 pub mod explore;
 pub mod failure;
@@ -20,6 +21,29 @@ pub mod prompts;
 pub mod summary;
 
 use serde::{Deserialize, Serialize};
+
+/// The paths `mukoko-weather-api` forwards to the AI Worker (POST only): the
+/// Shamwari routes under `/v1/ai/` (the two reference-data GETs there are
+/// answered by the API itself, [`crate::reference::serves`]) and the report
+/// wizard's follow-up questions ([`clarify::PATH`]).
+pub fn is_forwarded_path(path: &str) -> bool {
+    path == clarify::PATH
+        || ((path == "/v1/ai" || path.starts_with("/v1/ai/")) && !crate::reference::serves(path))
+}
+
+/// Largest body a public AI route takes: a location and a few ids.
+pub const MAX_PUBLIC_BODY_BYTES: usize = 64 * 1024;
+
+/// The largest body the public API relays, and the AI Worker takes, on a
+/// public route: a few kilobytes at most, and far less for the report
+/// wizard's slug and report type ([`clarify::MAX_BODY_BYTES`]).
+pub fn public_body_cap(path: &str) -> usize {
+    if path == clarify::PATH {
+        clarify::MAX_BODY_BYTES
+    } else {
+        MAX_PUBLIC_BODY_BYTES
+    }
+}
 
 /// The header `mukoko-weather-internal` passes on with the id of the signed-in
 /// person, once the app's server has checked the WorkOS session and the Worker
@@ -254,6 +278,44 @@ mod tests {
             vec!["running", "drone-flying", "football", "mining", "driving"]
         );
         assert_eq!(activity_label("drone-flying"), "drone flying");
+    }
+
+    #[test]
+    fn the_api_forwards_the_shamwari_routes_and_the_report_questions() {
+        for yes in [
+            "/v1/ai",
+            "/v1/ai/chat",
+            "/v1/ai/history/analyze",
+            "/v1/ai/explore/search",
+            "/v1/reports/clarify",
+        ] {
+            assert!(is_forwarded_path(yes), "{yes}");
+        }
+        // The reference-data GETs under /v1/ai are the API's own.
+        assert!(!is_forwarded_path("/v1/ai/prompts"));
+        assert!(!is_forwarded_path("/v1/ai/suggested-rules"));
+        // The report routes the places Worker serves are not forwarded here,
+        // and neither is anything near the clarify path.
+        for no in [
+            "/v1/reports",
+            "/v1/reports/upvote",
+            "/v1/reports/clarify/",
+            "/v1/reports/clarify/x",
+            "/v1/reports/clarification",
+            "/v1/weather",
+            "/v1/airport",
+            "/internal/chat/completions",
+        ] {
+            assert!(!is_forwarded_path(no), "{no}");
+        }
+    }
+
+    #[test]
+    fn a_public_body_is_capped_and_the_wizards_far_lower() {
+        assert_eq!(public_body_cap("/v1/ai/chat"), 64 * 1024);
+        assert_eq!(public_body_cap("/v1/ai/explore/search"), 64 * 1024);
+        assert_eq!(public_body_cap(clarify::PATH), clarify::MAX_BODY_BYTES);
+        const { assert!(clarify::MAX_BODY_BYTES < MAX_PUBLIC_BODY_BYTES) };
     }
 
     #[test]
