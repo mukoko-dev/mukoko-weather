@@ -8,9 +8,10 @@ import {
   type ReactNode,
 } from "react";
 import dynamic from "next/dynamic";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { LocationSkeleton } from "@/components/weather/LocationSkeleton";
 import { PlaceLoadNotice } from "@/components/weather/PlaceLoadNotice";
+import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import type { AISummaryUser } from "@/components/weather/AISummary";
 import { fetchHomeWeather } from "@/lib/home-weather";
 import {
@@ -47,14 +48,14 @@ function browserDeps(): PlaceDeps {
   return {
     now: () => Date.now(),
     recall: (slug) => recallPlace(slug),
-    fetchWeather: (lat, lon) => fetchHomeWeather(lat, lon),
+    fetchWeather: (lat, lon, signal) => fetchHomeWeather(lat, lon, signal),
     resolve: (slug, signal) => resolvePlaceSeed(slug, signal),
     history: {
       path: () => window.location.pathname,
       push: (path) => window.history.pushState(null, "", path),
       replace: (path) => window.history.replaceState(null, "", path),
     },
-    onShow({ seed, url }) {
+    onShow({ seed, isHome, url }) {
       const slug = seed.location.slug;
       useAppStore.getState().setSelectedLocation(slug);
       try {
@@ -62,10 +63,14 @@ function browserDeps(): PlaceDeps {
       } catch {
         /* no document */
       }
+      // The place the visitor is on is the one `/` should open on next time.
+      // Written here, not only by the edge proxy: a stored page is served by
+      // the service worker without reaching the proxy, and the proxy now
+      // sets the cookie only when its value changes, so this also keeps its
+      // 30 days fresh.
+      if (!isHome) writeLastLocationCookie(slug);
       if (url === "none") return;
-      // A switch the visitor made: remember it for the next visit and start
-      // the new place at the top of the page.
-      writeLastLocationCookie(slug);
+      // A switch the visitor made: start the new place at the top of the page.
       try {
         window.scrollTo({ top: 0, behavior: "auto" });
       } catch {
@@ -75,8 +80,8 @@ function browserDeps(): PlaceDeps {
   };
 }
 
-/** Paths a hard reload was already tried for (never loops). */
-const reloaded = new Set<string>();
+/** Paths the router was already asked to render once (never loops). */
+const replaced = new Set<string>();
 
 export interface PlaceStageApi {
   state: PlaceState;
@@ -107,10 +112,11 @@ export function usePlaceStage(
     controller.getState,
   );
   const pathname = usePathname();
+  const router = useRouter();
 
   useEffect(() => {
     // Fetch the dashboard's code now; it renders as soon as a view exists.
-    void loadDashboard();
+    void loadDashboard().catch(() => {});
     const unregister = registerPlaceStage({
       canShow: (target) => target.kind === "slug" || !!controller.homeSeed(),
       show: (target) => controller.showTarget(target, "push"),
@@ -125,17 +131,17 @@ export function usePlaceStage(
   useEffect(() => {
     let live = true;
     void controller.reconcile(pathname).then((handled) => {
-      // A place URL this stage cannot show (and no router will): load it
-      // from the server, once.
-      if (live && !handled && !reloaded.has(pathname)) {
-        reloaded.add(pathname);
-        window.location.reload();
+      // A place URL this stage cannot show: let the router render it from the
+      // server (a soft navigation, once per path), never a page reload.
+      if (live && !handled && !replaced.has(pathname)) {
+        replaced.add(pathname);
+        router.replace(pathname);
       }
     });
     return () => {
       live = false;
     };
-  }, [controller, pathname]);
+  }, [controller, pathname, router]);
 
   const retry = useCallback(() => void controller.retry(), [controller]);
   return { state, controller, retry };
@@ -165,18 +171,20 @@ export function PlaceView({
   return (
     <>
       {view ? (
-        <WeatherDashboard
-          weather={view.weather}
-          location={view.location}
-          usingFallback={view.usingFallback}
-          frostAlert={view.frostAlert}
-          season={view.season}
-          countryName={view.countryName}
-          user={user}
-          isCurrentLocation={isCurrentLocation && state.isHome}
-          device={device}
-          onRetry={retry}
-        />
+        <ChartErrorBoundary name="weather dashboard">
+          <WeatherDashboard
+            weather={view.weather}
+            location={view.location}
+            usingFallback={view.usingFallback}
+            frostAlert={view.frostAlert}
+            season={view.season}
+            countryName={view.countryName}
+            user={user}
+            isCurrentLocation={isCurrentLocation && state.isHome}
+            device={device}
+            onRetry={retry}
+          />
+        </ChartErrorBoundary>
       ) : (
         <>
           {/* The page's heading is server-rendered for crawlers and screen

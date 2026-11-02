@@ -26,10 +26,13 @@ import { LocationPromptCard } from "@/components/weather/LocationPromptCard";
 import { PlaceView, usePlaceStage } from "@/components/weather/PlaceStage";
 import type { AISummaryUser } from "@/components/weather/AISummary";
 import { seedOfPayload, type PlaceSeed } from "@/lib/place-controller";
-import { seedFor } from "@/lib/place-resolve";
+import { resolvePlaceSeed, seedFor } from "@/lib/place-resolve";
 import { recallPlace } from "@/lib/rxdb/weather-places";
 import { readStorage, writeStorage } from "@/lib/safe-storage";
-import { LAST_HOME_PLACE_KEY } from "@/lib/last-location";
+import {
+  LAST_HOME_PLACE_KEY,
+  readLastLocationFromCookieString,
+} from "@/lib/last-location";
 
 /**
  * The place `/` starts on — the server seeds this from the lastLocation
@@ -129,6 +132,33 @@ export function CurrentLocationHome({ initial, user }: Props) {
       const stored = await recallPlace(slug);
       if (cancelled || !stored) return;
       await controller.showHome(seedOfPayload(stored.payload));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [initial, controller]);
+
+  // A copy of this page kept by the service worker was seeded from the
+  // lastLocation cookie as it was when the copy was stored. If the visitor
+  // has been to other places since, the cookie is newer: show that place, as
+  // a fresh server render would have. (Equal to the seed on a fresh render,
+  // so this does nothing there.) Never overrides a GPS result that landed
+  // first.
+  useEffect(() => {
+    if (!initial) return;
+    const slug = readLastLocationFromCookieString(document.cookie);
+    if (!slug || slug === initial.location.slug) return;
+    let cancelled = false;
+    void (async () => {
+      const stored = await recallPlace(slug);
+      const seed = stored
+        ? seedOfPayload(stored.payload)
+        : await resolvePlaceSeed(slug);
+      if (cancelled || !seed) return;
+      if (controller.homeSeed()?.location.slug !== initial.location.slug) {
+        return;
+      }
+      await controller.showHome(seed);
     })();
     return () => {
       cancelled = true;

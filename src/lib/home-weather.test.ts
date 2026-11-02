@@ -59,3 +59,36 @@ describe("fetchModelWeather (issue #246)", () => {
     expect(baseline).toBeNull();
   });
 });
+
+describe("fetchHomeWeather abandons a request the visitor left (issue #414)", () => {
+  it("rejects on abort instead of falling through to Open-Meteo from the phone", async () => {
+    const { fetchHomeWeather } = await import("./home-weather");
+    const controller = new AbortController();
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () =>
+          reject(new DOMException("aborted", "AbortError")),
+        );
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const pending = fetchHomeWeather(-17.83, 31.05, controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toBeTruthy();
+    // One request to the Worker; no direct provider call after the abort.
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => /open-meteo\.com/.test(u))).toBe(false);
+  });
+
+  it("does not start at all when already abandoned", async () => {
+    const { fetchHomeWeather } = await import("./home-weather");
+    const controller = new AbortController();
+    controller.abort();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      fetchHomeWeather(-17.83, 31.05, controller.signal),
+    ).rejects.toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

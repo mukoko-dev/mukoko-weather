@@ -12,9 +12,9 @@
  *
  * What may be cached (the owner's rule: nothing authenticated or personal,
  * nothing that sets a cookie):
- * - only `GET` navigations to `/` and `/{slug}` (`placeTargetOf`): never
- *   `/profile`, `/auth/*`, `/callback`, `/api/*`, a sub-route, or a path with
- *   anything else on it;
+ * - only `GET` navigations to `/` and `/{slug}` (`isPlacePath`, which must agree
+ *   with `placeTargetOf`; a test pins it): never `/profile`, `/auth/*`,
+ *   `/callback`, `/api/*`, a sub-route, or a path with anything else on it;
  * - only a 200 HTML response the SERVER marked `x-mukoko-shell: anonymous`.
  *   The edge proxy (`src/proxy.ts`) sets it only when no one is signed in and
  *   the response sets no cookie. A service worker cannot see `Set-Cookie` or
@@ -32,8 +32,6 @@
  *   HTML that names chunks the new build no longer has.
  */
 
-import { placeTargetOf } from "./place-target";
-
 /** Response header the edge proxy sets on a page that is safe to keep. */
 export const SHELL_HEADER = "x-mukoko-shell";
 /** Its only value. */
@@ -42,8 +40,62 @@ export const SHELL_ANONYMOUS = "anonymous";
 /** Cache names for stored pages: `pages-<build version>`. */
 export const PAGES_CACHE_PREFIX = "pages-";
 
-/** Longest an uncached navigation waits for the network before the offline shell. */
-export const NAVIGATION_TIMEOUT_MS = 8_000;
+/**
+ * Most place pages kept at once. Each is a few tens of KB of HTML; the oldest
+ * go first, so a visitor who browses many places never fills the device.
+ */
+export const MAX_STORED_PAGES = 12;
+
+/**
+ * Top-level routes that are not places. A copy of NON_LOCATION_ROUTES
+ * (src/lib/current-slug.ts) and the proxy's KNOWN_ROUTES, kept here because the
+ * worker must not import them: that module pulls the whole location catalogue
+ * into sw.js. `sw-navigation.test.ts` fails if either list grows without this.
+ */
+export const RESERVED_ROUTES: ReadonlySet<string> = new Set([
+  "explore",
+  "locations",
+  "shamwari",
+  "history",
+  "aviation",
+  "about",
+  "help",
+  "privacy",
+  "terms",
+  "status",
+  "embed",
+  "offline",
+  "api",
+  "auth",
+  "callback",
+  "profile",
+  "developers",
+  "releases",
+  "login",
+  "signage",
+  "display",
+]);
+
+/** A location slug: the app's `LOCATION_SLUG_RE`. */
+const SLUG_RE = /^[a-z0-9-]{1,80}$/;
+
+/** True for `/` and for `/{slug}` exactly (one segment, not a route name). */
+export function isPlacePath(pathname: string): boolean {
+  const path =
+    pathname.length > 1 && pathname.endsWith("/")
+      ? pathname.slice(0, -1)
+      : pathname;
+  if (path === "/") return true;
+  const parts = path.split("/").filter(Boolean);
+  if (parts.length !== 1 || path !== `/${parts[0]}`) return false;
+  let slug: string;
+  try {
+    slug = decodeURIComponent(parts[0]);
+  } catch {
+    return false;
+  }
+  return SLUG_RE.test(slug) && !RESERVED_ROUTES.has(slug);
+}
 
 export function pagesCacheName(version: string): string {
   return `${PAGES_CACHE_PREFIX}${version}`;
@@ -97,7 +149,7 @@ export function classifyNavigation(url: URL): NavigationKind {
   if (path === "/callback" || path === "/auth" || path.startsWith("/auth/")) {
     return "auth";
   }
-  return placeTargetOf(path) ? "shell" : "other";
+  return isPlacePath(path) ? "shell" : "other";
 }
 
 /** The key a page is stored under: the path, never the query or the hash. */
@@ -134,6 +186,8 @@ export interface PagesCache {
   match(key: string): Promise<Response | undefined>;
   put(key: string, response: Response): Promise<void>;
   delete(key: string): Promise<boolean>;
+  /** Stored keys, oldest first (a `Cache` lists in insertion order). */
+  keys(): Promise<string[]>;
 }
 
 export interface NavigationDeps {
@@ -146,29 +200,32 @@ export interface NavigationDeps {
   clearPages(): Promise<void>;
   /** Keep the worker alive for background work. */
   waitUntil(work: Promise<unknown>): void;
-  /** Overridable for tests. */
-  timeoutMs?: number;
 }
 
-async function networkWithin(
-  deps: NavigationDeps,
-): Promise<Response | undefined> {
-  const limit = deps.timeoutMs ?? NAVIGATION_TIMEOUT_MS;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<undefined>((resolve) => {
-    timer = setTimeout(() => resolve(undefined), limit);
-  });
-  try {
-    return await Promise.race([deps.network().catch(() => undefined), timeout]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
+/**
+ * The network, then the offline shell only if the network FAILED. A slow
+ * network is not an offline one: the visitor waits for the page like they
+ * would without a worker, never gets "You're offline" while connected.
+ */
 async function networkOrOffline(deps: NavigationDeps): Promise<Response> {
-  const res = await networkWithin(deps);
+  const res = await deps.network().catch(() => undefined);
   if (res) return res;
   return (await deps.offline()) ?? Response.error();
+}
+
+/** Keep at most `max` stored pages, dropping the oldest. */
+export async function trimPages(
+  pages: PagesCache,
+  max: number = MAX_STORED_PAGES,
+): Promise<void> {
+  try {
+    const keys = await pages.keys();
+    for (const key of keys.slice(0, Math.max(0, keys.length - max))) {
+      await pages.delete(key);
+    }
+  } catch {
+    // Housekeeping only.
+  }
 }
 
 /** Refresh a stored page in the background; drop it when it is no longer right. */
@@ -176,8 +233,10 @@ async function revalidate(key: string, deps: NavigationDeps): Promise<void> {
   try {
     const res = await deps.network();
     if (!res) return;
-    if (isShellResponse(res)) await deps.pages.put(key, res);
-    else if (invalidates(res)) await deps.pages.delete(key);
+    if (isShellResponse(res)) {
+      await deps.pages.put(key, res);
+      await trimPages(deps.pages);
+    } else if (invalidates(res)) await deps.pages.delete(key);
     // A 5xx or a network failure keeps the copy we have.
   } catch {
     // Offline: the copy stays.
@@ -206,11 +265,16 @@ export async function handleNavigation(
         deps.waitUntil(revalidate(key, deps));
         return stored;
       }
-      const res = await networkWithin(deps);
+      const res = await deps.network().catch(() => undefined);
       if (!res) return (await deps.offline()) ?? Response.error();
       if (isShellResponse(res)) {
         // Cloned before the browser reads the body.
-        deps.waitUntil(deps.pages.put(key, res.clone()).catch(() => undefined));
+        deps.waitUntil(
+          deps.pages
+            .put(key, res.clone())
+            .then(() => trimPages(deps.pages))
+            .catch(() => undefined),
+        );
       }
       return res;
     }

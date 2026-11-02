@@ -1,15 +1,20 @@
+import { readFileSync } from "fs";
+import { resolve } from "path";
 import { describe, expect, it } from "vitest";
 import {
-  NAVIGATION_TIMEOUT_MS,
+  MAX_STORED_PAGES,
   PAGES_CACHE_PREFIX,
+  RESERVED_ROUTES,
   SHELL_ANONYMOUS,
   SHELL_HEADER,
   classifyNavigation,
   handleNavigation,
+  isPlacePath,
   isShellResponse,
   pageKey,
   pagesCacheName,
   stalePagesCaches,
+  trimPages,
   versionOfManifest,
   type NavigationDeps,
   type PagesCache,
@@ -37,6 +42,9 @@ class MemoryCache implements PagesCache {
   }
   async delete(key: string) {
     return this.store.delete(key);
+  }
+  async keys() {
+    return [...this.store.keys()];
   }
 }
 
@@ -72,7 +80,6 @@ function harness(next: Harness["answers"]["next"] = () => html("fresh")) {
     waitUntil: (p) => {
       background.push(p);
     },
-    timeoutMs: 40,
   };
   return {
     deps,
@@ -196,13 +203,29 @@ describe("a place page: stale-while-revalidate", () => {
     expect(h.calls.offline).toBe(1);
   });
 
-  it("a network that never answers falls to the offline shell after the timeout", async () => {
-    const h = harness(() => new Promise<Response>(() => {}));
-    const started = Date.now();
+  it("a slow network is not an offline one: the page is waited for, never replaced by /offline", async () => {
+    const h = harness(
+      () =>
+        new Promise<Response>((resolve) =>
+          setTimeout(() => resolve(html("late but live")), 60),
+        ),
+    );
     const res = await handleNavigation(url("/nairobi-ke"), h.deps);
-    expect(await res.text()).toBe("offline page");
-    expect(Date.now() - started).toBeLessThan(1000);
-    expect(NAVIGATION_TIMEOUT_MS).toBeLessThanOrEqual(10_000);
+    expect(await res.text()).toBe("late but live");
+    expect(h.calls.offline).toBe(0);
+    await h.settle();
+  });
+
+  it("a slow sign-in is not turned into the offline page either", async () => {
+    const h = harness(
+      () =>
+        new Promise<Response>((resolve) =>
+          setTimeout(() => resolve(new Response(null, { status: 302 })), 60),
+        ),
+    );
+    const res = await handleNavigation(url("/callback?code=abc"), h.deps);
+    expect(res.status).toBe(302);
+    expect(h.calls.offline).toBe(0);
   });
 });
 
@@ -326,6 +349,9 @@ describe("a stored copy never outlives its situation", () => {
       delete: async () => {
         throw new Error("quota");
       },
+      keys: async () => {
+        throw new Error("quota");
+      },
     };
     const res = await handleNavigation(url("/harare"), h.deps);
     expect(await res.text()).toBe("v1");
@@ -361,5 +387,85 @@ describe("versioned caches (a deploy never serves old HTML)", () => {
     expect(a).toBe(a2);
     expect(a).not.toBe(b);
     expect(a).toMatch(/^[0-9a-z]+$/);
+  });
+});
+
+describe("the stored pages are bounded", () => {
+  it("keeps the newest MAX_STORED_PAGES and drops the oldest", async () => {
+    const pages = new MemoryCache();
+    for (let i = 0; i < MAX_STORED_PAGES + 3; i++) {
+      await pages.put(`${ORIGIN}/place-${i}`, html(`p${i}`));
+    }
+    await trimPages(pages);
+    const keys = await pages.keys();
+    expect(keys).toHaveLength(MAX_STORED_PAGES);
+    expect(keys[0]).toBe(`${ORIGIN}/place-3`);
+    expect(keys.at(-1)).toBe(`${ORIGIN}/place-${MAX_STORED_PAGES + 2}`);
+  });
+
+  it("trims after storing a visited page", async () => {
+    const h = harness(() => html("page"));
+    for (let i = 0; i < MAX_STORED_PAGES; i++) {
+      await h.pages.put(`${ORIGIN}/old-${i}`, html("old"));
+    }
+    await handleNavigation(url("/fresh"), h.deps);
+    await h.settle();
+    const keys = await h.pages.keys();
+    expect(keys).toHaveLength(MAX_STORED_PAGES);
+    expect(keys).toContain(`${ORIGIN}/fresh`);
+    expect(keys).not.toContain(`${ORIGIN}/old-0`);
+  });
+});
+
+describe("isPlacePath agrees with the app's own place rule", () => {
+  it("matches placeTargetOf on every kind of path", async () => {
+    const { placeTargetOf } = await import("./place-target");
+    for (const path of [
+      "/",
+      "/harare",
+      "/harare/",
+      "/nairobi-ke",
+      "/koh-samui--w4gz9k2",
+      "/harare/forecast",
+      "/explore",
+      "/profile",
+      "/a/b/c",
+      "/%E0%A4%A",
+      "/Harare",
+      "//evil",
+      "/under_score",
+    ]) {
+      expect(isPlacePath(path), path).toBe(placeTargetOf(path) !== null);
+    }
+  });
+
+  it("reserves every route the app (and its proxy) knows is not a place", async () => {
+    const { NON_LOCATION_ROUTES } = await import("./current-slug");
+    for (const route of NON_LOCATION_ROUTES) {
+      expect(RESERVED_ROUTES.has(route), route).toBe(true);
+    }
+    // The proxy's own list (read from its source: importing the proxy pulls
+    // in the auth library).
+    const proxy = readFileSync(resolve(__dirname, "../proxy.ts"), "utf-8");
+    const list = proxy.slice(
+      proxy.indexOf("export const KNOWN_ROUTES = new Set(["),
+      proxy.indexOf("]);", proxy.indexOf("export const KNOWN_ROUTES")),
+    );
+    const known = [...list.matchAll(/"([a-z-]+)"/g)].map((m) => m[1]);
+    expect(known.length).toBeGreaterThan(10);
+    for (const route of known) {
+      expect(RESERVED_ROUTES.has(route), route).toBe(true);
+    }
+  });
+
+  it("does not pull the location catalogue into the worker bundle", () => {
+    const source = readFileSync(
+      resolve(__dirname, "sw-navigation.ts"),
+      "utf-8",
+    );
+    expect(source).not.toMatch(
+      /from\s+["']\.\/(place-target|current-slug|location-gate|locations)["']/,
+    );
+    expect(source).not.toMatch(/from\s+["']@\//);
   });
 });

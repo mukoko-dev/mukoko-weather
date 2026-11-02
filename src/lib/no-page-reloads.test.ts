@@ -27,8 +27,6 @@ const sources = files(SRC).map((f) => ({
 const RELOAD_ALLOWED: Record<string, string> = {
   "components/pwa/ServiceWorkerUpdater.tsx":
     "once, when a genuinely new service worker takes control (a deploy)",
-  "components/weather/PlaceStage.tsx":
-    "a place URL the stage cannot show and the router will not: load it from the server, once per path",
   "app/[location]/WeatherUnavailableBanner.tsx":
     "only when no onRetry is given; the dashboard always gives one",
   "lib/use-display-runtime.ts":

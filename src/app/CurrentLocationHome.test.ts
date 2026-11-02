@@ -52,7 +52,7 @@ describe("CurrentLocationHome — silent-URL model", () => {
       resolve(__dirname, "../components/weather/PlaceStage.tsx"),
       "utf-8",
     );
-    expect(stage).toContain("fetchHomeWeather(lat, lon)");
+    expect(stage).toContain("fetchHomeWeather(lat, lon, signal)");
   });
 
   it("does not remount the dashboard per location: the stage keeps it mounted", () => {

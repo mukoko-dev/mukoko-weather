@@ -79,9 +79,14 @@ const serwist: Serwist = new Serwist({
       handler: {
         async handle({ request, event }): Promise<Response> {
           const fetchEvent = event as unknown as FetchEventLike;
-          const pages = await caches.open(PAGES_CACHE);
+          const cache = await caches.open(PAGES_CACHE);
           return handleNavigation(new URL(request.url), {
-            pages,
+            pages: {
+              match: (key) => cache.match(key),
+              put: (key, response) => cache.put(key, response),
+              delete: (key) => cache.delete(key),
+              keys: async () => (await cache.keys()).map((r) => r.url),
+            },
             // The browser's navigation preload when it started one, else a
             // fetch. Used once per navigation.
             network: async () =>

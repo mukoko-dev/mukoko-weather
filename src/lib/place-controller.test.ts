@@ -314,6 +314,48 @@ describe("start: the server's place, then the device, then the visitor's own req
     expect(temp(c.getState())).toBe(-18);
   });
 
+  it("uses a slow device's copy when it arrives before the forecast does", async () => {
+    const h = harness("/harare");
+    h.stored.set("harare", storedView(HARARE, 21, REFRESH_AFTER_MS + 60_000));
+    // The database is slow to open (its code loads on first use).
+    h.deps.recall = (slug) =>
+      new Promise((resolve) =>
+        setTimeout(() => resolve(h.stored.get(slug) ?? null), 80),
+      );
+    h.failFetch.on = true; // and the network is down
+    const c = createPlaceController(h.deps, {
+      seed: HARARE,
+      isHome: false,
+      path: "/harare",
+    });
+    const done = c.start();
+    await done; // the fetch failed fast; the device is still thinking
+    expect(c.getState().view).toBeNull();
+    await new Promise((r) => setTimeout(r, 120));
+    expect(temp(c.getState())).toBe(21);
+    expect(c.getState().failed).toBe(true);
+    expect(c.getState().device).not.toBeNull();
+  });
+
+  it("ignores a slow device's copy once the live forecast is on screen", async () => {
+    const h = harness("/harare");
+    h.stored.set("harare", storedView(HARARE, 21, REFRESH_AFTER_MS + 60_000));
+    h.deps.recall = (slug) =>
+      new Promise((resolve) =>
+        setTimeout(() => resolve(h.stored.get(slug) ?? null), 80),
+      );
+    const c = createPlaceController(h.deps, {
+      seed: HARARE,
+      isHome: false,
+      path: "/harare",
+    });
+    await c.start();
+    expect(temp(c.getState())).toBe(-18);
+    await new Promise((r) => setTimeout(r, 120));
+    expect(temp(c.getState())).toBe(-18);
+    expect(c.getState().device).toBeNull();
+  });
+
   it("keeps the server's season and location on top of a stored copy", async () => {
     const h = harness("/harare");
     const old = storedView(HARARE, 21, 5 * 60_000);

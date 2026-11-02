@@ -32,10 +32,15 @@ export function isRenderableWeather(data: unknown): data is WeatherData {
 export async function fetchHomeWeather(
   lat: number,
   lon: number,
+  /** Abandon the request (the visitor moved to another place). */
+  signal?: AbortSignal,
 ): Promise<{ weather: WeatherData; usingFallback: boolean }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), HOME_WEATHER_TIMEOUT_MS);
+  const abandon = () => controller.abort();
+  signal?.addEventListener("abort", abandon, { once: true });
   try {
+    if (signal?.aborted) throw signal.reason ?? new Error("aborted");
     const res = await fetchWorker(
       "weather",
       `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`,
@@ -50,10 +55,14 @@ export async function fetchHomeWeather(
         };
       }
     }
-  } catch {
+  } catch (err) {
+    // Abandoned on purpose: do not spend the browser's own Open-Meteo quota
+    // on a place the visitor has already left.
+    if (signal?.aborted) throw err;
     // Unreachable / timed out — fall through to the direct provider.
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener("abort", abandon);
   }
   return { weather: await fetchWeather(lat, lon), usingFallback: false };
 }

@@ -214,6 +214,8 @@ function withTimeout<T>(work: Promise<T>, ms: number): Promise<T | null> {
   });
 }
 
+const TIMED_OUT = Symbol("recall-timed-out");
+
 // ── The controller ──────────────────────────────────────────────────────────
 
 export interface PresentResult {
@@ -270,10 +272,30 @@ export function createPlaceController(
     for (const listener of [...listeners]) listener();
   };
 
-  const stored = async (slug: string): Promise<DeviceView | null> => {
+  /**
+   * The stored view for a place: memory at once, else the device. A device
+   * that is slow (the database loads on first use) is not waited on past the
+   * timeout, but its answer is still kept in `late` and used if it arrives
+   * before the live forecast does.
+   */
+  const stored = async (
+    slug: string,
+  ): Promise<{
+    found: DeviceView | null;
+    late: Promise<DeviceView | null> | null;
+  }> => {
     const mem = recallFromMemory(slug, deps.now());
-    if (mem) return mem;
-    return withTimeout(deps.recall(slug), deps.recallTimeoutMs ?? 400);
+    if (mem) return { found: mem, late: null };
+    const pending = Promise.resolve(deps.recall(slug)).catch(() => null);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<typeof TIMED_OUT>((resolve) => {
+      timer = setTimeout(() => resolve(TIMED_OUT), deps.recallTimeoutMs ?? 400);
+    });
+    const first = await Promise.race([pending, timedOut]);
+    clearTimeout(timer);
+    return first === TIMED_OUT
+      ? { found: null, late: pending }
+      : { found: first, late: null };
   };
 
   /** Fetch live weather for `seed` and put it on screen if still the latest. */
@@ -319,8 +341,10 @@ export function createPlaceController(
     seed: PlaceSeed,
     opts: { isHome: boolean; url: UrlAction; found?: DeviceView | null },
   ): Promise<PresentResult> {
-    const found =
-      opts.found !== undefined ? opts.found : await stored(seed.location.slug);
+    let found: DeviceView | null;
+    let late: Promise<DeviceView | null> | null = null;
+    if (opts.found !== undefined) found = opts.found;
+    else ({ found, late } = await stored(seed.location.slug));
     if (!req.isLatest()) return { shown: false, failed: false };
 
     const path = opts.isHome ? "/" : `/${seed.location.slug}`;
@@ -341,6 +365,23 @@ export function createPlaceController(
       path,
     });
     deps.onShow?.({ seed, isHome: opts.isHome, url: opts.url });
+
+    // A slow device answer repaints the skeleton with the stored copy, unless
+    // the live forecast (or another place) got there first.
+    late?.then((view) => {
+      if (
+        !view ||
+        !req.isLatest() ||
+        state.view ||
+        state.seed?.location.slug !== seed.location.slug
+      ) {
+        return;
+      }
+      set({
+        view: mergeStoredWithSeed(view.payload, seed),
+        device: { fetchedAt: view.fetchedAt, freshness: view.freshness },
+      });
+    });
 
     if (found && isFreshEnough(found, deps.now())) {
       return { shown: true, failed: false };

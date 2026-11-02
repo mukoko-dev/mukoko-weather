@@ -32,3 +32,25 @@ export function readLastLocation(jar: CookieJar): string | null {
   const value = jar.get(LAST_LOCATION_COOKIE)?.value;
   return value && LOCATION_SLUG_RE.test(value) ? value : null;
 }
+
+/**
+ * The same read from a `document.cookie` string (the browser, where there is
+ * no cookie jar): the remembered slug when it holds a syntactically valid one.
+ */
+export function readLastLocationFromCookieString(
+  cookie: string | null | undefined,
+): string | null {
+  if (!cookie) return null;
+  for (const part of cookie.split(";")) {
+    const [name, ...rest] = part.trim().split("=");
+    if (name !== LAST_LOCATION_COOKIE) continue;
+    let value: string;
+    try {
+      value = decodeURIComponent(rest.join("="));
+    } catch {
+      return null;
+    }
+    return LOCATION_SLUG_RE.test(value) ? value : null;
+  }
+  return null;
+}
