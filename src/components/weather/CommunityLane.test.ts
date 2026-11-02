@@ -42,7 +42,7 @@ describe("CommunityLane structure", () => {
 
   it("loads rules through the shared suitability cache and reports from the API", () => {
     expect(source).toContain("fetchSuitabilityRules");
-    expect(source).toContain("reportsListUrl(slug)");
+    expect(source).toContain("loadReports<ReportLike>(slug)");
     expect(source).not.toContain("/api/py/reports");
   });
 

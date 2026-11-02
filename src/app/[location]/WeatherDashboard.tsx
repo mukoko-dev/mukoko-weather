@@ -68,18 +68,17 @@ import {
   normalizeForecastModel,
   synthesizeOpenMeteoInsights,
 } from "@/lib/weather";
-import { fetchModelWeather } from "@/lib/home-weather";
+import { useLiveWeather } from "@/lib/use-live-weather";
+import { weatherBanner } from "@/lib/weather-banner";
 import { useNearViewport } from "@/lib/use-near-viewport";
 import { useIdleOnce } from "@/lib/use-idle-once";
 import {
   emptyModelExtras,
+  resolveDisplayedWeather,
   MODEL_EXTRAS_IDLE_TIMEOUT_MS,
   MODEL_EXTRAS_ROOT_MARGIN,
-  modelExtrasFromResponse,
   modelExtrasKey,
-  selectModelExtras,
   shouldFetchModelExtras,
-  type ModelExtras,
 } from "@/lib/dashboard-fetch-policy";
 import type { WeatherLocation } from "@/lib/locations";
 import type { AISummaryUser } from "@/components/weather/AISummary";
@@ -162,7 +161,7 @@ const ModelComparisonChart = lazy(() =>
 );
 
 import { formatCoords } from "@/lib/utils";
-import { workerUrl } from "@/lib/worker-url";
+import { fetchActivities } from "@/lib/activities-client";
 
 const BASE_URL = "https://weather.mukoko.com";
 
@@ -217,23 +216,62 @@ export function WeatherDashboard({
   const selectedForecastModel = useAppStore((s) => s.selectedForecastModel);
   const model = normalizeForecastModel(selectedForecastModel);
   const extrasKey = modelExtrasKey(location.lat, location.lon, model);
-  const [loadedExtras, setLoadedExtras] = useState<ModelExtras>(() =>
-    emptyModelExtras(extrasKey),
+
+  // The client fetch of /v1/weather: the model comparison + minutely nowcast,
+  // a picked model's baseline, and the live forecast that replaces a seasonal
+  // estimate the server could only send (#414). With the default blend the
+  // comparison is the heaviest payload on the page and feeds cards at the END
+  // of the main column, so it waits for the first idle moment after load
+  // (capped at MODEL_EXTRAS_IDLE_TIMEOUT_MS) or for that end to come near,
+  // whichever is first; starting at idle means the cards are in long before a
+  // reader reaches them, so nothing is inserted above what they are reading
+  // (Safari has no scroll anchoring). A picked model swaps the whole
+  // dashboard, and a page showing the seasonal estimate wants live data
+  // before anything else, so both fetch at once (shouldFetchModelExtras).
+  const extrasSentinelRef = useRef<HTMLDivElement>(null);
+  const extrasNear = useNearViewport(
+    extrasSentinelRef,
+    MODEL_EXTRAS_ROOT_MARGIN,
   );
-  const extras = selectModelExtras(loadedExtras, extrasKey);
-  const modelBaseline = extras.baseline;
-  const weather = modelBaseline ?? seedWeather;
-  // Everything derived from the forecast follows the baseline on screen: a
-  // GFS baseline must not keep the blend's frost banner (or miss its own).
-  // A model the server confirmed is never the seasonal fallback.
+  const afterIdle = useIdleOnce(MODEL_EXTRAS_IDLE_TIMEOUT_MS);
+  const fetchExtras = shouldFetchModelExtras(model, extrasNear || afterIdle);
+  const live = useLiveWeather({
+    enabled: fetchExtras || seedUsingFallback,
+    recover: seedUsingFallback || model !== "best_match",
+    extrasKey,
+    slug: location.slug,
+    lat: location.lat,
+    lon: location.lon,
+    model,
+    modelsKey: COMPARISON_MODELS.join(","),
+  });
+  const extras = live.extras ?? emptyModelExtras(extrasKey);
+  // What is on screen: the seed, a picked model's baseline, or (when the seed
+  // was the seasonal estimate) the first live forecast a fetch brought. The
+  // banner and everything derived from the forecast follow it, so a recovery
+  // clears the banner and a GFS baseline cannot keep the blend's frost banner.
+  const displayed = resolveDisplayedWeather(
+    seedWeather,
+    seedUsingFallback,
+    extras,
+  );
+  const weather = displayed.weather;
   const frostAlert = useMemo(
     () =>
-      modelBaseline
-        ? checkFrostRisk(modelBaseline.hourly, modelBaseline.utc_offset_seconds)
+      displayed.override
+        ? checkFrostRisk(
+            displayed.override.hourly,
+            displayed.override.utc_offset_seconds,
+          )
         : seedFrostAlert,
-    [modelBaseline, seedFrostAlert],
+    [displayed.override, seedFrostAlert],
   );
-  const usingFallback = modelBaseline ? false : seedUsingFallback;
+  const usingFallback = displayed.usingFallback;
+  const banner = weatherBanner({
+    fallback: usingFallback,
+    stale: device?.freshness === "forecast",
+    live: live.state,
+  });
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
   const selectedActivities = useAppStore((s) => s.selectedActivities);
   const storedSectionOrder = useAppStore((s) => s.sectionOrder);
@@ -312,10 +350,10 @@ export function WeatherDashboard({
   const [allActivities, setAllActivities] = useState<Activity[]>(ACTIVITIES);
   useEffect(() => {
     if (selectedActivities.length === 0) return;
-    fetch(workerUrl("/v1/activities"))
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.activities?.length) setAllActivities(data.activities);
+    // Cached for 10 minutes with in-flight sharing (activities-client).
+    fetchActivities()
+      .then((list) => {
+        if (list.length) setAllActivities(list);
       })
       .catch(() => {});
   }, [selectedActivities.length]);
@@ -387,45 +425,6 @@ export function WeatherDashboard({
     season,
     countryName,
   ]);
-
-  // Fetch the selected model's baseline + multi-model comparison + minutely
-  // nowcast through the Worker's /v1/weather (cached, single writer).
-  // Best-effort — failures are swallowed so the seeded page is never affected.
-  // The selected model is unioned into the comparison set so the user's pick
-  // is always shown.
-  //
-  // With the default blend this fetch only feeds the nowcast and the model
-  // comparison at the END of the main column, and the comparison series is
-  // the heaviest payload on the page, so it waits for the first idle moment
-  // after load (capped at MODEL_EXTRAS_IDLE_TIMEOUT_MS) or for the end of the
-  // main column to come near, whichever is first. Starting at idle means the
-  // cards are in long before a reader reaches them, so nothing is inserted
-  // above what they are reading (Safari has no scroll anchoring). A picked
-  // model swaps the whole dashboard, so it is fetched straight away
-  // (shouldFetchModelExtras).
-  const extrasSentinelRef = useRef<HTMLDivElement>(null);
-  const extrasNear = useNearViewport(
-    extrasSentinelRef,
-    MODEL_EXTRAS_ROOT_MARGIN,
-  );
-  const afterIdle = useIdleOnce(MODEL_EXTRAS_IDLE_TIMEOUT_MS);
-  const fetchExtras = shouldFetchModelExtras(model, extrasNear || afterIdle);
-  useEffect(() => {
-    if (!fetchExtras) return;
-    let cancelled = false;
-    const models = Array.from(new Set([model, ...COMPARISON_MODELS]));
-    fetchModelWeather(location.lat, location.lon, model, models)
-      .then(({ data, baseline }) => {
-        if (cancelled) return;
-        setLoadedExtras(modelExtrasFromResponse(extrasKey, data, baseline));
-      })
-      .catch(() => {
-        // Non-critical enhancement — leave sections hidden on failure.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [location.lat, location.lon, model, extrasKey, fetchExtras]);
 
   // The breadcrumb sits at the left of the hero's top row (over the sky), so
   // its text takes the hero's foreground instead of the page text tokens.
@@ -523,7 +522,9 @@ export function WeatherDashboard({
           )}
 
           {/* Weather unavailable banner — shown when all providers failed */}
-          {usingFallback && <WeatherUnavailableBanner />}
+          {banner.show && (
+            <WeatherUnavailableBanner banner={banner} onRetry={live.retryNow} />
+          )}
 
           {/* Frost alert banner */}
           {frostAlert && <FrostAlertBanner alert={frostAlert} />}

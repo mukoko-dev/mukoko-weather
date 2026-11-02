@@ -42,7 +42,9 @@
 //! over `PLACES`; `/v1/ai/*` is forwarded to `mukoko-weather-ai` over
 //! `AI_SERVICE` with the client's IP (that Worker has its own, tighter limit).
 //! Anonymous requests are rate limited per client IP
-//! (`RATE_LIMITER`). A developer may send a Nyuchi API key, checked by the
+//! (`RATE_LIMITER`, 600 a minute: a school or office shares one address, and
+//! the upstream cost is bounded by the KV caches and the D1 budgets, not by
+//! this limiter). A developer may send a Nyuchi API key, checked by the
 //! Nyuchi API (`keys`), and is then limited per key (`KEY_RATE_LIMITER`).
 
 mod keys;
@@ -133,7 +135,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
         allow_origin.as_deref(),
         Some(
             "X-Cache, X-Weather-Provider, X-Weather-Blend, X-Enrichment, X-Current-Source, \
-             X-Fetched-At, X-AQ-Source",
+             X-Fetched-At, X-AQ-Source, Retry-After",
         ),
     )
 }

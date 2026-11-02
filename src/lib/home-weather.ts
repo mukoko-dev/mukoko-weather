@@ -1,10 +1,16 @@
-import { roundCoord } from "@/lib/location-privacy";
 import type { WeatherData } from "./weather";
 import { fetchWeather } from "./weather";
-import { fetchWorker } from "./weather-api";
+import {
+  classifyTransportError,
+  workerData,
+  type WorkerFailure,
+} from "./worker-data";
 
 /** How long the home page waits on our own weather API before falling back. */
 export const HOME_WEATHER_TIMEOUT_MS = 8000;
+
+/** How long the dashboard waits on the model-baseline / comparison fetch. */
+export const MODEL_WEATHER_TIMEOUT_MS = 10_000;
 
 /** Minimal shape check — enough for WeatherDashboard to render safely. */
 export function isRenderableWeather(data: unknown): data is WeatherData {
@@ -33,36 +39,46 @@ export async function fetchHomeWeather(
   lat: number,
   lon: number,
 ): Promise<{ weather: WeatherData; usingFallback: boolean }> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), HOME_WEATHER_TIMEOUT_MS);
   try {
-    const res = await fetchWorker(
+    // Through the shared read: a place already fetched this session (a swipe
+    // back, a remount) or being fetched right now costs no second call. The
+    // timeout below only bounds how long THIS caller waits: the shared request
+    // keeps its own per-attempt limit and carries on, so its answer is kept for
+    // the next caller. If the wait runs out the caller falls through to the
+    // direct provider, as it did before the shared read.
+    const res = await workerData.read<unknown>(
       "weather",
-      `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`,
-      { signal: controller.signal },
+      { lat, lon },
+      { retries: 1, signal: AbortSignal.timeout(HOME_WEATHER_TIMEOUT_MS) },
     );
-    if (res.ok) {
-      const data: unknown = await res.json();
-      if (isRenderableWeather(data)) {
-        return {
-          weather: data,
-          usingFallback: res.headers.get("X-Weather-Provider") === "fallback",
-        };
-      }
+    if (res.ok && isRenderableWeather(res.data)) {
+      return {
+        weather: res.data,
+        usingFallback: res.provider === "fallback",
+      };
     }
   } catch {
     // Unreachable / timed out — fall through to the direct provider.
-  } finally {
-    clearTimeout(timer);
   }
   return { weather: await fetchWeather(lat, lon), usingFallback: false };
 }
 
-/** How long the dashboard waits on the model-baseline / comparison fetch. */
-export const MODEL_WEATHER_TIMEOUT_MS = 10_000;
+/** What `loadModelWeather` hands the dashboard: the forecast, or why not. */
+export type ModelWeatherResult =
+  | {
+      ok: true;
+      data: WeatherData;
+      /** Set only when a specific model was picked AND our API served it. */
+      baseline: WeatherData | null;
+      /** The Worker answered with the seasonal estimate (no live provider). */
+      fallback: boolean;
+    }
+  | { ok: false; failure: WorkerFailure };
 
 /**
- * Forecast for a user-selected model plus the comparison series (issue #246).
+ * Forecast for a user-selected model plus the comparison series (issue #246),
+ * and the live forecast a page that was served the seasonal estimate swaps in
+ * (#414).
  *
  * Goes through the Rust Worker (`GET /v1/weather`) with `?models=`
  * (comparison series) and `?model=` (the `selectedForecastModel` preference;
@@ -70,43 +86,56 @@ export const MODEL_WEATHER_TIMEOUT_MS = 10_000;
  * model as the baseline (`X-Weather-Provider: open-meteo:<model>`, its own
  * cache row, `best_match` filling the variables the model does not publish);
  * with no data for that model at the point it answers `best_match` and
- * `baseline` stays null. Only when the Worker is unreachable does it fall back
- * to a direct Open-Meteo call, which still yields comparison series.
+ * `baseline` stays null.
  *
- * `baseline` is set only when a specific model was picked AND our API served
- * it, so the caller can swap the dashboard onto that model.
+ * It never swallows a failure: the typed reason comes back (`rate_limited`,
+ * `timeout`, `server`, `offline`, `invalid`) so the caller can retry sensibly
+ * and tell the visitor. `force` reads past a remembered failure (a retry).
  */
-export async function fetchModelWeather(
+export async function loadModelWeather(
   lat: number,
   lon: number,
   model: string,
   models: string[],
-): Promise<{ data: WeatherData; baseline: WeatherData | null }> {
-  const params = new URLSearchParams({
-    lat: String(roundCoord(lat)),
-    lon: String(roundCoord(lon)),
-    models: models.filter((m) => m && m !== "best_match").join(","),
-  });
-  if (model && model !== "best_match") params.set("model", model);
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), MODEL_WEATHER_TIMEOUT_MS);
+  { force = false }: { force?: boolean } = {},
+): Promise<ModelWeatherResult> {
+  let res;
   try {
-    const res = await fetchWorker("weather", params.toString(), {
-      signal: controller.signal,
-    });
-    if (res.ok) {
-      const data: unknown = await res.json();
-      if (isRenderableWeather(data)) {
-        const provider = res.headers.get("X-Weather-Provider") ?? "";
-        const servedModel = provider === `open-meteo:${model}`;
-        return { data, baseline: servedModel ? data : null };
-      }
-    }
-  } catch {
-    // Unreachable / timed out — fall through to the direct provider.
-  } finally {
-    clearTimeout(timer);
+    res = await workerData.read<unknown>(
+      "weather",
+      {
+        lat,
+        lon,
+        models: models.filter((m) => m && m !== "best_match").join(","),
+        model: model && model !== "best_match" ? model : undefined,
+      },
+      {
+        force,
+        // The live-fetch controller (live-fetch.ts) owns retrying, with a
+        // backoff that honours Retry-After; a second hidden call per attempt
+        // would only add to the load on a Worker that is struggling.
+        retries: 0,
+        signal: AbortSignal.timeout(MODEL_WEATHER_TIMEOUT_MS),
+      },
+    );
+  } catch (err) {
+    // Our own wait ran out (the request itself carries on for the next caller).
+    return { ok: false, failure: classifyTransportError(err) };
   }
-  return { data: await fetchWeather(lat, lon, models), baseline: null };
+  if (!res.ok) {
+    return {
+      ok: false,
+      failure: res.failure ?? { kind: "server", status: res.status },
+    };
+  }
+  if (!isRenderableWeather(res.data)) {
+    return { ok: false, failure: { kind: "invalid", status: res.status } };
+  }
+  const servedModel = (res.provider ?? "") === `open-meteo:${model}`;
+  return {
+    ok: true,
+    data: res.data,
+    baseline: servedModel ? res.data : null,
+    fallback: res.provider === "fallback",
+  };
 }

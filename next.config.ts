@@ -17,6 +17,11 @@ const withSerwist = withSerwistInit({
   swSrc: "src/app/sw.ts",
   swDest: "public/sw.js",
   disable: process.env.NODE_ENV === "development",
+  // The default injects `window.addEventListener("online", () =>
+  // location.reload())`, which restarts the whole app (and drops the open
+  // sheet, the scroll position and the place being read) every time the
+  // browser reports it is back online. Data refreshes on its own cadence.
+  reloadOnOnline: false,
 });
 
 const nextConfig: NextConfig = {

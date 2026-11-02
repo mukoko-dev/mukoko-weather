@@ -35,11 +35,17 @@
   ],
   // Per client IP. Service-binding callers share one key, so mukoko-api
   // must apply its own per-consumer limits.
+  // RATE_LIMITER is 600 a minute (it was 120): a school, an office or a
+  // mobile carrier puts many devices behind one IP, and a single page
+  // session makes several calls per section. Upstream cost is bounded by the
+  // KV caches (one provider call per 0.05 degree cell) and by the D1 budgets
+  // on the metered routes (weather_core::budget); this limiter only stops one
+  // address from flooding the Worker.
   "ratelimits": [
     {
       "name": "RATE_LIMITER",
       "namespace_id": "1481",
-      "simple": { "limit": 120, "period": 60 },
+      "simple": { "limit": 600, "period": 60 },
     },
     // Per developer key (key id), for callers with a Nyuchi API key scoped
     // for `weather`. Monthly quotas are the Nyuchi API's.

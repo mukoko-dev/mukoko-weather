@@ -1,7 +1,6 @@
 "use client";
 
-import { roundCoord } from "@/lib/location-privacy";
-import { useState, useEffect, useRef } from "react";
+import { useWorkerData } from "@/lib/use-worker-data";
 import {
   formatPollutant,
   POLLUTANT_LABELS,
@@ -9,7 +8,6 @@ import {
   type AirQualityResponse,
   type PollutantKey,
 } from "./AirQualityCard";
-import { fetchWorker } from "@/lib/weather-api";
 import { aqiScalePct } from "@/lib/air-quality-details";
 import { trackWindow } from "@/lib/scale-blend";
 import { blendGradient } from "./widgets/geometry";
@@ -87,52 +85,9 @@ export function PollutantBar({ subIndex }: { subIndex: number | undefined }) {
   );
 }
 
-type AQDetailsState =
-  | { status: "loading" }
-  | { status: "ready"; data: AirQualityResponse }
-  | { status: "error" };
-
 export function AirQualityDetails({ lat, lon }: Props) {
-  // Single state object — same React-compiler pattern as AirQualityCard.
-  const [state, setState] = useState<AQDetailsState>({ status: "loading" });
-  const abortRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    let cancelled = false;
-
-    fetchWorker(
-      "air-quality",
-      `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`,
-      {
-        signal: controller.signal,
-      },
-    )
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json() as Promise<AirQualityResponse>;
-      })
-      .then((json) => {
-        if (cancelled) return;
-        setState({ status: "ready", data: json });
-      })
-      .catch((err: unknown) => {
-        if (
-          cancelled ||
-          (err as { name?: string } | null)?.name === "AbortError"
-        )
-          return;
-        setState({ status: "error" });
-      });
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [lat, lon]);
+  // The same shared read as the Conditions grid's air-quality tile.
+  const state = useWorkerData<AirQualityResponse>("air-quality", { lat, lon });
 
   if (state.status === "loading") {
     return (

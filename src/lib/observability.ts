@@ -177,7 +177,12 @@ export function reportErrorToAnalytics(
  * Tracks which providers are failing and how often.
  */
 export function reportProviderFailure(
-  provider: "tomorrow-io" | "open-meteo" | "mongodb" | "ai-gateway",
+  provider:
+    | "tomorrow-io"
+    | "open-meteo"
+    | "mongodb"
+    | "ai-gateway"
+    | "weather-api",
   errorType: string,
   location?: string,
 ) {

@@ -53,6 +53,8 @@ import {
   type ParsedSmartSlug,
 } from "./smart-slug";
 import { nearestWithin } from "./geo";
+import { fetchWorkerPlace, looksLikePlaceSlug } from "./worker-place";
+import { TIMED_OUT, withTimeout } from "./with-timeout";
 import type { PlaceRef, SpotRef } from "./place-ref";
 
 // ---------------------------------------------------------------------------
@@ -384,7 +386,25 @@ export async function resolveSmartSlug(
  */
 export interface ResolveOptions {
   strict?: boolean;
+  /**
+   * Longest the render path (non-strict) waits on the stored geography before
+   * it moves on to the seed and the Worker. A hung cluster used to hold a page
+   * until the function timed out; the seed and the Worker answer without it.
+   */
+  dbTimeoutMs?: number;
+  /** See {@link WORKER_HEDGE_MS}. */
+  workerHedgeMs?: number;
 }
+
+/** Default for {@link ResolveOptions.dbTimeoutMs}. */
+export const DB_LOOKUP_TIMEOUT_MS = 2_500;
+/**
+ * How long the stored geography has to answer before the Worker is asked too
+ * (a hedged request). A store that finds the place in a few hundred
+ * milliseconds never costs a Worker call; a slow one does not delay the
+ * Worker's answer by its whole wait.
+ */
+export const WORKER_HEDGE_MS = 400;
 
 /**
  * Resolve a PLACE slug — one identified by a map feature.
@@ -568,7 +588,7 @@ async function resolveSpotSlug(
 /** placesGeo platform slugs: `<slugified-name>-<6 hex>` (see upsert_placesgeo_city). */
 export const PLATFORM_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*-[0-9a-f]{6}$/;
 
-export async function resolveLocationSlug(
+async function resolveFromPlaces(
   slug: string,
   options: ResolveOptions = {},
 ): Promise<AdaptedLocation | null> {
@@ -685,6 +705,115 @@ export async function resolveLocationSlug(
   });
 
   return adaptPlacesGeoToLocationDoc(matches[0], { cleanSlug: slug, seed });
+}
+
+/** The shipped seed place for a slug, adapted, or null (no lookup, no I/O). */
+export function seedLocationForSlug(slug: string): AdaptedLocation | null {
+  const seed = SLUG_INDEX.get(slug);
+  return seed ? adaptSeedToLocationDoc(seed) : null;
+}
+
+/**
+ * The whole wait the render path gives the stored geography for a slug the
+ * app does not ship, when the Worker has not named it: a cold Atlas
+ * connection is the reason for the first {@link DB_LOOKUP_TIMEOUT_MS}, and a
+ * place only the store holds must not become a 404 because it was slow.
+ */
+export const DB_LOOKUP_TOTAL_MS = 8_000;
+
+/**
+ * Canonical lookup for a URL slug: the stored geography, plus what the app can
+ * always answer without it (#414).
+ *
+ * 1. The stored geography (`resolveFromPlaces`). On the render path its first
+ *    wait is {@link ResolveOptions.dbTimeoutMs}: a hung or failing cluster
+ *    must not hold a page or turn a shipped place into "Location not found".
+ * 2. A shipped seed place is answered from the seed whatever the store said or
+ *    did (no lookup, no Worker).
+ * 3. A place the Worker knows (`GET /v1/locations?slug=`: community places
+ *    created through the platform, like `sembawang-sg`), for slugs worth
+ *    asking about (`looksLikePlaceSlug`). It is asked when the store has
+ *    missed or failed, or has not answered within {@link WORKER_HEDGE_MS}, so
+ *    the time is the slower of the two, not their sum (the proxy gate has a
+ *    2.5 s budget for both), and a place the store holds costs no Worker call.
+ *
+ * `strict` (the proxy's location gate) keeps telling "unknown" from "the
+ * lookup failed": a store error or a Worker error is rethrown unless
+ * something found the place; a store null and a Worker 404 is unknown. On the
+ * render path a store that merely timed out gets the rest of
+ * {@link DB_LOOKUP_TOTAL_MS} before the answer is "not found".
+ */
+export async function resolveLocationSlug(
+  slug: string,
+  options: ResolveOptions = {},
+): Promise<AdaptedLocation | null> {
+  if (!slug) return null;
+  const {
+    strict = false,
+    dbTimeoutMs = DB_LOOKUP_TIMEOUT_MS,
+    workerHedgeMs = WORKER_HEDGE_MS,
+  } = options;
+
+  const seed = seedLocationForSlug(slug);
+  const askWorker = !seed && !parseSmartSlug(slug) && looksLikePlaceSlug(slug);
+  // The Worker's lookup starts when the store has missed or failed, or has
+  // not answered within the hedge, whichever is first. It never rejects: its
+  // outcome is read below, or dropped when the store wins.
+  type WorkerAnswer = { place: AdaptedLocation | null; error: unknown };
+  const asked: { answer: Promise<WorkerAnswer> | null } = { answer: null };
+  const startWorker = (): Promise<WorkerAnswer> | null => {
+    if (!askWorker) return null;
+    asked.answer ??= fetchWorkerPlace(slug).then(
+      (place) => ({ place, error: undefined }),
+      (error: unknown) => ({ place: null, error }),
+    );
+    return asked.answer;
+  };
+  const hedge = askWorker ? setTimeout(startWorker, workerHedgeMs) : undefined;
+
+  const store = resolveFromPlaces(slug, options);
+  let found: AdaptedLocation | null = null;
+  let failed = false;
+  let timedOut = false;
+  let failure: unknown;
+  try {
+    if (strict) {
+      found = await store;
+    } else {
+      const result = await withTimeout(store, dbTimeoutMs);
+      if (result === TIMED_OUT) {
+        failed = timedOut = true;
+        failure = new Error("stored geography lookup timed out");
+      } else {
+        found = result;
+      }
+    }
+  } catch (err) {
+    failed = true;
+    failure = err;
+  }
+  clearTimeout(hedge);
+  if (found) return found;
+
+  // A shipped place renders from the seed whatever the store said or did.
+  if (seed && !strict) return seed;
+
+  const pending = startWorker();
+  if (pending) {
+    const answer = await pending;
+    if (answer.place) return answer.place;
+    // The Worker could not answer: on the gate path that is "lookup failed".
+    if (answer.error !== undefined && strict)
+      throw failed ? failure : answer.error;
+  }
+  if (failed && strict) throw failure;
+  if (timedOut) {
+    // Neither the Worker nor the seed has it, and the store has not said no:
+    // give it the rest of its wait before the answer is "not found".
+    const late = await withTimeout(store, DB_LOOKUP_TOTAL_MS - dbTimeoutMs);
+    if (late !== TIMED_OUT && late) return late;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------

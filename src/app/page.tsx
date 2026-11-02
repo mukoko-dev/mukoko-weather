@@ -15,6 +15,7 @@ import { readLastLocation } from "@/lib/last-location";
 import { loadLocationWeather } from "@/lib/location-payload";
 import type { WeatherLocation } from "@/lib/locations";
 import { ipFallbackLocation } from "@/lib/home-location";
+import { defaultHomeLocation } from "@/lib/default-home";
 import { countryDisplayName, reconcileCountry } from "@/lib/location-country";
 import { reconcileElevation } from "@/lib/location-elevation";
 import { SITE_URL } from "@/lib/site";
@@ -23,7 +24,7 @@ import { usableIpGeo } from "@/lib/location-choice";
 import { LocationSkeleton } from "@/components/weather/LocationSkeleton";
 
 // Bound the Worker geo fetch so a hung or protected upstream can't stall
-// the home render — the onboarding chooser is a fine fallback.
+// the home render — Harare, a shipped seed, is the fallback.
 const GEO_FETCH_TIMEOUT_MS = 2500;
 
 /**
@@ -51,7 +52,9 @@ export const dynamic = "force-dynamic";
  * 1. lastLocation cookie that resolves to a real location → full
  *    server-rendered dashboard for it, instantly.
  * 2. Else IP geo (Vercel's x-vercel-ip-latitude/longitude headers, find-only).
- * 3. Else nothing — the client shows the GPS/city chooser.
+ * 3. Else Harare, a shipped seed that renders without any lookup. Never a page
+ *    for choosing cities (#414): search and browse are one tap away in My
+ *    Weather and on the Locations list.
  *
  * CurrentLocationHome then refreshes via GPS on mount and swaps the dashboard
  * IN PLACE when the visitor is somewhere else — no redirect exists for a
@@ -74,10 +77,10 @@ export default function Home() {
 
 /**
  * Longest the server render may spend resolving the seeded location and its
- * weather. Past it the page streams the client chooser (GPS / search, which
- * fetches from the Worker itself) instead of holding the first paint: an
- * installed iOS app sat on its loading screen for 30 s behind a slow
- * upstream.
+ * weather. Past it the page streams the client home (which paints the last
+ * place from the device, else loads Harare from the Worker itself) instead of
+ * holding the first paint: an installed iOS app sat on its loading screen for
+ * 30 s behind a slow upstream.
  */
 const HOME_SEED_DEADLINE_MS = 3_500;
 
@@ -175,7 +178,7 @@ async function buildHome() {
         }
       } catch {
         // Geo lookup unavailable or timed out — the seed fallback below, then
-        // the client chooser, take over.
+        // Harare, take over.
       } finally {
         clearTimeout(timeout);
       }
@@ -196,15 +199,15 @@ async function buildHome() {
     }
   }
 
+  // Nothing resolved (no cookie, no usable IP position): Harare, a shipped
+  // seed. It renders without any lookup, so the home page is never a chooser.
+  // The GPS refresh and the location card in CurrentLocationHome are unchanged.
+  if (!detectedLocation) detectedLocation = defaultHomeLocation();
+
   const currentUser = await getCurrentUser().catch(() => null);
   const aiUser = currentUser
     ? { id: currentUser.id, email: currentUser.email ?? null }
     : null;
-
-  // No server-side location at all — the client GPS/city-chooser takes over.
-  if (!detectedLocation) {
-    return <CurrentLocationHome initial={null} user={aiUser} />;
-  }
 
   // Strip MongoDB _id (ObjectId with .toJSON()) before crossing to the client.
   const { _id: _removed, ...seededLocation } =

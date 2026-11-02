@@ -384,13 +384,19 @@ describe("WeatherDashboard — redesign wiring", () => {
 
 describe("selected forecast model is the baseline (issue #246)", () => {
   it("fetches through our API, not Open-Meteo directly", () => {
-    expect(source).toContain("fetchModelWeather(");
+    const hook = readFileSync(
+      resolve(__dirname, "../../lib/use-live-weather.ts"),
+      "utf-8",
+    );
+    expect(hook).toContain("loadModelWeather(");
+    expect(source).toContain("useLiveWeather(");
     expect(source).not.toMatch(/\bfetchWeather\(location\.lat/);
   });
 
   it("derives the frost banner and fallback flag from the baseline on screen", () => {
-    expect(source).toContain("checkFrostRisk(modelBaseline.hourly");
-    expect(source).toContain("modelBaseline ? false : seedUsingFallback");
+    expect(source).toContain("checkFrostRisk(");
+    expect(source).toContain("displayed.override.hourly");
+    expect(source).toContain("const usingFallback = displayed.usingFallback;");
   });
 });
 

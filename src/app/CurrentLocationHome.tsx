@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import type { WeatherLocation } from "@/lib/locations";
 import { checkFrostRisk, getDefaultSeason } from "@/lib/weather";
 import { fetchHomeWeather } from "@/lib/home-weather";
@@ -23,10 +22,9 @@ import { useDeviceHeartbeat } from "@/lib/use-device-heartbeat";
 import { countryDisplayName, reconcileCountry } from "@/lib/location-country";
 import { reconcileElevation } from "@/lib/location-elevation";
 import { trackEvent } from "@/lib/analytics";
-import { SearchIcon, NavigationIcon } from "@/lib/weather-icons";
-import { Spinner } from "@/components/ui/spinner";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { LocationPromptCard } from "@/components/weather/LocationPromptCard";
+import { LocationSkeleton } from "@/components/weather/LocationSkeleton";
+import { loadDefaultHomePayload } from "@/lib/default-home";
 import { WeatherDashboard } from "./[location]/WeatherDashboard";
 import type { AISummaryUser } from "@/components/weather/AISummary";
 import type { DashboardPayload, DeviceView } from "@/lib/device-weather";
@@ -123,17 +121,23 @@ export function CurrentLocationHome({ initial, user }: Props) {
       writeStorage(LAST_HOME_PLACE_KEY, view.location.slug);
   }, [view?.location.slug]);
 
-  // Nothing seeded by the server (cookies cleared, IP lookup failed): paint
+  // Nothing seeded by the server (it ran past its deadline, or failed): paint
   // the last place shown here from the device, then refresh it in the
-  // background and swap the fresh forecast in.
+  // background and swap the fresh forecast in. With nothing on the device
+  // either, load Harare from the Worker: the home page is never a chooser.
   useEffect(() => {
     if (initial) return;
-    const slug = readStorage(LAST_HOME_PLACE_KEY);
-    if (!slug) return;
     let cancelled = false;
     void (async () => {
-      const stored = await recallPlace(slug);
-      if (cancelled || !stored) return;
+      const slug = readStorage(LAST_HOME_PLACE_KEY);
+      const stored = slug ? await recallPlace(slug) : null;
+      if (cancelled) return;
+      if (!stored) {
+        const fallback = await loadDefaultHomePayload(slug);
+        if (cancelled) return;
+        setView((current) => current ?? fallback);
+        return;
+      }
       setView((current) => current ?? stored.payload);
       setDevice({ fetchedAt: stored.fetchedAt, freshness: stored.freshness });
       try {
@@ -397,69 +401,9 @@ export function CurrentLocationHome({ initial, user }: Props) {
     );
   }
 
-  // ── Nothing to show — city chooser ────────────────────────────────────────
-  return (
-    <main
-      id="main-content"
-      className="flex min-h-[calc(100dvh-4rem)] flex-col items-center justify-center px-4 py-12"
-      aria-label="Location selection"
-    >
-      <div className="w-full max-w-sm space-y-8 text-center">
-        <section
-          aria-label="Find your location"
-          className="animate-fade-in space-y-6"
-        >
-          <div>
-            <h1 className="text-2xl font-semibold text-text-primary">
-              Find your weather
-            </h1>
-            <p className="mt-2 text-sm text-text-secondary">
-              Use your device location or search for any city worldwide.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-3">
-            <button
-              type="button"
-              onClick={handleGps}
-              disabled={gpsState === "detecting"}
-              aria-busy={gpsState === "detecting"}
-              className="kudu press-scale"
-            >
-              {gpsState === "detecting" ? (
-                <Spinner className="h-4 w-4 border-current border-t-transparent" />
-              ) : (
-                <NavigationIcon size={15} aria-hidden="true" />
-              )}
-              {gpsState === "detecting"
-                ? "Finding your location…"
-                : "Use my current location"}
-            </button>
-            <button
-              type="button"
-              onClick={() => openMyWeather()}
-              className="impala press-scale"
-            >
-              <SearchIcon size={15} aria-hidden="true" />
-              Search for a city
-            </button>
-            <Link
-              href="/explore"
-              className="dove underline-offset-4 hover:underline"
-            >
-              Browse all locations
-            </Link>
-          </div>
-
-          {message && (
-            <Alert variant="warning">
-              <AlertDescription className="text-sm">
-                {PROMPT_COPY[message]}
-              </AlertDescription>
-            </Alert>
-          )}
-        </section>
-      </div>
-    </main>
-  );
+  // ── Nothing seeded yet — the home page's own skeleton, never a chooser ────
+  // The server could not seed a place in time and the device holds none: Harare
+  // is loading from the Worker (see the effect above). Search and browse stay
+  // one tap away in My Weather and on the Locations list.
+  return <LocationSkeleton />;
 }
