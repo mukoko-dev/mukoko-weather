@@ -26,6 +26,9 @@ describe("privacy page: MET Norway", () => {
     expect(entry).toContain("rounded to four decimal places");
     expect(entry).toContain("Your IP address is");
     expect(entry).toContain("not forwarded");
+    // Its own logs hold the coordinates (api.met.no/doc/TermsOfService,
+    // "Personal data"): said plainly.
+    expect(entry).toContain("request logs, kept in Norway");
     expect(entry).toContain("CC BY 4.0");
   });
 

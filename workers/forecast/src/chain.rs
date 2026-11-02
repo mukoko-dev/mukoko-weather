@@ -76,6 +76,10 @@ impl Got {
 /// cached): the jobs Worker uses it to keep popular places warm. `model` is
 /// the caller's single-model baseline (`?model=`, already sanitised with
 /// [`blend::sanitize_baseline_model`]); `None` is the Africa-weighted blend.
+/// `failover` lets MET Norway answer when Open-Meteo gave nothing (never for
+/// `refresh`, the jobs Worker's cache warming); the jobs Worker's history
+/// recording turns it off too (`failover=0`), because it would throw the answer
+/// away and MET Norway's terms ask for no unnecessary traffic.
 pub async fn forecast(
     env: &Env,
     ctx: &Context,
@@ -83,6 +87,7 @@ pub async fn forecast(
     lon: f64,
     refresh: bool,
     model: Option<&str>,
+    failover: bool,
 ) -> Option<Got> {
     let kv = env.kv(CACHE_BINDING).ok();
     // The key and the lifetime are `weather_core::blend`'s rules.
@@ -110,8 +115,15 @@ pub async fn forecast(
         // not the seasonal estimate. Fresher than the stored row, which stays
         // the last resort below.
         None => {
-            let hint = offset_hint(kv.as_ref(), lat, lon, stale.as_ref()).await;
-            match crate::met_no::forecast(env, ctx, lat, lon, hint).await {
+            // Visitors only: cache warming (`refresh`) is background traffic,
+            // and MET Norway's terms ask for none that is unnecessary.
+            let from_met_no = if failover && !refresh {
+                let hint = offset_hint(kv.as_ref(), lat, lon, stale.as_ref()).await;
+                crate::met_no::forecast(env, ctx, lat, lon, hint).await
+            } else {
+                None
+            };
+            match from_met_no {
                 Some(data) => (data, met_no::PROVIDER.to_owned(), None, Source::MetNo),
                 None => {
                     return stale.map(|mut old| {

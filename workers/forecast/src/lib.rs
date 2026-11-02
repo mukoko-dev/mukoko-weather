@@ -4,7 +4,7 @@
 //! workers.dev address: the API Workers reach it through service bindings.
 //!
 //! ```text
-//! GET /weather?lat=&lon=[&model=m][&models=a,b][&extras=1][&refresh=1][&priority=1]   full WeatherData (the app's shape)
+//! GET /weather?lat=&lon=[&model=m][&models=a,b][&extras=1][&refresh=1][&priority=1][&failover=0]   full WeatherData (the app's shape)
 //! GET /daily?location=|lat=&lon=[&days=1..7]       the daily forecast contract
 //! GET /air-quality?lat=&lon=                       the EPA AQI (Open-Meteo air quality)
 //! GET /agriculture?lat=&lon=[&location=][&country=][&crops=]  farm windows, rain, soil, water balance, frost and heat risk
@@ -166,7 +166,9 @@ async fn weather(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
     // The caller's own model (`selectedForecastModel`); `best_match`, an
     // empty value and anything unknown mean the Africa-weighted blend.
     let model = weather_core::blend::sanitize_baseline_model(get("model"));
-    let Some(mut got) = chain::forecast(env, ctx, lat, lon, refresh, model).await else {
+    // `failover=0` (the jobs Worker recording a day) keeps MET Norway out of it.
+    let failover = get("failover") != Some("0");
+    let Some(mut got) = chain::forecast(env, ctx, lat, lon, refresh, model, failover).await else {
         return error(
             503,
             "providers_unavailable",
@@ -312,7 +314,7 @@ async fn daily(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
             }
         },
     };
-    let Some(got) = chain::forecast(env, ctx, place.lat, place.lon, false, None).await else {
+    let Some(got) = chain::forecast(env, ctx, place.lat, place.lon, false, None, true).await else {
         return error(
             503,
             "providers_unavailable",

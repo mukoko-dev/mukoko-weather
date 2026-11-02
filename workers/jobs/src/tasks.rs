@@ -70,7 +70,11 @@ async fn place_history(env: &Env, slugs: &[String]) -> Result<()> {
     let db = env.d1(DB)?;
     let mut statements: Vec<D1PreparedStatement> = Vec::new();
     for p in &places {
-        let q = format!("/weather?lat={}&lon={}", p.lat, p.lon);
+        // `failover=0`: MET Norway is not asked for a day that will not be
+        // recorded (the provider check below), so a history run over every
+        // seed place adds no traffic to it. A fresh stored `met-no` row can
+        // still come back from the cache; the check skips that too.
+        let q = format!("/weather?lat={}&lon={}&failover=0", p.lat, p.lon);
         let Some(mut resp) = ask_forecast(env, &q).await? else {
             continue;
         };

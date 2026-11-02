@@ -215,7 +215,9 @@ export default function PrivacyPage() {
                   asks it for the forecast of a place: it sends geographic
                   coordinates rounded to four decimal places (about 11 metres)
                   and identifies itself as mukoko weather. Your IP address is
-                  not forwarded. The data is licensed under CC BY 4.0. See their{" "}
+                  not forwarded: its request logs, kept in Norway, hold those
+                  coordinates with the address of our server, not yours. The
+                  data is licensed under CC BY 4.0. See their{" "}
                   <a
                     href="https://api.met.no/doc/TermsOfService"
                     className="sunbird"
