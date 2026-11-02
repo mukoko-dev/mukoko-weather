@@ -143,10 +143,6 @@ def locations_collection():
     return weather_db()["locations"]
 
 
-def weather_cache_collection():
-    return weather_db()["weather_cache"]
-
-
 def ai_summaries_collection():
     return weather_db()["ai_summaries"]
 

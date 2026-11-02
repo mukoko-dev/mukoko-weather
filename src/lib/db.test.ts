@@ -819,21 +819,16 @@ describe("db-init indexes for the model baseline (issue #246)", () => {
     }
   });
 
-  it("uses the same camelCase collection names as the Python writers", async () => {
+  it("the forecast Worker reads the blend overrides from the camelCase collection name", async () => {
+    // The Python writers of the budget, cache and verification collections are
+    // gone (the Worker keeps its budget in D1 and its cache in KV); only the
+    // blend-weight overrides are still read from MongoDB.
     const fs = await import("fs");
-    const py = [
-      fs.readFileSync("api/py/_enrichment.py", "utf-8"),
-      fs.readFileSync("api/py/_verification.py", "utf-8"),
-      fs.readFileSync("api/py/_model_blend.py", "utf-8"),
-    ].join("\n");
-    for (const name of [
-      "providerBudget",
-      "enrichmentCache",
-      "forecastVerification",
-      "modelBlendConfig",
-    ]) {
-      expect(py).toContain(`weather_db()["${name}"]`);
-    }
+    const rust = fs.readFileSync(
+      "workers/forecast/src/blend_config.rs",
+      "utf-8",
+    );
+    expect(rust).toContain('const COLLECTION: &str = "modelBlendConfig";');
   });
 });
 

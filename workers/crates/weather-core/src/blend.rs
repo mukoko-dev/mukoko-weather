@@ -4,7 +4,7 @@
 //! request shape) and the serving rules in `api/py/_weather.py` (nowcast
 //! trimming, UTC offset estimate). The output is pinned to the Python by
 //! `tests/fixtures/model-blend.json`, whose `expected` values the Python
-//! functions produced (`scripts/gen_model_blend_fixtures.py`).
+//! functions produced before they were removed (frozen oracle data, #333).
 //!
 //! The baseline is a weighted blend of the global NWP models Open-Meteo
 //! serves keyless. Tomorrow.io never provides it (see `enrichment.rs`).

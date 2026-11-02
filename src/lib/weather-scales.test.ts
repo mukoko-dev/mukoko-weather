@@ -6,6 +6,8 @@ import {
   FLIGHT_CATEGORY_PDF,
   FLIGHT_SCALE,
   PSI_SCALE,
+  TEMP_ANCHORS,
+  TEMP_SCALE,
   UV_SCALE,
   WEATHER_SCALES,
   WIND_SCALE,
@@ -15,6 +17,7 @@ import {
   uvBand,
 } from "./weather-scales";
 import { legendBandIndex, MAP_CHIPS, MODEL_CHIPS } from "./map-layers";
+import { GRADIENT_PRESETS } from "@/components/weather/widgets/geometry";
 import { aqiBand, AQI_BANDS } from "./aq-grid";
 import { uvLevel } from "./weather";
 import { contrastRatio } from "./contrast";
@@ -512,6 +515,52 @@ describe("no brand mineral in a weather data encoding (whole of src)", () => {
       "utf8",
     );
     expect(geo).not.toMatch(TOKEN_RE);
+  });
+});
+
+describe("continuous scale bars blend (owner, 2026-11-02)", () => {
+  const read = (file: string) =>
+    readFileSync(join(SRC, file), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+
+  // Every bar that draws a continuous quantity (AQI, UV index, temperature)
+  // paints ONE gradient built from the scale's tokens, and carries the 3:1
+  // outline. A categorical scale (haze level, flight category, frost level, a
+  // map legend of fills) is stepped on purpose and is not in this list.
+  const BARS = [
+    "components/weather/widgets/GradientScale.tsx",
+    "components/weather/DailyForecast.tsx",
+    "components/weather/AirQualityDetails.tsx",
+  ];
+
+  it("paints every continuous bar as a gradient from the scale tokens", () => {
+    for (const file of BARS) {
+      const src = read(file);
+      expect(src, file).toMatch(/backgroundImage:/);
+      expect(src, file).toMatch(/blendGradient|trackGradient/);
+    }
+  });
+
+  it("draws no per-band rectangles or solid band fills on those bars", () => {
+    for (const file of BARS) {
+      const src = read(file);
+      expect(src, file).not.toContain("data-band");
+      expect(src, file).not.toContain("GRADIENT_BREAKS[");
+      expect(src, file).not.toMatch(/<rect\b/);
+      expect(src, file).not.toMatch(/\bbg-wx-(aqi|uv|temp)-\d/);
+    }
+  });
+
+  it("outlines every blended bar so pale official colours hold 3:1", () => {
+    for (const file of BARS)
+      expect(read(file), file).toContain("ring-wx-outline");
+  });
+
+  it("keeps the AQI, UV and temperature bars built from the same tokens as their swatches", () => {
+    const tokens = (scale: { bands: readonly { token: string }[] }) =>
+      scale.bands.map((b) => b.token);
+    expect(GRADIENT_PRESETS.aqi).toEqual(tokens(AQI_SCALE));
+    expect(GRADIENT_PRESETS.uv).toEqual(tokens(UV_SCALE));
+    expect(TEMP_ANCHORS.map((a) => a.token)).toEqual(tokens(TEMP_SCALE));
   });
 });
 
