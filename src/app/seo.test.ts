@@ -251,21 +251,24 @@ describe("country-aware metadata in [location]/page.tsx", () => {
 
   it("omits addressCountry and containedInPlace when the place has no country (open ocean)", () => {
     expect(pageSource).toContain(
-      "...(countryCode ? { addressCountry: countryCode } : {})",
+      "...(schemaCountry ? { addressCountry: schemaCountry } : {})",
     );
     expect(pageSource).toMatch(
-      /\.\.\.\(countryCode\s*\?\s*\{\s*containedInPlace:/,
+      /\.\.\.\(schemaCountry\s*\?\s*\{\s*containedInPlace:/,
     );
-    expect(pageSource).not.toMatch(/addressCountry: countryCode,\n/);
+    expect(pageSource).not.toMatch(/addressCountry: schemaCountry,\n/);
   });
 
-  it("uses countryCode for addressCountry in JSON-LD", () => {
+  it("uses the place's country code for addressCountry in JSON-LD", () => {
     // addressCountry should use the actual ISO code, not hardcoded "ZW"
     const addressCountrySection = pageSource.slice(
       pageSource.indexOf("addressCountry"),
       pageSource.indexOf("addressCountry") + 50,
     );
-    expect(addressCountrySection).toContain("countryCode");
+    expect(addressCountrySection).toContain("schemaCountry");
+    expect(pageSource).toContain(
+      'const schemaCountry = location.regionApproximate ? "" : countryCode;',
+    );
   });
 
   it("containedInPlace uses dynamic country name in JSON-LD", () => {

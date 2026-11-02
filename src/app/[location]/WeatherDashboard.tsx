@@ -27,6 +27,7 @@ import {
   restrictToVerticalAxis,
   restrictToParentElement,
 } from "@dnd-kit/modifiers";
+import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { useLocationSwipe } from "@/components/layout/LocationPager";
 import { Footer } from "@/components/layout/Footer";
@@ -163,8 +164,6 @@ const ModelComparisonChart = lazy(() =>
 import { formatCoords } from "@/lib/utils";
 import { fetchActivities } from "@/lib/activities-client";
 
-const BASE_URL = "https://weather.mukoko.com";
-
 interface WeatherDashboardProps {
   weather: WeatherData;
   location: WeatherLocation;
@@ -232,8 +231,10 @@ export function WeatherDashboard({
   const extrasNear = useNearViewport(
     extrasSentinelRef,
     MODEL_EXTRAS_ROOT_MARGIN,
+    true,
+    location.slug,
   );
-  const afterIdle = useIdleOnce(MODEL_EXTRAS_IDLE_TIMEOUT_MS);
+  const afterIdle = useIdleOnce(MODEL_EXTRAS_IDLE_TIMEOUT_MS, location.slug);
   const fetchExtras = shouldFetchModelExtras(model, extrasNear || afterIdle);
   const live = useLiveWeather({
     enabled: fetchExtras || seedUsingFallback,
@@ -281,7 +282,22 @@ export function WeatherDashboard({
   const sectionOrder = pinHeroFirst(storedSectionOrder);
   const setSectionOrder = useAppStore((s) => s.setSectionOrder);
   const hydrateSectionOrder = useAppStore((s) => s.hydrateSectionOrder);
-  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  // The dashboard stays mounted when the visitor moves to another place (the
+  // place stage swaps `location` in place), so state that belongs to ONE
+  // place is stored with its slug and ignored for any other. The sections
+  // themselves are re-created per place (`key={location.slug}` on the grid).
+  const [aiSummaryFor, setAiSummaryFor] = useState<{
+    slug: string;
+    text: string;
+  } | null>(null);
+  const aiSummary =
+    aiSummaryFor?.slug === location.slug ? aiSummaryFor.text : null;
+  const placeSlug = location.slug;
+  const setAiSummary = useCallback(
+    (text: string | null) =>
+      setAiSummaryFor(text === null ? null : { slug: placeSlug, text }),
+    [placeSlug],
+  );
   // Location-local clock for the backdrop's dawn/dusk sky. Client-only (after
   // mount, then every 5 min) so SSR and hydration agree and it tracks time.
   const [skyClock, setSkyClock] = useState<BackdropClock | null>(null);
@@ -298,16 +314,28 @@ export function WeatherDashboard({
   // Activity advice sheet: opened from the Community lane (whole card, "All
   // advice", or one activity's row). `loaded` keeps it mounted after the first
   // open so the close animation plays; its content mounts only while open.
-  const [advice, setAdvice] = useState<{
+  const [adviceState, setAdvice] = useState<{
+    slug: string;
     loaded: boolean;
     open: boolean;
     activityId?: string;
     opener: HTMLElement | null;
-  }>({ loaded: false, open: false, opener: null });
+  }>({ slug: location.slug, loaded: false, open: false, opener: null });
+  // An advice sheet opened for the previous place is not this place's.
+  const advice =
+    adviceState.slug === location.slug
+      ? adviceState
+      : { ...adviceState, loaded: false, open: false, opener: null };
   const openAdvice = useCallback(
     (activityId: string | undefined, opener: HTMLElement) =>
-      setAdvice({ loaded: true, open: true, activityId, opener }),
-    [],
+      setAdvice({
+        slug: placeSlug,
+        loaded: true,
+        open: true,
+        activityId,
+        opener,
+      }),
+    [placeSlug],
   );
   const closeAdvice = useCallback(
     () => setAdvice((a) => ({ ...a, open: false })),
@@ -437,12 +465,13 @@ export function WeatherDashboard({
     <nav aria-label="Breadcrumb" data-breadcrumb>
       <ol className="flex flex-wrap items-center gap-x-1.5">
         <li>
-          <a
-            href={BASE_URL}
+          <Link
+            href="/"
+            prefetch={false}
             className="dik-dik hover:underline transition-colors"
           >
             Home
-          </a>
+          </Link>
         </li>
         <li aria-hidden="true">/</li>
         {/* Country — always shown */}
@@ -530,7 +559,10 @@ export function WeatherDashboard({
           {frostAlert && <FrostAlertBanner alert={frostAlert} />}
 
           {/* Main grid: mobile = 1 col, lg = 3 col (2+1), xl = 4 col (3+1) */}
-          <div className="grid gap-[var(--space-section)] lg:grid-cols-3 xl:grid-cols-4">
+          <div
+            key={location.slug}
+            className="grid gap-[var(--space-section)] lg:grid-cols-3 xl:grid-cols-4"
+          >
             {/* Primary content — lg:col-span-2, xl:col-span-3, DnD sortable.
                 `relative` anchors the out-of-flow sentinel at its end. */}
             <div className={`relative ${MAIN_COLUMN_CLASS}`}>

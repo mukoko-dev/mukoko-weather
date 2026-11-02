@@ -54,7 +54,10 @@ describe("dashboard wiring — below-the-fold fetches are deferred", () => {
     expect(dashboard).toContain(
       "shouldFetchModelExtras(model, extrasNear || afterIdle)",
     );
-    expect(dashboard).toContain("useIdleOnce(MODEL_EXTRAS_IDLE_TIMEOUT_MS)");
+    // Re-armed per place: the dashboard stays mounted across place switches.
+    expect(dashboard).toContain(
+      "useIdleOnce(MODEL_EXTRAS_IDLE_TIMEOUT_MS, location.slug)",
+    );
     // The deferred gate still holds for a page that already has live weather;
     // a page showing the seasonal estimate fetches at once (#414).
     expect(dashboard).toContain("enabled: fetchExtras || seedUsingFallback,");

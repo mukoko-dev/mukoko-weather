@@ -3,9 +3,14 @@
  *
  * Caching strategies:
  *   - Static assets (_next/static): CacheFirst (content-hashed, immutable)
- *   - Precache: stylesheets + public icons only (src/lib/sw-precache.ts), so
- *     install never competes with the first paint for bandwidth
- *   - HTML pages: always the network; offline fallback via `fallbacks` config
+ *   - Precache: stylesheets, public icons and the /offline shell only
+ *     (src/lib/sw-precache.ts), so install never competes with the first
+ *     paint for bandwidth. /offline is fetched without cookies.
+ *   - Page navigations (src/lib/sw-navigation.ts): `/` and `/{slug}` that the
+ *     server marked anonymous and cookie-free are stale-while-revalidate (the
+ *     stored shell paints first, the network refreshes it); every other page
+ *     is the network, then /offline. Nothing signed-in or personal is stored.
+ *     Caches are named `pages-<build version>`; a new worker deletes the rest.
  *   - Weather API: NetworkFirst (5s timeout, 15min cache)
  *   - Suitability/activities: StaleWhileRevalidate (1h cache)
  *   - Map tiles: CacheFirst (24h cache)
@@ -21,37 +26,82 @@ import {
   ExpirationPlugin,
 } from "serwist";
 import type { PrecacheEntry } from "serwist";
-import { precacheEntries } from "@/lib/sw-precache";
+import { OFFLINE_URL, precacheEntries } from "@/lib/sw-precache";
+import {
+  handleNavigation,
+  pagesCacheName,
+  stalePagesCaches,
+  versionOfManifest,
+} from "@/lib/sw-navigation";
+
+/** The slice of a `FetchEvent` the navigation handler uses (no webworker lib here). */
+interface FetchEventLike {
+  preloadResponse: Promise<Response | undefined>;
+  waitUntil(work: Promise<unknown>): void;
+}
+
+/** The slice of an `ExtendableEvent` the activate handler uses. */
+interface ActivateEventLike {
+  waitUntil(work: Promise<unknown>): void;
+}
 
 declare const self: {
   __SW_MANIFEST: Array<PrecacheEntry | string>;
 } & Record<string, unknown>;
 
-const serwist = new Serwist({
+// A version that changes whenever the build's emitted assets do: stored pages
+// name this build's chunks, so another build's pages are never served.
+// (The build's injection point may appear only once in this file.)
+const MANIFEST = self.__SW_MANIFEST;
+const BUILD_VERSION = versionOfManifest(MANIFEST);
+const PAGES_CACHE = pagesCacheName(BUILD_VERSION);
+
+const serwist: Serwist = new Serwist({
   // Only the offline shell is precached (src/lib/sw-precache.ts); chunks and
   // fonts are cached on first use by the CacheFirst route below.
-  precacheEntries: precacheEntries(self.__SW_MANIFEST),
+  precacheEntries: precacheEntries(MANIFEST),
   precacheOptions: {
     cleanupOutdatedCaches: true,
     concurrency: 10,
+    // Precache without cookies: /offline must never hold a visitor's name.
+    fetchOptions: { credentials: "omit" },
   },
   skipWaiting: true,
   clientsClaim: true,
   navigationPreload: true,
   disableDevLogs: true,
 
-  fallbacks: {
-    entries: [
-      {
-        url: "/offline",
-        matcher({ request }) {
-          return request.destination === "document";
+  runtimeCaching: [
+    // Page navigations: the app shell. See src/lib/sw-navigation.ts for what
+    // may be stored and when a stored copy is dropped.
+    {
+      matcher: ({ request }) => request.mode === "navigate",
+      handler: {
+        async handle({ request, event }): Promise<Response> {
+          const fetchEvent = event as unknown as FetchEventLike;
+          const cache = await caches.open(PAGES_CACHE);
+          return handleNavigation(new URL(request.url), {
+            pages: {
+              match: (key) => cache.match(key),
+              put: (key, response) => cache.put(key, response),
+              delete: (key) => cache.delete(key),
+              keys: async () => (await cache.keys()).map((r) => r.url),
+            },
+            // The browser's navigation preload when it started one, else a
+            // fetch. Used once per navigation.
+            network: async () =>
+              (await fetchEvent.preloadResponse) ?? fetch(request),
+            offline: async (): Promise<Response | undefined> =>
+              serwist.matchPrecache(OFFLINE_URL),
+            clearPages: async () => {
+              await caches.delete(PAGES_CACHE);
+            },
+            waitUntil: (work) => fetchEvent.waitUntil(work),
+          });
         },
       },
-    ],
-  },
+    },
 
-  runtimeCaching: [
     // Static assets — CacheFirst (immutable, content-hashed by Next.js)
     {
       matcher: ({ url }) => url.pathname.startsWith("/_next/static/"),
@@ -160,6 +210,29 @@ const serwist = new Serwist({
 });
 
 serwist.addEventListeners();
+
+// A new build's worker drops the stored pages of every other build when it
+// takes over (they name chunks the new build may not have).
+(
+  self as unknown as {
+    addEventListener(
+      type: "activate",
+      listener: (event: ActivateEventLike) => void,
+    ): void;
+  }
+).addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches
+      .keys()
+      .then((names) =>
+        Promise.all(
+          stalePagesCaches(names, BUILD_VERSION).map((name) =>
+            caches.delete(name),
+          ),
+        ),
+      ),
+  );
+});
 
 // Web push (mukoko-dev/mukoko-weather#289). Glue only: the logic is in
 // src/lib/push/sw-logic.ts so it can move to another service-worker toolchain.

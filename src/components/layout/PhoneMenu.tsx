@@ -13,6 +13,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useAppStore } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { trackEvent } from "@/lib/analytics";
+import { canShowHomeInPlace } from "@/lib/place-bus";
 import {
   displayNameFor,
   initialsFor,
@@ -98,7 +99,9 @@ export function PhoneMenu({ trigger, buttonClassName, iconClassName }: Props) {
         });
         setSelectedLocation(result.location.slug);
         writeLastLocationCookie(result.location.slug);
-        if (pathname === "/") {
+        // A mounted home stage swaps (or returns to) My Location in place,
+        // wherever the URL points; otherwise `/` is a normal navigation.
+        if (pathname === "/" || canShowHomeInPlace()) {
           window.dispatchEvent(
             new CustomEvent(CURRENT_LOCATION_EVENT, {
               detail: result.location,

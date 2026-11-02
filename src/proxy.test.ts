@@ -436,3 +436,90 @@ describe("proxy — bare place names resolve instead of 404 (#317)", () => {
     }
   });
 });
+
+describe("the app shell the service worker may keep (x-mukoko-shell)", () => {
+  const anonymous = () =>
+    vi.mocked(authkit).mockResolvedValueOnce({
+      headers: new Headers(),
+      session: { user: null },
+    } as never);
+
+  it("marks `/` and `/{slug}` for an anonymous visitor whose response sets no cookie", async () => {
+    anonymous();
+    const home = await proxy(new NextRequest("https://weather.mukoko.com/"));
+    expect(home.headers.get("x-mukoko-shell")).toBe("anonymous");
+
+    // The cookie already names the place, so nothing is set and the page is keepable.
+    anonymous();
+    const place = await proxy(
+      new NextRequest("https://weather.mukoko.com/harare", {
+        headers: { cookie: "lastLocation=harare" },
+      }),
+    );
+    expect(place.headers.getSetCookie()).toEqual([]);
+    expect(place.headers.get("x-mukoko-shell")).toBe("anonymous");
+  });
+
+  it("does not mark a response that sets a cookie (a new place)", async () => {
+    anonymous();
+    const res = await proxy(
+      new NextRequest("https://weather.mukoko.com/harare", {
+        headers: { cookie: "lastLocation=bulawayo" },
+      }),
+    );
+    expect(
+      res.headers
+        .getSetCookie()
+        .some((c) => c.startsWith("lastLocation=harare")),
+    ).toBe(true);
+    expect(res.headers.get("x-mukoko-shell")).toBeNull();
+  });
+
+  it("sets the lastLocation cookie only when it changes", async () => {
+    anonymous();
+    const same = await proxy(
+      new NextRequest("https://weather.mukoko.com/harare", {
+        headers: { cookie: "lastLocation=harare" },
+      }),
+    );
+    expect(same.headers.getSetCookie()).toEqual([]);
+    const fresh = await proxy(
+      new NextRequest("https://weather.mukoko.com/harare"),
+    );
+    expect(fresh.headers.getSetCookie().join("\n")).toContain(
+      "lastLocation=harare",
+    );
+  });
+
+  it("never marks a signed-in visitor's page (their name is in the HTML)", async () => {
+    vi.mocked(authkit).mockResolvedValueOnce({
+      headers: new Headers(),
+      session: { user: { id: "user_1", email: "a@example.com" } },
+    } as never);
+    const res = await proxy(new NextRequest("https://weather.mukoko.com/"));
+    expect(res.headers.get("x-mukoko-shell")).toBeNull();
+  });
+
+  it("never marks a response when the session is unknown", async () => {
+    // authkit answered without a session: not proof of anonymity.
+    const res = await proxy(new NextRequest("https://weather.mukoko.com/"));
+    expect(res.headers.get("x-mukoko-shell")).toBeNull();
+  });
+
+  it("never marks sub-routes, other routes or an unknown place", async () => {
+    for (const path of [
+      "/harare/forecast",
+      "/explore",
+      "/profile",
+      "/auth/signin",
+      "/api/ai",
+      "/zzzz-not-a-place",
+    ]) {
+      anonymous();
+      const res = await proxy(
+        new NextRequest(`https://weather.mukoko.com${path}`),
+      );
+      expect(res.headers.get("x-mukoko-shell"), path).toBeNull();
+    }
+  });
+});

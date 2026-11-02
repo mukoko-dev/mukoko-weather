@@ -36,3 +36,21 @@ describe("service worker precache filter", () => {
     ]);
   });
 });
+
+describe("the offline shell", () => {
+  it("is precached (it is a route, so next.config.ts adds it to the manifest)", async () => {
+    const { OFFLINE_URL, shouldPrecache, precacheEntries } =
+      await import("./sw-precache");
+    expect(OFFLINE_URL).toBe("/offline");
+    expect(shouldPrecache({ url: "/offline" })).toBe(true);
+    expect(
+      precacheEntries([
+        { url: "/offline" },
+        { url: "/_next/static/chunks/a.js" },
+      ]),
+    ).toEqual([{ url: "/offline" }]);
+    // Still not a general page cache: other routes are not precached.
+    expect(shouldPrecache({ url: "/harare" })).toBe(false);
+    expect(shouldPrecache({ url: "/profile" })).toBe(false);
+  });
+});

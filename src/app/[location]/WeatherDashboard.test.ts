@@ -330,9 +330,11 @@ describe("WeatherDashboard — mobile nav clearance and touch targets", () => {
   });
 
   it("inline breadcrumb Home link carries the .dik-dik touch-target class", () => {
-    const homeIdx = source.indexOf("href={BASE_URL}");
+    // A client-side Link to "/", never an <a href="https://…"> (a full reload).
+    const homeIdx = source.indexOf('<Link\n            href="/"');
     expect(homeIdx).toBeGreaterThan(-1);
     expect(source.slice(homeIdx, homeIdx + 200)).toContain("dik-dik");
+    expect(source).not.toContain("href={BASE_URL}");
   });
 });
 
