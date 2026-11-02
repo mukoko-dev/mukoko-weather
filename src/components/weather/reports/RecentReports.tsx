@@ -5,8 +5,7 @@ import { useAppStore } from "@/lib/store";
 import { trackEvent } from "@/lib/analytics";
 import { CloudSunIcon, MegaphoneIcon } from "@/lib/weather-icons";
 import { getReportTypeInfo } from "@/lib/report-types";
-import { fetchJson } from "@/lib/fetch-json";
-import { reportsListUrl, reportsUpvoteUrl } from "@/lib/reports-api";
+import { loadReports, reportsUpvoteUrl } from "@/lib/reports-api";
 import { LoadingNotice } from "@/components/ui/loading-notice";
 import { Button } from "@/components/ui/button";
 import { formatRelative } from "@/lib/i18n";
@@ -48,9 +47,21 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
   useEffect(() => {
     if (!locationSlug) return;
 
-    fetchJson<{ reports?: Report[] }>(reportsListUrl(locationSlug))
-      .then((data) => setReports(data?.reports || []))
-      .finally(() => setLoading(false));
+    // Shared with the report lane: one call for both.
+    let alive = true;
+    loadReports<Report>(locationSlug)
+      .then((data) => {
+        if (alive) setReports(data?.reports || []);
+      })
+      .catch(() => {
+        // Supplementary: an empty list, not an error card.
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
   }, [locationSlug]);
 
   const handleUpvote = useCallback(

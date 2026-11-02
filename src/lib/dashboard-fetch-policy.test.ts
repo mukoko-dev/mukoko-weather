@@ -7,6 +7,7 @@ import {
   MODEL_EXTRAS_ROOT_MARGIN,
   modelExtrasFromResponse,
   modelExtrasKey,
+  resolveDisplayedWeather,
   selectModelExtras,
   shouldFetchModelExtras,
 } from "./dashboard-fetch-policy";
@@ -54,7 +55,9 @@ describe("dashboard wiring — below-the-fold fetches are deferred", () => {
       "shouldFetchModelExtras(model, extrasNear || afterIdle)",
     );
     expect(dashboard).toContain("useIdleOnce(MODEL_EXTRAS_IDLE_TIMEOUT_MS)");
-    expect(dashboard).toContain("if (!fetchExtras) return;");
+    // The deferred gate still holds for a page that already has live weather;
+    // a page showing the seasonal estimate fetches at once (#414).
+    expect(dashboard).toContain("enabled: fetchExtras || seedUsingFallback,");
   });
 
   it("observes an out-of-flow sentinel at the end of the main column", () => {
@@ -64,7 +67,13 @@ describe("dashboard wiring — below-the-fold fetches are deferred", () => {
 
   it("fetches climate normals only once the Conditions grid is near", () => {
     expect(atmospheric).toContain('useNearViewport(sectionRef, "600px")');
-    expect(atmospheric).toContain("if (!enabled) return;");
+    // The shared hook fetches nothing while it is not enabled.
+    expect(atmospheric).toContain("enabled && hasPoint");
+    const hook = readFileSync(
+      resolve(__dirname, "use-worker-data.ts"),
+      "utf-8",
+    );
+    expect(hook).toContain("if (!enabled) return;");
   });
 });
 
@@ -115,6 +124,7 @@ describe("model extras follow the place + model on screen (review finding 1)", (
     expect(emptyModelExtras(blendKey)).toEqual({
       key: blendKey,
       baseline: null,
+      live: null,
       minutely: null,
       series: [],
       time: [],
@@ -122,14 +132,71 @@ describe("model extras follow the place + model on screen (review finding 1)", (
   });
 
   it("the dashboard renders only selectModelExtras' result, never raw loaded state", () => {
-    expect(dashboard).toContain(
-      "const extras = selectModelExtras(loadedExtras, extrasKey);",
+    const hook = readFileSync(
+      resolve(__dirname, "use-live-weather.ts"),
+      "utf-8",
     );
-    expect(dashboard).toContain("const modelBaseline = extras.baseline;");
+    // The hook hands out only extras fetched for the place + model on screen.
+    expect(hook).toContain(
+      "extras: loaded?.key === extrasKey ? loaded : emptyModelExtras(extrasKey)",
+    );
+    expect(dashboard).toContain("const extras = live.extras ?? ");
+    expect(dashboard).toContain("resolveDisplayedWeather(");
     expect(dashboard).not.toContain("setModelBaseline(");
   });
 
   it("starts at idle within 2.5 s", () => {
     expect(MODEL_EXTRAS_IDLE_TIMEOUT_MS).toBeLessThanOrEqual(2500);
+  });
+});
+
+describe("resolveDisplayedWeather (#414: the banner follows the data on screen)", () => {
+  const seed = { current: { temperature_2m: 21 } } as unknown as WeatherData;
+  const liveBlend = {
+    current: { temperature_2m: 24 },
+  } as unknown as WeatherData;
+  const gfs = { current: { temperature_2m: 25 } } as unknown as WeatherData;
+  const key = modelExtrasKey(-17.83, 31.05, "best_match");
+
+  it("a live seed stays as it is, and a fetch that finds nothing changes nothing", () => {
+    const shown = resolveDisplayedWeather(seed, false, emptyModelExtras(key));
+    expect(shown).toEqual({
+      weather: seed,
+      override: null,
+      usingFallback: false,
+    });
+    // Even a live forecast arriving later does not replace a live seed.
+    const later = modelExtrasFromResponse(key, liveBlend, null, liveBlend);
+    expect(resolveDisplayedWeather(seed, false, later).weather).toBe(seed);
+  });
+
+  it("a seasonal-estimate seed stays on screen, flagged, until live data arrives", () => {
+    const shown = resolveDisplayedWeather(seed, true, emptyModelExtras(key));
+    expect(shown).toEqual({
+      weather: seed,
+      override: null,
+      usingFallback: true,
+    });
+  });
+
+  it("the first live forecast replaces a seasonal-estimate seed and clears the flag, with no picked model", () => {
+    const recovered = modelExtrasFromResponse(key, liveBlend, null, liveBlend);
+    const shown = resolveDisplayedWeather(seed, true, recovered);
+    expect(shown.weather).toBe(liveBlend);
+    expect(shown.override).toBe(liveBlend);
+    expect(shown.usingFallback).toBe(false);
+  });
+
+  it("a picked model's baseline wins and is never a fallback", () => {
+    const picked = modelExtrasFromResponse(key, gfs, gfs, gfs);
+    const shown = resolveDisplayedWeather(seed, true, picked);
+    expect(shown.weather).toBe(gfs);
+    expect(shown.usingFallback).toBe(false);
+  });
+
+  it("a failed or empty fetch never clears the flag on its own", () => {
+    expect(
+      resolveDisplayedWeather(seed, true, emptyModelExtras(key)).usingFallback,
+    ).toBe(true);
   });
 });

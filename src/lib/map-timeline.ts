@@ -15,7 +15,7 @@
  */
 import type { TimelineFrame } from "@/lib/map-layers";
 import { wallClockLabel, wallDateString } from "@/lib/location-time";
-import { fetchWorker } from "./weather-api";
+import { workerData } from "./worker-data";
 
 const HOUR_MS = 3_600_000;
 const SHORT_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -129,11 +129,15 @@ export async function fetchPlaceOffset(
   signal?: AbortSignal,
 ): Promise<PlaceOffset | null> {
   try {
-    const res = await fetchWorker("weather", `lat=${lat}&lon=${lon}`, {
-      signal,
-    });
+    // Shared read: the same `/v1/weather` row the location page already
+    // fetched for this cell.
+    const res = await workerData.read<unknown>(
+      "weather",
+      { lat, lon },
+      { signal },
+    );
     if (!res.ok) return null;
-    const data: unknown = await res.json();
+    const data = res.data;
     if (!data || typeof data !== "object") return null;
     const { utc_offset_seconds: offset, utc_offset_estimated: estimated } =
       data as { utc_offset_seconds?: unknown; utc_offset_estimated?: unknown };

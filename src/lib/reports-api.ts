@@ -11,6 +11,7 @@
  * Pure helpers, no I/O. Edge-safe.
  */
 import { workerUrl } from "@/lib/weather-api";
+import { workerData } from "@/lib/worker-data";
 
 /** How far back the lane and the card list reports, in hours. */
 export const REPORT_WINDOW_HOURS = 24;
@@ -24,6 +25,31 @@ export function reportsListUrl(
     "reports",
     `location=${encodeURIComponent(slug)}&hours=${hours}`,
   );
+}
+
+/**
+ * The recent reports for a place, through the shared store: the report lane
+ * and the recent-reports card mount together and ask for the same list, so it
+ * is one call, and a remount or a swipe back within a minute is free. Rejects
+ * on a refusal (callers show an empty list).
+ */
+export function loadReports<T>(
+  slug: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<{ reports?: T[] }> {
+  return workerData.json<{ reports?: T[] }>(
+    "reports",
+    { location: slug, hours: REPORT_WINDOW_HOURS },
+    options,
+  );
+}
+
+/** Drop the kept list for a place (after the visitor submits a report). */
+export function forgetReports(slug: string): void {
+  workerData.invalidate("reports", {
+    location: slug,
+    hours: REPORT_WINDOW_HOURS,
+  });
 }
 
 /** `POST /v1/reports` */
