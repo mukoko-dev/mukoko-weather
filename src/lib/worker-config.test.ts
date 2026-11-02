@@ -91,24 +91,32 @@ describe("weather Worker config", () => {
 
 describe("weather stations already in the field (the old upload URL)", () => {
   const ROOT = resolve(__dirname, "../..");
-  const rewrites = (
-    JSON.parse(readFileSync(resolve(ROOT, "vercel.json"), "utf-8")) as {
-      rewrites: { source: string; destination: string }[];
-    }
-  ).rewrites;
+  const vercel = JSON.parse(
+    readFileSync(resolve(ROOT, "vercel.json"), "utf-8"),
+  ) as {
+    rewrites: { source: string; destination: string }[];
+    functions?: unknown;
+    builds?: unknown;
+  };
+  const rewrites = vercel.rewrites;
 
-  it("vercel.json sends the old ingest path to the stations Worker, ahead of the Python catch-all", () => {
-    const ingest = rewrites.findIndex(
-      (r) => r.source === "/api/py/stations/ingest",
-    );
-    const catchAll = rewrites.findIndex((r) => r.source === "/api/py/(.*)");
-    expect(ingest).toBeGreaterThanOrEqual(0);
-    // First match wins: the specific rule must come before the catch-all.
-    if (catchAll >= 0) expect(ingest).toBeLessThan(catchAll);
+  it("vercel.json sends the old ingest path to the stations Worker, and nothing else under /api/py", () => {
+    // The Python backend is gone: no catch-all rewrite to a Python function, so
+    // every other /api/py/* path is an ordinary 404 from Next.js.
+    expect(rewrites.map((r) => r.source)).toEqual(["/api/py/stations/ingest"]);
+    expect(rewrites.some((r) => r.source === "/api/py/(.*)")).toBe(false);
     // The Worker serves the same path (it strips `/api/py`), so a console
     // configured with the old URL keeps the protocol it speaks.
-    expect(rewrites[ingest]!.destination).toBe(
+    expect(rewrites[0]!.destination).toBe(
       "https://weather-ingest.nyuchi.com/api/py/stations/ingest",
+    );
+  });
+
+  it("vercel.json builds no Python function", () => {
+    expect(vercel.functions).toBeUndefined();
+    expect(vercel.builds).toBeUndefined();
+    expect(JSON.stringify(vercel)).not.toMatch(
+      /python|\.py\b|@vercel\/python/i,
     );
   });
 

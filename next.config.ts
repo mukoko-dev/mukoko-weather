@@ -101,10 +101,11 @@ const nextConfig: NextConfig = {
           { key: "Content-Security-Policy", value: "frame-ancestors *" },
         ],
       },
-      // CORS (B06): `*` (no credentials) only on the documented public read
-      // API and the embed endpoints. Everything else under /api/py is
-      // answered by FastAPI's allowlist; /api/ai, /api/keys, /api/db-init are
-      // same-origin. Policy data: CORS_POLICY in src/lib/security-headers.ts.
+      // CORS (B06): `*` (no credentials) only on the embed endpoints (the
+      // documented public read API is the Rust API Worker, which carries the
+      // same policy). /api/ai, /api/keys, /api/db-init are same-origin; the
+      // Workers answer their own CORS. Policy data: CORS_POLICY in
+      // src/lib/security-headers.ts.
       ...CORS_POLICY.open.map((source) => ({
         source,
         headers: [...CORS_POLICY.headers],

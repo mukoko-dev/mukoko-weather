@@ -84,9 +84,9 @@ Vector Search infrastructure is in place but requires an embedding pipeline to b
 
 ## Resilience Patterns
 
-### Circuit Breaker System
+### Circuit Breakers
 
-`api/py/_circuit_breaker.py` — Netflix Hystrix-inspired circuit breaker for external API resilience. Python implementation with in-memory state that persists across Vercel warm function starts (~5-15 minutes).
+`weather_core::breaker` — Netflix Hystrix-inspired circuit breaker for external API resilience, in the Rust Workers. It is pure (time is passed in) and its state lives in the Worker isolate's memory, so it protects a provider from a burst of calls while it is failing, without any storage round trip. (The Python implementation in `api/py/_circuit_breaker.py` was deleted with the Python backend, #333.)
 
 ```
 CLOSED ──(failures >= threshold)──> OPEN ──(cooldown expires)──> HALF_OPEN
@@ -97,34 +97,38 @@ CLOSED ──(failures >= threshold)──> OPEN ──(cooldown expires)──>
   OPEN <──────────────(failure)──────────────────────────────────────+
 ```
 
-**Per-provider singletons:**
+**Per-provider breakers** (only a 5xx, a 429, a transport error, a timeout or an unreadable body counts as a failure; a 4xx never does):
 
-| Breaker              | Provider        | Failure Threshold | Cooldown | Window | Timeout |
-| -------------------- | --------------- | :---------------: | :------: | :----: | :-----: |
-| `tomorrow_breaker`   | Tomorrow.io API |         3         |  2 min   | 5 min  |   5s    |
-| `open_meteo_breaker` | Open-Meteo API  |         5         |  5 min   | 5 min  |   8s    |
-| `ai_breaker`         | AI Worker (GLM) |         3         |  5 min   | 10 min |   15s   |
+| Breaker      | Providers                                                      | Failure Threshold | Cooldown | Window |
+| ------------ | -------------------------------------------------------------- | :---------------: | :------: | :----: |
+| `TOMORROW`   | Tomorrow.io (insights enrichment, map tiles)                   |         3         |  2 min   | 5 min  |
+| `OPEN_METEO` | Open-Meteo (forecast, grids, air quality, haze, history, ERA5) |         5         |  5 min   | 5 min  |
+| `NASA_POWER` | NASA POWER (history archive)                                   |         3         |  2 min   | 5 min  |
+| `SOILGRIDS`  | ISRIC SoilGrids                                                |         3         |  15 min  | 10 min |
+| `DEFAULT`    | NOAA CPC, NEA data.gov.sg, Aviation Weather Center             |         3         |  2 min   | 5 min  |
 
-AI runs only in the AI Worker, `mukoko-weather-ai`: Workers AI GLM through the `shamwari` AI Gateway with the native `env.AI` binding, the Nyuchi guardrails first in every prompt. No Cloudflare AI token exists on Vercel. The signed-in app reaches it through its own server: the Next.js `/api/ai` proxy checks the WorkOS session (`withAuth()`), then calls `{WEATHER_SERVICE_URL}/internal/ai/summary` with `Authorization: Bearer WEATHER_SERVICE_API_KEY` and the person's id and address. `mukoko-weather-internal` checks the key and forwards over a service binding; the AI Worker caches the answer in KV (30/60/120 min by tag) and counts only the calls that reach the model against the person's hour in D1 (`weather_core::budget`). No route calls a model from Python any more (the report wizard's follow-up questions were the last, now `POST /v1/reports/clarify` on the AI Worker); what is left of `api/py/_ai_gateway.py` (`POST {WEATHER_SERVICE_URL}/internal/ai/chat/completions`) is dead code awaiting deletion.
+The AI Worker has no breaker: a model call is bounded by the D1 budgets, a timeout and the gateway's own limits.
+
+AI runs only in the AI Worker, `mukoko-weather-ai`: Workers AI GLM through the `shamwari` AI Gateway with the native `env.AI` binding, the Nyuchi guardrails first in every prompt. No Cloudflare AI token exists on Vercel. The signed-in app reaches it through its own server: the Next.js `/api/ai` proxy checks the WorkOS session (`withAuth()`), then calls `{WEATHER_SERVICE_URL}/internal/ai/summary` with `Authorization: Bearer WEATHER_SERVICE_API_KEY` and the person's id and address. `mukoko-weather-internal` checks the key and forwards over a service binding; the AI Worker caches the answer in KV (30/60/120 min by tag) and counts only the calls that reach the model against the person's hour in D1 (`weather_core::budget`). No Python calls a model any more: the report wizard's follow-up questions, the last Python AI route, are `POST /v1/reports/clarify` on the AI Worker.
 
 ### Weather Fallback Chain
 
-4-stage fallback ensures weather data is always available:
+The forecast Worker's chain always ends in an answer, and says which stage served it (`X-Weather-Provider`):
 
 ```
-1. MongoDB cache (15-min TTL)
+1. KV cache (wx:v2:<lat>_<lon>, 15 min; 5 min for a best_match answer)
     |── hit ──> return cached data
     |── miss
     v
-2. Tomorrow.io API (primary)
-    |── success ──> cache + return
-    |── rate-limited (429) or error
+2. Open-Meteo Africa-weighted blend of nine global models (served only when at least four return data)
+    |── success ──> cache + return (Tomorrow.io enrichment merged on top when its budget allows)
+    |── too few members, or the request fails
     v
-3. Open-Meteo API (fallback)
+3. Open-Meteo best_match (labelled as not a blend)
     |── success ──> cache + return
     |── error
     v
-4. createFallbackWeather (seasonal estimates)
+4. Seasonal estimate (labelled `fallback`)
     |── always succeeds ──> return
 ```
 
@@ -148,7 +152,7 @@ A chart crash, API timeout, or rendering error in any section only affects that 
 
 ### Shamwari Chatbot Resilience
 
-The Shamwari chat is `POST /v1/ai/chat` on the Rust AI Worker (`workers/ai`); the Python `/api/py/chat` and its tool loop were deleted while the chat was paused. The Worker's layers:
+The Shamwari chat is `POST /v1/ai/chat` on the Rust AI Worker (`workers/ai`); the Python `/api/py/chat` and its tool loop were deleted with the Python backend. The Worker's layers:
 
 | Layer              | Mechanism                                                                     | Scope       |
 | ------------------ | ----------------------------------------------------------------------------- | ----------- |

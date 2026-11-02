@@ -19,15 +19,16 @@ describe("station console client", () => {
     expect(api).toContain("TRANSITIONAL");
   });
 
-  it("keeps the /api/py/stations paths the Worker serves", () => {
+  it("calls the Worker's own /stations/* paths, never the Python prefix", () => {
     for (const route of ["register", "status", "manual"]) {
-      expect(api).toContain(`/api/py/stations/${route}`);
+      expect(api).toContain("${API_BASE}/stations/" + route);
     }
+    expect(api).not.toMatch(/fetch\(`\$\{API_BASE\}\/api\/py/);
+    expect(api).not.toContain("detail");
   });
 
-  it("shows a refusal from the Worker's error_description, and still a legacy detail", () => {
+  it("shows a refusal from the Worker's error_description", () => {
     expect(api).toContain("error_description");
-    expect(api).toContain("detail");
   });
 
   it("tells a new station where to upload from the registration answer, not from a constant", () => {
@@ -40,15 +41,15 @@ describe("station console client", () => {
 });
 
 describe("the Python stations route is gone", () => {
-  it("has no module, no router and no test", () => {
-    expect(existsSync(resolve(ROOT, "api/py/_stations.py"))).toBe(false);
-    expect(existsSync(resolve(ROOT, "tests/py/test_stations.py"))).toBe(false);
-    expect(read("api/py/index.py")).not.toMatch(/stations/);
+  it("has no module, no router and no test: the whole Python backend is gone", () => {
+    expect(existsSync(resolve(ROOT, "api"))).toBe(false);
+    expect(existsSync(resolve(ROOT, "tests/py"))).toBe(false);
   });
 
   it("serves station uploads from the stations Worker's one host", () => {
     // Ingest is the Worker's (Wunderground GET, Ecowitt POST, the literal
-    // body `success`); nothing under /api/py/stations falls to Python.
+    // body `success`); the one /api/py/stations path consoles in the field
+    // use is rewritten to it (vercel.json), the rest is a plain 404.
     const worker = read("workers/stations/src/lib.rs");
     expect(worker).toContain('"/stations/ingest"');
     expect(worker).toContain('strip_prefix("/api/py")');

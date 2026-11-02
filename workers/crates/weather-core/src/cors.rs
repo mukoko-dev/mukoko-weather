@@ -2,7 +2,7 @@
 
 /// The documented public read API: `GET` routes any website may call from the
 /// browser (`Access-Control-Allow-Origin: *`, never with credentials). This is
-/// the policy the Python routes `/api/py/weather`, `/geo`, `/search` and
+/// the policy the Python routes `weather`, `geo`, `search` and
 /// `/airquality/*` had (`CORS_POLICY.open` in `src/lib/security-headers.ts`),
 /// carried to the Worker that replaces them. Every other route, and every
 /// write (`/v1/ai/*`, `/v1/devices`), keeps the `CORS_ORIGINS` allowlist.

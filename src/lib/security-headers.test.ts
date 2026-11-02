@@ -136,19 +136,25 @@ describe("CORS (B06)", () => {
     );
   });
 
-  it("no longer opens the deleted Python weather, air-quality, geo and search routes", () => {
-    // They moved to the Worker (/v1/weather, /v1/air-quality, /v1/geo,
-    // /v1/search), whose open routes are `weather_core::cors::OPEN_READ_ROUTES`,
-    // not this table.
-    for (const gone of [
-      "/api/py/weather",
-      "/api/py/airquality/:path*",
-      "/api/py/geo",
-      "/api/py/search",
-    ]) {
-      expect(CORS_POLICY.open).not.toContain(gone);
-      expect(sources).not.toContain(gone);
-    }
+  it("opens nothing under /api/py: the Python routes are gone", () => {
+    // The public read API moved to the Worker (/v1/weather, /v1/air-quality,
+    // /v1/geo, /v1/search), whose open routes are
+    // `weather_core::cors::OPEN_READ_ROUTES`, not this table.
+    expect(CORS_POLICY.open.some((s) => s.startsWith("/api/py"))).toBe(false);
+    expect(sources.some((s) => s.startsWith("/api/py"))).toBe(false);
+  });
+
+  it("keeps one /api/py path, the hardware ingest URL, and it is the vercel.json rewrite", () => {
+    // Consoles in the field upload to https://weather.mukoko.com/api/py/stations/ingest.
+    // It is not a browser route (no CORS), and it is the only /api/py rewrite.
+    const rewrites = (
+      JSON.parse(
+        readFileSync(resolve(__dirname, "../../vercel.json"), "utf-8"),
+      ) as {
+        rewrites: { source: string }[];
+      }
+    ).rewrites;
+    expect(rewrites.map((r) => r.source)).toEqual([...CORS_POLICY.noCors]);
   });
 
   it("never sends credentials with the wildcard", () => {
@@ -164,10 +170,9 @@ describe("CORS (B06)", () => {
       "/api/ai",
       "/api/keys",
       "/api/db-init",
-      "/api/py/devices",
-      "/api/py/chat",
-      "/api/py/stations/manual",
-      "/api/py/reports",
+      "/api/app-keys",
+      "/api/devices",
+      "/api/py/stations/ingest",
     ])
       expect(
         sources.some((s) => closed.startsWith(s.replace(/\/:path\*$/, ""))),

@@ -95,8 +95,11 @@ describe("EnsoOutlook — content and attribution", () => {
   it("falls back to the NOAA CPC ONI source label from the API payload", () => {
     expect(source).toContain("source: string;");
     expect(
-      readFileSync(resolve(__dirname, "../../../api/py/_enso.py"), "utf-8"),
-    ).toContain('SOURCE_LABEL = "NOAA CPC ONI"');
+      readFileSync(
+        resolve(__dirname, "../../../workers/crates/weather-core/src/enso.rs"),
+        "utf-8",
+      ),
+    ).toContain('SOURCE_LABEL: &str = "NOAA CPC ONI"');
   });
 
   it("renders impact lines from the ensoImpact helper", () => {

@@ -1,4 +1,7 @@
-// @generated from api/py/_ag_calendar.py (GEOGLAM_COUNTRY_ISO, SEASON_NAMES); do not edit.
+// Generated once from the former api/py/_ag_calendar.py (GEOGLAM_COUNTRY_ISO,
+// SEASON_NAMES), which was deleted with the Python backend (#333). This file is
+// now the source: edit it here, and keep it in step with the GEOGLAM table
+// (`scripts/build_geoglam_calendars.py`).
 
 /// GEOGLAM country names (as spelt in the dataset) to ISO 3166-1 alpha-2.
 pub const COUNTRY_ISO: &[(&str, &str)] = &[

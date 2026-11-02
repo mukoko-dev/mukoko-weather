@@ -14,8 +14,6 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:python": "python -m pytest tests/py/ -v",
-    "test:all": "vitest run && python -m pytest tests/py/ -v",
     "check": "vp check",
     "fmt": "vp fmt"
   },

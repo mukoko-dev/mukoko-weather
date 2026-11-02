@@ -1,7 +1,7 @@
 //! `mukoko-weather-places`: locations and their weather history.
 //!
-//! Ported from `api/py/_locations.py` (`/api/py/locations`, `/search`, `/geo`)
-//! and `api/py/_history.py` (`/api/py/history`), with the same parameters and
+//! Ported from `api/py/_locations.py` (Python `/locations`, `/search`, `/geo`)
+//! and `api/py/_history.py` (Python `/history`), with the same parameters and
 //! response shapes. No route and no workers.dev address: `mukoko-weather-api`
 //! reaches it through the `PLACES` service binding and serves it as
 //! `/v1/locations`, `/v1/search`, `/v1/geo` and `/v1/history`.

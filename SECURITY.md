@@ -27,7 +27,7 @@ We will acknowledge your report within 48 hours and provide an update within 7 d
 
 ### API Keys
 
-- **`ANTHROPIC_API_KEY`** — server-side environment variable, never exposed to the client. Used only in Python backend endpoints (`api/py/_ai.py`, etc.)
+- **Model access** — there is no model API key in this repository's deployments. Every model call is a native Workers AI binding call in the AI Worker through the `shamwari` AI Gateway, so no Cloudflare AI or third-party model token exists on Vercel or in the browser. The Workers' secrets live in the Cloudflare Secrets Store
 - **Tomorrow.io API key** — stored in MongoDB (`api_keys` collection via `getApiKey`/`setApiKey` in `src/lib/db.ts`), never in environment variables or client-side code. Seeded via `POST /api/db-init`
 - **`DB_INIT_SECRET`** — optional server-side environment variable protecting the `/api/db-init` endpoint in production (via `x-init-secret` header)
 
@@ -35,7 +35,7 @@ We will acknowledge your report within 48 hours and provide an update within 7 d
 
 - **Tomorrow.io** — server-side only; weather data is the only payload (no PII). API key stored in MongoDB, not environment variables
 - **Open-Meteo** — public API, no authentication required, no user data transmitted
-- **Anthropic Claude** — server-side only via Python FastAPI; weather data is the only payload (no PII)
+- **Workers AI (open-weights models)** — server-side only, in the AI Worker; weather data is the only payload, and prompts carrying personal data are refused (`422 personal_data_detected`)
 
 ### Data Privacy
 
@@ -66,7 +66,7 @@ The chat runs on the Rust AI Worker (`workers/ai`), reached through `mukoko-weat
 
 ### Rate Limiting
 
-The Python endpoints use a MongoDB-backed IP rate limiter (`check_rate_limit` in `api/py/_db.py`) with atomic `findOneAndUpdate` and TTL index; the Workers' hourly limits (`/v1/reports` here) are kept in D1 `rate_events`, per client address hash:
+The Python backend and its MongoDB-backed IP rate limiter are deleted (#333). The Workers' hourly limits (the report routes here) are kept in D1 `rate_events`, per client address hash:
 
 | Endpoint               | Limit       |
 | ---------------------- | ----------- |
@@ -75,13 +75,9 @@ The Python endpoints use a MongoDB-backed IP rate limiter (`check_rate_limit` in
 
 The routes on the Rust Workers keep their limits in the Workers' own D1 table `rate_events` (`weather_core::budget`; the client is a SHA-256 of the visitor's address, never the address). The AI location search (`/v1/ai/explore/search`, 15 an hour per client) and the AI history analysis (`/v1/ai/history/analyze`, 10 an hour per client) fail closed: when the budget cannot be read, the model is not called. The signed-in app's model routes (the summary, the follow-up chat and the agriculture explanation, on the AI Worker's `/internal/*` paths, reached only through the app's WorkOS-checked `/api/ai` proxy and `mukoko-weather-internal`) are counted per person instead, 30 model calls an hour each (a cached answer is free), and fail closed the same way. See `workers/README.md`.
 
-### Circuit Breaker System
+### Circuit Breakers
 
-`api/py/_circuit_breaker.py` — Netflix Hystrix-inspired circuit breaker for external API resilience. Per-provider singleton breakers prevent cascade failures:
-
-- `tomorrow_breaker` — Tomorrow.io API (3 failures / 2min cooldown)
-- `open_meteo_breaker` — Open-Meteo API (5 failures / 5min cooldown)
-- `anthropic_breaker` — Anthropic Claude API (3 failures / 5min cooldown)
+`weather_core::breaker` — Netflix Hystrix-inspired circuit breaker for external API resilience, per provider and per Worker isolate, so a failing provider is not hammered (Open-Meteo: 5 failures in 5 minutes open it for 5; Tomorrow.io and the other providers: 3 failures in 5 minutes open it for 2; SoilGrids 3 in 10 for 15). Only a 5xx, a 429, a transport error, a timeout or an unreadable body counts as a failure.
 
 ### Content Security
 
@@ -108,6 +104,6 @@ We keep dependencies minimal and up to date. Key production dependencies:
 - `radix-ui` — accessible UI primitives (via shadcn/ui)
 - `chart.js` + `react-chartjs-2` — Canvas 2D chart rendering
 - `react-markdown` — markdown rendering (AI summaries)
-- `fastapi` + `pymongo` + `anthropic` + `httpx` — Python backend (server-side only)
+- the Rust Workers' crates (`worker`, `serde`, `futures`, ...) — the backend, server-side only; see `workers/Cargo.toml` and `workers/Cargo.lock`
 
 GitHub Dependabot and CodeQL are enabled for automated vulnerability scanning.

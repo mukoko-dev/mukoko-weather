@@ -213,6 +213,8 @@ Every collection (except `device_profiles` legacy) uses these patterns:
 
 ## Weather writes from the Cloudflare Workers (the MongoDB bridge)
 
+**There is no Python writer any more** (the backend in `api/py` was deleted, #333). What writes the cluster now: the MongoDB bridge Worker (the two collections below, plus the history archive days, `weather.weather_history`, insert-only); the Next.js app on Vercel (sign-in into `identity.persons`, `credentials` and `activityLog`, the developer keys, and `/api/db-init`'s seeds); and the platform's own jobs for the collections that belong to it. The Workers read MongoDB read-only and keep their counters, caches and observations in D1 and KV. The collections the Python alone wrote and read (`weather.weather_cache`, `ai_summaries`, `air_quality_cache`, `forecastVerification`, `agriculture_ai`, `enrichmentCache`, `providerBudget`) have no reader or writer among the Workers now; `/api/db-init` still creates some of their TTL indexes, and dropping the collections and those index definitions is a later cleanup against the live database (an owner step, not done here).
+
 The Rust Workers read MongoDB read-only (`workers/crates/weather-mongo`). The two weather collections the app writes from the Workers go through one TypeScript Worker, `mukoko-weather-mongo-bridge` (`workers/mongo-bridge`), over the `MONGO_BRIDGE` service binding from `mukoko-weather-places`. Nothing here is stored in D1, and nothing depends on Vercel.
 
 | Collection                | Written by                                    | Shape                                                               | Indexes (owner step, the bridge never creates indexes)                                        |
@@ -235,14 +237,14 @@ The bridge keeps one official-driver `MongoClient` in a Durable Object, uses the
 
 - [x] Map the platform (this document)
 - [x] Update `MONGODB_URI` in `.env.local` and Vercel
-- [ ] **Refactor `api/py/_db.py`** to expose multi-DB accessors:
+- [x] **Multi-DB accessors** (the Python `_db.py` that exposed them is deleted, #333; the TypeScript side has `src/lib/mongo.ts` and `src/lib/db.ts`):
   - `weather_db()`, `places_db()`, `identity_db()`, `shamwari_db()`, `device_db()`, `integrations_db()`
   - All writes auto-stamp `_schemaVersion`, `createdAt`, `updatedAt`, `bundu` sub-doc
   - Strict adherence to validators (validators will reject writes with bad shape)
-- [ ] **Refactor `src/lib/db.ts`** similarly for the TS side
+- [x] **Refactor `src/lib/db.ts`** similarly for the TS side
 - [ ] **Replace `src/lib/locations.ts`** static array — read from `places.places` (+ `places.placesGeo` for breadcrumb hierarchy). Add 5-min in-memory cache.
-- [ ] **Rename `_db.py` API key reader** to read from `integrations.providerConfigurations` (with `credentialsReference.secretsStore: "platform_managed"`)
-- [ ] **Add StationKit observation reader** — a Python helper `nearest_station_observation(lat, lon, max_distance_km=50)` that queries `weather.observations` ordered by `observedAt desc`. Returns `null` if no station within range.
+- [ ] **Read provider keys** from `integrations.providerConfigurations` (the Python `_db.py` reader is deleted; the Workers read their keys from the Cloudflare Secrets Store) (with `credentialsReference.secretsStore: "platform_managed"`)
+- [ ] **Add StationKit observation reader** — done on the forecast Worker (`nearest_station_observation`, now reading D1); the Python helper queried `weather.observations` ordered by `observedAt desc`. Returns `null` if no station within range.
 - [ ] **Weather endpoint priority order**: `weather.observations` (StationKit, if within 50km) → Tomorrow.io → Open-Meteo → seasonal estimate
 - [ ] **Rename `weather_reports` → `communityReports`** in code; new docs use camelCase + `qcStatus` + `reporterPersonId`
 - [ ] **Stamp existing collection writes**: every doc we write to `weather.ai_summaries`, `weather.weather_cache`, etc. must include `_schemaVersion: "v3.1"`, `bundu: {...}`, `createdAt`, `updatedAt`
@@ -290,16 +292,15 @@ The bridge keeps one official-driver `MongoClient` in a Durable Object, uses the
 
 ## Location resolution (Phase 0F/0G — placesGeo canonical)
 
-`weather.locations` is **dropped**. As of Phase 0G the Python backend also reads
-exclusively through `places.placesGeo` — `api/py/_places_resolver.py` mirrors the
-TypeScript resolver in `src/lib/places.ts`, and every read/write in
-`_reports.py`
-flows through it. The legacy `weather.countries` and `weather.provinces` collections
+`weather.locations` is **dropped**. As of Phase 0G every reader went through `places.placesGeo`: the
+TypeScript resolver in `src/lib/places.ts` and (until it was deleted in #333) the
+Python `_places_resolver.py`. Now the Rust places Worker and `src/lib/places.ts`
+are the only resolvers. The legacy `weather.countries` and `weather.provinces` collections
 are also dropped — `placesGeo.geoType=country/province` is the canonical source.
 
 Mukoko-weather reads every location through `places.placesGeo` (admin
 geography) + `places.places` (POIs from OSM/Fundi) via the helpers in
-`src/lib/places.ts` (TypeScript) and `api/py/_places_resolver.py` (Python), and
+`src/lib/places.ts` (TypeScript) and the places Worker, and
 writes none (see "Creating a place" below). The Rust places Worker reads no
 database for places at all (`GET /v1/locations|search|geo`: compiled-in seeds, spots,
 the Nyuchi API and geocoders).
@@ -326,10 +327,10 @@ to the static `LOCATIONS` seed entry, then to `["city"]` / `0` defaults.
 ### Creating a place (no longer done by the weather backend)
 
 The weather backend does not write `places.placesGeo`, `places.places` or
-`places.seedRequests` any more (#333). `POST /api/py/locations/add` and
+`places.seedRequests` any more (#333). The Python `POST /api/py/locations/add` and
 `GET /api/py/geo?autoCreate=true` (reverse-geocode, 1 km duplicate gate, OSM-ref
 join, `upsert_placesgeo_city`, Overpass naming, Fundi seed queue, AI season
-enrichment, the place-knowledge build hook) were deleted from `api/py`. A
+enrichment, the place-knowledge build hook) were deleted with `api/py`. A
 `mukoko_user` placesGeo document is now only one that an earlier version wrote.
 
 What a visitor gets instead, with no write anywhere:
@@ -351,7 +352,7 @@ is gone with the module; nothing reads or writes it from this repo.
 
 ### Phase 0 work list (locked plan)
 
-1. **Refactor `api/py/_db.py`** to expose `weather_db()`, `places_db()`, `identity_db()`, `shamwari_db()`, `device_db()`, `integrations_db()` accessors.
+1. **Multi-database accessors** — `weatherDb()`, `placesDb()`, `identityDb()`, `shamwariDb()`, `deviceDb()`, `integrationsDb()` in `src/lib/mongo.ts` (the Python `_db.py` equivalents are deleted, #333).
 2. **Seed `places.places`** with the 250+ African cities/towns we have locally (using `placesGeo` for ISO codes + admin hierarchy).
 3. **Add the StationKit overlay** to the weather route — done on the forecast Worker (`workers/forecast/src/stations.rs`, D1 `observations`, latest validated within 50 km and 60 min).
 4. **Update weather priority chain**: StationKit → Open-Meteo blend (Tomorrow.io enriches only) → seasonal estimate — done on the Worker (`GET /v1/weather`).

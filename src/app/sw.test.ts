@@ -27,8 +27,8 @@ describe("service worker routes for the Worker's data", () => {
     expect(source).not.toContain('cacheName: "history-data"');
   });
 
-  it("does not leave a Python history path in the service worker", () => {
-    expect(source).not.toContain("/api/py/history");
+  it("does not leave any Python path in the service worker", () => {
+    expect(source).not.toContain("/api/py");
   });
 
   it("still serves the report list from the network first (GET only)", () => {

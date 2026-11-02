@@ -196,7 +196,7 @@ pub fn pollutants_from_open_meteo(raw: &Value) -> Vec<(&'static str, Option<f64>
         .collect()
 }
 
-/// The response body the app reads (`/api/py/airquality`), less `source`
+/// The response body the app reads (Python `/airquality`), less `source`
 /// and `fetchedAt`, which the Worker adds.
 pub fn payload(pollutants: &[(&str, Option<f64>)]) -> Value {
     let mut out = compute(pollutants);

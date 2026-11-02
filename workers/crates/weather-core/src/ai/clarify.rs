@@ -4,8 +4,9 @@
 //!
 //! Ported from `clarify_report` in the former `api/py/_reports.py` and pinned to
 //! it by `tests/fixtures/report-clarify.json`, whose `expected` values were
-//! produced by running the real Python (`scripts/gen_report_clarify_fixtures.py`,
-//! from a pinned commit): the system prompt and messages handed to the model
+//! produced by running the real Python (the since deleted, #333,
+//! `scripts/gen_report_clarify_fixtures.py`, from the commit named in the
+//! fixture header): the system prompt and messages handed to the model
 //! for every report type, the questions parsed from a range of model answers,
 //! the fallback pair for every type, and the refusal of an unknown type.
 //! Everything here is pure; the AI Worker (`workers/ai`) does the I/O.

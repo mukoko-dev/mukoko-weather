@@ -255,7 +255,8 @@ function aiSuggestedRulesCollection() {
  * platform validator), keyed by the ICAO code as its natural `_id` so
  * re-seeding is idempotent and never creates duplicates (same deterministic-id
  * discipline as `air_quality_cache`). The `location` GeoJSON Point powers the
- * `$nearSphere` nearest-airport lookup in `api/py/_airports.py`.
+ * `$nearSphere` nearest-airport lookup the Python backend ran (deleted, #333;
+ * the Worker's catalogue replaced it).
  */
 export interface AirportDoc {
   /** ICAO code, uppercase — also the document `_id`. */
@@ -269,13 +270,13 @@ export interface AirportDoc {
   /**
    * Absent for the static seed. `"awc-stationinfo"` for an airport the
    * nearest-METAR search fetched on demand from the Aviation Weather Center
-   * (`api/py/_metar.py` `discover_airports`, #302).
+   * (the aviation Worker's `discover_airports`, #302).
    */
   source?: typeof DISCOVERED_AIRPORT_SOURCE;
   updatedAt: Date;
 }
 
-/** `source` of a fetched-on-demand airport — mirrors `DISCOVERED_SOURCE` in api/py/_airports.py. */
+/** `source` of a fetched-on-demand airport — the aviation Worker writes the same value. */
 export const DISCOVERED_AIRPORT_SOURCE = "awc-stationinfo";
 
 /**
@@ -597,7 +598,7 @@ export async function ensureIndexes(): Promise<void> {
 
     // Airports: ICAO reference data for METAR/TAF. `_id` is the ICAO code
     // (unique for free); the 2dsphere index powers the $nearSphere
-    // nearest-airport lookup in api/py/_airports.py.
+    // nearest-airport lookup the deleted Python backend ran.
     safeCreateIndex(airportsCollection(), { location: "2dsphere" }),
   ]);
 }
