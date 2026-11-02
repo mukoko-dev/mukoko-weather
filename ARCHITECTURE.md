@@ -105,7 +105,7 @@ CLOSED ──(failures >= threshold)──> OPEN ──(cooldown expires)──>
 | `open_meteo_breaker` | Open-Meteo API  |         5         |  5 min   | 5 min  |   8s    |
 | `ai_breaker`         | AI Worker (GLM) |         3         |  5 min   | 10 min |   15s   |
 
-AI runs only in the AI Worker, `mukoko-weather-ai`: Workers AI GLM through the `shamwari` AI Gateway with the native `env.AI` binding, the Nyuchi guardrails first in every prompt. No Cloudflare AI token exists on Vercel. The signed-in app reaches it through its own server: the Next.js `/api/ai` proxy checks the WorkOS session (`withAuth()`), then calls `{WEATHER_SERVICE_URL}/internal/ai/summary` with `Authorization: Bearer WEATHER_SERVICE_API_KEY` and the person's id and address. `mukoko-weather-internal` checks the key and forwards over a service binding; the AI Worker caches the answer in KV (30/60/120 min by tag) and counts only the calls that reach the model against the person's hour in D1 (`weather_core::budget`). The Python AI modules still not ported (`_chat.py`, `_explore_search.py`, `_history_analyze.py`, `_reports.py`, and the follow-up and agriculture routes) reach the same model through `api/py/_ai_gateway.py`: `POST {WEATHER_SERVICE_URL}/internal/ai/chat/completions`.
+AI runs only in the AI Worker, `mukoko-weather-ai`: Workers AI GLM through the `shamwari` AI Gateway with the native `env.AI` binding, the Nyuchi guardrails first in every prompt. No Cloudflare AI token exists on Vercel. The signed-in app reaches it through its own server: the Next.js `/api/ai` proxy checks the WorkOS session (`withAuth()`), then calls `{WEATHER_SERVICE_URL}/internal/ai/summary` with `Authorization: Bearer WEATHER_SERVICE_API_KEY` and the person's id and address. `mukoko-weather-internal` checks the key and forwards over a service binding; the AI Worker caches the answer in KV (30/60/120 min by tag) and counts only the calls that reach the model against the person's hour in D1 (`weather_core::budget`). The Python AI modules still not ported (`_reports.py`, and the follow-up and agriculture routes) reach the same model through `api/py/_ai_gateway.py`: `POST {WEATHER_SERVICE_URL}/internal/ai/chat/completions`.
 
 ### Weather Fallback Chain
 
@@ -158,6 +158,7 @@ The Shamwari chat is `POST /v1/ai/chat` on the Rust AI Worker (`workers/ai`); th
 | Guardrails         | The Nyuchi API's compiled block first in the system prompt; `503` without one | Per-isolate |
 | Gateway            | `shamwari` AI Gateway: Guardrails and DLP blocks answered politely            | Per-call    |
 | Weather for places | The seed places named in the message, up to three, from the forecast Worker   | Per-request |
+| Place profile      | Each named place's profile block and the grounding rule                       | Per-request |
 | Markdown boundary  | `MarkdownErrorBoundary` in the chatbot UI                                     | Per-section |
 
 ## Lazy Loading (TikTok-Style Sequential)

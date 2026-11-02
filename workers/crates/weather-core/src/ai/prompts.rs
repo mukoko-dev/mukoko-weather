@@ -874,6 +874,7 @@ mod tests {
     fn the_history_message_with_a_place_profile_is_the_pythons() {
         use crate::ai::history::{aggregate, Record};
         let f: Value = serde_json::from_str(PROFILE_FIXTURE).unwrap();
+        // The fixture's season line is `name (name)`: no local name.
         let summer = Season {
             name: "Summer".into(),
             local_name: "Summer".into(),

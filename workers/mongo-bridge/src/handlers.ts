@@ -11,6 +11,8 @@
 //   GET  /history?slug=..[&slug=..]&start=&end=[&aliases=1&lat=&lon=]  → 200 {days}  (weather.weather_history;
 //        aliases=1 also reads the days under the place's platform slugs, found in places.placesGeo near lat/lon)
 //   POST /history/days      {slug, days:[archive day]}  → 200 {inserted, existing}  (insert-only)
+//   GET  /places?slug=..    one community place         → 200 {place} | 404 | 503  (places.placesGeo, READ ONLY;
+//        found by sourceProvenance.mukokoSlug; 503 when the read is not permitted: it fails closed)
 //
 // Errors use the Workers' envelope: {error, error_description}.
 
@@ -29,6 +31,7 @@ import {
   validateHistoryRead,
   validateHistoryWrite,
   validateListQuery,
+  validatePlaceQuery,
   validateReport,
   validateUpvote,
 } from "./validate";
@@ -79,7 +82,8 @@ export function needsStores(path: string): boolean {
     path === "/reports" ||
     path === "/reports/upvote" ||
     path === "/history" ||
-    path === "/history/days"
+    path === "/history/days" ||
+    path === "/places"
   );
 }
 
@@ -116,6 +120,9 @@ export async function route(call: Call, deps: Deps): Promise<Result> {
     return method === "POST"
       ? writeHistoryDays(call, deps)
       : notAllowed("POST /history/days");
+  }
+  if (path === "/places") {
+    return method === "GET" ? getPlace(call, deps) : notAllowed("GET /places");
   }
   return fail(404, "not_found", "No such route.");
 }
@@ -258,4 +265,15 @@ async function writeHistoryDays(call: Call, deps: Deps): Promise<Result> {
     now,
   );
   return { status: 200, body: res };
+}
+
+async function getPlace(call: Call, deps: Deps): Promise<Result> {
+  const q = validatePlaceQuery(call.query);
+  if (!q.ok) return badRequest(q.detail);
+  const found = await deps.stores.places.bySlug(q.value.slug);
+  if (found.kind === "found")
+    return { status: 200, body: { place: found.place } };
+  if (found.kind === "none") return fail(404, "not_found", "Place not found");
+  // The read is not permitted, or the store is down: answer closed, never "none".
+  return fail(503, "unavailable", "The data store is unavailable.");
 }

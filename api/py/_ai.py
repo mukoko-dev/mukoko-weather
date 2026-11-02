@@ -8,11 +8,9 @@ which ``scripts/gen_ai_summary_fixtures.py`` produced from the original code.
 
 What stays is what a module not yet ported still imports:
 
-- ``_resolve_seasons_with_ai`` (``_locations.py``'s creation hook).
-
-``_get_season`` and the hemisphere fallback below have no caller left
-(``_history_analyze.py``, their last, went to the AI Worker); they are kept
-only until this file goes.
+- ``_resolve_seasons_with_ai`` (``_locations.py``'s creation hook);
+- ``_get_season``, which nothing imports since the history analysis moved to
+  the AI Worker (``_resolve_seasons_with_ai`` uses it).
 
 Delete this file with them (#333).
 """

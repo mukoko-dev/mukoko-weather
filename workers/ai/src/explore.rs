@@ -32,7 +32,7 @@ const ROUTE: &str = "explore";
 pub async fn handle(
     env: &Env,
     guardrails: Option<Compiled>,
-    caller: Caller,
+    caller: &Caller,
     body: Value,
 ) -> Result<Response> {
     let query = match explore::query(body["query"].as_str().unwrap_or("")) {
@@ -52,7 +52,7 @@ pub async fn handle(
         return text_search(env, &query, catalogue).await;
     };
 
-    match budget::take(env, Action::ExploreSearch, &caller).await {
+    match budget::take(env, Action::ExploreSearch, caller).await {
         Decision::Allow => {}
         Decision::ClientLimit => {
             return responses::rate_limited(

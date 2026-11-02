@@ -61,8 +61,10 @@ describe("3-step wizard flow", () => {
     expect(source).toContain("/api/py/reports/clarify");
   });
 
-  it("submits report to POST /api/py/reports", () => {
-    expect(source).toContain('fetch("/api/py/reports"');
+  it("submits the report to the Worker's POST /v1/reports and reads its refusal", () => {
+    expect(source).toContain("fetch(reportsSubmitUrl()");
+    expect(source).toContain("reportRefusal(body,");
+    expect(source).not.toContain('fetch("/api/py/reports"');
   });
 
   it("includes reportType and severity in submission", () => {

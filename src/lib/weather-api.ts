@@ -68,7 +68,9 @@ export type WorkerRoute =
   | "ai/history/analyze"
   | "ai/explore/search"
   | "devices"
-  | `devices/${string}`;
+  | `devices/${string}`
+  | "reports"
+  | "reports/upvote";
 
 /** The Worker's URL for a route and its query string (no leading `?`). */
 export function workerUrl(
