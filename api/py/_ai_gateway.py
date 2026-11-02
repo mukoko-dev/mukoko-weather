@@ -9,8 +9,8 @@ call over a service binding to ``mukoko-weather-ai``, which runs it on a
 Workers AI GLM model through the ``shamwari`` AI Gateway with the native
 ``env.AI`` binding — no token anywhere — with the Nyuchi guardrails first in
 the system prompt. The wire format is OpenAI chat completions (``messages``,
-``tools``, ``max_tokens``), so the tool loops in ``_chat.py`` and
-``_explore_search.py`` work unchanged. The Worker returns the model's
+``tools``, ``max_tokens``), so the tool loop in ``_chat.py`` works
+unchanged. The Worker returns the model's
 ``content`` only, never its reasoning, and adds reasoning headroom to the
 token budget itself.
 

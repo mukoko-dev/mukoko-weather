@@ -6,10 +6,11 @@ AI Worker (``workers/ai``, ``weather_core::ai``), pinned to this module's
 prompt, cache tiers and fallback text by ``tests/fixtures/ai-summary.json``,
 which ``scripts/gen_ai_summary_fixtures.py`` produced from the original code.
 
-What stays is what two modules not yet ported still import:
+What stays is what a module not yet ported still imports:
 
-- ``_get_season`` (``_history_analyze.py``);
-- ``_resolve_seasons_with_ai`` (``_locations.py``'s creation hook).
+- ``_resolve_seasons_with_ai`` (``_locations.py``'s creation hook);
+- ``_get_season``, which nothing imports since the history analysis moved to
+  the AI Worker (``_resolve_seasons_with_ai`` uses it).
 
 Delete this file with them (#333).
 """

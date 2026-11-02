@@ -10,6 +10,7 @@
 //! compiled in: the Workers never read a database outside their own stores.
 
 pub mod completions;
+pub mod explore;
 pub mod guardrails;
 pub mod history;
 pub mod pii;

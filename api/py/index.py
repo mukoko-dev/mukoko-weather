@@ -27,8 +27,6 @@ configure_logging()
 from ._chat import router as chat_router
 from ._embeddings import router as embeddings_router
 from ._ai_followup import router as ai_followup_router
-from ._history_analyze import router as history_analyze_router
-from ._explore_search import router as explore_search_router
 from ._reports import router as reports_router
 from ._agriculture import router as agriculture_router
 from ._db import get_db
@@ -90,8 +88,6 @@ app.add_middleware(
 app.include_router(chat_router)
 app.include_router(embeddings_router)
 app.include_router(ai_followup_router)
-app.include_router(history_analyze_router)
-app.include_router(explore_search_router)
 app.include_router(reports_router)
 app.include_router(agriculture_router)
 
