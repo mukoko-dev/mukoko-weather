@@ -8,7 +8,7 @@
  */
 
 import type { Feature, FeatureCollection, Polygon } from "geojson";
-import { fetchWorker } from "@/lib/weather-api";
+import { workerData } from "@/lib/worker-data";
 import { AQI_SCALE } from "@/lib/weather-scales";
 
 /** EPA US AQI categories, lowest to highest severity. */
@@ -222,16 +222,16 @@ export async function fetchAirQualityGrid(options: {
   n?: number;
   signal?: AbortSignal;
 }): Promise<AqGridResponse> {
-  const params = new URLSearchParams({
-    lat: options.lat.toFixed(4),
-    lon: options.lon.toFixed(4),
-    radiusKm: String(options.radiusKm ?? 40),
-    n: String(options.n ?? 7),
-  });
-  const res = await fetchWorker("air-quality/grid", params.toString(), {
-    signal: options.signal,
-    headers: { Accept: "application/json" },
-  });
-  if (!res.ok) throw new Error(`air quality grid HTTP ${res.status}`);
-  return (await res.json()) as AqGridResponse;
+  // Shared read: one grid per route + 0.05 degree cell + size, however often
+  // the card is mounted (LazySection) and however many cards ask at once.
+  return workerData.json<AqGridResponse>(
+    "air-quality/grid",
+    {
+      lat: options.lat,
+      lon: options.lon,
+      radiusKm: options.radiusKm ?? 40,
+      n: options.n ?? 7,
+    },
+    { signal: options.signal },
+  );
 }

@@ -14,12 +14,17 @@
 
 import { LOCATIONS, type WeatherLocation } from "@/lib/locations";
 import { isLocationSlug } from "@/lib/current-slug";
+import { DEFAULT_PAGER_SLUGS } from "@/lib/default-places";
 
-/** Nearest seeded cities suggested around the anchor (Harare and Bulawayo are added on top). */
+/** Nearest seeded cities suggested around the anchor (Harare, Nairobi and Lagos are added on top). */
 export const PRESET_NEAREST_COUNT = 4;
 
-/** Always-suggested seeded cities, listed after the nearest ones. */
-export const PRESET_ALWAYS_SLUGS: readonly string[] = ["harare", "bulawayo"];
+/**
+ * Always-suggested seeded cities, listed after the nearest ones: Harare,
+ * Nairobi and Lagos (the default pager, #414). With no anchor they are the
+ * whole list.
+ */
+export const PRESET_ALWAYS_SLUGS: readonly string[] = DEFAULT_PAGER_SLUGS;
 
 export interface PresetAnchor {
   lat: number;
@@ -56,8 +61,8 @@ export function isPresetAnchor(value: unknown): value is PresetAnchor {
 
 /**
  * Ordered suggestion list for an anchor: the nearest seeded cities (closest
- * first, ties broken by slug), then Harare and Bulawayo. Without an anchor
- * only Harare and Bulawayo are suggested. Duplicates never appear.
+ * first, ties broken by slug), then Harare, Nairobi and Lagos. Without an
+ * anchor only those three are suggested. Duplicates never appear.
  */
 export function suggestPresetSlugs(
   anchor: PresetAnchor | null | undefined,

@@ -155,7 +155,7 @@ describe("AirQualityCard API contract", () => {
       "utf-8",
     );
     expect(source).toContain('"air-quality"');
-    expect(source).toContain("fetchWorker");
+    expect(source).toContain("useWorkerData");
     expect(source).not.toContain('"/api/py/airquality"');
   });
 

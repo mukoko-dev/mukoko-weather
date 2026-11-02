@@ -44,10 +44,15 @@ describe("device sync call sites", () => {
 
   it("replication talks to the Worker, never /api/py/devices", () => {
     const src = read("src/lib/rxdb/replication.ts");
-    expect(src).toContain('workerUrl(`devices/${deviceId}`, "")');
-    expect(src).toContain('fetchWorker(`devices/${deviceId}`, "")');
-    expect(src).not.toContain("/api/py/devices");
-    expect(src).not.toMatch(/\$\{API_BASE\}\/devices/);
+    const client = read("src/lib/rxdb/device-profile.ts");
+    expect(src).toContain("createDeviceProfileClient(");
+    expect(client).toContain("`devices/${deviceId}`");
+    expect(client).toContain('"devices"');
+    expect(client).toContain("workerUrl(route");
+    for (const text of [src, client]) {
+      expect(text).not.toContain("/api/py/devices");
+      expect(text).not.toMatch(/\$\{API_BASE\}\/devices/);
+    }
   });
 
   it("the service worker never caches device sync", () => {
