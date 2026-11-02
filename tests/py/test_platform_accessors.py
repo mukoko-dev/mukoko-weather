@@ -238,7 +238,6 @@ class TestLegacyAccessorsRouteToWeatherDb:
             (db.ai_prompts_collection, "ai_prompts"),
             (db.ai_suggested_rules_collection, "ai_suggested_rules"),
             (db.weather_reports_collection, "weather_reports"),
-            (db.history_analysis_collection, "history_analysis"),
             (db.metar_cache_collection, "metar_cache"),
         ],
     )

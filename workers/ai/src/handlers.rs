@@ -82,7 +82,7 @@ fn turns(v: &Value) -> Vec<Turn> {
 }
 
 /// The full `WeatherData` for a point, from the forecast Worker.
-async fn weather(env: &Env, lat: f64, lon: f64) -> Option<Value> {
+pub(crate) async fn weather(env: &Env, lat: f64, lon: f64) -> Option<Value> {
     let fetcher = env.service(FORECAST_BINDING).ok()?;
     let mut resp = fetcher
         .fetch(
@@ -384,6 +384,7 @@ async fn history_records(ctx: &Ctx<'_>, slug: &str, window: &str) -> Option<Vec<
             current: d["current"].clone(),
             daily: d["daily"].clone(),
             insights: d["insights"].clone(),
+            source: d["source"].as_str().map(str::to_owned),
         })
         .collect();
     records.sort_by(|a, b| a.date.cmp(&b.date));
@@ -458,17 +459,64 @@ pub async fn history(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
     }
 
     let stats = aggregate(&records);
+
+    // A model call is a budgeted spend (10 an hour per client, as the Python
+    // backend had); an analysis answered from the cache above was free. Over
+    // the client's hour is a 429; the service's hour spent, or a budget that
+    // cannot be read (it fails closed), answers with the statistics alone.
+    // No caller (it is always set on this route) would be refused: the budget
+    // fails closed.
+    let decision = match ctx.caller.as_ref() {
+        Some(caller) => budget::take(ctx.env, Action::HistoryAnalysis, caller).await,
+        None => Decision::GlobalLimit,
+    };
+    match decision {
+        Decision::Allow => {}
+        Decision::ClientLimit => {
+            return responses::rate_limited(
+                900,
+                "You have used this hour's AI analyses. Please try again later.",
+            )
+        }
+        Decision::GlobalLimit => {
+            return json(
+                200,
+                &json!({
+                    "analysis": "AI analysis is busy right now. The statistical summary is available above.",
+                    "stats": stats,
+                    "cached": false,
+                    "error": true,
+                    "dataPoints": points,
+                }),
+            )
+        }
+    }
+
     let name = place.name.clone().unwrap_or_else(|| place.slug.clone());
     let season: Season = season_for(
         place.country.as_deref().filter(|c| c.chars().count() == 2),
         place.lat,
         now(),
     );
+    // What is known about the place (season calendar, crop stage, normals,
+    // climate zone), cache-only and bounded: no profile is no block, and a
+    // profile never slows or fails the analysis.
+    let profile = with_profile(
+        &profile::block(
+            ctx.env,
+            Some(&place.slug),
+            place.lat,
+            place.lon,
+            place.country.as_deref(),
+        )
+        .await,
+    );
     let request = prompts::history_request(
         &name,
         place.elevation.unwrap_or(0.0),
         &season,
         &acts,
+        &profile,
         &stats,
     );
     let system = system_prompt(

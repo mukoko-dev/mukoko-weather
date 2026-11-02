@@ -58,6 +58,12 @@ pub enum Action {
     AiFollowup,
     /// An agriculture explanation that goes to the model (a cache miss).
     AiAgriculture,
+    /// An AI location search (`/v1/ai/explore/search`): up to three model
+    /// calls and some forecast lookups.
+    ExploreSearch,
+    /// An AI history analysis (`/v1/ai/history/analyze`) that calls the model:
+    /// an analysis answered from the cache is free.
+    HistoryAnalysis,
 }
 
 /// Hourly limits for one action.
@@ -85,6 +91,8 @@ impl Action {
             Action::AiSummary => "ai-summary",
             Action::AiFollowup => "ai-followup",
             Action::AiAgriculture => "ai-agriculture",
+            Action::ExploreSearch => "ai-explore-search",
+            Action::HistoryAnalysis => "ai-history-analysis",
         }
     }
 
@@ -173,6 +181,20 @@ impl Action {
             Action::AiAgriculture => Limits {
                 per_client: 30,
                 global: 600,
+            },
+            // 15 searches an hour per client, as in the Python backend. Each
+            // is up to three model calls; the service-wide cap is 40 clients
+            // at their limit, and past it the search answers from the text
+            // match instead of the model.
+            Action::ExploreSearch => Limits {
+                per_client: 15,
+                global: 600,
+            },
+            // 10 analyses an hour per client, as in the Python backend. Each
+            // is one model call.
+            Action::HistoryAnalysis => Limits {
+                per_client: 10,
+                global: 300,
             },
         }
     }
@@ -492,6 +514,20 @@ mod tests {
         assert_eq!(decide(r, 0, 600), Decision::GlobalLimit);
         let names = [Action::WeatherReport, Action::DeviceCreate].map(Action::name);
         assert_ne!(names[0], names[1]);
+    }
+
+    #[test]
+    fn the_ai_budgets_are_the_pythons_per_client_and_bounded_service_wide() {
+        // 15 searches and 10 analyses an hour per client, as the Python had.
+        assert_eq!(Action::ExploreSearch.limits().per_client, 15);
+        assert_eq!(Action::HistoryAnalysis.limits().per_client, 10);
+        assert_eq!(Action::ExploreSearch.name(), "ai-explore-search");
+        assert_eq!(Action::HistoryAnalysis.name(), "ai-history-analysis");
+        for a in [Action::ExploreSearch, Action::HistoryAnalysis] {
+            let l = a.limits();
+            assert!(l.per_client <= l.global);
+        }
+        assert_ne!(Action::ExploreSearch.name(), Action::HistoryAnalysis.name());
     }
 
     #[test]

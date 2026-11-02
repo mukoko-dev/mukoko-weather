@@ -3,7 +3,7 @@
 The weather summary (prompt, tiered cache, fallback text, activity and tag
 filtering) is the AI Worker's now and is pinned natively against
 ``tests/fixtures/ai-summary.json`` (``weather_core::ai``). What stays here is
-what ``_history_analyze.py`` and ``_locations.py`` still import.
+what ``_locations.py`` still imports.
 """
 
 from __future__ import annotations
