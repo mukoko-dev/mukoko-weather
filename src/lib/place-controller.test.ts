@@ -4,6 +4,7 @@ import type { DeviceView } from "./device-weather";
 import { REFRESH_AFTER_MS, deviceViewOf } from "./device-weather";
 import {
   MEMORY_MAX_PLACES,
+  SLOW_LOAD_AFTER_MS,
   clearPlaceMemory,
   createPlaceController,
   isFreshEnough,
@@ -127,8 +128,16 @@ interface Harness {
   /** Make fetchWeather wait until released; returns the release function. */
   hold(slug: string): () => void;
   failFetch: { on: boolean };
-  /** Run every scheduled retry timer now; the delays asked for, in order. */
+  /**
+   * Run every scheduled RETRY timer now (live-fetch's 2 s, 5 s, 15 s); the
+   * delays asked for, in order. The "still trying" clock is not a retry: it is
+   * left alone here, and fired with fireSlow().
+   */
   runTimers(): Promise<number[]>;
+  /** Run the "still trying" clock now (SLOW_LOAD_AFTER_MS); how many ran. */
+  fireSlow(): Promise<number>;
+  /** The delays of every timer still waiting (cancelled ones are gone). */
+  pending(): number[];
   fallbackAnswer: { on: boolean };
   path: { current: string };
   places: Map<string, PlaceSeed>;
@@ -158,6 +167,15 @@ function harness(initialPath: string): Harness {
   const byLat = new Map(
     [HARARE, NAIROBI, LAGOS].map((s) => [s.location.lat, s.location.slug]),
   );
+  /** Remove the cancelled timers, and return (and remove) those `wanted`. */
+  const take = (wanted: (t: (typeof timers)[number]) => boolean) => {
+    for (let i = timers.length - 1; i >= 0; i--) {
+      if (timers[i].cancelled) timers.splice(i, 1);
+    }
+    const due = timers.filter(wanted);
+    for (const t of due) timers.splice(timers.indexOf(t), 1);
+    return due;
+  };
   const deps: PlaceDeps = {
     now: () => clock.now,
     recall: async (slug) => {
@@ -209,10 +227,20 @@ function harness(initialPath: string): Harness {
     path,
     places,
     async runTimers() {
-      const due = timers.splice(0).filter((t) => !t.cancelled);
+      const due = take((t) => t.ms !== SLOW_LOAD_AFTER_MS);
       for (const t of due) t.fn();
       await new Promise((r) => setTimeout(r, 5));
       return due.map((t) => t.ms);
+    },
+    async fireSlow() {
+      const due = take((t) => t.ms === SLOW_LOAD_AFTER_MS);
+      for (const t of due) t.fn();
+      await new Promise((r) => setTimeout(r, 5));
+      return due.length;
+    },
+    pending() {
+      take(() => false);
+      return timers.map((t) => t.ms);
     },
     hold(slug) {
       let release!: () => void;
@@ -834,6 +862,296 @@ describe("when the visitor's own request fails", () => {
     release();
     await done;
     expect(c.getState().view).toBeNull();
+  });
+});
+
+describe("a forecast that is slow to arrive (the skeleton says so, after 8 s)", () => {
+  function lagos(h: Harness) {
+    return createPlaceController(h.deps, {
+      seed: LAGOS,
+      isHome: false,
+      path: "/lagos-ng",
+    });
+  }
+
+  it("the threshold is 8 seconds, below the 22 s the retries take", () => {
+    expect(SLOW_LOAD_AFTER_MS).toBe(8_000);
+    // Two seconds, five and fifteen: the line comes well before "Couldn't load".
+    expect(SLOW_LOAD_AFTER_MS).toBeLessThan(2_000 + 5_000 + 15_000);
+  });
+
+  it("starts the clock when the forecast is first asked for, not before", async () => {
+    const h = harness("/lagos-ng");
+    h.failFetch.on = true;
+    const c = lagos(h);
+    expect(h.pending()).toEqual([]);
+    expect(c.getState().slow).toBe(false);
+    await c.start();
+    expect(h.pending()).toContain(SLOW_LOAD_AFTER_MS);
+  });
+
+  it("before 8 s there is no line: the first failure and the first retry stay silent", async () => {
+    const h = harness("/lagos-ng");
+    h.failFetch.on = true;
+    const c = lagos(h);
+    await c.start();
+    expect(c.getState().slow).toBe(false);
+    expect(await h.runTimers()).toEqual([2_000]);
+    expect(c.getState().slow).toBe(false);
+    expect(c.getState().failed).toBe(false);
+  });
+
+  it("at 8 s the skeleton stays and the line is up while the retries carry on", async () => {
+    const h = harness("/lagos-ng");
+    h.failFetch.on = true;
+    const c = lagos(h);
+    await c.start();
+    await h.runTimers(); // the 2 s retry failed too
+    expect(await h.fireSlow()).toBe(1);
+    const s = c.getState();
+    expect(s.slow).toBe(true);
+    expect(s.view).toBeNull(); // still the skeleton
+    expect(s.failed).toBe(false); // "Couldn't load" is the end of the retries
+    expect(s.fetching).toBe(true);
+    // The retry schedule is untouched: 5 s next, then 15 s.
+    expect(await h.runTimers()).toEqual([5_000]);
+    expect(c.getState().slow).toBe(true);
+    expect(await h.runTimers()).toEqual([15_000]);
+  });
+
+  it("a request that hangs (never fails) is just as slow at 8 s", async () => {
+    const h = harness("/lagos-ng");
+    const release = h.hold("lagos-ng");
+    const c = lagos(h);
+    const started = c.start();
+    await new Promise((r) => setTimeout(r, 5));
+    expect(c.getState().slow).toBe(false);
+    await h.fireSlow();
+    expect(c.getState().slow).toBe(true);
+    // The forecast arrives late: the line goes with the skeleton.
+    release();
+    await started;
+    expect(temp(c.getState())).toBe(6);
+    expect(c.getState().slow).toBe(false);
+  });
+
+  it("when the retries are spent the existing failed state replaces the line", async () => {
+    const h = harness("/lagos-ng");
+    h.failFetch.on = true;
+    const c = lagos(h);
+    await c.start();
+    await h.runTimers();
+    await h.fireSlow();
+    expect(c.getState().slow).toBe(true);
+    await h.runTimers(); // 5 s
+    await h.runTimers(); // 15 s: spent
+    const s = c.getState();
+    expect(s.failed).toBe(true);
+    expect(s.slow).toBe(false); // never both
+    expect(s.fetching).toBe(false);
+    expect(s.view).toBeNull();
+    expect(h.pending()).not.toContain(SLOW_LOAD_AFTER_MS);
+  });
+
+  it("a forecast clears it at any time, and cancels the clock when it comes first", async () => {
+    // Before the line: the clock is cancelled, so the line can never appear late.
+    clearPlaceMemory();
+    const early = harness("/lagos-ng");
+    early.failFetch.on = true;
+    const a = lagos(early);
+    await a.start();
+    early.failFetch.on = false;
+    await early.runTimers(); // the 2 s retry succeeds
+    expect(temp(a.getState())).toBe(6);
+    expect(early.pending()).not.toContain(SLOW_LOAD_AFTER_MS);
+    expect(await early.fireSlow()).toBe(0);
+    expect(a.getState().slow).toBe(false);
+
+    // After the line is up: the forecast takes it down. (The first scenario
+    // left Lagos in memory, which would answer without a request.)
+    clearPlaceMemory();
+    const late = harness("/lagos-ng");
+    late.failFetch.on = true;
+    const b = lagos(late);
+    await b.start();
+    await late.fireSlow();
+    expect(b.getState().slow).toBe(true);
+    late.failFetch.on = false;
+    await late.runTimers();
+    expect(temp(b.getState())).toBe(6);
+    expect(b.getState().slow).toBe(false);
+    expect(b.getState().failed).toBe(false);
+  });
+
+  it("never with something stored on screen: the saved copy is the answer to waiting", async () => {
+    const h = harness("/lagos-ng");
+    h.stored.set("lagos-ng", storedView(LAGOS, 30, REFRESH_AFTER_MS + 60_000));
+    h.failFetch.on = true;
+    const c = lagos(h);
+    await c.start();
+    expect(temp(c.getState())).toBe(30);
+    await h.fireSlow();
+    expect(c.getState().slow).toBe(false);
+  });
+
+  it("a slow device copy that lands after the line is up takes it down", async () => {
+    const h = harness("/lagos-ng");
+    h.failFetch.on = true;
+    const late = storedView(LAGOS, 30, REFRESH_AFTER_MS + 60_000);
+    let giveCopy!: () => void;
+    h.deps.recall = () =>
+      new Promise((resolve) => {
+        giveCopy = () => resolve(late);
+      });
+    const c = lagos(h);
+    await c.start(); // the device did not answer within recallTimeoutMs
+    await h.fireSlow();
+    expect(c.getState().slow).toBe(true);
+    giveCopy();
+    await new Promise((r) => setTimeout(r, 5));
+    expect(temp(c.getState())).toBe(30);
+    expect(c.getState().slow).toBe(false);
+  });
+
+  it("Try again from the line is a forced read: the line stays up, busy, until that attempt ends", async () => {
+    const h = harness("/lagos-ng");
+    const forced: boolean[] = [];
+    const inner = h.deps.fetchWeather.bind(h.deps);
+    h.deps.fetchWeather = (lat, lon, signal, options) => {
+      forced.push(options?.force ?? false);
+      return inner(lat, lon, signal, options);
+    };
+    h.failFetch.on = true;
+    const c = lagos(h);
+    await c.start();
+    await h.fireSlow();
+    expect(c.getState().slow).toBe(true);
+    expect(c.getState().trying).toBe(false);
+
+    // The visitor presses it, and the attempt hangs for a moment.
+    const release = h.hold("lagos-ng");
+    const pressed = c.retry();
+    await new Promise((r) => setTimeout(r, 5));
+    expect(forced[forced.length - 1]).toBe(true); // reads past the remembered failure
+    expect(c.getState().slow).toBe(true); // the line does not vanish
+    expect(c.getState().trying).toBe(true); // ...it shows "Trying…"
+    expect(h.pending()).not.toContain(SLOW_LOAD_AFTER_MS); // no second wait
+
+    // That attempt fails: the button is free again, the line stays.
+    release();
+    await pressed;
+    expect(c.getState().slow).toBe(true);
+    expect(c.getState().trying).toBe(false);
+    expect(c.getState().failed).toBe(false);
+
+    // And it works: once the Worker is back, Try again shows the forecast.
+    h.failFetch.on = false;
+    await c.retry();
+    expect(temp(c.getState())).toBe(6);
+    expect(c.getState().slow).toBe(false);
+    expect(c.getState().trying).toBe(false);
+  });
+
+  it('Try again from "Couldn\'t load" (nothing stored) goes straight to the busy line, never a silent skeleton', async () => {
+    const h = harness("/lagos-ng");
+    h.failFetch.on = true;
+    const c = lagos(h);
+    await c.start();
+    await h.fireSlow();
+    for (let i = 0; i < 3; i++) await h.runTimers();
+    expect(c.getState().failed).toBe(true);
+    expect(c.getState().slow).toBe(false);
+
+    h.failFetch.on = false;
+    const release = h.hold("lagos-ng");
+    const pressed = c.retry();
+    await new Promise((r) => setTimeout(r, 5));
+    const s = c.getState();
+    expect(s.failed).toBe(false); // the notice is replaced, not left on screen
+    expect(s.slow).toBe(true); // by the line,
+    expect(s.trying).toBe(true); // busy
+    expect(h.pending()).not.toContain(SLOW_LOAD_AFTER_MS); // no second 8 s of silence
+
+    release();
+    await pressed;
+    expect(temp(c.getState())).toBe(6);
+    expect(c.getState().slow).toBe(false);
+    expect(c.getState().trying).toBe(false);
+  });
+
+  it('Try again from "Couldn\'t refresh" with the saved copy on screen is unchanged: no line, the copy stays', async () => {
+    const h = harness("/lagos-ng");
+    h.stored.set("lagos-ng", storedView(LAGOS, 30, REFRESH_AFTER_MS + 60_000));
+    h.failFetch.on = true;
+    const c = lagos(h);
+    await c.start();
+    for (let i = 0; i < 3; i++) await h.runTimers();
+    expect(c.getState().failed).toBe(true);
+    expect(temp(c.getState())).toBe(30);
+
+    await c.retry();
+    expect(c.getState().slow).toBe(false);
+    expect(c.getState().trying).toBe(false);
+    expect(temp(c.getState())).toBe(30);
+  });
+
+  it("leaving the place drops the line and its clock", async () => {
+    const h = harness("/lagos-ng");
+    h.failFetch.on = true;
+    const c = lagos(h);
+    await c.start();
+    await h.fireSlow();
+    expect(c.getState().slow).toBe(true);
+    h.failFetch.on = false;
+    await c.showSlug("harare");
+    expect(c.getState().seed?.location.slug).toBe("harare");
+    expect(c.getState().slow).toBe(false);
+    expect(h.pending()).not.toContain(SLOW_LOAD_AFTER_MS);
+  });
+
+  it("an unresolvable slug stops the old place's retries, so its line is taken down too", async () => {
+    const h = harness("/lagos-ng");
+    h.failFetch.on = true;
+    const c = lagos(h);
+    await c.start();
+    await h.fireSlow();
+    expect(await c.showSlug("nowhere")).toBe(false);
+    expect(c.getState().slow).toBe(false);
+  });
+
+  it("coming back online after the retries were spent keeps the notice and adds no line over it", async () => {
+    const h = harness("/lagos-ng");
+    h.failFetch.on = true;
+    const c = lagos(h);
+    await c.start();
+    await h.fireSlow();
+    for (let i = 0; i < 3; i++) await h.runTimers();
+    expect(c.getState().failed).toBe(true);
+    expect(c.getState().slow).toBe(false);
+
+    // One more attempt, and it hangs: "Couldn't load" stays as it is.
+    h.failFetch.on = false;
+    const release = h.hold("lagos-ng");
+    h.clock.now += 5_000;
+    c.nudge("online");
+    await new Promise((r) => setTimeout(r, 5));
+    expect(h.pending()).not.toContain(SLOW_LOAD_AFTER_MS);
+    expect(c.getState().failed).toBe(true);
+    expect(c.getState().slow).toBe(false);
+    release();
+    await new Promise((r) => setTimeout(r, 5));
+    expect(temp(c.getState())).toBe(6);
+    expect(c.getState().failed).toBe(false);
+  });
+
+  it("disposing the stage cancels the clock", async () => {
+    const h = harness("/lagos-ng");
+    h.failFetch.on = true;
+    const c = lagos(h);
+    await c.start();
+    c.dispose();
+    expect(h.pending()).not.toContain(SLOW_LOAD_AFTER_MS);
+    expect(c.getState().slow).toBe(false);
   });
 });
 
