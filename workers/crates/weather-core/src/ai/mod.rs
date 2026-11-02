@@ -11,6 +11,7 @@
 
 pub mod completions;
 pub mod explore;
+pub mod failure;
 pub mod guardrails;
 pub mod history;
 pub mod pii;
