@@ -147,8 +147,12 @@ describe("service worker: the /offline page can start with no network", () => {
   });
 
   it("refuses to store an HTML answer as a script, in the one strategy both paths use", () => {
-    expect(source).toContain("isStorableStaticAsset(response) ? response : null");
-    expect(source).toContain("return response.ok && isStorableStaticAsset(response);");
+    expect(source).toContain(
+      "isStorableStaticAsset(response) ? response : null",
+    );
+    expect(source).toContain(
+      "return response.ok && isStorableStaticAsset(response);",
+    );
   });
 
   it("repeats an unfinished pass from a navigation, in the background and only online", () => {
@@ -169,4 +173,3 @@ describe("service worker: the /offline page can start with no network", () => {
     );
   });
 });
-

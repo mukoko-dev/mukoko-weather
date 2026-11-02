@@ -21,17 +21,20 @@ export const PHONE = { width: 390, height: 844 };
 /** Print PASS/FAIL lines and a summary; `finish()` sets the exit code. */
 export function reporter() {
   const results = [];
-  return {
-    note(name, ok, detail = "") {
-      results.push({ name, ok });
-      console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? `  -- ${detail}` : ""}`);
-    },
-    finish() {
-      const failed = results.filter((r) => !r.ok);
-      console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
-      process.exit(failed.length ? 1 : 0);
-    },
+  const note = (name, ok, detail = "") => {
+    results.push({ name, ok });
+    console.log(
+      `${ok ? "PASS" : "FAIL"}  ${name}${detail ? `  -- ${detail}` : ""}`,
+    );
   };
+  const finish = () => {
+    const failed = results.filter((r) => !r.ok);
+    console.log(
+      `\n${results.length - failed.length}/${results.length} checks passed`,
+    );
+    process.exit(failed.length ? 1 : 0);
+  };
+  return { note, finish };
 }
 
 /** Run `main`, turning a crash of the harness itself into exit code 2. */
@@ -50,7 +53,10 @@ export function run(main) {
  * `failWeather()` makes `/v1/weather` answer 503 while it returns true;
  * `onCall(method, pathname)` sees every request.
  */
-export async function proxyApi(context, { failWeather = () => false, onCall = () => {} } = {}) {
+export async function proxyApi(
+  context,
+  { failWeather = () => false, onCall = () => {} } = {},
+) {
   await context.route(`${API}/**`, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -112,7 +118,8 @@ export const bodyText = async (page) =>
 export function classifyOffline(text) {
   if (/Something went wrong/.test(text)) return "ERROR BOUNDARY";
   if (/You're offline/.test(text)) return "OFFLINE PAGE";
-  if (/Harare|Lagos/.test(text) && /\d+°/.test(text)) return "APP (place + temperature)";
+  if (/Harare|Lagos/.test(text) && /\d+°/.test(text))
+    return "APP (place + temperature)";
   return `OTHER: ${text.slice(0, 80)}`;
 }
 
@@ -125,7 +132,8 @@ export const cacheHolding = (page, pattern) =>
     const matcher = new RegExp(source);
     for (const name of await caches.keys()) {
       const cache = await caches.open(name);
-      for (const request of await cache.keys()) if (matcher.test(request.url)) return name;
+      for (const request of await cache.keys())
+        if (matcher.test(request.url)) return name;
     }
     return null;
   }, pattern.source);

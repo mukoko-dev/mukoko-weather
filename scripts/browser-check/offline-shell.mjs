@@ -22,16 +22,22 @@ const { note, finish } = reporter();
 
 async function launchOffline(target) {
   const browser = await chromium.launch();
-  const context = await browser.newContext({ viewport: PHONE, locale: "en-ZW" });
+  const context = await browser.newContext({
+    viewport: PHONE,
+    locale: "en-ZW",
+  });
   await proxyApi(context);
   const page = await context.newPage();
   await installServiceWorker(page);
   await context.setOffline(true);
   const failed = [];
   page.on("requestfailed", (request) => {
-    if (request.url().includes("/_next/")) failed.push(request.url().replace(BASE, "").slice(0, 80));
+    if (request.url().includes("/_next/"))
+      failed.push(request.url().replace(BASE, "").slice(0, 80));
   });
-  await page.goto(BASE + target, { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => null);
+  await page
+    .goto(BASE + target, { waitUntil: "domcontentloaded", timeout: 20000 })
+    .catch(() => null);
   await page.waitForTimeout(6000);
   const kind = classifyOffline(await bodyText(page));
   await browser.close();

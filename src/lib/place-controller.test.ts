@@ -1016,7 +1016,7 @@ describe("a forecast that is slow to arrive (the skeleton says so, after 8 s)", 
   it("Try again from the line is a fresh forced read; the line goes and returns after another 8 s", async () => {
     const h = harness("/lagos-ng");
     const forced: boolean[] = [];
-    const inner = h.deps.fetchWeather;
+    const inner = h.deps.fetchWeather.bind(h.deps);
     h.deps.fetchWeather = (lat, lon, signal, options) => {
       forced.push(options?.force ?? false);
       return inner(lat, lon, signal, options);

@@ -24,7 +24,10 @@ const OFFLINE_ONLY = /\/_next\/static\/chunks\/app\/offline\/page-/;
 
 run(async () => {
   const browser = await chromium.launch();
-  const context = await browser.newContext({ viewport: PHONE, locale: "en-ZW" });
+  const context = await browser.newContext({
+    viewport: PHONE,
+    locale: "en-ZW",
+  });
   await proxyApi(context);
 
   // Refuse the chunk only the offline page uses (the worker reads the build's
@@ -71,10 +74,16 @@ run(async () => {
   );
 
   await context.setOffline(true);
-  await page.goto(`${BASE}/lagos-ng`, { waitUntil: "domcontentloaded", timeout: 20000 }).catch(() => null);
+  await page
+    .goto(`${BASE}/lagos-ng`, { waitUntil: "domcontentloaded", timeout: 20000 })
+    .catch(() => null);
   await page.waitForTimeout(6000);
   const kind = classifyOffline(await bodyText(page));
-  note("offline /lagos-ng then shows the offline page", kind === "OFFLINE PAGE", kind);
+  note(
+    "offline /lagos-ng then shows the offline page",
+    kind === "OFFLINE PAGE",
+    kind,
+  );
 
   await browser.close();
   finish();

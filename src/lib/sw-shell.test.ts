@@ -49,7 +49,10 @@ describe("shellAssetUrls: what the /offline page needs to start", () => {
       "/_next/static/chunks/app/offline/page-67244ec337d81e16.js",
     );
     // A different build's page gives that build's names.
-    const next = OFFLINE_HTML.replaceAll("649c18685a418c01", "0000000000000000");
+    const next = OFFLINE_HTML.replaceAll(
+      "649c18685a418c01",
+      "0000000000000000",
+    );
     expect(shellAssetUrls(next, PAGE)).toContain(
       "/_next/static/chunks/8655-0000000000000000.js",
     );
@@ -211,10 +214,15 @@ describe("warmShellAssets", () => {
     const shell = fakeShell(OFFLINE_HTML);
     shell.failing.add("/_next/static/chunks/8655-649c18685a418c01.js");
     const result = await warmShellAssets(shell.deps);
-    expect(result).toEqual({ wanted: 6, loaded: 5, failed: 1, complete: false });
-    expect(shell.stored.has("/_next/static/chunks/8655-649c18685a418c01.js")).toBe(
-      false,
-    );
+    expect(result).toEqual({
+      wanted: 6,
+      loaded: 5,
+      failed: 1,
+      complete: false,
+    });
+    expect(
+      shell.stored.has("/_next/static/chunks/8655-649c18685a418c01.js"),
+    ).toBe(false);
   });
 
   it("never throws: a load that rejects is a failure of that file only", async () => {
@@ -433,4 +441,3 @@ describe("isStorableStaticAsset: a page is never kept as a script", () => {
     }
   });
 });
-

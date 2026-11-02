@@ -47,11 +47,7 @@ import {
   type Freshness,
 } from "./device-weather";
 import { createLatestRequests, type LatestRequest } from "./latest-request";
-import {
-  createLiveFetch,
-  defaultSchedule,
-  type LiveFetch,
-} from "./live-fetch";
+import { createLiveFetch, defaultSchedule, type LiveFetch } from "./live-fetch";
 import { classifyTransportError } from "./worker-data";
 import { countryDisplayName, reconcileCountry } from "./location-country";
 import { reconcileElevation } from "./location-elevation";
