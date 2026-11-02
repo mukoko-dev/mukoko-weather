@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { workerData } from "./worker-data";
 import {
   aqiBand,
   gridToGeoJSON,
@@ -169,6 +170,9 @@ describe("gridToGeoJSON — square cell geometry", () => {
 });
 
 describe("fetchAirQualityGrid", () => {
+  beforeEach(() => {
+    workerData.reset();
+  });
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -176,6 +180,7 @@ describe("fetchAirQualityGrid", () => {
   it("requests the grid endpoint with rounded coordinates, radius and n", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
+      status: 200,
       json: async () => ({
         available: true,
         center: null,
@@ -200,8 +205,9 @@ describe("fetchAirQualityGrid", () => {
       url.startsWith("https://weather-api.mukoko.com/v1/air-quality/grid?"),
     ).toBe(true);
     const params = new URL(url, "http://x").searchParams;
-    expect(params.get("lat")).toBe("1.3512");
-    expect(params.get("lon")).toBe("103.8249");
+    // Three decimals (~110 m): the app's coordinate privacy rule.
+    expect(params.get("lat")).toBe("1.351");
+    expect(params.get("lon")).toBe("103.825");
     expect(params.get("radiusKm")).toBe("40");
     expect(params.get("n")).toBe("7");
   });
@@ -216,18 +222,26 @@ describe("fetchAirQualityGrid", () => {
     );
   });
 
-  it("forwards the abort signal", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue({ ok: true, json: async () => ({}) });
+  it("an abort stops the caller waiting; the shared request is not cancelled", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ points: [] }),
+    });
     vi.stubGlobal("fetch", fetchMock);
     const controller = new AbortController();
-    await fetchAirQualityGrid({ lat: 0, lon: 0, signal: controller.signal });
-    // The Worker helper combines the caller's signal with its own timeout.
+    const first = fetchAirQualityGrid({
+      lat: 0,
+      lon: 0,
+      signal: controller.signal,
+    });
+    controller.abort();
+    await expect(first).rejects.toMatchObject({ name: "AbortError" });
+    // The next mount asks again and reuses the request that is out.
+    await fetchAirQualityGrid({ lat: 0, lon: 0 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     const sent = fetchMock.mock.calls[0][1].signal as AbortSignal;
     expect(sent.aborted).toBe(false);
-    controller.abort();
-    expect(sent.aborted).toBe(true);
   });
 });
 

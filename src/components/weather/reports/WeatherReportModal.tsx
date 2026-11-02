@@ -14,6 +14,11 @@ import {
 import { useAppStore } from "@/lib/store";
 import { trackEvent } from "@/lib/analytics";
 import { REPORT_TYPES } from "@/lib/report-types";
+import {
+  forgetReports,
+  reportRefusal,
+  reportsSubmitUrl,
+} from "@/lib/reports-api";
 
 const SEVERITIES = [
   { id: "mild", label: "Mild", description: "Noticeable but not disruptive" },
@@ -98,7 +103,7 @@ export function WeatherReportModal() {
     setError(null);
 
     try {
-      const res = await fetch("/api/py/reports", {
+      const res = await fetch(reportsSubmitUrl(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -111,9 +116,11 @@ export function WeatherReportModal() {
 
       if (!res.ok) {
         const body = await res.json().catch(() => null);
-        throw new Error(body?.detail || "Failed to submit report");
+        throw new Error(reportRefusal(body, "Failed to submit report"));
       }
 
+      // The kept list for this place is now out of date.
+      forgetReports(selectedLocation);
       setSubmitted(true);
       setStep("confirm");
       trackEvent("report_submitted", {

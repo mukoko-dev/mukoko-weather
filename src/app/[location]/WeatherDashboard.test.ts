@@ -330,9 +330,11 @@ describe("WeatherDashboard — mobile nav clearance and touch targets", () => {
   });
 
   it("inline breadcrumb Home link carries the .dik-dik touch-target class", () => {
-    const homeIdx = source.indexOf("href={BASE_URL}");
+    // A client-side Link to "/", never an <a href="https://…"> (a full reload).
+    const homeIdx = source.indexOf('<Link\n            href="/"');
     expect(homeIdx).toBeGreaterThan(-1);
     expect(source.slice(homeIdx, homeIdx + 200)).toContain("dik-dik");
+    expect(source).not.toContain("href={BASE_URL}");
   });
 });
 
@@ -384,13 +386,19 @@ describe("WeatherDashboard — redesign wiring", () => {
 
 describe("selected forecast model is the baseline (issue #246)", () => {
   it("fetches through our API, not Open-Meteo directly", () => {
-    expect(source).toContain("fetchModelWeather(");
+    const hook = readFileSync(
+      resolve(__dirname, "../../lib/use-live-weather.ts"),
+      "utf-8",
+    );
+    expect(hook).toContain("loadModelWeather(");
+    expect(source).toContain("useLiveWeather(");
     expect(source).not.toMatch(/\bfetchWeather\(location\.lat/);
   });
 
   it("derives the frost banner and fallback flag from the baseline on screen", () => {
-    expect(source).toContain("checkFrostRisk(modelBaseline.hourly");
-    expect(source).toContain("modelBaseline ? false : seedUsingFallback");
+    expect(source).toContain("checkFrostRisk(");
+    expect(source).toContain("displayed.override.hourly");
+    expect(source).toContain("const usingFallback = displayed.usingFallback;");
   });
 });
 

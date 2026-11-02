@@ -99,7 +99,11 @@ export const BASELINE_HEADERS = [
 
 export const FRAME_HEADER = { key: "X-Frame-Options", value: "SAMEORIGIN" };
 
-/** Origins allowed to call the first-party API cross-origin (Python CORS list). */
+/**
+ * Origins allowed to call the first-party API cross-origin: the Workers'
+ * `CORS_ORIGINS` (`workers/public-api` and `workers/stations`). The Python CORS
+ * list, still being retired, is a subset (it no longer lists the station console).
+ */
 export const FIRST_PARTY_ORIGINS = [
   "https://weather.mukoko.com",
   "https://weatherstations.nyuchi.com",
@@ -109,20 +113,15 @@ export const FIRST_PARTY_ORIGINS = [
 /**
  * CORS policy as data (framework-agnostic, reusable by the Astro/Workers app).
  *
- * `open` routes are the documented public browser API (developers page) and the
- * embed endpoints: `Access-Control-Allow-Origin: *`, never with credentials.
+ * `open` routes are the embed endpoints: `Access-Control-Allow-Origin: *`,
+ * never with credentials. The documented public browser API (developers page:
+ * weather, air quality, geo and search) is on the Rust API Worker now
+ * (`weather_core::cors::OPEN_READ_ROUTES`), which carries the same policy.
  * Every other route is same-origin plus {@link FIRST_PARTY_ORIGINS}, echoed by
  * the API layer (FastAPI CORSMiddleware).
  */
 export const CORS_POLICY = {
-  open: [
-    "/api/py/weather",
-    "/api/py/geo",
-    "/api/py/search",
-    "/api/py/airquality/:path*",
-    "/api/embed/:path*",
-    "/embed/:path*",
-  ],
+  open: ["/api/embed/:path*", "/embed/:path*"],
   allowlist: FIRST_PARTY_ORIGINS,
   /** Hardware ingest is not a browser: no CORS needed. */
   noCors: ["/api/py/stations/ingest"],

@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { randomUUID } from "node:crypto";
 import withSerwistInit from "@serwist/next";
 import {
   MISSING_ASSET_DESTINATION,
@@ -16,7 +17,16 @@ import {
 const withSerwist = withSerwistInit({
   swSrc: "src/app/sw.ts",
   swDest: "public/sw.js",
+  // `/offline` is a route, not an emitted asset, so it is not in the manifest
+  // unless it is added here. The worker's offline fallback needs it precached
+  // (it was never there). A new revision per build keeps it current.
+  additionalPrecacheEntries: [{ url: "/offline", revision: randomUUID() }],
   disable: process.env.NODE_ENV === "development",
+  // The default injects `window.addEventListener("online", () =>
+  // location.reload())`, which restarts the whole app (and drops the open
+  // sheet, the scroll position and the place being read) every time the
+  // browser reports it is back online. Data refreshes on its own cadence.
+  reloadOnOnline: false,
 });
 
 const nextConfig: NextConfig = {

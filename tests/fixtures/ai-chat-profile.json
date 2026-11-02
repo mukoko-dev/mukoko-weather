@@ -1,0 +1,28 @@
+{
+  "_oracle": "api/py/_chat.py _execute_get_weather and _build_chat_system_prompt at origin/staging 4091aa3, run with the real Python (dependencies scripted)",
+  "groundingRule": "Use the place profile to ground timing and local practice (season, crop stage, climate). Lines marked ~ are derived estimates: say \"typically\" or \"around\", never state them as fact. If the profile has no crop calendar, do not name local crops.",
+  "systemPromptTail": "\n\nPLACE PROFILES: Use the place profile to ground timing and local practice (season, crop stage, climate). Lines marked ~ are derived estimates: say \"typically\" or \"around\", never state them as fact. If the profile has no crop calendar, do not name local crops.",
+  "toolResults": [
+    {
+      "block": "Place profile (stored facts about this place; lines marked ~ are derived estimates — present them as approximate, never as fact):\n- Harare, ZW; 1490 m; Southern hemisphere; Africa/Harare\n- Climate: Cwb (Subtropical highland)",
+      "placeKnown": true,
+      "hasField": true,
+      "placeProfile": "Place profile (stored facts about this place; lines marked ~ are derived estimates — present them as approximate, never as fact):\n- Harare, ZW; 1490 m; Southern hemisphere; Africa/Harare\n- Climate: Cwb (Subtropical highland)",
+      "profileLookedUp": true
+    },
+    {
+      "block": "",
+      "placeKnown": true,
+      "hasField": false,
+      "placeProfile": null,
+      "profileLookedUp": true
+    },
+    {
+      "block": "Place profile (stored facts about this place; lines marked ~ are derived estimates — present them as approximate, never as fact):\n- Harare, ZW; 1490 m; Southern hemisphere; Africa/Harare\n- Climate: Cwb (Subtropical highland)",
+      "placeKnown": false,
+      "hasField": false,
+      "placeProfile": null,
+      "profileLookedUp": false
+    }
+  ]
+}

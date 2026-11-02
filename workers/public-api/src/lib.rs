@@ -7,7 +7,7 @@
 //! - mukoko-api, which binds to this Worker for consumer reuse.
 //!
 //! ```text
-//! GET /v1/weather?lat=&lon=[&models=a,b]   full WeatherData, the shape of /api/py/weather
+//! GET /v1/weather?lat=&lon=[&model=m][&models=a,b]   full WeatherData, the shape of /api/py/weather (`model` = the caller's own baseline model)
 //! GET /v1/forecast?location=|lat=&lon=[&days=1..7]   the daily forecast contract
 //! GET /v1/locations/profile?slug=|lat=&lon=[&country=]   a place's knowledge (seasons, crops, climate, soil) and today's context
 //! GET /v1/agriculture?lat=&lon=[&location=][&country=][&crops=]   farm windows, rain, soil, water balance, frost and heat risk (the shape of /api/py/agriculture)
@@ -24,7 +24,10 @@
 //!                                                    the shape of /api/py/airports/nearest
 //! GET /v1/locations, /v1/search, /v1/geo, /v1/history   places (mukoko-weather-places)
 //! POST /v1/devices, GET|PATCH /v1/devices/{id}      device preference profiles
-//! POST /v1/ai, /v1/ai/{summary,followup,chat,history/analyze}   Shamwari Weather
+//! POST|GET /v1/reports, POST /v1/reports/upvote     community weather reports
+//! POST /v1/ai/{chat,history/analyze,explore/search}   Shamwari Weather (the summary, the follow-up and the agriculture
+//!                                               explanation are not public: they are signed-in routes of the app,
+//!                                               reached through mukoko-weather-internal)
 //! GET /health
 //! ```
 //!
@@ -39,7 +42,9 @@
 //! over `PLACES`; `/v1/ai/*` is forwarded to `mukoko-weather-ai` over
 //! `AI_SERVICE` with the client's IP (that Worker has its own, tighter limit).
 //! Anonymous requests are rate limited per client IP
-//! (`RATE_LIMITER`). A developer may send a Nyuchi API key, checked by the
+//! (`RATE_LIMITER`, 600 a minute: a school or office shares one address, and
+//! the upstream cost is bounded by the KV caches and the D1 budgets, not by
+//! this limiter). A developer may send a Nyuchi API key, checked by the
 //! Nyuchi API (`keys`), and is then limited per key (`KEY_RATE_LIMITER`).
 
 mod keys;
@@ -59,7 +64,8 @@ const AI_BINDING: &str = "AI_SERVICE";
 /// AI request bodies larger than this are refused here.
 const MAX_AI_BODY_BYTES: usize = 64 * 1024;
 /// Device profile bodies are a few hundred bytes.
-const MAX_DEVICE_BODY_BYTES: usize = 16 * 1024;
+/// Device profile and community report bodies larger than this are refused here.
+const MAX_COMMUNITY_BODY_BYTES: usize = 16 * 1024;
 const RATE_LIMITER: &str = "RATE_LIMITER";
 const KEY_RATE_LIMITER: &str = "KEY_RATE_LIMITER";
 const PLACES_BINDING: &str = "PLACES";
@@ -72,13 +78,28 @@ const DEFAULT_ELEVATION_M: f64 = 1200.0;
 pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let origin = req.headers().get("Origin")?.unwrap_or_default();
     let cors_origin = cors::allowed_origin(&env, &origin);
-    let is_ai = is_ai_path(&req.path());
+    // The documented public read routes are open to any website (a GET, no
+    // credentials), as the Python routes they replace were. A listed origin
+    // still gets its own origin echoed; everything else keeps the allowlist.
+    // Every CORS decision is `weather_core::cors::cors_decision`, made on the
+    // method the page wants (a preflight names it in `Access-Control-Request-
+    // Method`), so a preflight for a write never gets `*`.
+    let path = req.path();
+    let method = req.method();
+    let requested = req.headers().get("Access-Control-Request-Method")?;
+    let decision = weather_core::cors::cors_decision(
+        weather_core::cors::cors_method(method.as_ref(), requested.as_deref()),
+        &path,
+        cors_origin.as_deref(),
+    );
+    let allow_origin = decision.allow_origin;
+    let is_ai = is_ai_path(&path);
 
     let resp = if req.method() == Method::Options {
         cors::preflight(
-            cors_origin.is_some(),
-            "GET, POST, PATCH, OPTIONS",
-            "Content-Type, Authorization, X-Mukoko-Client, X-API-Key, X-Client-Id, X-Client-Secret",
+            allow_origin.is_some(),
+            decision.methods,
+            decision.allow_headers,
         )
     } else if is_ai {
         if req.method() != Method::Post {
@@ -88,12 +109,12 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
         } else {
             forward_ai(&mut req, &env).await
         }
-    } else if is_devices_path(&req.path()) {
+    } else if is_community_path(&req.path()) {
         match req.method() {
             Method::Get | Method::Post | Method::Patch => {
                 match rate_limited(&req, &env, &keys::Caller::Anonymous).await {
                     Some(limited) => limited,
-                    None => forward_devices(&mut req, &env).await,
+                    None => forward_community(&mut req, &env).await,
                 }
             }
             _ => error(405, "method_not_allowed", "Use POST, GET or PATCH."),
@@ -111,10 +132,10 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     }?;
     cors::apply(
         resp,
-        cors_origin.as_deref(),
+        allow_origin.as_deref(),
         Some(
             "X-Cache, X-Weather-Provider, X-Weather-Blend, X-Enrichment, X-Current-Source, \
-             X-Fetched-At, X-AQ-Source",
+             X-Fetched-At, X-AQ-Source, Retry-After",
         ),
     )
 }
@@ -261,24 +282,36 @@ async fn rate_limited(req: &Request, env: &Env, caller: &keys::Caller) -> Option
     }
 }
 
-fn is_devices_path(path: &str) -> bool {
-    path == "/v1/devices" || path.starts_with("/v1/devices/")
+/// The routes `mukoko-weather-places` serves from MongoDB through the bridge,
+/// which are also the ones that write: device profiles and community reports.
+fn is_community_path(path: &str) -> bool {
+    path == "/v1/devices"
+        || path.starts_with("/v1/devices/")
+        || path == "/v1/reports"
+        || path == "/v1/reports/upvote"
 }
 
-/// Device preference profiles: `POST /v1/devices`, `GET` and `PATCH
-/// /v1/devices/{id}`, passed to `mukoko-weather-places` with the client's IP.
-async fn forward_devices(req: &mut Request, env: &Env) -> Result<Response> {
+/// Device preference profiles (`POST /v1/devices`, `GET` and `PATCH
+/// /v1/devices/{id}`) and community reports (`POST` and `GET /v1/reports`,
+/// `POST /v1/reports/upvote`), passed to `mukoko-weather-places` with the
+/// client's IP and the query string, and never cached.
+async fn forward_community(req: &mut Request, env: &Env) -> Result<Response> {
     let method = req.method();
     let body = if method == Method::Get {
         String::new()
     } else {
         let text = req.text().await.unwrap_or_default();
-        if text.len() > MAX_DEVICE_BODY_BYTES {
+        if text.len() > MAX_COMMUNITY_BODY_BYTES {
             return error(413, "payload_too_large", "The request body is too large.");
         }
         text
     };
     let path = req.path();
+    let query = req
+        .url()?
+        .query()
+        .map(|q| format!("?{q}"))
+        .unwrap_or_default();
     let headers = Headers::new();
     headers.set("Content-Type", "application/json")?;
     headers.set("X-Mukoko-Client-IP", &client_ip(req))?;
@@ -288,7 +321,7 @@ async fn forward_devices(req: &mut Request, env: &Env) -> Result<Response> {
         init.with_body(Some(JsValue::from_str(&body)));
     }
     let inner = Request::new_with_init(
-        &format!("https://places{}", path.trim_start_matches("/v1")),
+        &format!("https://places{}{query}", path.trim_start_matches("/v1")),
         &init,
     )?;
     let Ok(mut upstream) = env.service(PLACES_BINDING)?.fetch_request(inner).await else {
@@ -331,6 +364,10 @@ async fn forward_ai(req: &mut Request, env: &Env) -> Result<Response> {
     if let Some(ip) = req.headers().get("CF-Connecting-IP")? {
         headers.set("CF-Connecting-IP", &ip)?;
     }
+    // The AI Worker budgets the model calls per client (an hour of searches
+    // and analyses each), so it must key by the visitor, not by this Worker:
+    // the header every other relay stamps, read when the first is not there.
+    headers.set("X-Mukoko-Client-IP", &client_ip(req))?;
     let mut init = RequestInit::new();
     init.with_method(Method::Post)
         .with_headers(headers)
@@ -381,16 +418,20 @@ async fn weather(req: &Request, env: &Env) -> Result<Response> {
     }
 
     let mut q = format!("/weather?lat={lat}&lon={lon}&extras=1");
+    // The forecast Worker keeps only known model ids; send just the
+    // characters a model id can have (`weather_core::blend::safe_model_param`).
     if let Some(models) = get("models") {
-        // The forecast Worker keeps only known model ids; send just the
-        // characters a model id can have.
-        let safe: String = models
-            .chars()
-            .filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == ',')
-            .take(200)
-            .collect();
         q.push_str("&models=");
-        q.push_str(&safe);
+        q.push_str(&weather_core::blend::safe_model_param(models, 200));
+    }
+    // The user's own baseline model (`selectedForecastModel`); `best_match`
+    // and anything unknown mean the blend, decided by the forecast Worker.
+    let picked = get("model")
+        .map(|m| weather_core::blend::safe_model_param(m, 64))
+        .unwrap_or_default();
+    if !picked.is_empty() {
+        q.push_str("&model=");
+        q.push_str(&picked);
     }
 
     if let Some(mut upstream) = service::ask(env, FORECAST_BINDING, &q).await? {
@@ -407,17 +448,13 @@ async fn weather(req: &Request, env: &Env) -> Result<Response> {
                 ] {
                     copy_header(upstream.headers(), resp.headers(), h)?;
                 }
-                // Only the full blend is worth five minutes at the edge. A
-                // degraded answer (single model, best_match) is short-lived,
-                // so the blend comes back as soon as it recovers.
-                let blended = upstream.headers().get("X-Weather-Provider")?.as_deref()
-                    == Some("open-meteo:blend");
-                let cache = if blended {
-                    "public, max-age=300"
-                } else {
-                    "public, max-age=30"
-                };
-                resp.headers().set("Cache-Control", cache)?;
+                // The edge lifetime follows the baseline that served it
+                // (`weather_core::blend::edge_cache_control`).
+                let provider = upstream.headers().get("X-Weather-Provider")?;
+                resp.headers().set(
+                    "Cache-Control",
+                    weather_core::blend::edge_cache_control(provider.as_deref()),
+                )?;
                 return Ok(resp);
             }
         }

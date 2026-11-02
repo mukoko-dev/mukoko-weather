@@ -29,9 +29,9 @@ export default function PrivacyPage() {
               (&quot;we&quot;, &quot;us&quot;, &quot;our&quot;), handles
               information when you use mukoko weather (&quot;the Service&quot;)
               at{" "}
-              <a href="https://weather.mukoko.com" className="sunbird">
+              <Link href="/" prefetch={false} className="sunbird">
                 weather.mukoko.com
-              </a>
+              </Link>
               .
             </p>
             <p className="mt-3">

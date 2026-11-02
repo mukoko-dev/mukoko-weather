@@ -1,0 +1,17 @@
+[package]
+name = "weather-webpush"
+description = "The Web Push protocol for the Mukoko Weather push Worker: RFC 8291 message encryption, RFC 8292 VAPID, RFC 8030 request assembly, behind injected key agreement, signer and transport"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+weather-core.workspace = true
+serde_json.workspace = true
+base64.workspace = true
+hkdf.workspace = true
+aes-gcm.workspace = true
+sha2.workspace = true

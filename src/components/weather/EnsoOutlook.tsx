@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useId, useMemo } from "react";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EnsoOutlookSkeleton } from "@/components/weather/SectionSkeleton";
 import { ensoImpact, type EnsoPhase } from "@/lib/enso";
-import { fetchWorker } from "@/lib/weather-api";
+import { useWorkerData } from "@/lib/use-worker-data";
 
 /**
  * El Niño / La Niña seasonal outlook card.
@@ -84,54 +84,32 @@ type EnsoState =
 
 export function EnsoOutlook({ lat, lon, countryCode }: Props) {
   const headingId = useId();
-  const [state, setState] = useState<EnsoState>({ status: "loading" });
-
-  useEffect(() => {
-    const controller = new AbortController();
-    let cancelled = false;
-
-    fetchWorker("enso", "", { signal: controller.signal })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json() as Promise<EnsoOutlookResponse>;
-      })
-      .then((json) => {
-        if (cancelled) return;
-        if (
-          json.available &&
-          json.phase &&
-          json.oni !== null &&
-          json.season !== null &&
-          json.year !== null
-        ) {
-          setState({
-            status: "ready",
-            data: {
-              ...json,
-              phase: json.phase,
-              oni: json.oni,
-              season: json.season,
-              year: json.year,
-            },
-          });
-        } else {
-          setState({ status: "unavailable" });
-        }
-      })
-      .catch((err: unknown) => {
-        if (
-          cancelled ||
-          (err as { name?: string } | null)?.name === "AbortError"
-        )
-          return;
-        setState({ status: "unavailable" });
-      });
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, []);
+  // The ENSO phase is global (not per place): one shared read of `/v1/enso`.
+  const fetched = useWorkerData<EnsoOutlookResponse>("enso", {});
+  const state: EnsoState = useMemo(() => {
+    if (fetched.status === "loading") return { status: "loading" };
+    if (fetched.status === "error") return { status: "unavailable" };
+    const json = fetched.data;
+    if (
+      json.available &&
+      json.phase &&
+      json.oni !== null &&
+      json.season !== null &&
+      json.year !== null
+    ) {
+      return {
+        status: "ready",
+        data: {
+          ...json,
+          phase: json.phase,
+          oni: json.oni,
+          season: json.season,
+          year: json.year,
+        },
+      };
+    }
+    return { status: "unavailable" };
+  }, [fetched]);
 
   if (state.status === "loading") return <EnsoOutlookSkeleton />;
   if (state.status === "unavailable") return null;
