@@ -29,7 +29,7 @@ import {
 } from "@dnd-kit/modifiers";
 import Link from "next/link";
 import { Header } from "@/components/layout/Header";
-import { useLocationSwipe } from "@/components/layout/LocationPager";
+import { useLocationSwipe } from "@/lib/use-location-pager";
 import { Footer } from "@/components/layout/Footer";
 import { CurrentConditions } from "@/components/weather/CurrentConditions";
 import { AtmosphericSummary } from "@/components/weather/AtmosphericSummary";

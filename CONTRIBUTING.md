@@ -76,6 +76,13 @@ Write tests for:
 
 Tests live next to the code they test (co-located). Use the `describe`/`it`/`expect` pattern.
 
+A change to the service worker, the offline page or how a place loads also gets the real-browser checks in `scripts/browser-check/` (Chromium, the production build; see its README). They exist because every unit test of the first PWA cut passed while the offline page could not start:
+
+```bash
+npm run build && npx next start -p 3100 &
+BASE=http://localhost:3100 node scripts/browser-check/pwa-check.mjs
+```
+
 ## Architecture Guidelines
 
 ### Frontend / backend split
