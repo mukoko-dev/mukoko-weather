@@ -12,6 +12,7 @@ import {
   SHOTS,
   bodyText,
   chromium,
+  classifyOffline,
   proxyApi,
   reporter,
   run,
@@ -169,10 +170,15 @@ run(async () => {
   }
 
   // 4. Offline relaunch: the app opens from the service worker, not a browser error.
-  await page.goto(`${BASE}/harare`, { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(3000); // let the page be stored
+  // A page is stored only when the server sets no cookie, and the last place
+  // changed since step 3 (the first visit rewrites the lastLocation cookie), so
+  // it takes two visits to /harare for the second one to be stored.
+  for (let visit = 0; visit < 2; visit += 1) {
+    await page.goto(`${BASE}/harare`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(3000);
+  }
   await context.setOffline(true);
-  let offlineOk = false;
+  let offlineKind = "navigation failed";
   let offlineDetail = "";
   try {
     const offline = await page.goto(`${BASE}/harare`, {
@@ -180,19 +186,19 @@ run(async () => {
       timeout: 15000,
     });
     await page.waitForTimeout(2500);
-    const text = await page.evaluate(() => document.body.innerText);
-    offlineOk =
-      !!offline &&
-      offline.status() === 200 &&
-      /Harare|offline|mukoko/i.test(text);
-    offlineDetail = `status ${offline?.status()}, text: ${text.replace(/\s+/g, " ").slice(0, 260)}`;
+    const text = await bodyText(page);
+    offlineKind =
+      offline?.status() === 200
+        ? classifyOffline(text)
+        : `status ${offline?.status()}`;
+    offlineDetail = `${offlineKind}; text: ${text.slice(0, 200)}`;
     await page.screenshot({ path: `${SHOTS}/offline.png` });
   } catch (error) {
     offlineDetail = `navigation failed: ${error.message.split("\n")[0]}`;
   }
   note(
-    "Offline reload of a visited place opens the app",
-    offlineOk,
+    "Offline reload of a visited place opens the app (its place and temperature, not a fallback)",
+    offlineKind === "APP (place + temperature)",
     offlineDetail,
   );
 
@@ -309,7 +315,48 @@ run(async () => {
       /\d+°/.test(recovered),
     recovered.slice(0, 100),
   );
+
   await second.close();
+
+  // The home page's location ask and the weather notice are both floating
+  // cards: with the forecast failing they must stack, not lie on top of each
+  // other. A fresh browser, so no stored copy answers instead of the skeleton.
+  const third = await browser.newContext({
+    viewport: PHONE,
+    serviceWorkers: "block",
+    locale: "en-ZW",
+  });
+  await proxyApi(third, { failWeather: () => true });
+  await third.route(/open-meteo\.com/, (route) => route.abort("failed"));
+  const homePage = await third.newPage();
+  await homePage.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+  await homePage.waitForTimeout(10_000);
+  const locationAsk = homePage.getByLabel("Use your location");
+  const stackedLine = homePage
+    .getByRole("status")
+    .filter({ hasText: "Still trying to reach the weather service" });
+  const askBox = (await locationAsk.count())
+    ? await locationAsk.boundingBox()
+    : null;
+  const lineBox = (await stackedLine.count())
+    ? await stackedLine.boundingBox()
+    : null;
+  await homePage.screenshot({ path: `${SHOTS}/home-stacked.png` });
+  const overlap =
+    askBox && lineBox
+      ? !(
+          askBox.y + askBox.height <= lineBox.y + 0.5 ||
+          lineBox.y + lineBox.height <= askBox.y + 0.5
+        )
+      : null;
+  note(
+    'On the home page the location ask and the "still trying" line stack, with no overlap',
+    !!askBox && !!lineBox && overlap === false,
+    askBox && lineBox
+      ? `ask y=${Math.round(askBox.y)} h=${Math.round(askBox.height)}, line y=${Math.round(lineBox.y)} h=${Math.round(lineBox.height)}`
+      : `ask: ${!!askBox}, line: ${!!lineBox}`,
+  );
+  await third.close();
 
   note(
     "No uncaught page errors",

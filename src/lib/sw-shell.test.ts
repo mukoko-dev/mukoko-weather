@@ -173,8 +173,8 @@ function fakeShell(html: string | null, options: { have?: string[] } = {}) {
       pageUrl: PAGE,
       page: async () =>
         html === null ? undefined : new Response(html, { status: 200 }),
+      has: async (url: string) => stored.has(url),
       load: async (url: string) => {
-        if (stored.has(url)) return true;
         fetched.push(url);
         if (failing.has(url)) return false;
         stored.add(url);
@@ -208,6 +208,29 @@ describe("warmShellAssets", () => {
     const again = await warmShellAssets(shell.deps);
     expect(again.complete).toBe(true);
     expect(shell.fetched).toEqual([]);
+  });
+
+  it("a file that is already stored is looked up, never fetched or loaded", async () => {
+    const shell = fakeShell(OFFLINE_HTML);
+    const load = vi.fn(shell.deps.load);
+    await warmShellAssets({ ...shell.deps, load });
+    expect(load).toHaveBeenCalledTimes(6);
+    load.mockClear();
+    await warmShellAssets({ ...shell.deps, load });
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it("a lookup that rejects counts as a failure of that file only", async () => {
+    const shell = fakeShell(OFFLINE_HTML);
+    const result = await warmShellAssets({
+      ...shell.deps,
+      has: async (url) => {
+        if (url.endsWith(".css")) throw new Error("storage");
+        return false;
+      },
+    });
+    expect(result.failed).toBe(2);
+    expect(result.loaded).toBe(4);
   });
 
   it("reports what failed, stores the rest and is not complete", async () => {
@@ -279,6 +302,7 @@ describe("warmShellAssets", () => {
       pageUrl: PAGE,
       page: async () => new Response(html),
       concurrency: 4,
+      has: async () => false,
       load: async () => {
         inFlight += 1;
         peak = Math.max(peak, inFlight);

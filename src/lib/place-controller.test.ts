@@ -1013,7 +1013,7 @@ describe("a forecast that is slow to arrive (the skeleton says so, after 8 s)", 
     expect(c.getState().slow).toBe(false);
   });
 
-  it("Try again from the line is a fresh forced read; the line goes and returns after another 8 s", async () => {
+  it("Try again from the line is a forced read: the line stays up, busy, until that attempt ends", async () => {
     const h = harness("/lagos-ng");
     const forced: boolean[] = [];
     const inner = h.deps.fetchWeather.bind(h.deps);
@@ -1026,19 +1026,48 @@ describe("a forecast that is slow to arrive (the skeleton says so, after 8 s)", 
     await c.start();
     await h.fireSlow();
     expect(c.getState().slow).toBe(true);
+    expect(c.getState().trying).toBe(false);
 
-    await c.retry();
+    // The visitor presses it, and the attempt hangs for a moment.
+    const release = h.hold("lagos-ng");
+    const pressed = c.retry();
+    await new Promise((r) => setTimeout(r, 5));
     expect(forced[forced.length - 1]).toBe(true); // reads past the remembered failure
-    expect(c.getState().slow).toBe(false);
-    expect(h.pending()).toContain(SLOW_LOAD_AFTER_MS);
-    await h.fireSlow();
+    expect(c.getState().slow).toBe(true); // the line does not vanish
+    expect(c.getState().trying).toBe(true); // ...it shows "Trying…"
+    expect(h.pending()).not.toContain(SLOW_LOAD_AFTER_MS); // no second wait
+
+    // That attempt fails: the button is free again, the line stays.
+    release();
+    await pressed;
     expect(c.getState().slow).toBe(true);
+    expect(c.getState().trying).toBe(false);
+    expect(c.getState().failed).toBe(false);
 
     // And it works: once the Worker is back, Try again shows the forecast.
     h.failFetch.on = false;
     await c.retry();
     expect(temp(c.getState())).toBe(6);
     expect(c.getState().slow).toBe(false);
+    expect(c.getState().trying).toBe(false);
+  });
+
+  it("Try again from the failed notice hides it and starts a new wait; the line returns after 8 s", async () => {
+    const h = harness("/lagos-ng");
+    h.failFetch.on = true;
+    const c = lagos(h);
+    await c.start();
+    await h.fireSlow();
+    for (let i = 0; i < 3; i++) await h.runTimers();
+    expect(c.getState().failed).toBe(true);
+
+    await c.retry(); // fails again at once (the first attempt of a new episode)
+    expect(c.getState().failed).toBe(false);
+    expect(c.getState().slow).toBe(false);
+    expect(c.getState().trying).toBe(false);
+    expect(h.pending()).toContain(SLOW_LOAD_AFTER_MS);
+    await h.fireSlow();
+    expect(c.getState().slow).toBe(true);
   });
 
   it("leaving the place drops the line and its clock", async () => {

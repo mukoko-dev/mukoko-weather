@@ -263,9 +263,21 @@ serwist.addEventListeners();
 // navigation. The decisions are in src/lib/sw-shell.ts.
 const shellScope = self as unknown as ShellScope;
 
-/** Only the ability to keep the worker alive for a while: nothing else of `event`. */
+/**
+ * Only the ability to keep the worker alive for a while: nothing else of
+ * `event`. Once the event is over (the install bound passed while files were
+ * still coming) `waitUntil` throws; the work simply carries on for as long as
+ * the worker lives, and a pass it could not finish is repeated from a
+ * navigation, so the files still to come are not failed for it.
+ */
 const lifetimeOf = (event: ShellEvent): ShellEvent => ({
-  waitUntil: (work) => event.waitUntil(work),
+  waitUntil: (work) => {
+    try {
+      event.waitUntil(work);
+    } catch {
+      /* the event has ended */
+    }
+  },
 });
 const OFFLINE_PAGE_URL = new URL(OFFLINE_URL, shellScope.location.origin).href;
 
@@ -279,8 +291,13 @@ const shellKeeper = createShellKeeper<ShellEvent>({
       page: async () =>
         (await serwist.matchPrecache(OFFLINE_URL)) ??
         fetch(OFFLINE_URL, { credentials: "omit" }),
-      // Through the route's own strategy: a file already stored costs nothing,
-      // a missing one is fetched, stored and counted for expiry like any other.
+      // A plain lookup in every cache first (the precache holds the
+      // stylesheets): a pass runs on the first navigation of every worker
+      // start and must not touch the network or the expiry bookkeeping for
+      // files that are there.
+      has: async (url) => !!(await caches.match(url)),
+      // A missing one goes through the route's own strategy: fetched, stored
+      // and counted for expiry like any file cached on use.
       // The strategy gets a stand-in that only extends the worker's lifetime,
       // NEVER the event itself: given a navigation's FetchEvent, Serwist
       // answers every fetch made under it with that navigation's preload

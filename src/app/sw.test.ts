@@ -143,7 +143,18 @@ describe("service worker: the /offline page can start with no network", () => {
     // the offline page failed with "MIME type ('text/html') is not executable".
     expect(source).toContain("event: lifetimeOf(event) as never,");
     expect(source).not.toContain("event: event as never");
-    expect(source).toContain("waitUntil: (work) => event.waitUntil(work),");
+    expect(source).toContain("event.waitUntil(work);");
+    // An event that has ended must not fail the files still to come.
+    expect(source).toMatch(/try \{\s*event\.waitUntil\(work\);\s*\} catch/);
+  });
+
+  it("looks a file up before it goes near the network or the expiry bookkeeping", () => {
+    expect(source).toContain(
+      "has: async (url) => !!(await caches.match(url)),",
+    );
+    expect(source.indexOf("has: async (url)")).toBeLessThan(
+      source.indexOf("load: async (url)"),
+    );
   });
 
   it("refuses to store an HTML answer as a script, in the one strategy both paths use", () => {

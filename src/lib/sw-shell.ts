@@ -201,10 +201,9 @@ export interface ShellWarmDeps {
   page(): Promise<Response | undefined | null>;
   /** The absolute URL that HTML is served from. */
   pageUrl: string;
-  /**
-   * Make one file available offline: already stored, or fetched and stored.
-   * True when it now is.
-   */
+  /** The file is already stored (a plain lookup: no fetch, no bookkeeping). */
+  has(url: string): Promise<boolean>;
+  /** Fetch and store one file. True when it is now available offline. */
   load(url: string): Promise<boolean>;
   concurrency?: number;
 }
@@ -259,7 +258,10 @@ export async function warmShellAssets(
       for (let url = queue.shift(); url !== undefined; url = queue.shift()) {
         let ok = false;
         try {
-          ok = await deps.load(url);
+          // A file already stored costs one lookup: a pass runs on the first
+          // navigation of every worker start, and must not touch the network
+          // or the expiry bookkeeping for files that are there.
+          ok = (await deps.has(url)) || (await deps.load(url));
         } catch {
           ok = false;
         }

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Children,
   useCallback,
   useEffect,
   useState,
@@ -9,6 +10,7 @@ import {
 } from "react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
+import { FloatingStack } from "@/components/ui/floating-stack";
 import { LocationSkeleton } from "@/components/weather/LocationSkeleton";
 import { PlaceLoadNotice } from "@/components/weather/PlaceLoadNotice";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
@@ -191,6 +193,26 @@ export function PlaceView({
   const { seed, view, device } = state;
   if (!seed) return null;
 
+  const notice = state.failed ? (
+    <PlaceLoadNotice
+      placeName={seed.location.name}
+      showingSaved={!!view}
+      busy={state.fetching}
+      onRetry={retry}
+    />
+  ) : state.slow && !view ? (
+    // The retries are still running and there is nothing stored to show: say
+    // so, over the same skeleton, and offer the button now.
+    <PlaceLoadNotice
+      slow
+      placeName={seed.location.name}
+      showingSaved={false}
+      busy={state.trying}
+      onRetry={retry}
+    />
+  ) : null;
+  const extras = Children.toArray(children);
+
   return (
     <>
       {view ? (
@@ -218,26 +240,14 @@ export function PlaceView({
           <LocationSkeleton slug={seed.location.slug} />
         </>
       )}
-      {state.failed && (
-        <PlaceLoadNotice
-          placeName={seed.location.name}
-          showingSaved={!!view}
-          busy={state.fetching}
-          onRetry={retry}
-        />
+      {/* Floating cards (the load notice, and the home page's location ask)
+          share one column above the mobile nav, so two never overlap. */}
+      {(notice || extras.length > 0) && (
+        <FloatingStack>
+          {notice}
+          {extras}
+        </FloatingStack>
       )}
-      {/* The retries are still running and there is nothing stored to show:
-          say so, over the same skeleton, and offer the button now. */}
-      {state.slow && !view && !state.failed && (
-        <PlaceLoadNotice
-          slow
-          placeName={seed.location.name}
-          showingSaved={false}
-          busy={false}
-          onRetry={retry}
-        />
-      )}
-      {children}
     </>
   );
 }
