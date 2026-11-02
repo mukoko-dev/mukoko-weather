@@ -36,18 +36,22 @@ describe("EnsoOutlook — client component", () => {
   });
 
   it("fetches the Rust Worker's ENSO route, never /api/py", () => {
-    expect(source).toContain('fetchWorker("enso"');
+    expect(source).toContain('useWorkerData<EnsoOutlookResponse>("enso", {})');
+    expect(source).not.toContain("fetchWorker(");
     expect(source).not.toContain("/api/py/enso");
   });
 
-  it("aborts the in-flight request on unmount", () => {
-    expect(source).toContain("new AbortController()");
-    expect(source).toContain("controller.abort()");
-  });
-
-  it("ignores AbortError and post-unmount responses", () => {
-    expect(source).toContain("AbortError");
-    expect(source).toContain("if (cancelled) return;");
+  it("reads the answer from the shared store, so a component that has left cannot be updated", () => {
+    const hook = readFileSync(
+      resolve(process.cwd(), "src/lib/use-worker-data.ts"),
+      "utf8",
+    );
+    // State lives in the store (useSyncExternalStore), not in the component:
+    // there is nothing to set after an unmount, and the request is not
+    // cancelled by one.
+    expect(hook).toContain("useSyncExternalStore(");
+    expect(hook).not.toContain("setLoaded(");
+    expect(hook).not.toContain("controller.abort()");
   });
 
   it("renders nothing when the outlook is unavailable", () => {

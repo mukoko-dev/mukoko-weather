@@ -6,10 +6,12 @@
  * ("SSR latency budget"): `getWeatherForLocation` owns every timeout, so
  * nothing here adds one.
  */
-import { cache } from "react";
 import { checkFrostRisk, createFallbackWeather } from "@/lib/weather";
 import type { WeatherData } from "@/lib/weather";
-import { getSeasonForDate, getWeatherForLocation } from "@/lib/db";
+import { getWeatherForLocation } from "@/lib/db";
+import { getCachedSeason, type Season } from "@/lib/place-seed-server";
+
+export { getCachedSeason, type Season };
 
 /** Only the fields a weather fetch needs. */
 export interface PayloadLocation {
@@ -19,16 +21,6 @@ export interface PayloadLocation {
   elevation: number;
   country?: string | null;
 }
-
-export type Season = Awaited<ReturnType<typeof getSeasonForDate>>;
-
-/**
- * Season for a country on today's date, deduplicated per request. Pages and
- * `generateMetadata` share it, so one request reads the season once.
- */
-export const getCachedSeason = cache((countryCode: string, lat: number = 0) =>
-  getSeasonForDate(new Date(), countryCode, lat),
-);
 
 export interface LocationWeather {
   weather: WeatherData;

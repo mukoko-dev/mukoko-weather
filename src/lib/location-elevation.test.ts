@@ -45,15 +45,21 @@ describe("reconcileElevation (#302)", () => {
     expect(reconcileElevation(spot, -258).elevation).toBe(-258);
   });
 
-  it("is applied wherever a page shows a location", () => {
-    for (const file of [
-      "../app/[location]/page.tsx",
-      "../app/page.tsx",
-      "../app/CurrentLocationHome.tsx",
-    ]) {
-      const src = readFileSync(resolve(__dirname, file), "utf-8");
-      expect(src).toContain("reconcileElevation(");
-    }
+  it("is applied wherever a forecast reaches a location", () => {
+    // The server pages hold no forecast (issue #414); the place stage applies
+    // it when the visitor's own forecast arrives, for `/`, `/[location]` and
+    // every place switch alike. The server's structured data leaves a
+    // placeholder height out instead of publishing it.
+    const controller = readFileSync(
+      resolve(__dirname, "place-controller.ts"),
+      "utf-8",
+    );
+    expect(controller).toContain("reconcileElevation(");
+    const page = readFileSync(
+      resolve(__dirname, "../app/[location]/page.tsx"),
+      "utf-8",
+    );
+    expect(page).toContain("location.elevationApproximate");
   });
 
   it("marks every spot and IP-fallback placeholder as approximate", () => {
@@ -63,11 +69,11 @@ describe("reconcileElevation (#302)", () => {
     expect(home).toContain("elevationApproximate: true");
   });
 
-  it("matches the Python writer's field", () => {
-    const py = readFileSync(
-      resolve(__dirname, "../../api/py/_model_blend.py"),
+  it("matches the Worker's field", () => {
+    const rust = readFileSync(
+      resolve(__dirname, "../../workers/crates/weather-core/src/blend.rs"),
       "utf-8",
     );
-    expect(py).toContain('out["elevation"] = elevation');
+    expect(rust).toMatch(/insert\(\s*"elevation"/);
   });
 });

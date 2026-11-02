@@ -6,7 +6,12 @@ Tomorrow.io used to be the only source of the extended ``insights`` block
 ceiling, moon phase, …) that the suitability rules and ActivityInsights read.
 Its free tier cannot carry the baseline (issue #246), so every field it
 supplied is now DERIVED here from the Open-Meteo baseline, and Tomorrow.io
-is merged on top only as an optional enrichment (``_enrichment.py``).
+is merged on top only as an optional enrichment (the forecast Worker's
+``weather_core::enrichment``).
+
+The forecast Worker serves these now (``weather_core::insights``); the
+place-knowledge builder (``_place_knowledge``) still imports ``moon_phase``
+from here until it is ported (#333).
 
 Mirror: ``synthesizeOpenMeteoInsights`` in ``src/lib/weather.ts`` (used on
 the TS direct-Open-Meteo fallback path). Keep the two in sync — the

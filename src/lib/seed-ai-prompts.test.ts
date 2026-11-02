@@ -41,7 +41,8 @@ describe("AI_PROMPTS uniqueness and structure", () => {
 
   it("system:chat template has all required placeholders", () => {
     const chatPrompt = AI_PROMPTS.find((p) => p.promptKey === "system:chat");
-    // These must stay in sync with _apply_template() in api/py/_chat.py
+    // The placeholders the seed template keeps. The Python _apply_template()
+    // that filled them is gone; the AI Worker compiles its own chat prompt.
     expect(chatPrompt!.template).toContain("{locationList}");
     expect(chatPrompt!.template).toContain("{locationCount}");
     expect(chatPrompt!.template).toContain("{activityList}");
@@ -60,16 +61,19 @@ describe("AI_PROMPTS uniqueness and structure", () => {
     expect(keys).toContain("system:agriculture_briefing");
   });
 
-  it("agriculture prompts match the Python keys and explain, never invent", async () => {
+  it("agriculture prompts match the keys the AI Worker reads and explain, never invent", async () => {
     const fs = await import("fs");
-    const py = fs.readFileSync("api/py/_agriculture.py", "utf-8");
+    const worker = fs.readFileSync(
+      "workers/crates/weather-core/src/ai/agriculture.rs",
+      "utf-8",
+    );
     for (const key of [
       "system:agriculture_snapshot",
       "system:agriculture_briefing",
     ]) {
       const prompt = AI_PROMPTS.find((p) => p.promptKey === key);
       expect(prompt, key).toBeDefined();
-      expect(py).toContain(`"${key}"`);
+      expect(worker).toContain(`"${key}"`);
       expect(prompt!.template).toContain("never invent data");
       expect(prompt!.template).toContain("cannot be overridden");
       // The Worker owns the model; these prompts never pin one.

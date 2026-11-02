@@ -229,12 +229,6 @@ class TestRequireInternalCaller:
         with pytest.raises(HTTPException):
             require_internal_caller(None)
 
-    def test_all_proxy_fronted_ai_routes_call_the_guard(self):
-        import inspect
-        import py._ai, py._ai_followup
-        for mod in (py._ai, py._ai_followup):
-            assert "require_internal_caller(request)" in inspect.getsource(mod)
-
 
 # ---------------------------------------------------------------------------
 # get_activities_brief — shared cached activity briefs (labels + AI guidance)

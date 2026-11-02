@@ -13,7 +13,7 @@
  * placesGeo city/town/village document could render, so browsing or searching
  * to a location returned "Location not found".
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 /** Mutable stand-in for the placesGeo collection, swapped per test. */
 let findOneImpl: (filter: unknown) => Promise<unknown>;
@@ -33,10 +33,24 @@ vi.mock("./places-geo-collection", () => ({
 
 const { resolveLocationSlug } = await import("./places");
 
+/** The Worker knows no place unless a test says so; never the live network. */
+let workerFetch: ReturnType<typeof vi.fn>;
+function stubWorker(answer: (url: string) => Response | Promise<Response>) {
+  workerFetch = vi.fn(async (input: string | URL) => answer(String(input)));
+  vi.stubGlobal("fetch", workerFetch);
+}
+const notFound = () =>
+  new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("resolveLocationSlug — seed fallback", () => {
   beforeEach(() => {
     findOneImpl = async () => null;
     findArrayImpl = async () => [];
+    stubWorker(notFound);
   });
 
   it("renders a shipped slug when placesGeo has NO matching document", async () => {
@@ -128,7 +142,7 @@ describe("resolveLocationSlug — seed fallback", () => {
 });
 
 describe("CITY_STATE_COUNTRIES", () => {
-  it("mirrors the _CITY_STATES set in api/py/_locations.py", async () => {
+  it("mirrors CITY_STATES in weather_core::locations", async () => {
     const { CITY_STATE_COUNTRIES } = await import("./places");
     expect([...CITY_STATE_COUNTRIES].sort()).toEqual(
       [
@@ -506,5 +520,234 @@ describe("resolveLocationSlug — strict mode (#263)", () => {
       throw new Error("mongo down");
     };
     await expect(resolveLocationSlug("zzzz-not-a-place")).resolves.toBeNull();
+  });
+});
+
+// ── #414: a shipped place never 404s, and the Worker names community places ──
+
+const SEMBAWANG_BODY = {
+  location: {
+    country: "SG",
+    elevation: 8,
+    lat: 1.444,
+    lon: 103.824,
+    name: "Sembawang",
+    province: "Sembawang",
+    provinceSlug: "sembawang-sg",
+    slug: "sembawang-sg",
+    source: "community",
+    tags: ["city"],
+  },
+};
+
+describe("resolveLocationSlug — a shipped place never 404s (#414)", () => {
+  beforeEach(() => {
+    findOneImpl = async () => null;
+    findArrayImpl = async () => [];
+    stubWorker(notFound);
+  });
+
+  it.each(["harare", "nairobi-ke", "lagos-ng", "singapore-sg"])(
+    "%s renders when the stored geography throws",
+    async (slug) => {
+      findOneImpl = async () => {
+        throw new Error("MongoServerSelectionError: connection timed out");
+      };
+      findArrayImpl = findOneImpl as () => Promise<unknown[]>;
+      const loc = await resolveLocationSlug(slug);
+      expect(loc?.slug).toBe(slug);
+      expect(loc?._id).toBe(`seed:${slug}`);
+    },
+  );
+
+  it("a shipped place renders when the stored geography HANGS (it is not waited for)", async () => {
+    findOneImpl = () => new Promise(() => undefined);
+    findArrayImpl = () => new Promise(() => undefined);
+    const started = Date.now();
+    const loc = await resolveLocationSlug("harare", { dbTimeoutMs: 30 });
+    expect(loc?.slug).toBe("harare");
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it("a shipped place never asks the Worker (it needs no lookup)", async () => {
+    findOneImpl = async () => {
+      throw new Error("down");
+    };
+    findArrayImpl = findOneImpl as () => Promise<unknown[]>;
+    await resolveLocationSlug("harare");
+    await resolveLocationSlug("nairobi-ke");
+    expect(workerFetch).not.toHaveBeenCalled();
+  });
+
+  it("an error OUTSIDE the lookups' own guards (the adapter on a matched name) does not turn a shipped place into a 404", async () => {
+    // The name match at the end of the chain is adapted without a guard: a
+    // malformed matched document used to throw out of the resolver, and the
+    // loader turned any throw into "Location not found".
+    const broken = {
+      _id: "broken",
+      name: "Harare",
+      geoType: "city",
+      get sourceProvenance(): never {
+        throw new Error("malformed placesGeo document");
+      },
+    };
+    findArrayImpl = async () => [broken];
+    // Unguarded in the stored-geography step itself...
+    await expect(
+      resolveLocationSlug("harare", { strict: true }),
+    ).rejects.toThrow("malformed placesGeo document");
+    // ...and absorbed on the render path: the shipped place renders.
+    const loc = await resolveLocationSlug("harare");
+    expect(loc?.slug).toBe("harare");
+    expect(loc?._id).toBe("seed:harare");
+  });
+});
+
+describe("resolveLocationSlug — a place the Worker names (#414)", () => {
+  beforeEach(() => {
+    findOneImpl = async () => null;
+    findArrayImpl = async () => [];
+  });
+
+  it("renders sembawang-sg (not a seed) from the Worker when the stored geography misses", async () => {
+    stubWorker((url) =>
+      url.includes("slug=sembawang-sg")
+        ? new Response(JSON.stringify(SEMBAWANG_BODY))
+        : notFound(),
+    );
+    const loc = await resolveLocationSlug("sembawang-sg");
+    expect(loc).toMatchObject({
+      slug: "sembawang-sg",
+      name: "Sembawang",
+      country: "SG",
+    });
+    expect(workerFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders it when the stored geography throws or hangs", async () => {
+    stubWorker(() => new Response(JSON.stringify(SEMBAWANG_BODY)));
+    findOneImpl = async () => {
+      throw new Error("down");
+    };
+    findArrayImpl = findOneImpl as () => Promise<unknown[]>;
+    expect((await resolveLocationSlug("sembawang-sg"))?.name).toBe("Sembawang");
+
+    findOneImpl = () => new Promise(() => undefined);
+    findArrayImpl = () => new Promise(() => undefined);
+    expect(
+      (await resolveLocationSlug("sembawang-sg", { dbTimeoutMs: 30 }))?.name,
+    ).toBe("Sembawang");
+  });
+
+  it("is null when neither the store nor the Worker knows it (london-gb: the Worker answers 404)", async () => {
+    stubWorker(notFound);
+    expect(await resolveLocationSlug("london-gb")).toBeNull();
+  });
+
+  it("is null, not an error, when the Worker cannot answer on the render path", async () => {
+    stubWorker(() => new Response("x", { status: 503 }));
+    expect(await resolveLocationSlug("sembawang-sg")).toBeNull();
+  });
+
+  it("strict (the proxy gate) tells unknown from failed: a Worker 404 is unknown, a Worker outage throws", async () => {
+    stubWorker(notFound);
+    expect(await resolveLocationSlug("london-gb", { strict: true })).toBeNull();
+
+    stubWorker(() => new Response("x", { status: 503 }));
+    await expect(
+      resolveLocationSlug("sembawang-sg", { strict: true }),
+    ).rejects.toThrow();
+  });
+
+  it("strict: a stored-geography failure is rethrown unless the Worker found the place", async () => {
+    findOneImpl = async () => {
+      throw new Error("down");
+    };
+    findArrayImpl = findOneImpl as () => Promise<unknown[]>;
+    stubWorker(notFound);
+    await expect(
+      resolveLocationSlug("london-gb", { strict: true }),
+    ).rejects.toThrow("down");
+
+    stubWorker(() => new Response(JSON.stringify(SEMBAWANG_BODY)));
+    expect(
+      (await resolveLocationSlug("sembawang-sg", { strict: true }))?.name,
+    ).toBe("Sembawang");
+  });
+
+  it("a place only the store holds is not 404'd because the store was slow (the Worker said no, the store answers late)", async () => {
+    stubWorker(notFound);
+    findOneImpl = () =>
+      new Promise((resolve) =>
+        setTimeout(
+          () =>
+            resolve({
+              _id: "late",
+              name: "Latecomer",
+              slug: "latecomer-a1b2c3",
+              geoType: "city",
+              geo: { type: "Point", coordinates: [31.05, -17.83] },
+              isoCode: "ZW",
+              sourceProvenance: { mukokoSlug: "latecomer-a1b2c3" },
+            }),
+          60,
+        ),
+      );
+    const loc = await resolveLocationSlug("latecomer-a1b2c3", {
+      dbTimeoutMs: 20,
+    });
+    expect(loc?._id).toBe("late");
+  });
+
+  it("a place the store holds costs no Worker call (the Worker is only the hedge)", async () => {
+    stubWorker(notFound);
+    findOneImpl = async () => ({
+      _id: "held",
+      name: "Heldtown",
+      slug: "heldtown-a1b2c3",
+      geoType: "city",
+      geo: { type: "Point", coordinates: [31.05, -17.83] },
+      isoCode: "ZW",
+      sourceProvenance: { mukokoSlug: "heldtown-a1b2c3" },
+    });
+    const loc = await resolveLocationSlug("heldtown-a1b2c3");
+    expect(loc?._id).toBe("held");
+    expect(
+      (await resolveLocationSlug("heldtown-a1b2c3", { strict: true }))?._id,
+    ).toBe("held");
+    expect(workerFetch).not.toHaveBeenCalled();
+  });
+
+  it("the Worker is asked as soon as the store has missed, and after the hedge when the store is slow: the wait is the slower, not the sum", async () => {
+    stubWorker(async () => {
+      await new Promise((r) => setTimeout(r, 150));
+      return new Response(JSON.stringify(SEMBAWANG_BODY));
+    });
+    findOneImpl = () =>
+      new Promise((resolve) => setTimeout(() => resolve(null), 150));
+    findArrayImpl = async () => [];
+    const started = Date.now();
+    const loc = await resolveLocationSlug("sembawang-sg", {
+      strict: true,
+      workerHedgeMs: 10,
+    });
+    const took = Date.now() - started;
+    expect(loc?.name).toBe("Sembawang");
+    expect(took).toBeGreaterThanOrEqual(140);
+    expect(took).toBeLessThan(290); // asked one after the other it would be 300+
+  });
+
+  it("probes and junk never reach the Worker", async () => {
+    stubWorker(notFound);
+    for (const slug of ["wp-login", "admin", "ab", "x".repeat(81)]) {
+      expect(await resolveLocationSlug(slug)).toBeNull();
+    }
+    expect(workerFetch).not.toHaveBeenCalled();
+  });
+
+  it("a smart slug is never sent to the Worker (it carries its own coordinate)", async () => {
+    stubWorker(notFound);
+    await resolveLocationSlug("canberra-residences--osm-w890123");
+    expect(workerFetch).not.toHaveBeenCalled();
   });
 });

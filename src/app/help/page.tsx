@@ -78,9 +78,9 @@ export default function HelpPage() {
             <p>
               mukoko weather gives you accurate weather data for 265+ locations
               worldwide. No account needed — just visit{" "}
-              <a href={SITE_URL} className="sunbird">
+              <Link href="/" prefetch={false} className="sunbird">
                 weather.mukoko.com
-              </a>{" "}
+              </Link>{" "}
               and you&apos;re ready to go.
             </p>
             <h3 className="font-semibold text-text-primary">

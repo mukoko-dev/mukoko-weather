@@ -77,7 +77,10 @@ describe("home paints from the device when the server seeded nothing", () => {
   it("recalls the last home place and refreshes it in the background", () => {
     expect(home).toContain("LAST_HOME_PLACE_KEY");
     expect(home).toContain("recallPlace(slug)");
-    expect(home).toContain("fetchHomeWeather(");
+    // The stage refreshes it in the background (place-controller tests).
+    expect(home).toContain(
+      "controller.showHome(seedOfPayload(stored.payload))",
+    );
     expect(home).toContain("if (initial) return;");
   });
   it("uses safe-storage, never raw localStorage, for the pointer", () => {

@@ -17,7 +17,7 @@ import {
   TrashIcon,
   NavigationIcon,
 } from "@/lib/weather-icons";
-import { ActivityIcon } from "@/lib/weather-icons";
+import { ActivityIcon } from "@/lib/activity-icon";
 import { detectUserLocation, type GeoResult } from "@/lib/geolocation";
 import {
   type Activity,
@@ -52,7 +52,11 @@ import {
 import { t } from "@/lib/i18n";
 import { Spinner } from "@/components/ui/spinner";
 import { SelectRow } from "./SelectRow";
-import { workerUrl } from "@/lib/worker-url";
+import { navigateToPlace } from "@/lib/place-bus";
+import {
+  fetchActivities,
+  fetchActivityCategories,
+} from "@/lib/activities-client";
 
 /** Default category style for unknown categories */
 const DEFAULT_CATEGORY_STYLE = {
@@ -139,17 +143,17 @@ export function MyWeatherModal() {
   );
 
   useEffect(() => {
+    // Cached for 10 minutes with in-flight sharing (activities-client), so
+    // opening the modal again, or the dashboard asking too, is not a new call.
     Promise.all([
-      fetch(workerUrl("/v1/activities"))
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data?.activities?.length) setAllActivities(data.activities);
+      fetchActivities()
+        .then((list) => {
+          if (list.length) setAllActivities(list);
         })
         .catch(() => {}),
-      fetch(workerUrl("/v1/activities?mode=categories"))
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data?.categories?.length) setActivityCategories(data.categories);
+      fetchActivityCategories()
+        .then((list) => {
+          if (list.length) setActivityCategories(list);
         })
         .catch(() => {}),
     ]);
@@ -184,7 +188,9 @@ export function MyWeatherModal() {
         to: pendingSlug,
         method: pending?.method ?? "saved",
       });
-      router.push(`/${pendingSlug}`);
+      // In place when a place stage is mounted (the app stays open and only
+      // that place's data is fetched); the router otherwise.
+      navigateToPlace(`/${pendingSlug}`, (href) => router.push(href));
     }
   };
 

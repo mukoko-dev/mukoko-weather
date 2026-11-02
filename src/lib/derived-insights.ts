@@ -1,8 +1,8 @@
 /**
  * Weather insights derived from global-model data — no Tomorrow.io needed.
  *
- * TypeScript mirror of `api/py/_insights.py` (issue #246). The server derives
- * insights for every `/api/py/weather` response; this copy covers the TS
+ * TypeScript mirror of `weather_core::insights` (issue #246). The server derives
+ * insights for every `/v1/weather` response; this copy covers the TS
  * direct-Open-Meteo fallback path (`synthesizeOpenMeteoInsights`). The
  * formulas are pinned by tests on both sides — change one, change both.
  *

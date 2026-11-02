@@ -5,7 +5,7 @@ import type { Activity } from "@/lib/activities";
 import type { WeatherData, WeatherInsights } from "@/lib/weather";
 import type { CategoryStyle } from "@/lib/suitability-cache";
 import type { SuitabilityRuleDoc } from "@/lib/db";
-import { ActivityIcon } from "@/lib/weather-icons";
+import { ActivityIcon } from "@/lib/activity-icon";
 import { evaluateSuitability } from "@/lib/suitability";
 import { feasibilitySeries } from "@/lib/activity-feasibility";
 import { getActivityTips } from "@/lib/activity-tips";

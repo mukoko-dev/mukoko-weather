@@ -58,4 +58,33 @@ describe("weather Worker config", () => {
     // Hourly budgets live in D1 (weather_core::budget), not in bindings.
     expect(text).toContain("rate_events");
   });
+
+  it("the public API's anonymous per-IP limit is 600 a minute (shared networks), the developer-key limit unchanged", () => {
+    const text = wrangler("public-api");
+    const limit = (name: string) =>
+      Number(
+        text.match(
+          new RegExp(
+            `"name":\\s*"${name}",[^}]*?"simple":\\s*\\{\\s*"limit":\\s*(\\d+),\\s*"period":\\s*(\\d+)`,
+            "s",
+          ),
+        )?.[1],
+      );
+    // A school or office network shares one IP; the upstream cost is bounded
+    // by the KV caches and the D1 budgets, not by this limiter (#414).
+    expect(limit("RATE_LIMITER")).toBe(600);
+    expect(limit("KEY_RATE_LIMITER")).toBe(600);
+    expect(text).toMatch(/shared network|school/i);
+  });
+
+  it("the service worker does not reload the page whenever the browser comes back online", () => {
+    const config = readFileSync(
+      resolve(__dirname, "../../next.config.ts"),
+      "utf-8",
+    );
+    // @serwist/next injects `window.addEventListener("online", () =>
+    // location.reload())` by default, which restarts the app on every
+    // reconnect (#414). It must be switched off explicitly.
+    expect(config).toMatch(/reloadOnOnline:\s*false/);
+  });
 });

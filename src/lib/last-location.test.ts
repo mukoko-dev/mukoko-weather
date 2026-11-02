@@ -33,3 +33,30 @@ describe("last-location", () => {
     expect(readLastLocation(jar("../etc"))).toBeNull();
   });
 });
+
+describe("readLastLocationFromCookieString (the browser's document.cookie)", () => {
+  it("reads a valid slug among other cookies", async () => {
+    const { readLastLocationFromCookieString } =
+      await import("./last-location");
+    expect(
+      readLastLocationFromCookieString("a=1; lastLocation=nairobi-ke; b=2"),
+    ).toBe("nairobi-ke");
+    expect(readLastLocationFromCookieString("lastLocation=harare")).toBe(
+      "harare",
+    );
+  });
+
+  it("is null for nothing, another cookie, or a value that is not a slug", async () => {
+    const { readLastLocationFromCookieString } =
+      await import("./last-location");
+    expect(readLastLocationFromCookieString("")).toBeNull();
+    expect(readLastLocationFromCookieString(null)).toBeNull();
+    expect(readLastLocationFromCookieString("other=harare")).toBeNull();
+    expect(
+      readLastLocationFromCookieString("lastLocation=Not A Slug"),
+    ).toBeNull();
+    expect(
+      readLastLocationFromCookieString("lastLocation=%E0%A4%A"),
+    ).toBeNull();
+  });
+});

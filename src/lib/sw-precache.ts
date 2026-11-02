@@ -9,12 +9,18 @@
  * worker then takes control and `ServiceWorkerUpdater` reloads the page,
  * which pays for the cold load a second time.
  *
- * Only what an offline launch needs is precached. Everything else under
- * `/_next/static/` is cached on first use by the `static-assets` CacheFirst
- * route in `src/app/sw.ts`, so it costs nothing until it is actually used.
+ * Only what an offline launch needs is precached: the stylesheets, the public
+ * icons and the `/offline` shell (a page with no data and no visitor in it,
+ * fetched without cookies). Everything else under `/_next/static/` is cached
+ * on first use by the `static-assets` CacheFirst route in `src/app/sw.ts`, so
+ * it costs nothing until it is actually used. Page navigations are handled by
+ * `src/lib/sw-navigation.ts`.
  */
 
 type Entry = string | { url: string };
+
+/** The page the worker shows when it has nothing else to show. */
+export const OFFLINE_URL = "/offline";
 
 const urlOf = (entry: Entry): string =>
   typeof entry === "string" ? entry : entry.url;
@@ -22,6 +28,8 @@ const urlOf = (entry: Entry): string =>
 /** True when an entry is worth downloading at install time. */
 export function shouldPrecache(entry: Entry): boolean {
   const url = urlOf(entry).split("?")[0];
+  // The offline shell (`additionalPrecacheEntries` in next.config.ts).
+  if (url === OFFLINE_URL) return true;
   // Stylesheets: the /offline fallback page needs them and they are small.
   if (url.startsWith("/_next/static/css/")) return true;
   // Everything else Next emits (chunks, fonts, build manifests) loads lazily.
