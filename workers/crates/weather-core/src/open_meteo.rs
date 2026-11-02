@@ -417,8 +417,8 @@ mod tests {
         // The runtime's error text can embed the whole URL.
         let message = format!("TypeError: error sending request for url ({url}): connection reset");
         let clean = scrub(&message, Some(key));
-        assert!(!clean.contains("secret"), "{clean}");
-        assert!(!clean.contains("k%26y"), "{clean}");
+        assert!(!clean.contains("secret"));
+        assert!(!clean.contains("k%26y"));
         assert!(clean.contains("connection reset"));
         assert!(clean.contains("apikey=[redacted]"));
         // With no key in hand, an `apikey=` value is still masked.
@@ -445,7 +445,7 @@ mod tests {
         let text = format!("failed: {}", plan.url(&forecast()));
         assert!(text.contains(KEY));
         let clean = plan.scrub(&text);
-        assert!(!clean.contains(KEY), "{clean}");
+        assert!(!clean.contains(KEY));
         assert!(!format!("{plan:?}").contains(KEY));
         assert_eq!(
             format!("{plan:?}"),
