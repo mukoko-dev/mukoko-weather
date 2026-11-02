@@ -3,7 +3,7 @@
 //! optional `minutely`/`models` extras).
 //!
 //! Ported from `api/py/_weather.py`. The shape is unchanged so the app can
-//! switch from `/api/py/weather` to the Worker without touching a component.
+//! switch from Python `/weather` to the Worker without touching a component.
 
 use chrono::{DateTime, Datelike, Duration, FixedOffset, Timelike, Utc};
 use serde_json::{json, Map, Value};

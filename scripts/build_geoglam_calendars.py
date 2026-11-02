@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the compact GEOGLAM crop-calendar table that ships with the backend.
+"""Build the compact GEOGLAM crop-calendar table that ships with the Rust Workers.
 
 Source: GEOGLAM Crop Monitor Sub-National Crop Calendars, Crop Monitor for
 Early Warning, v1.3 (Becker-Reshef et al., Zenodo, doi:10.5281/zenodo.15850408),
@@ -14,7 +14,13 @@ keeps only:
   stages (planting, vegetative, harvest, end of season, out of season).
 
 Rows with no calendar (all stages 0, the "minimal production" rows) are
-dropped. Output: api/py/data/geoglam_cm4ew_v1_3.json.gz
+dropped. Output: workers/crates/weather-core/data/geoglam_cm4ew_v1_3.json.gz (read by
+`weather_core::ag_calendar`, which `include_bytes!`s it).
+
+This is the one Python file left in the repository (#333): a standalone,
+standard-library-only data builder that imports nothing from the deleted
+backend and is not run by CI. The table it writes is committed, so the Workers
+build without Python; run this only to rebuild it from a new GEOGLAM release.
 
     python3 -I scripts/build_geoglam_calendars.py            # writes the file
     python3 -I scripts/build_geoglam_calendars.py --check    # rebuild, compare only
@@ -37,7 +43,14 @@ from pathlib import Path
 URL = "https://zenodo.org/records/15850408/files/GEOGLAM_CM4EW_Calendars_V1.3.zip?download=1"
 MD5 = "6aa1bd4312091169c5116bc73305bd23"  # published on the Zenodo record
 STEM = "GEOGLAM_CM4EW_Calendars_V1.3/GEOGLAM_CM4EW_Calendars_V1.3"
-OUT = Path(__file__).resolve().parent.parent / "api" / "py" / "data" / "geoglam_cm4ew_v1_3.json.gz"
+OUT = (
+    Path(__file__).resolve().parent.parent
+    / "workers"
+    / "crates"
+    / "weather-core"
+    / "data"
+    / "geoglam_cm4ew_v1_3.json.gz"
+)
 TOLERANCE_DEG = 0.02
 MIN_RING_AREA = 0.0004  # square degrees (~5 km x 5 km at the equator); smaller islands are dropped
 

@@ -237,13 +237,10 @@ const serwist: Serwist = new Serwist({
       }),
     },
 
-    // AI endpoints — NetworkOnly (personalized, never cached). Both the
-    // direct Python paths (legacy/internal) and the new auth-gated
-    // /api/ai/* proxy are matched so a stale SW never traps a request.
+    // AI endpoints — NetworkOnly (personalized, never cached): the auth-gated
+    // /api/ai/* proxy.
     {
-      matcher: ({ url }) =>
-        url.pathname.startsWith("/api/py/ai") ||
-        url.pathname.startsWith("/api/ai"),
+      matcher: ({ url }) => url.pathname.startsWith("/api/ai"),
       handler: new NetworkOnly(),
     },
 

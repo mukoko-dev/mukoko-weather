@@ -2,8 +2,9 @@
 // No route and no workers.dev address. Reached over service bindings
 // (AI_SERVICE) only: mukoko-weather-api forwards /v1/ai/*, and
 // mukoko-weather-internal forwards the signed-in app's calls
-// (/internal/summary, ...) and the Python backend's model calls (/internal/
-// chat/completions) after checking its service key.
+// (/internal/summary, ...) after checking its service key. (It also forwards
+// /internal/chat/completions, the deleted Python backend's model passthrough,
+// which has no caller left in this repository.)
 //
 // Every model call goes through the `shamwari` AI Gateway (Guardrails on,
 // logging off) to an open-weights Workers AI model. The guardrails block

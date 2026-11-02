@@ -3,11 +3,15 @@ name: Workers
 # The Rust weather backend in workers/ (mukoko-dev/mukoko-weather#148):
 # format, lint (native and wasm32), test, and build every Worker bundle, plus
 # typecheck and test of the TypeScript MongoDB bridge (workers/mongo-bridge).
+# tests/fixtures/ is in the paths: the fixtures are the oracle the Rust tests
+# assert (the Python that produced them is gone, #333), so a fixture change
+# alone must run them.
 on:
   push:
     branches: [main, staging]
     paths:
       - "workers/**"
+      - "tests/fixtures/**"
       - "src/lib/locations.ts"
       - "src/lib/locations-global.ts"
       - "src/lib/icao-codes.ts"
@@ -16,6 +20,7 @@ on:
     branches: [main, staging]
     paths:
       - "workers/**"
+      - "tests/fixtures/**"
       - "src/lib/locations.ts"
       - "src/lib/locations-global.ts"
       - "src/lib/icao-codes.ts"
