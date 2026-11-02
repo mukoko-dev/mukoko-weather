@@ -105,7 +105,7 @@ CLOSED ──(failures >= threshold)──> OPEN ──(cooldown expires)──>
 | `open_meteo_breaker` | Open-Meteo API  |         5         |  5 min   | 5 min  |   8s    |
 | `ai_breaker`         | AI Worker (GLM) |         3         |  5 min   | 10 min |   15s   |
 
-AI is called only from the Python backend (`api/py/_ai_gateway.py`), and only through the weather Worker: `POST {WEATHER_SERVICE_URL}/internal/ai/chat/completions` with `Authorization: Bearer WEATHER_SERVICE_API_KEY`. `mukoko-weather-internal` checks the key and forwards over a service binding to `mukoko-weather-ai`, which runs Workers AI GLM through the `shamwari` AI Gateway with the native `env.AI` binding. No Cloudflare AI token exists on Vercel.
+AI runs only in the AI Worker, `mukoko-weather-ai`: Workers AI GLM through the `shamwari` AI Gateway with the native `env.AI` binding, the Nyuchi guardrails first in every prompt. No Cloudflare AI token exists on Vercel. The signed-in app reaches it through its own server: the Next.js `/api/ai` proxy checks the WorkOS session (`withAuth()`), then calls `{WEATHER_SERVICE_URL}/internal/ai/summary` with `Authorization: Bearer WEATHER_SERVICE_API_KEY` and the person's id and address. `mukoko-weather-internal` checks the key and forwards over a service binding; the AI Worker caches the answer in KV (30/60/120 min by tag) and counts only the calls that reach the model against the person's hour in D1 (`weather_core::budget`). The Python AI modules still not ported (`_chat.py`, `_explore_search.py`, `_history_analyze.py`, `_reports.py`, and the follow-up and agriculture routes) reach the same model through `api/py/_ai_gateway.py`: `POST {WEATHER_SERVICE_URL}/internal/ai/chat/completions`.
 
 ### Weather Fallback Chain
 
@@ -190,9 +190,9 @@ Sections also UNMOUNT when scrolled 1500px past the viewport (bidirectional), re
 | Collection            |        TTL         | Purpose                                                                                   |
 | --------------------- | :----------------: | ----------------------------------------------------------------------------------------- |
 | `weather_cache`       |       15 min       | Weather API responses, keyed by 0.05° grid cell                                           |
-| `ai_summaries`        |   30/60/120 min    | Cached AI weather summaries (tiered by location)                                          |
+| `ai_summaries`        |   30/60/120 min    | Cached AI weather summaries (tiered by location). Now KV in the AI Worker; no longer read |
 | `weather_history`     |        None        | Permanent historical weather records                                                      |
-| `history_analysis`    |       1 hour       | Cached AI history analysis results                                                        |
+| `history_analysis`    |       1 hour       | Unused: AI history analyses are cached in the AI Worker's KV (`history:v1:`)              |
 | `locations`           |        None        | Seed + community locations                                                                |
 | `activities`          |        None        | Activity definitions (30+ activities, 6 categories)                                       |
 | `activity_categories` |        None        | Category metadata with mineral color styles                                               |

@@ -8,8 +8,10 @@ the MongoDB bridge and fills the missing days from NASA POWER / Open-Meteo,
 inserting them with ``source`` ``nasa-power`` or ``open-meteo-archive``. What
 stays here is what the remaining Python needs until it is ported (#333): the
 recorder ``/api/py/weather`` calls on a fresh provider fetch
-(:func:`record_weather_history`) and the reader ``/api/py/history/analyze``
-uses (:func:`read_history`, :func:`history_slugs`).
+(:func:`record_weather_history`), and the reader helpers the deleted
+``/api/py/history/analyze`` used (:func:`read_history`,
+:func:`history_slugs`; the AI Worker reads history through the places Worker,
+so these have no caller left).
 
 One document per ``(locationSlug, date)`` where ``date`` is the location-local
 calendar day (``YYYY-MM-DD``). db-init creates a UNIQUE index on
@@ -31,8 +33,8 @@ Provenances share the collection, marked by ``source``:
   Worker's history route. Inserted with ``$setOnInsert`` only, so it never
   overwrites a recorded day.
 
-Document shape mirrors the TS ``WeatherHistoryDoc`` the HistoryDashboard and
-``_history_analyze`` read: ``current`` (WeatherData current fields),
+Document shape mirrors the TS ``WeatherHistoryDoc`` the HistoryDashboard
+reads: ``current`` (WeatherData current fields),
 ``daily`` (WeatherData daily arrays, sliced to the one day), ``insights``.
 """
 
