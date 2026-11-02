@@ -1,4 +1,4 @@
-//! The provider chain: KV cache, then the Open-Meteo multi-model blend, then
+//! The provider chain: KV cache (fresh, or kept a day as the last resort), then the Open-Meteo multi-model blend, then
 //! Open-Meteo `best_match`. Tomorrow.io is NOT in this chain: it only enriches
 //! the insights afterwards (`enrich.rs`, issue #246).
 //!
@@ -48,6 +48,24 @@ pub struct Got {
     pub fetched_at: String,
     #[serde(skip)]
     pub cache_hit: bool,
+    /// Served past its fresh lifetime because every provider failed
+    /// (`blend::is_fresh`); `X-Cache: STALE`.
+    #[serde(skip)]
+    pub stale: bool,
+}
+
+impl Got {
+    /// `X-Cache`: `HIT`, `MISS`, or `STALE` (a stored forecast served only
+    /// because no provider answered).
+    pub fn cache_status(&self) -> &'static str {
+        if self.stale {
+            "STALE"
+        } else if self.cache_hit {
+            "HIT"
+        } else {
+            "MISS"
+        }
+    }
 }
 
 /// The forecast for a point, or `None` when the cache is cold and every
@@ -67,15 +85,27 @@ pub async fn forecast(
     // The key and the lifetime are `weather_core::blend`'s rules.
     let key = blend::forecast_cache_key(lat, lon, model);
 
+    // A stored row inside its fresh lifetime is the answer. One past it is
+    // kept as the last resort: if every provider fails below, it beats the
+    // seasonal estimate (Open-Meteo refusing the Workers' shared egress left
+    // every uncached or just-expired place with no forecast at all).
+    let mut stale: Option<Got> = None;
     if let Some(kv) = kv.as_ref().filter(|_| !refresh) {
         if let Ok(Some(mut hit)) = kv.get(&key).json::<Got>().await {
             hit.cache_hit = true;
-            return Some(hit);
+            if blend::is_fresh(&hit.provider, &hit.fetched_at, now()) {
+                return Some(hit);
+            }
+            stale = Some(hit);
         }
     }
 
-    let (data, provider, blend_header) = baseline(env, lat, lon, model).await?;
-    let ttl = blend::cache_ttl_seconds(&provider);
+    let Some((data, provider, blend_header)) = baseline(env, lat, lon, model).await else {
+        return stale.map(|mut old| {
+            old.stale = true;
+            old
+        });
+    };
     let got = Got {
         data,
         source: Source::OpenMeteo,
@@ -83,13 +113,14 @@ pub async fn forecast(
         blend: blend_header,
         fetched_at: now_rfc3339(),
         cache_hit: false,
+        stale: false,
     };
 
     if let Some(kv) = kv {
         if let Ok(body) = serde_json::to_string(&got) {
             ctx.wait_until(async move {
                 if let Ok(put) = kv.put(&key, body) {
-                    let _ = put.expiration_ttl(ttl).execute().await;
+                    let _ = put.expiration_ttl(blend::STALE_TTL_SECONDS).execute().await;
                 }
             });
         }

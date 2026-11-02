@@ -747,6 +747,70 @@ pub const BLEND_TTL_SECONDS: u64 = 900;
 /// How long a `best_match` answer is cached: less, so a blend missed to a
 /// passing upstream problem is back within minutes, not a quarter of an hour.
 pub const BEST_MATCH_TTL_SECONDS: u64 = 300;
+/// How long a stored forecast stays in KV (seconds). It is FRESH only for
+/// [`cache_ttl_seconds`]; after that it is kept so an outage of every provider
+/// (Open-Meteo answering 429 to the Workers' shared egress, an open breaker)
+/// still has something true to show: the model run's hourly series covers the
+/// next days, so a day-old forecast is far better than the seasonal estimate.
+/// Freshness is judged on read ([`is_fresh`]), never by the KV expiry.
+pub const STALE_TTL_SECONDS: u64 = 86_400;
+
+/// Seconds since `fetched_at` (RFC 3339), or `None` when it does not parse.
+pub fn age_seconds(fetched_at: &str, now: DateTime<Utc>) -> Option<i64> {
+    DateTime::parse_from_rfc3339(fetched_at)
+        .ok()
+        .map(|t| (now - t.with_timezone(&Utc)).num_seconds())
+}
+
+/// Whether a stored row is still inside its fresh lifetime. An unreadable
+/// `fetched_at` is not fresh (it is fetched again, and kept only as a last
+/// resort).
+pub fn is_fresh(provider: &str, fetched_at: &str, now: DateTime<Utc>) -> bool {
+    age_seconds(fetched_at, now).is_some_and(|age| age < cache_ttl_seconds(provider) as i64)
+}
+
+/// Prepare a stored forecast that is served PAST its fresh lifetime (every
+/// provider failed): `current` becomes the hourly slot for the place's own
+/// current hour (the stored `current` is as old as the row), and the payload
+/// says so in `baseline.stale` / `baseline.ageSeconds` so a client can label
+/// it. `offset_seconds` is the place's UTC offset.
+pub fn mark_stale(data: &mut Value, age_seconds: i64, offset_seconds: i64, now: DateTime<Utc>) {
+    let local = now + chrono::Duration::seconds(offset_seconds);
+    let hour = local.format("%Y-%m-%dT%H").to_string();
+    let slot = data
+        .pointer("/hourly/time")
+        .and_then(Value::as_array)
+        .and_then(|times| {
+            times
+                .iter()
+                .position(|t| t.as_str().is_some_and(|s| s.starts_with(&hour)))
+        });
+    if let Some(i) = slot {
+        let hourly = data["hourly"].clone();
+        if let Some(current) = data.get_mut("current").and_then(Value::as_object_mut) {
+            for var in CURRENT_VARS.split(',') {
+                if let Some(v) = hourly
+                    .get(var)
+                    .and_then(Value::as_array)
+                    .and_then(|a| a.get(i))
+                    .filter(|v| !v.is_null())
+                {
+                    current.insert(var.to_owned(), v.clone());
+                }
+            }
+            if let Some(t) = hourly["time"].get(i) {
+                current.insert("time".to_owned(), t.clone());
+            }
+        }
+    }
+    if let Some(root) = data.as_object_mut() {
+        let baseline = root.entry("baseline").or_insert_with(|| json!({}));
+        if let Some(b) = baseline.as_object_mut() {
+            b.insert("stale".to_owned(), json!(true));
+            b.insert("ageSeconds".to_owned(), json!(age_seconds.max(0)));
+        }
+    }
+}
 
 /// The forecast KV key for a point: `wx:v2:` + the point rounded to 0.01°
 /// (about 1 km, `geo::cache_key`). The version
@@ -897,12 +961,13 @@ pub fn attempt_single_model(upstream: Upstream, model: &str, now: DateTime<Utc>)
 
 /// `Cache-Control` for a `/v1/weather` answer at the edge. Only the full
 /// blend, or a model the caller picked, is worth five minutes; a degraded
-/// answer (`best_match`, the seasonal `fallback`) is short-lived so the blend
-/// comes back as soon as it recovers.
-pub fn edge_cache_control(provider: Option<&str>) -> &'static str {
+/// answer (`best_match`, the seasonal `fallback`, a stored forecast served
+/// `stale`) is short-lived so the blend comes back as soon as it recovers.
+pub fn edge_cache_control(provider: Option<&str>, stale: bool) -> &'static str {
     let healthy =
         provider.is_some_and(|p| p.starts_with("open-meteo:") && p != PROVIDER_BEST_MATCH);
-    if healthy {
+    // A stored forecast served past its lifetime must be asked for again soon.
+    if healthy && !stale {
         "public, max-age=300"
     } else {
         "public, max-age=30"
@@ -1837,13 +1902,77 @@ mod tests {
     }
 
     #[test]
+    fn a_stored_forecast_is_fresh_for_its_ttl_then_only_a_last_resort() {
+        let at = |m: i64| (now() - chrono::Duration::minutes(m)).to_rfc3339();
+        assert!(is_fresh(PROVIDER_BLEND, &at(14), now()));
+        assert!(!is_fresh(PROVIDER_BLEND, &at(15), now()));
+        // best_match is fresh for five minutes only.
+        assert!(is_fresh(PROVIDER_BEST_MATCH, &at(4), now()));
+        assert!(!is_fresh(PROVIDER_BEST_MATCH, &at(6), now()));
+        // A clock a little ahead of ours is not a reason to refetch.
+        assert!(is_fresh(PROVIDER_BLEND, &at(-2), now()));
+        // Unreadable: fetched again.
+        assert!(!is_fresh(PROVIDER_BLEND, "yesterday", now()));
+        assert_eq!(age_seconds("yesterday", now()), None);
+        assert_eq!(age_seconds(&at(3), now()), Some(180));
+        const { assert!(STALE_TTL_SECONDS > BLEND_TTL_SECONDS) };
+    }
+
+    #[test]
+    fn a_stale_forecast_shows_the_places_current_hour_and_says_how_old_it_is() {
+        // Harare is UTC+2: 14:08 UTC is 16:08 there. The row was fetched at
+        // 03:00, so its `current` is 13 hours old.
+        let mut data = json!({
+            "current": {"time": "2026-11-02T03:00", "temperature_2m": 12.0, "weather_code": 0},
+            "hourly": {
+                "time": ["2026-11-02T15:00", "2026-11-02T16:00", "2026-11-02T17:00"],
+                "temperature_2m": [24.0, 25.5, 25.0],
+                "weather_code": [1, 3, 3],
+                "uv_index": [null, 6.0, 5.0]
+            },
+            "baseline": {"blend": true}
+        });
+        let at = Utc.with_ymd_and_hms(2026, 11, 2, 14, 8, 0).unwrap();
+        mark_stale(&mut data, 46_800, 7200, at);
+        assert_eq!(data["current"]["time"], "2026-11-02T16:00");
+        assert_eq!(data["current"]["temperature_2m"], 25.5);
+        assert_eq!(data["current"]["weather_code"], 3);
+        assert_eq!(data["current"]["uv_index"], 6.0);
+        assert_eq!(data["baseline"]["stale"], true);
+        assert_eq!(data["baseline"]["ageSeconds"], 46_800);
+        // Existing baseline facts are kept.
+        assert_eq!(data["baseline"]["blend"], true);
+    }
+
+    #[test]
+    fn a_stale_forecast_that_no_longer_covers_now_is_still_labelled() {
+        let mut data = json!({
+            "current": {"time": "2026-11-01T03:00", "temperature_2m": 12.0},
+            "hourly": {"time": ["2026-11-01T03:00"], "temperature_2m": [12.0]}
+        });
+        let at = Utc.with_ymd_and_hms(2026, 11, 2, 14, 8, 0).unwrap();
+        mark_stale(&mut data, 100, 0, at);
+        // Nothing to rebase onto: `current` stays, but the label is there, and
+        // a `baseline` object is made when the payload had none.
+        assert_eq!(data["current"]["temperature_2m"], 12.0);
+        assert_eq!(data["baseline"]["stale"], true);
+    }
+
+    #[test]
     fn the_edge_caches_a_healthy_baseline_longer_than_a_degraded_one() {
         for healthy in [
             "open-meteo:blend",
             "open-meteo:ecmwf_ifs",
             "open-meteo:meteofrance_seamless",
         ] {
-            assert_eq!(edge_cache_control(Some(healthy)), "public, max-age=300");
+            assert_eq!(
+                edge_cache_control(Some(healthy), false),
+                "public, max-age=300"
+            );
+            assert_eq!(
+                edge_cache_control(Some(healthy), true),
+                "public, max-age=30"
+            );
         }
         for degraded in [
             Some("open-meteo:best_match"),
@@ -1851,7 +1980,7 @@ mod tests {
             Some(""),
             None,
         ] {
-            assert_eq!(edge_cache_control(degraded), "public, max-age=30");
+            assert_eq!(edge_cache_control(degraded, false), "public, max-age=30");
         }
     }
 

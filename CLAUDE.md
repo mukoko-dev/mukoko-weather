@@ -1003,7 +1003,7 @@ The original six were re-checked in the same run: all 7 of 7, same variable cove
 **Provider strategy (priority 0 = StationKit, then forecast chain):** The Worker's `GET /v1/weather` (forecast Worker `/weather`) consults sources in this order:
 
 0. **Nyuchi StationKit** (`workers/forecast/src/stations.rs` `overlay`) — most recent QC-validated observation in the weather D1 database (`observations`, written by the stations Worker) within **50 km** and the **last 60 minutes**. If a station is in range, its sensor data replaces the `current` block of the response while hourly/daily are still served from the baseline below.
-1. **KV cache** (`FORECAST_CACHE`, `wx:v2:`, 15-min TTL for a blend or a picked model, 5 min for `best_match`; one row per point rounded to 0.01°, plus `{point}::{model}` rows for user-selected models, `weather_core::blend::forecast_cache_key`)
+1. **KV cache** (`FORECAST_CACHE`, `wx:v2:`, FRESH for 15 min for a blend or a picked model, 5 min for `best_match`; one row per point rounded to 0.01°, plus `{point}::{model}` rows for user-selected models, `weather_core::blend::forecast_cache_key`). **Stored for a day, served stale only as the last resort (#434):** a row is kept `STALE_TTL_SECONDS` (24 h) and judged on read (`blend::is_fresh`); when every provider then fails (Open-Meteo answering 429 to the Workers' shared egress, an open breaker) the stored row is served instead of the seasonal estimate, `X-Cache: STALE`, its `current` rebased onto the place's current hour from the hourly series and `baseline.stale: true` / `baseline.ageSeconds` in the payload (`blend::mark_stale`); the public API gives it a 30 s edge lifetime (`edge_cache_control(.., stale)`)
 2. **Open-Meteo multi-model blend** (Africa-weighted), or the user's single model
 3. **Open-Meteo `best_match`** (alternate single request)
 4. **Seasonal estimate** (never fails)
@@ -1012,7 +1012,7 @@ Every Open-Meteo step is gated by the Worker's Open-Meteo circuit breaker (`weat
 
 The Worker sets these response headers (the public API forwards them) so callers can verify which source served what:
 
-- `X-Cache` — `HIT` | `MISS` (cache status for the forecast data)
+- `X-Cache` — `HIT` | `MISS` | `STALE` (cache status for the forecast data; `STALE` is a stored forecast past its fresh lifetime, served only because no provider answered)
 - `X-Weather-Provider` — the **baseline**: `open-meteo:blend` | `open-meteo:<model>` | `open-meteo:best_match` | `fallback`
 - `X-Weather-Blend` — the region and normalised weights actually used (fresh blends only), e.g. `southern-africa; ecmwf_ifs=0.35,…`
 - `X-Enrichment` — `tomorrow` | `skipped-budget` | `skipped-error` | `none` (no key configured, or the seasonal estimate)
