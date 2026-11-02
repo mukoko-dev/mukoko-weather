@@ -88,3 +88,46 @@ describe("weather Worker config", () => {
     expect(config).toMatch(/reloadOnOnline:\s*false/);
   });
 });
+
+describe("weather stations already in the field (the old upload URL)", () => {
+  const ROOT = resolve(__dirname, "../..");
+  const vercel = JSON.parse(
+    readFileSync(resolve(ROOT, "vercel.json"), "utf-8"),
+  ) as {
+    rewrites: { source: string; destination: string }[];
+    functions?: unknown;
+    builds?: unknown;
+  };
+  const rewrites = vercel.rewrites;
+
+  it("vercel.json sends the old ingest path to the stations Worker, and nothing else under /api/py", () => {
+    // The Python backend is gone: no catch-all rewrite to a Python function, so
+    // every other /api/py/* path is an ordinary 404 from Next.js.
+    expect(rewrites.map((r) => r.source)).toEqual(["/api/py/stations/ingest"]);
+    expect(rewrites.some((r) => r.source === "/api/py/(.*)")).toBe(false);
+    // The Worker serves the same path (it strips `/api/py`), so a console
+    // configured with the old URL keeps the protocol it speaks.
+    expect(rewrites[0]!.destination).toBe(
+      "https://weather-ingest.nyuchi.com/api/py/stations/ingest",
+    );
+  });
+
+  it("vercel.json builds no Python function", () => {
+    expect(vercel.functions).toBeUndefined();
+    expect(vercel.builds).toBeUndefined();
+    expect(JSON.stringify(vercel)).not.toMatch(
+      /python|\.py\b|@vercel\/python/i,
+    );
+  });
+
+  it("the stations Worker also takes weather.mukoko.com/api/py/stations/* as a route", () => {
+    const text = wrangler("stations");
+    expect(text).toMatch(
+      /"pattern":\s*"weather\.mukoko\.com\/api\/py\/stations\/\*",\s*"zone_name":\s*"mukoko\.com"/,
+    );
+    // The custom domain the consoles are told to use stays.
+    expect(text).toMatch(
+      /"pattern":\s*"weather-ingest\.nyuchi\.com",\s*"custom_domain":\s*true/,
+    );
+  });
+});

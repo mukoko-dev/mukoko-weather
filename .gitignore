@@ -12,7 +12,6 @@
 
 # testing
 /coverage
-.pytest_cache/
 
 # python
 __pycache__/

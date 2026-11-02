@@ -89,7 +89,7 @@ export interface ParsedSmartSlug {
  * Slugify a place name: strip diacritics, lowercase, collapse everything
  * non-alphanumeric to single dashes.
  *
- * Mirrors `_generate_slug` in `api/py/_locations.py` minus its country suffix —
+ * Mirrors the former Python `_generate_slug` (deleted, #333) minus its country suffix —
  * with smart slugs the coordinate carries the geography, so the country code no
  * longer has to be smuggled into the name.
  */
@@ -146,7 +146,7 @@ export function buildSmartSlug(
 /**
  * The name half of a coordinate spot's slug (`12-35n-45-68e`): what the
  * backend mints for a point nothing on Earth names (open water, polar ice,
- * empty desert; `coordinate_slug_name` in `api/py/_geohash.py`). Two-decimal
+ * empty desert; `weather_core::resolve`). Two-decimal
  * latitude and longitude, hemisphere letters, dashes.
  */
 export const COORDINATE_NAME_RE = /^\d{1,2}-\d{2}[ns]-\d{1,3}-\d{2}[ew]$/;
@@ -158,7 +158,7 @@ export function isCoordinateNameSlug(nameSlug: string): boolean {
 
 /**
  * Plain label for an unnamed point: `12.35°N 45.68°E`. Mirrors
- * `coordinate_label` in `api/py/_geohash.py`.
+ * `weather_core::resolve`.
  */
 export function coordinateLabel(lat: number, lon: number): string {
   const la = Math.round(lat * 100) / 100;

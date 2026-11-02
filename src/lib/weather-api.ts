@@ -3,8 +3,8 @@
  * `workers/`, public at `weather-api.mukoko.com`.
  *
  * Vercel is frontend only. Every route the Worker serves is called there and
- * nowhere else: there is no fallback to the frozen Python under `api/py`
- * (owner decision). A call retries once on a network error or a 5xx, and
+ * nowhere else: there is no Python backend to fall back to (`api/py` is deleted,
+ * #333; owner decision). A call retries once on a network error or a 5xx, and
  * every call carries a timeout; what the Worker itself falls back to (the
  * seasonal estimate, `X-Weather-Provider: fallback`) is the only degraded
  * answer a page shows.

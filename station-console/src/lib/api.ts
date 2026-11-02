@@ -4,15 +4,16 @@
  * the Python backend it replaced is gone). The console is UI only; all writes
  * go through that API.
  *
- * The Worker serves every route both as `/stations/*` and as
- * `/api/py/stations/*`, the prefix the Python used; this client keeps the
- * prefixed form it has always called.
+ * The client calls the Worker's own `/stations/*` paths. (The Worker also
+ * answers the `/api/py/stations/*` prefix the deleted Python used, because
+ * consoles in the field upload to it; this client no longer needs it.)
  *
  * TRANSITIONAL: the console calls the stations Worker's own host directly.
  * Weather is to be served behind the gateway (one way in), which forwards the
  * station routes to the Worker with the protocol unchanged; then `API_BASE`
- * becomes the gateway's origin. Nothing on `weather.mukoko.com` serves these
- * routes any more (the Python behind it is deleted), so a project that still
+ * becomes the gateway's origin. `weather.mukoko.com` serves only the
+ * `/api/py/stations/*` form (a Cloudflare route to the stations Worker, once it
+ * is deployed with it), not these unprefixed paths, so a project that still
  * sets `NEXT_PUBLIC_WEATHER_API_BASE` to `https://weather.mukoko.com` must
  * unset it.
  */
@@ -21,14 +22,12 @@ export const API_BASE =
   process.env.NEXT_PUBLIC_WEATHER_API_BASE ??
   "https://weather-ingest.nyuchi.com";
 
-/** The words to show for a refused request: the Worker's `error_description`, else a legacy `detail`. */
+/** The words to show for a refused request: the Worker's `error_description`, else the status. */
 async function refusal(res: Response, fallback: string): Promise<string> {
   const body: unknown = await res.json().catch(() => null);
   if (typeof body === "object" && body !== null) {
-    const b = body as { error_description?: unknown; detail?: unknown };
-    for (const text of [b.error_description, b.detail]) {
-      if (typeof text === "string" && text.trim()) return text;
-    }
+    const text = (body as { error_description?: unknown }).error_description;
+    if (typeof text === "string" && text.trim()) return text;
   }
   return `${fallback} (${res.status})`;
 }
@@ -85,7 +84,7 @@ export async function registerStation(body: {
   hardware?: string;
   country?: string;
 }): Promise<RegistrationResult> {
-  const res = await fetch(`${API_BASE}/api/py/stations/register`, {
+  const res = await fetch(`${API_BASE}/stations/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -98,7 +97,7 @@ export async function fetchStatus(
   station: RegisteredStation,
 ): Promise<StationStatus> {
   const res = await fetch(
-    `${API_BASE}/api/py/stations/status?id=${encodeURIComponent(station.stationId)}&key=${encodeURIComponent(station.key)}`,
+    `${API_BASE}/stations/status?id=${encodeURIComponent(station.stationId)}&key=${encodeURIComponent(station.key)}`,
   );
   if (!res.ok) throw new Error(`Status failed (${res.status})`);
   return res.json();
@@ -108,7 +107,7 @@ export async function submitManualReading(
   station: RegisteredStation,
   reading: Record<string, number | string | undefined>,
 ) {
-  const res = await fetch(`${API_BASE}/api/py/stations/manual`, {
+  const res = await fetch(`${API_BASE}/stations/manual`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({

@@ -3,7 +3,7 @@
 //! before, so its behaviour does not move; the Weather playbook says prompt
 //! changes need sign-off). Pinned to the real Python by
 //! `tests/fixtures/ai-summary.json`, whose `expected` values
-//! `scripts/gen_ai_summary_fixtures.py` produced by running `_ai.py`.
+//! the (since deleted, #333) `scripts/gen_ai_summary_fixtures.py` produced by running `_ai.py`.
 //!
 //! - the tiered cache time to live (30 / 60 / 120 minutes by tag);
 //! - which of the user's activities shape a summary (at most three) and which

@@ -14,7 +14,7 @@
 //! 401 missing or wrong key   404 unknown location   422 bad query
 //! 503 key not configured here, or no provider answered (fails closed)
 //!
-//! POST /internal/ai/chat/completions
+//! POST /internal/ai/chat/completions   (the deleted Python backend's passthrough; no caller left)
 //!     Authorization: Bearer <WEATHER_SERVICE_API_KEY>
 //!     {messages, tools?, max_tokens?, model?}   (OpenAI chat completions)
 //! 200 an OpenAI chat completion (content only, never the model's reasoning)
