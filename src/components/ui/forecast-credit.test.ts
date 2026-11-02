@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { ForecastCredit } from "./ForecastCredit";
+import { ForecastCredit } from "./forecast-credit";
 
 const LEGAL = "https://developer.apple.com/weatherkit/data-source-attribution/";
 
@@ -63,7 +63,7 @@ describe("ForecastCredit rendered", () => {
   });
 
   it("source: no hex colours, no inline style", () => {
-    const src = read("src/components/layout/ForecastCredit.tsx");
+    const src = read("src/components/ui/forecast-credit.tsx");
     expect(src).not.toContain("style={{");
     expect(src).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     // The wording comes from forecast-sources, never hand-written here.
@@ -109,6 +109,48 @@ describe("where Apple's credit appears", () => {
     expect(
       src.slice(src.lastIndexOf("{appleWeatherEnabled", at), at),
     ).toContain("&&");
+  });
+});
+
+describe("retention: Apple data is kept 15 minutes, nowhere longer", () => {
+  it("the 2-hour weather-hint cache never takes an external model's values", () => {
+    const src = read("src/app/[location]/WeatherDashboard.tsx");
+    expect(src).toContain(
+      "modelBaseline && isExternalForecastModel(model) ? seedWeather : weather",
+    );
+    const effect = src.slice(src.indexOf("cacheWeatherHint(location.slug"));
+    const call = effect.slice(0, effect.indexOf("]);"));
+    expect(call).toContain("hintWeather.current.weather_code");
+    // Not the displayed baseline, which may be Apple's.
+    expect(call).not.toMatch(/[^t]weather\.current/);
+  });
+
+  it("the device store keeps the server seed, never a picked model's baseline", () => {
+    const src = read("src/app/[location]/WeatherDashboard.tsx");
+    const at = src.indexOf("void rememberPlace(");
+    expect(at).toBeGreaterThan(-1);
+    expect(src.slice(at, at + 300)).toContain("weather: seedWeather");
+  });
+
+  it("the service worker holds a weather answer 15 minutes at most", () => {
+    const sw = read("src/app/sw.ts");
+    const route = sw.slice(sw.indexOf('startsWith("/v1/weather")'));
+    expect(route.slice(0, 400)).toContain("maxAgeSeconds: 15 * 60");
+  });
+});
+
+describe("layering", () => {
+  it("is a shared ui primitive, so charts and layout both import from below", () => {
+    for (const f of [
+      "src/components/weather/charts/ModelComparisonChart.tsx",
+      "src/components/weather/MyWeatherModal.tsx",
+      "src/components/layout/Footer.tsx",
+      "src/app/[location]/WeatherDashboard.tsx",
+    ]) {
+      const src = read(f);
+      expect(src, f).toContain('from "@/components/ui/forecast-credit"');
+      expect(src, f).not.toContain("layout/ForecastCredit");
+    }
   });
 });
 

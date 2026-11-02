@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { TimeSeriesChart, type SeriesConfig } from "./TimeSeriesChart";
 import { formatTime } from "@/lib/i18n";
-import { ForecastCredit } from "@/components/layout/ForecastCredit";
+import { ForecastCredit } from "@/components/ui/forecast-credit";
 import {
   FORECAST_MODEL_LABELS,
   ForecastModel,

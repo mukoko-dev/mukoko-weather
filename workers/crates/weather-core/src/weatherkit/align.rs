@@ -16,15 +16,26 @@
 //! row that fills the `13:00` slot is the one starting at `12:00`. Without that
 //! shift Apple's rain would sit an hour late.
 //!
-//! **Known limit: daylight-saving changes.** The axis is local wall-clock text
-//! plus ONE offset, so the UTC instant of a slot is exact only while the offset
-//! does not change inside the 7 days. On the day a place changes its clock, the
-//! hours after the change are off by the clock step. Two things bound it: the
-//! DAILY alignment never uses the offset to pick a day (it needs the day to
-//! start at local midnight, [`day_date`]), and a caller with exact instants (an
-//! Open-Meteo request with `timeformat=unixtime`) passes them to [`hourly`]
-//! directly and has no error at all. [`local_instants`] is the convenience for
-//! the text form.
+//! **Daylight-saving changes.** The axis is local wall-clock text plus ONE
+//! offset (`utc_offset_seconds`), so the UTC instant of a slot is exact only
+//! while the offset does not change inside the window. When a place changes its
+//! clock within the 7 days, every slot after the change would be read from a row
+//! an hour off. So the change is DETECTED from Apple's own day starts (a day that
+//! starts at local midnight under the offset up to some day, and an hour from it
+//! after: [`clock_change_from`]) and everything from the day of the change on is
+//! left to the filler: [`local_axis`] returns `None` for those slots and
+//! [`daily`] returns no sunrise or sunset for those days. Degraded, never
+//! misaligned. (The same masking applies if a request did not name the place's
+//! time zone and Apple rolled its days at UTC midnight, in a zone within an hour
+//! of UTC: safe, only less Apple.) A caller with exact instants (an Open-Meteo
+//! request with `timeformat=unixtime`) passes them to [`hourly`] directly and has
+//! no limit at all.
+//!
+//! **Zones that are not a whole hour from UTC** (India +5:30, Nepal +5:45,
+//! Newfoundland -3:30, ...): whether Apple starts its hours on the local hour or
+//! on the UTC hour is not documented, so a slot takes the row that starts at it,
+//! else the nearest row within 30 minutes (ties to the earlier), so those places
+//! get Apple data either way, at most 30 minutes from the slot.
 
 use std::collections::BTreeMap;
 
@@ -47,8 +58,9 @@ pub const CURRENT_MAX_AGE_SECS: i64 = 2 * HOUR_SECONDS;
 pub const SERIES_HOURS: usize = 24;
 
 /// UTC instants (epoch seconds) of local wall-clock slots `YYYY-MM-DDTHH:MM`,
-/// at one constant offset. `None` for a slot that is not that form. See the
-/// module docs for the daylight-saving limit.
+/// at one constant offset. `None` for a slot that is not that form. The plain
+/// conversion; for an axis that is going to be read with Apple's rows use
+/// [`local_axis`], which also leaves out the slots a clock change makes wrong.
 pub fn local_instants(times: &[Value], offset_seconds: i64) -> Vec<Option<i64>> {
     times
         .iter()
@@ -57,6 +69,45 @@ pub fn local_instants(times: &[Value], offset_seconds: i64) -> Vec<Option<i64>> 
             Some(naive.and_utc().timestamp() - offset_seconds)
         })
         .collect()
+}
+
+/// The slots of a local-time axis as UTC instants, for reading with this
+/// snapshot: [`local_instants`], with every slot at or after a detected clock
+/// change ([`clock_change_from`]) set to `None`, so it is filled from the other
+/// model instead of being read an hour off.
+pub fn local_axis(times: &[Value], offset_seconds: i64, snapshot: &Snapshot) -> Vec<Option<i64>> {
+    let change = clock_change_from(snapshot, offset_seconds);
+    local_instants(times, offset_seconds)
+        .into_iter()
+        .map(|slot| slot.filter(|t| change.is_none_or(|c| *t < c)))
+        .collect()
+}
+
+/// The first instant at which the single `offset_seconds` can no longer be
+/// trusted, or `None` when it holds for every day Apple sent.
+///
+/// A WeatherKit day starts at local midnight (the request names the time zone),
+/// so under the right offset every day starts exactly at local `00:00`. Walk the
+/// days: the first one that starts within an hour of local midnight but not at
+/// it means the clock changed since the day before began, so the change is
+/// somewhere between the start of the previous day (returned: the whole day of
+/// the change is treated as affected) and the start of this one. When it is the
+/// very first day, nothing in the window can be trusted (`i64::MIN`). Days that
+/// are not near midnight at all are ignored, as the daily alignment ignores them.
+pub fn clock_change_from(snapshot: &Snapshot, offset_seconds: i64) -> Option<i64> {
+    let mut last_midnight: Option<i64> = None;
+    for d in &snapshot.daily {
+        if day_date(d.start, offset_seconds).is_none() {
+            continue;
+        }
+        let start = d.start.timestamp();
+        if (start + offset_seconds).rem_euclid(86_400) == 0 {
+            last_midnight = Some(start);
+        } else {
+            return Some(last_midnight.unwrap_or(i64::MIN));
+        }
+    }
+    None
 }
 
 /// `YYYY-MM-DDTHH:MM` of an instant on the wall clock at `offset_seconds`.
@@ -84,6 +135,34 @@ fn round2(x: f64) -> f64 {
 // Hourly
 // ---------------------------------------------------------------------------
 
+/// How far from a slot a row may start and still fill it, when none starts at
+/// it. Only a zone that is not a whole hour from UTC ever needs it: its hours
+/// are half or three quarters of an hour off Apple's, if Apple's start on UTC
+/// hours.
+const ROW_TOLERANCE_SECONDS: i64 = 1800;
+
+/// The row that starts at `want`, else the nearest row within
+/// [`ROW_TOLERANCE_SECONDS`] (a tie goes to the earlier row), else none.
+fn row_near<'a>(rows: &BTreeMap<i64, &'a Reading>, want: i64) -> Option<&'a Reading> {
+    if let Some(r) = rows.get(&want) {
+        return Some(r);
+    }
+    let before = rows.range(..want).next_back();
+    let after = rows.range(want..).next();
+    let (at, row) = match (before, after) {
+        (Some(b), Some(a)) => {
+            if want - *b.0 <= *a.0 - want {
+                b
+            } else {
+                a
+            }
+        }
+        (Some(x), None) | (None, Some(x)) => x,
+        (None, None) => return None,
+    };
+    ((*at - want).abs() <= ROW_TOLERANCE_SECONDS).then_some(*row)
+}
+
 /// Apple's hourly values on an hourly axis, as `variable -> array` with one
 /// entry per slot (`axis[i]` is the slot's UTC instant, `None` for a slot whose
 /// instant is unknown). Variables Apple publishes: `temperature_2m`,
@@ -100,12 +179,13 @@ pub fn hourly(snapshot: &Snapshot, axis: &[Option<i64>]) -> Map<String, Value> {
         .map(|r| (r.at.timestamp(), r))
         .collect();
     // The row for a slot: the one starting at the slot (`back` = 0), or one
-    // period earlier (`back` = 1 hour) for the period variables.
+    // period earlier (`back` = 1 hour) for the period variables; else the
+    // nearest within ROW_TOLERANCE_SECONDS (zones not a whole hour from UTC).
     let column = |back: i64, pick: &dyn Fn(&Reading) -> Value| -> Value {
         Value::Array(
             axis.iter()
                 .map(|slot| {
-                    slot.and_then(|t| rows.get(&(t - back)).copied())
+                    slot.and_then(|t| row_near(&rows, t - back))
                         .map_or(Value::Null, pick)
                 })
                 .collect(),
@@ -238,6 +318,9 @@ pub fn daily(snapshot: &Snapshot, dates: &[Value], offset_seconds: i64) -> Map<S
         .iter()
         .filter_map(|d| Some((day_date(d.start, offset_seconds)?, d)))
         .collect();
+    // From the day the clock changed, one offset gives sunrise and sunset an
+    // hour off: those days report none, and the filler's stand.
+    let change = clock_change_from(snapshot, offset_seconds);
     let column = |pick: &dyn Fn(&Day) -> Value| -> Value {
         Value::Array(
             dates
@@ -250,7 +333,10 @@ pub fn daily(snapshot: &Snapshot, dates: &[Value], offset_seconds: i64) -> Map<S
                 .collect(),
         )
     };
-    let sun = |t: Option<DateTime<Utc>>| {
+    let sun = |d: &Day, t: Option<DateTime<Utc>>| {
+        if change.is_some_and(|c| d.start.timestamp() >= c) {
+            return Value::Null;
+        }
         t.and_then(|t| local_label(t.timestamp(), offset_seconds))
             .map_or(Value::Null, Value::from)
     };
@@ -276,8 +362,8 @@ pub fn daily(snapshot: &Snapshot, dates: &[Value], offset_seconds: i64) -> Map<S
         "precipitation_probability_max".into(),
         column(&|d| number(d.precipitation_probability_max)),
     );
-    out.insert("sunrise".into(), column(&|d| sun(d.sunrise)));
-    out.insert("sunset".into(), column(&|d| sun(d.sunset)));
+    out.insert("sunrise".into(), column(&|d| sun(d, d.sunrise)));
+    out.insert("sunset".into(), column(&|d| sun(d, d.sunset)));
     out
 }
 
@@ -292,7 +378,12 @@ pub fn daily(snapshot: &Snapshot, dates: &[Value], offset_seconds: i64) -> Map<S
 /// Apple gives a rate for each minute (mm an hour); the nowcast is millimetres
 /// in each quarter hour, so a step is the mean rate of its minutes over a
 /// quarter of an hour. Steps sit on the quarter-hour grid and are labelled with
-/// their START on the wall clock (the app shows them as Now, +15, +30, +45). A
+/// their START on the wall clock (the app shows them as Now, +15, +30, +45). The
+/// start, not the end the hourly sums use, is deliberate: `fresh_minutely` keeps
+/// the steps labelled at or after the current quarter hour and the card calls the
+/// first one "Now", so a step labelled with its start is the quarter hour that is
+/// happening, where an end label would put the quarter hour that just ended in
+/// "Now". A
 /// step with fewer than five minutes of data (the edge of the window) is left
 /// out; the first step may begin part-way through, and its rate is the rate over
 /// the minutes that remain.
@@ -373,7 +464,9 @@ pub fn compose_raw(raw: &Value, snapshot: &Snapshot, now: DateTime<Utc>) -> Opti
     let offset = raw.get("utc_offset_seconds")?.as_i64()?;
     let hourly_times = raw.pointer("/hourly/time")?.as_array()?;
     let daily_times = raw.pointer("/daily/time")?.as_array()?;
-    let axis = local_instants(hourly_times, offset);
+    // The axis for reading Apple's rows: slots a clock change makes wrong are
+    // left out, so the filler covers them.
+    let axis = local_axis(hourly_times, offset, snapshot);
 
     let apple_hourly = hourly(snapshot, &axis);
     if apple_hourly["temperature_2m"]
@@ -569,10 +662,133 @@ mod tests {
         let h = hourly(&snap(), &[Some(t), Some(t + 3600)]);
         assert_eq!(h["temperature_2m"].as_array().unwrap().len(), 2);
         assert!(!h["temperature_2m"][0].is_null());
-        // A place on a :15 clock (UTC+5:45): instants are matched exactly.
-        let t15 = t + 15 * 60;
-        let h = hourly(&snap(), &[Some(t15)]);
-        assert!(h["temperature_2m"][0].is_null(), "no row starts at :15");
+        // A row that starts at the instant is used as it is.
+        let second = hourly(&snap(), &[Some(t + 3600)]);
+        assert_eq!(
+            second["temperature_2m"][0],
+            json!(snap().hourly[1].temperature_2m.unwrap())
+        );
+    }
+
+    #[test]
+    fn zones_that_are_not_a_whole_hour_from_utc_still_get_apple_data() {
+        // India +5:30, Nepal +5:45, Newfoundland -3:30: local 12:00 is not on a
+        // UTC hour, so no Apple row starts at it (if Apple starts its hours on
+        // UTC hours). The nearest row within 30 minutes fills the slot.
+        let raw = open_meteo_raw();
+        let times = raw["hourly"]["time"].as_array().unwrap();
+        for offset in [19_800_i64, 20_700, -12_600, 16_200] {
+            let axis = local_instants(times, offset);
+            let h = hourly(&snap(), &axis);
+            let filled = h["temperature_2m"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|v| !v.is_null())
+                .count();
+            // Apple's 30 rows reach 30 slots (give or take the ends).
+            assert!(filled >= 28, "offset {offset}: only {filled} slots filled");
+        }
+        // A slot half an hour off is at most half an hour from its row, ties
+        // to the earlier row: 10:30Z takes the 10:00Z row, 10:15Z the 10:00Z
+        // row too, and 10:45Z the 11:00Z row.
+        let t = utc("2026-11-01T10:00:00Z").timestamp();
+        let at = |slot: i64| hourly(&snap(), &[Some(slot)])["temperature_2m"][0].clone();
+        assert_eq!(at(t + 1800), at(t));
+        assert_eq!(at(t + 900), at(t));
+        assert_eq!(at(t + 2700), at(t + 3600));
+        // Never further than 30 minutes: a gap of an hour or more is a gap.
+        assert!(at(t - 1801).is_null());
+        assert!(at(t + 30 * 3600 + 1801).is_null());
+        // The period variables take the preceding hour's row the same way.
+        let rain = |slot: i64| hourly(&snap(), &[Some(slot)])["precipitation"][0].clone();
+        assert_eq!(
+            rain(t + 3600 + 1800),
+            hourly(&snap(), &[Some(t + 3600)])["precipitation"][0]
+        );
+    }
+
+    #[test]
+    fn a_clock_change_inside_the_window_is_detected_and_left_to_the_filler() {
+        // London, BST (+1h) until 01:00Z on 25 October 2026, then GMT. The
+        // snapshot's days start at local midnight in the zone the request
+        // named: 24 Oct 00:00 BST = 23 Oct 23:00Z, 25 Oct 00:00 BST = 24 Oct
+        // 23:00Z, 26 Oct 00:00 GMT = 26 Oct 00:00Z. Under the single offset
+        // the axis carries (+1h, taken on 24 October) the third day starts at
+        // local 01:00, not 00:00: the clock changed on the second day.
+        let day = |start: &str| {
+            let mut d = snap().daily[0].clone();
+            d.start = utc(start);
+            d.sunrise = Some(utc(start) + Duration::hours(7));
+            d.sunset = Some(utc(start) + Duration::hours(17));
+            d
+        };
+        let mut s = snap();
+        s.daily = vec![
+            day("2026-10-23T23:00:00Z"),
+            day("2026-10-24T23:00:00Z"),
+            day("2026-10-26T00:00:00Z"),
+            day("2026-10-27T00:00:00Z"),
+        ];
+        let bst = 3600;
+        // The change is somewhere on or after the second day: from its start on,
+        // nothing is trusted.
+        let change = utc("2026-10-24T23:00:00Z").timestamp();
+        assert_eq!(clock_change_from(&s, bst), Some(change));
+
+        // The axis: slots before the second day's start keep their instants,
+        // slots from it on are left out.
+        let times = [
+            json!("2026-10-24T22:00"), // 21:00Z, before
+            json!("2026-10-25T00:00"), // 23:00Z, the start of the day of the change
+            json!("2026-10-25T05:00"),
+            json!("2026-10-27T12:00"),
+        ];
+        let axis = local_axis(&times, bst, &s);
+        assert!(axis[0].is_some());
+        assert_eq!(&axis[1..], &[None, None, None]);
+        // The plain conversion is unchanged: the mask is the caller's choice.
+        assert!(local_instants(&times, bst).iter().all(Option::is_some));
+
+        // Daily values are keyed by date and stay; sunrise and sunset, which
+        // one offset would give an hour off, are left out from that day on.
+        let dates = [
+            json!("2026-10-24"),
+            json!("2026-10-25"),
+            json!("2026-10-26"),
+            json!("2026-10-27"),
+        ];
+        let d = daily(&s, &dates, bst);
+        assert!(!d["sunrise"][0].is_null(), "before the change");
+        assert!(d["sunrise"][1].is_null() && d["sunset"][1].is_null());
+        assert!(d["sunrise"][2].is_null() && d["sunrise"][3].is_null());
+        assert!(
+            !d["temperature_2m_max"][1].is_null(),
+            "dates are not shifted"
+        );
+    }
+
+    #[test]
+    fn with_no_clock_change_nothing_is_masked() {
+        // Harare has no daylight saving: every day starts at local midnight.
+        assert_eq!(clock_change_from(&snap(), OFFSET), None);
+        let raw = open_meteo_raw();
+        let times = raw["hourly"]["time"].as_array().unwrap();
+        assert_eq!(
+            local_axis(times, OFFSET, &snap()),
+            local_instants(times, OFFSET)
+        );
+        // A first day that is already off means the offset is wrong for the
+        // whole window: nothing is trusted.
+        let mut s = snap();
+        s.daily[0].start = utc("2026-10-31T23:00:00Z"); // local 01:00
+        assert_eq!(clock_change_from(&s, OFFSET), Some(i64::MIN));
+        assert!(local_axis(times, OFFSET, &s).iter().all(Option::is_none));
+        // Days that are nowhere near midnight (rolled in another zone) are
+        // ignored, as the daily alignment ignores them.
+        let mut s = snap();
+        s.daily[1].start = utc("2026-11-02T06:00:00Z");
+        assert_eq!(clock_change_from(&s, OFFSET), None);
     }
 
     #[test]

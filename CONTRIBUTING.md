@@ -287,15 +287,15 @@ Owner steps (checked against Apple's account help on 2026-11-01; Apple changes t
 
 1. In the Apple Developer account, as Account Holder or Admin, open **Certificates, Identifiers & Profiles → Keys**, add a key with a unique name and the **WeatherKit** checkbox ticked, confirm, and **download the `.p8` once** (Apple does not keep it and will not offer it again). Note the 10-character **Key ID** shown under the key name, and the 10-character **Team ID** from the membership details.
 2. Under **Identifiers**, add a **Services ID**: a description and a reverse-domain identifier such as `africa.nyuchi.mukoko.weatherkit`. All registered Services IDs are eligible for a WeatherKit-enabled key, so nothing is configured on the Services ID itself.
-3. Give the four values to the Servers API origin without pasting them anywhere. The names are the contract (`weather_core::weatherkit::SECRETS`); the origin may add its own prefix. The private key is read from the file, so it never appears in a command or in shell history:
+3. Give the four values to the Servers API origin without pasting them anywhere. The names are the contract (`weather_core::weatherkit::SECRETS`); the origin may add its own prefix. The three identifiers are not secret. The private key goes in over stdin, so it is never in a command line (where `ps` would show it) or in shell history, and as the file's base64 on one line, because a multi-line value is not guaranteed to survive `fly secrets import` (the origin decodes a value that does not start with `-----BEGIN`):
 
    ```bash
    fly secrets set --app nyuchi-servers-api \
      MUKOKO_WEATHER_WEATHERKIT_TEAM_ID=<Team ID> \
      MUKOKO_WEATHER_WEATHERKIT_SERVICE_ID=<Services ID> \
      MUKOKO_WEATHER_WEATHERKIT_KEY_ID=<Key ID>
-   fly secrets set --app nyuchi-servers-api \
-     MUKOKO_WEATHER_WEATHERKIT_PRIVATE_KEY="$(cat /path/to/AuthKey_<KeyID>.p8)"
+   { printf 'MUKOKO_WEATHER_WEATHERKIT_PRIVATE_KEY='; base64 < /path/to/AuthKey_<KeyID>.p8 | tr -d '\n'; printf '\n'; } \
+     | fly secrets import --app nyuchi-servers-api
    ```
 
    Then delete the `.p8` from the machine you downloaded it to, or keep it only in the owner's password manager. To rotate, create a new key tied to the Services ID, switch the secrets, then revoke the old key.

@@ -38,8 +38,8 @@
 //!    (CAPE, lifted index, surface pressure, apparent-temperature extremes, wind
 //!    maxima, ET0).
 //! 3. **Cache.** Key [`cache_key`] (`wk:v1:` plus the 0.05 degree cell key),
-//!    TTL [`cache_ttl_seconds`] (15 minutes, never past Apple's own
-//!    `expireTime`), value the serialised [`Snapshot`] (the standard form, the
+//!    TTL [`cache_ttl_seconds`] (15 minutes, never past Apple's `expireTime`;
+//!    `None` means do not store), value the serialised [`Snapshot`] (the standard form, the
 //!    only stored form of Apple data). Shared by all callers, so it must be a
 //!    store the origin's instances share: with a per-process cache every
 //!    instance spends its own call for the same cell. Apple data is written
@@ -63,7 +63,10 @@
 //!    [`Unavailable::UpstreamError`] without touching the breaker; `Outage`
 //!    (5xx, 429, timeout, transport, unreadable body) records a breaker failure.
 //!    Log status codes only.
-//! 6. **Compose.** [`align::compose_raw`] then `blend::build_single_model(raw,
+//! 6. **Compose.** [`align::compose_raw`] (it builds the local-time axis with
+//!    [`align::local_axis`], which leaves out the hours a clock change would make
+//!    wrong; with exact instants from Open-Meteo, `timeformat=unixtime`, pass them
+//!    to [`align::hourly`] and there is nothing to leave out) then `blend::build_single_model(raw,
 //!    "apple_weatherkit", now)` (the tests in `align` run exactly this); set
 //!    `payload["baseline"]` to [`baseline_marker`]; answer `X-Weather-Provider: apple-weatherkit`
 //!    ([`PROVIDER`]) and no `X-Weather-Blend`. For the comparison, append
@@ -119,7 +122,9 @@ pub const TRADEMARK: &str = "Weather";
 pub const MODIFIED_NOTICE: &str = "Data provided by Apple has been modified.";
 
 /// The four values that configure the provider (Servers API secret store). The
-/// last is the PKCS#8 PEM text of the downloaded `.p8`. Never logged.
+/// last is the PKCS#8 PEM text of the downloaded `.p8`, or that file's base64 on
+/// one line (a store that cannot hold a multi-line value: decode it when it does
+/// not start with `-----BEGIN`). Never logged.
 pub const SECRET_TEAM_ID: &str = "MUKOKO_WEATHER_WEATHERKIT_TEAM_ID";
 pub const SECRET_SERVICE_ID: &str = "MUKOKO_WEATHER_WEATHERKIT_SERVICE_ID";
 pub const SECRET_KEY_ID: &str = "MUKOKO_WEATHER_WEATHERKIT_KEY_ID";
@@ -139,8 +144,8 @@ pub const SECRETS: [&str; 4] = [
 pub const CACHE_PREFIX: &str = "wk:v1:";
 /// How long a snapshot is kept: 15 minutes.
 pub const CACHE_TTL_SECONDS: u64 = 15 * 60;
-/// The shortest TTL (also the smallest a key-value store accepts), so an
-/// `expireTime` already in the past does not turn every request into a call.
+/// The shortest lifetime worth storing, and the smallest a key-value store
+/// accepts (Cloudflare KV: 60 seconds). Under it nothing is stored.
 pub const CACHE_MIN_TTL_SECONDS: u64 = 60;
 
 /// `wk:v1:cell:-17.85_31.05`: the 0.05 degree cell, as every weather cache.
@@ -148,16 +153,22 @@ pub fn cache_key(lat: f64, lon: f64) -> String {
     format!("{CACHE_PREFIX}{}", geo::cell_key(lat, lon))
 }
 
-/// How long to keep `snapshot` read at `now`: [`CACHE_TTL_SECONDS`], cut to the
-/// time left before Apple's own `expireTime` when that is sooner, never below
-/// [`CACHE_MIN_TTL_SECONDS`]. This is the longest any Apple data is retained.
-pub fn cache_ttl_seconds(snapshot: &Snapshot, now: chrono::DateTime<chrono::Utc>) -> u64 {
-    let until_expiry = snapshot
+/// How long to keep `snapshot` read at `now`, in seconds: [`CACHE_TTL_SECONDS`],
+/// cut to the time left before Apple's own `expireTime` when that is sooner.
+/// This is the longest any Apple data is retained, and it is never longer than
+/// Apple says the data is valid.
+///
+/// `None` means DO NOT STORE: the data has already expired, or less than
+/// [`CACHE_MIN_TTL_SECONDS`] is left (the smallest lifetime a key-value store
+/// accepts, so storing it would keep it past `expireTime`). The answer in hand
+/// is still used for this one request; the next request fetches again (and
+/// spends, which the budget bounds).
+pub fn cache_ttl_seconds(snapshot: &Snapshot, now: chrono::DateTime<chrono::Utc>) -> Option<u64> {
+    let left = snapshot
         .expires_at
-        .map(|t| (t - now).num_seconds().max(0) as u64);
-    until_expiry
-        .map_or(CACHE_TTL_SECONDS, |left| left.min(CACHE_TTL_SECONDS))
-        .max(CACHE_MIN_TTL_SECONDS)
+        .map_or(CACHE_TTL_SECONDS, |t| (t - now).num_seconds().max(0) as u64)
+        .min(CACHE_TTL_SECONDS);
+    (left >= CACHE_MIN_TTL_SECONDS).then_some(left)
 }
 
 // ---------------------------------------------------------------------------
@@ -387,17 +398,37 @@ mod tests {
     #[test]
     fn a_snapshot_is_kept_fifteen_minutes_at_most() {
         let n = now();
-        assert_eq!(cache_ttl_seconds(&snapshot_expiring(None, n), n), 900);
+        let ttl = |e: Option<i64>| cache_ttl_seconds(&snapshot_expiring(e, n), n);
+        assert_eq!(ttl(None), Some(900));
         // Apple says it is good for half an hour: still 15 minutes.
-        assert_eq!(cache_ttl_seconds(&snapshot_expiring(Some(1800), n), n), 900);
+        assert_eq!(ttl(Some(1800)), Some(900));
         // Apple says it expires sooner: not kept past that.
-        assert_eq!(cache_ttl_seconds(&snapshot_expiring(Some(300), n), n), 300);
-        // Already expired, or about to: a short floor, not a call per request.
-        assert_eq!(cache_ttl_seconds(&snapshot_expiring(Some(-60), n), n), 60);
-        assert_eq!(cache_ttl_seconds(&snapshot_expiring(Some(10), n), n), 60);
+        assert_eq!(ttl(Some(300)), Some(300));
+        assert_eq!(ttl(Some(60)), Some(60));
         // Never longer than the 15 minutes the retention decision allows.
         for e in [None, Some(0), Some(60), Some(899), Some(900), Some(86_400)] {
-            assert!(cache_ttl_seconds(&snapshot_expiring(e, n), n) <= CACHE_TTL_SECONDS);
+            if let Some(t) = ttl(e) {
+                assert!(t <= CACHE_TTL_SECONDS, "{e:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn data_that_has_expired_or_is_about_to_is_not_stored_at_all() {
+        // Storing it for the smallest lifetime a store accepts (60 s) would keep
+        // it past Apple's expireTime, so nothing is stored: the answer in hand
+        // serves this request, the next one fetches again.
+        let n = now();
+        let ttl = |e: Option<i64>| cache_ttl_seconds(&snapshot_expiring(e, n), n);
+        assert_eq!(ttl(Some(-60)), None, "already expired");
+        assert_eq!(ttl(Some(0)), None, "expires now");
+        assert_eq!(ttl(Some(10)), None, "less left than a store keeps");
+        assert_eq!(ttl(Some(59)), None);
+        // And never stored past expireTime, for any value.
+        for left in [-1, 0, 1, 30, 59, 60, 61, 300, 899, 900, 901, 100_000] {
+            if let Some(t) = ttl(Some(left)) {
+                assert!(t as i64 <= left, "kept {t}s with {left}s left");
+            }
         }
     }
 

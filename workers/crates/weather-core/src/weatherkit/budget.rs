@@ -19,12 +19,17 @@
 //! client (a client is the hashed key of [`crate::budget::client_key`]), so one
 //! client cannot drain the day and a stampede cannot spend the day in an hour.
 //!
-//! **Two classes.** A person who picked Apple Weather as their forecast
-//! ([`Class::Baseline`]) may use the full caps. Apple as an extra series in the
-//! model comparison for someone who did not pick it ([`Class::Comparison`])
-//! gets half of the month, day and service-hour caps, because that spend is
-//! requested by the caller (`models=`), not chosen by a person, and must never
-//! be able to use up what the people who chose Apple need.
+//! **Two classes.** A request that names Apple Weather as the forecast
+//! (`?model=`, [`Class::Baseline`]) may use the full caps. One that only asks for
+//! Apple as an extra series in the model comparison (`models=`,
+//! [`Class::Comparison`]) gets half of the month, day and service-hour caps. The
+//! split keeps an accidental or careless flood of comparison requests (a client
+//! that adds the id to every page view) from using up the share a person who
+//! picked Apple needs. It does NOT authenticate anything: both are anonymous
+//! query parameters on a public API, so a deliberate abuser can send `?model=`
+//! over many cells and spend the full caps. What bounds that is the per-client
+//! hour, the service hour, the rolling day and the month; the origin should
+//! rate-limit by client (address or token) before it ever reaches this budget.
 //!
 //! **Fail closed.** A count that could not be read, a result that carries no
 //! change count, any error: the call does not go out ([`Decision::Unreadable`]).

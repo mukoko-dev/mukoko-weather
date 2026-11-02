@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useChromeClaimed } from "@/components/layout/chrome-context";
 import { isFeatureEnabled } from "@/lib/feature-flags";
-import { ForecastCredit } from "@/components/layout/ForecastCredit";
+import { ForecastCredit } from "@/components/ui/forecast-credit";
 import { APPLE_WEATHERKIT_MODEL } from "@/lib/forecast-sources";
 import { navDestination, type NavDestinationId } from "@/lib/nav-destinations";
 

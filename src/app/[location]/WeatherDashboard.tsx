@@ -30,7 +30,7 @@ import {
 import { Header } from "@/components/layout/Header";
 import { useLocationSwipe } from "@/components/layout/LocationPager";
 import { Footer } from "@/components/layout/Footer";
-import { ForecastCredit } from "@/components/layout/ForecastCredit";
+import { ForecastCredit } from "@/components/ui/forecast-credit";
 import { isExternalForecastModel } from "@/lib/forecast-sources";
 import { CurrentConditions } from "@/components/weather/CurrentConditions";
 import { AtmosphericSummary } from "@/components/weather/AtmosphericSummary";
@@ -337,21 +337,26 @@ export function WeatherDashboard({
   }, [location.slug, setSelectedLocation]);
 
   // Cache weather hint for the loading skeleton — enables weather-aware
-  // Three.js animation on subsequent visits to this location.
+  // Three.js animation on subsequent visits to this location. The hint is kept
+  // for 2 hours, longer than an external provider's data may be retained
+  // (Apple Weather: 15 minutes), so it is taken from the seeded blend, never
+  // from an external model's baseline.
+  const hintWeather =
+    modelBaseline && isExternalForecastModel(model) ? seedWeather : weather;
   useEffect(() => {
     cacheWeatherHint(location.slug, {
-      weatherCode: weather.current.weather_code,
-      isDay: weather.current.is_day === 1,
-      temperature: weather.current.temperature_2m,
-      windSpeed: weather.current.wind_speed_10m,
+      weatherCode: hintWeather.current.weather_code,
+      isDay: hintWeather.current.is_day === 1,
+      temperature: hintWeather.current.temperature_2m,
+      windSpeed: hintWeather.current.wind_speed_10m,
       timestamp: Date.now(),
     });
   }, [
     location.slug,
-    weather.current.weather_code,
-    weather.current.is_day,
-    weather.current.temperature_2m,
-    weather.current.wind_speed_10m,
+    hintWeather.current.weather_code,
+    hintWeather.current.is_day,
+    hintWeather.current.temperature_2m,
+    hintWeather.current.wind_speed_10m,
   ]);
 
   // Keep the last good payload for this place on the device so the next

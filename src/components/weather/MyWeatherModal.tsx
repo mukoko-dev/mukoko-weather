@@ -46,7 +46,7 @@ import { cn } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
 import { normalizeForecastModel } from "@/lib/weather";
 import { modelOptions } from "@/lib/forecast-model-options";
-import { ForecastCredit } from "@/components/layout/ForecastCredit";
+import { ForecastCredit } from "@/components/ui/forecast-credit";
 import { t } from "@/lib/i18n";
 import { Spinner } from "@/components/ui/spinner";
 import { SelectRow } from "./SelectRow";

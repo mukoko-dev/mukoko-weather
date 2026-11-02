@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FLAGS } from "./feature-flags";
+import { FORECAST_MODEL_LABELS, ForecastModel } from "./weather";
 import {
   APPLE_WEATHERKIT_MODEL,
   FORECAST_PROVIDERS,
@@ -42,6 +43,16 @@ describe("Apple Weather provider", () => {
     expect(apple.mark).toBe(rustConst("TRADEMARK"));
     expect(apple.href).toBe(rustConst("LEGAL_URL"));
     expect(apple.modifiedNotice).toBe(rustConst("MODIFIED_NOTICE"));
+  });
+
+  it("has one definition of the id and the name", () => {
+    // An enum member needs a literal, so the id is pinned here; the label is
+    // derived from the provider entry, so the picker, the chart legend and the
+    // credit cannot disagree.
+    expect(ForecastModel.AppleWeatherKit).toBe(APPLE_WEATHERKIT_MODEL);
+    expect(FORECAST_MODEL_LABELS[ForecastModel.AppleWeatherKit]).toBe(
+      apple.label,
+    );
   });
 
   it("links Apple's legal page over https", () => {

@@ -22,6 +22,7 @@ import {
 } from "./derived-insights";
 import { openMeteoForecastUrl, openMeteoHeaders } from "./open-meteo-endpoint";
 import {
+  FORECAST_PROVIDERS,
   appleWeatherEnabled,
   isExternalForecastModel,
 } from "./forecast-sources";
@@ -161,7 +162,7 @@ export const FORECAST_MODEL_LABELS: Record<ForecastModel, string> = {
   [ForecastModel.GFS]: "GFS (NOAA, USA)",
   [ForecastModel.ICON]: "ICON (DWD, Germany)",
   [ForecastModel.MeteoFrance]: "Météo-France",
-  [ForecastModel.AppleWeatherKit]: "Apple Weather",
+  [ForecastModel.AppleWeatherKit]: FORECAST_PROVIDERS["apple-weatherkit"].label,
 };
 
 /**
