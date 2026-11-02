@@ -148,6 +148,11 @@ pub trait KeyAgreement {
 /// crate is ever a literal. The octets that come out are the same as when the
 /// buffer was a zeroed array. A length HKDF cannot produce is
 /// [`EncryptError::Crypto`], as before.
+///
+/// Keep it this way: written as `[0u8; N]`, CodeQL
+/// (`rust/hard-coded-cryptographic-value`) reads the zeros as a hard-coded
+/// key, nonce or salt wherever the buffer reaches the cipher, and fails the
+/// release PR.
 pub(crate) fn expand<const N: usize>(
     prk: &Hkdf<Sha256>,
     info: &[u8],
@@ -495,6 +500,8 @@ pub(crate) mod tests {
         let rfc = rfc();
         let to = Recipient::parse(&rfc.ua_public, &rfc.auth).unwrap();
         let shown = format!("{to:?} {:?}", rfc_agreement());
+        // In order: 0 the browser's public key, 1 its auth value, 2 the
+        // server's ephemeral public key, 3 the ECDH result.
         let values = [
             rfc.ua_public.as_str(),
             rfc.auth.as_str(),

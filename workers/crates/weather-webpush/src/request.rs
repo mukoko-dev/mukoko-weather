@@ -577,6 +577,8 @@ mod tests {
     fn nothing_that_prints_carries_the_capability() {
         let r = built();
         let shown = format!("{r:?} {:?}", sub());
+        // In order: 0 the endpoint, 1 the endpoint's token, 2 the browser's
+        // public key, 3 its auth value, 4 the VAPID header's start.
         let values = [
             ENDPOINT,
             "dQw4w9",
