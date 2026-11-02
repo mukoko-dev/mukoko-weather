@@ -1,11 +1,12 @@
 //! Hourly budgets for the third-party geocoders (Open-Meteo forward geocoding,
-//! Nominatim reverse geocoding), kept in D1 (`rate_events`, migration 0002).
+//! Nominatim reverse geocoding) and for the model calls (`mukoko-weather-ai`),
+//! kept in D1 (`rate_events`, migration 0002).
 //!
-//! Both services are free and meant for light use, so every UNCACHED call is
-//! counted per client and for the whole service, per action, so one surface
-//! (autocomplete) can never starve another (a bare name in a URL). The pure
-//! parts live here, tested natively; the Worker (`mukoko-weather-places`) only
-//! runs the SQL.
+//! The geocoders are free and meant for light use, and a model call costs, so
+//! every UNCACHED call is counted per client and for the whole service, per
+//! action, so one surface (autocomplete) can never starve another (a bare name
+//! in a URL). The pure parts live here, tested natively; the Workers only run
+//! the SQL (`weather_edge::budget`).
 //!
 //! Who is "the client" is pluggable ([`client_key`]): a verified token subject
 //! when the caller presents one, else the IP address. No token verifier exists
@@ -45,6 +46,18 @@ pub enum Action {
     /// A place-profile request that needs an upstream (a 30-year archive
     /// request, SoilGrids): a cache hit is free.
     PlaceProfile,
+    /// A community weather report submitted (a write to MongoDB).
+    WeatherReport,
+    /// A new device profile created without a caller-supplied id (unbounded
+    /// document creation).
+    DeviceCreate,
+    /// A weather summary that goes to the model (a cache miss): the signed-in
+    /// person's hour.
+    AiSummary,
+    /// A follow-up chat message (always a model call).
+    AiFollowup,
+    /// An agriculture explanation that goes to the model (a cache miss).
+    AiAgriculture,
 }
 
 /// Hourly limits for one action.
@@ -67,6 +80,11 @@ impl Action {
             Action::HistoryNasaPower => "history-nasa-power",
             Action::HistoryOpenMeteo => "history-open-meteo",
             Action::PlaceProfile => "place-profile",
+            Action::WeatherReport => "weather-report",
+            Action::DeviceCreate => "device-create",
+            Action::AiSummary => "ai-summary",
+            Action::AiFollowup => "ai-followup",
+            Action::AiAgriculture => "ai-agriculture",
         }
     }
 
@@ -126,6 +144,34 @@ impl Action {
             // is one archive request (about 250 KB) and two SoilGrids calls.
             Action::PlaceProfile => Limits {
                 per_client: 120,
+                global: 600,
+            },
+            // As in the Python backend: 5 reports an hour per client. The
+            // service-wide hour bounds a flood of fresh addresses writing to
+            // MongoDB (twelve reports have ever been stored).
+            Action::WeatherReport => Limits {
+                per_client: crate::community::SUBMIT_PER_HOUR,
+                global: 600,
+            },
+            // As in the Python backend: 20 fresh device profiles an hour per
+            // client. The service-wide hour is far above real first launches
+            // and bounds document creation by many addresses.
+            Action::DeviceCreate => Limits {
+                per_client: crate::community::DEVICE_CREATE_PER_HOUR,
+                global: 3_000,
+            },
+            // 30 model calls an hour per signed-in person for each of the
+            // three, as the Python backend limited them per IP. The
+            // service-wide ceilings (1,500 an hour for the summary and the
+            // follow-up, 600 for agriculture) bound what the model can cost
+            // if many accounts are used at once; cache hits are free and
+            // never counted.
+            Action::AiSummary | Action::AiFollowup => Limits {
+                per_client: 30,
+                global: 1_500,
+            },
+            Action::AiAgriculture => Limits {
+                per_client: 30,
                 global: 600,
             },
         }
@@ -317,6 +363,22 @@ mod tests {
     }
 
     #[test]
+    fn model_budgets_are_the_pythons_per_person_hour() {
+        for (a, name) in [
+            (Action::AiSummary, "ai-summary"),
+            (Action::AiFollowup, "ai-followup"),
+            (Action::AiAgriculture, "ai-agriculture"),
+        ] {
+            assert_eq!(a.name(), name);
+            assert_eq!(a.limits().per_client, 30, "{name}");
+            assert!(a.limits().per_client <= a.limits().global);
+        }
+        // Each has its own rows: one surface cannot starve another.
+        assert_ne!(Action::AiSummary.name(), Action::AiFollowup.name());
+        assert_ne!(Action::AiSummary.name(), Action::AiAgriculture.name());
+    }
+
+    #[test]
     fn windows() {
         assert_eq!(window_start(HOUR_MS + 5), 5);
         assert_eq!(window_start(10), 0);
@@ -408,6 +470,28 @@ mod tests {
         // refusal stands, with the service-wide label.
         assert_eq!(refusal(l, 0, 0, 50), Decision::GlobalLimit);
         assert!(!refusal(l, 0, 0, 1).allowed());
+    }
+
+    #[test]
+    fn community_writes_are_budgeted_like_the_python_and_keep_their_event_names() {
+        // The names are the ones the old read-then-insert limiter wrote, so
+        // the hour's existing rows still count across the deploy.
+        assert_eq!(Action::WeatherReport.name(), "weather-report");
+        assert_eq!(Action::DeviceCreate.name(), "device-create");
+        let r = Action::WeatherReport.limits();
+        let d = Action::DeviceCreate.limits();
+        assert_eq!(r.per_client, 5);
+        assert_eq!(d.per_client, 20);
+        assert!(r.per_client <= r.global && d.per_client <= d.global);
+        // Atomic: both go through the one guarded statement, so parallel
+        // submissions cannot all read the same count and pass.
+        assert_eq!(decide(r, 4, 0), Decision::Allow);
+        assert_eq!(decide(r, 5, 0), Decision::ClientLimit);
+        assert_eq!(decide(d, 19, 0), Decision::Allow);
+        assert_eq!(decide(d, 20, 0), Decision::ClientLimit);
+        assert_eq!(decide(r, 0, 600), Decision::GlobalLimit);
+        let names = [Action::WeatherReport, Action::DeviceCreate].map(Action::name);
+        assert_ne!(names[0], names[1]);
     }
 
     #[test]

@@ -71,7 +71,7 @@ export function PhoneMenu({ trigger, buttonClassName, iconClassName }: Props) {
   const destinations = visibleHeaderDestinations(isFeatureEnabled);
   const mapSlug = currentLocationSlug(pathname, selectedLocation);
 
-  // Find where the user is right now (same GPS -> /api/py/geo flow as My
+  // Find where the user is right now (same GPS -> /v1/geo flow as My
   // Weather's "Use current location" button, autoCreate included), select it,
   // and land on the home page — the home page IS the current-location view and
   // refreshes GPS in place. On denial or failure the My Weather modal opens

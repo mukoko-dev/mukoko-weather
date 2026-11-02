@@ -555,7 +555,7 @@ const mean = (xs: number[]): number | null =>
     ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10
     : null;
 
-/** Totals and means over the recorded `/api/py/history` days. */
+/** Totals and means over the recorded `/v1/history` days. */
 export function summarizeHistory(
   docs: readonly HistoryDocLike[],
 ): HistorySummary {

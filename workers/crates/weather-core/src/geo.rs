@@ -39,6 +39,13 @@ pub fn cache_key(lat: f64, lon: f64) -> String {
     format!("{:.2}_{:.2}", r(lat), r(lon))
 }
 
+/// The forecast Worker's KV key for a point (`wx:v2:` + [`cache_key`]). One
+/// definition, used by `mukoko-weather-forecast` to write and read the entry
+/// and by every Worker that reads it cache-only (the report snapshot).
+pub fn forecast_cache_key(lat: f64, lon: f64) -> String {
+    format!("wx:v2:{}", cache_key(lat, lon))
+}
+
 /// Whether a coordinate pair is on the globe.
 pub fn valid_coordinates(lat: f64, lon: f64) -> bool {
     lat.is_finite()
@@ -80,6 +87,14 @@ mod tests {
     fn harare_to_bulawayo_is_about_365_km() {
         let d = haversine_km(-17.83, 31.05, -20.15, 28.58);
         assert!((d - 365.0).abs() < 10.0, "{d}");
+    }
+
+    #[test]
+    fn the_forecast_kv_key_is_the_versioned_point_key() {
+        // The forecast Worker writes under this key and others read it cache
+        // only; changing it orphans every cached forecast.
+        assert_eq!(forecast_cache_key(-17.83, 31.05), "wx:v2:-17.83_31.05");
+        assert_eq!(forecast_cache_key(-0.001, 0.0), "wx:v2:0.00_0.00");
     }
 
     #[test]

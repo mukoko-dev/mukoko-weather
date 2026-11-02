@@ -21,7 +21,7 @@ import { fetchWorker } from "@/lib/weather-api";
 
 /**
  * The past 30 days against climate normals: recorded rain and mean
- * highs/lows from `/api/py/history`, today's 1991–2020 normal high/low from
+ * highs/lows from the Worker's `/v1/history`, today's 1991–2020 normal high/low from
  * the Worker's `/v1/normals`, and the forecast model's own 30-day rain total as a
  * cross-check when few days are recorded. Failures fall back to what is known.
  */

@@ -789,7 +789,7 @@ describe("getWeatherForLocation — read-only SSR path (issue #101)", () => {
     expect(source).toContain('workerUrl(\n    "weather"');
     expect(source).toContain("x-weather-provider");
     // #245: SSR passes its slug so the cache row + history doc are keyed
-    // under the slug /api/py/history?location= reads.
+    // under the slug /v1/history?location= reads.
     expect(source).toContain("&location=${encodeURIComponent(slug)}");
     // Direct Open-Meteo remains ONLY as a read-only local-dev fallback.
     expect(source).toContain(

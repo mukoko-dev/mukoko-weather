@@ -169,17 +169,10 @@ class TestRouterMounting:
         assert "/api/py/weather" not in paths
         assert "/api/py/airquality" not in paths
 
-    def test_ai_router_mounted(self):
+    def test_the_summary_route_is_gone_it_runs_on_the_ai_worker(self):
         paths = self._get_route_paths()
-        assert "/api/py/ai" in paths
+        assert "/api/py/ai" not in paths
 
-    def test_locations_router_mounted(self):
-        paths = self._get_route_paths()
-        assert "/api/py/locations" in paths
-
-    def test_history_router_mounted(self):
-        paths = self._get_route_paths()
-        assert "/api/py/history" in paths
 
     def test_ai_followup_router_mounted(self):
         paths = self._get_route_paths()
@@ -194,8 +187,11 @@ class TestRouterMounting:
         assert "/api/py/explore/search" in paths
 
     def test_reports_router_mounted(self):
+        # Only the follow-up questions are left; submit, list and upvote are
+        # the Rust Worker's /v1/reports.
         paths = self._get_route_paths()
-        assert "/api/py/reports" in paths
+        assert "/api/py/reports/clarify" in paths
+        assert "/api/py/reports" not in paths
 
     def test_agriculture_router_mounted(self):
         paths = self._get_route_paths()
@@ -205,22 +201,3 @@ class TestRouterMounting:
         paths = self._get_route_paths()
         assert "/api/py/health" in paths
 
-
-class TestStationsRouterMounted:
-    def test_stations_router_mounted(self):
-        paths = set()
-
-        def collect(routes):
-            for route in routes:
-                if hasattr(route, "path"):
-                    paths.add(route.path)
-                if hasattr(route, "original_router") and route.original_router:
-                    collect(route.original_router.routes)
-                elif hasattr(route, "routes"):
-                    collect(route.routes)
-
-        collect(app.routes)
-        assert "/api/py/stations/register" in paths
-        assert "/api/py/stations/ingest" in paths
-        assert "/api/py/stations/manual" in paths
-        assert "/api/py/stations/status" in paths

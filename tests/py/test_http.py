@@ -45,21 +45,3 @@ class TestGetHttpClient:
 
         assert len(results) == 8
         assert all(c is results[0] for c in results)
-
-
-class TestModuleTimeouts:
-    """Each migrated module keeps its historical upstream timeout."""
-
-    def test_locations_geocoding_timeout(self):
-        from py import _locations
-
-        with patch("py._locations.get_http_client") as get:
-            _locations._get_http()
-        get.assert_called_once_with(5.0)
-
-    def test_overpass_timeout_constant(self):
-        # conftest makes _overpass._get_http unreachable by default, so pin the
-        # constant it passes to the shared client instead.
-        from py import _overpass
-
-        assert _overpass.HTTP_TIMEOUT_S == 6.0
