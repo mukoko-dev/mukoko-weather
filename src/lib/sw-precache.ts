@@ -13,8 +13,11 @@
  * icons and the `/offline` shell (a page with no data and no visitor in it,
  * fetched without cookies). Everything else under `/_next/static/` is cached
  * on first use by the `static-assets` CacheFirst route in `src/app/sw.ts`, so
- * it costs nothing until it is actually used. Page navigations are handled by
- * `src/lib/sw-navigation.ts`.
+ * it costs nothing until it is actually used. The one exception is the
+ * `/offline` page's OWN scripts: the shell is no use offline if React cannot
+ * start, so the worker reads them out of the precached `/offline` HTML and
+ * stores them too (`src/lib/sw-shell.ts`; nothing is listed here by name).
+ * Page navigations are handled by `src/lib/sw-navigation.ts`.
  */
 
 type Entry = string | { url: string };

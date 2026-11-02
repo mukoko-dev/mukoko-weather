@@ -27,7 +27,14 @@
  * - A failed request is retried by the shared recovery rules (live-fetch.ts:
  *   about 2 s, 5 s and 15 s, `Retry-After` honoured, one more attempt when
  *   the browser comes back online or the page becomes visible). Only when
- *   those are spent is `failed` set, which shows the "Try again" notice.
+ *   those are spent is `failed` set, which shows the "Couldn't load" notice.
+ * - Those retries take about 22 s, so a place with nothing to show (no stored
+ *   copy) is not left on a silent skeleton: SLOW_LOAD_AFTER_MS after a
+ *   forecast was first asked for, `slow` is set, which shows one calm
+ *   "still trying" line and "Try again" over the same skeleton. It does not
+ *   change the retries; it only says they are happening. Pressing "Try again"
+ *   (on that line, or on "Couldn't load" with nothing stored) shows the line,
+ *   busy, until that attempt ends.
  */
 
 import type { WeatherLocation } from "./locations";
@@ -42,7 +49,7 @@ import {
   type Freshness,
 } from "./device-weather";
 import { createLatestRequests, type LatestRequest } from "./latest-request";
-import { createLiveFetch, type LiveFetch } from "./live-fetch";
+import { createLiveFetch, defaultSchedule, type LiveFetch } from "./live-fetch";
 import { classifyTransportError } from "./worker-data";
 import { countryDisplayName, reconcileCountry } from "./location-country";
 import { reconcileElevation } from "./location-elevation";
@@ -66,6 +73,18 @@ export interface PlaceState {
   fetching: boolean;
   /** The last fetch for `seed` failed and nothing newer replaced it. */
   failed: boolean;
+  /**
+   * The forecast has been asked for SLOW_LOAD_AFTER_MS ago or longer, nothing
+   * is on screen to show meanwhile (`view` is null) and the retries have not
+   * run out yet. Never set together with `failed`.
+   */
+  slow: boolean;
+  /**
+   * The visitor pressed "Try again" on the "still trying" line and that
+   * attempt is in flight: the line stays up and its button shows "Trying…"
+   * until the attempt ends. Only ever set together with `slow`.
+   */
+  trying: boolean;
   /** `seed` is the place `/` shows (My Location). */
   isHome: boolean;
   /** The pathname this state belongs to: "/" or "/{slug}". */
@@ -104,6 +123,14 @@ export interface PlaceDeps {
   /** Run `fn` after `ms`; returns the canceller. Default: setTimeout. */
   schedule?: (fn: () => void, ms: number) => () => void;
 }
+
+/**
+ * How long the skeleton stands alone before the page says it is still trying
+ * to reach the weather service (and offers "Try again"). The retries run for
+ * about 22 s (2 s, 5 s, 15 s), far too long to say nothing; 8 s is past what
+ * a healthy request takes, so a normal load never shows the line.
+ */
+export const SLOW_LOAD_AFTER_MS = 8_000;
 
 // ── In-memory copies ────────────────────────────────────────────────────────
 
@@ -276,6 +303,8 @@ export function createPlaceController(
     device: null,
     fetching: false,
     failed: false,
+    slow: false,
+    trying: false,
     isHome: init.isHome,
     path: init.path,
   };
@@ -316,17 +345,50 @@ export function createPlaceController(
 
   let live: LiveFetch | null = null;
   let settleLive: ((result: PresentResult) => void) | null = null;
+  let cancelSlow: (() => void) | null = null;
+
+  const schedule = deps.schedule ?? defaultSchedule;
+
+  function stopSlowTimer(): void {
+    cancelSlow?.();
+    cancelSlow = null;
+  }
+
+  /**
+   * Start the clock for the "still trying" line. When it runs out with no
+   * forecast and nothing stored on screen, `slow` is set; it never touches the
+   * retries. Cancelled by a forecast, by the retries running out and by
+   * leaving the place.
+   */
+  function armSlow(req: LatestRequest): void {
+    if (cancelSlow || state.slow) return;
+    cancelSlow = schedule(() => {
+      cancelSlow = null;
+      if (!req.isLatest() || state.view || !state.fetching) return;
+      set({ slow: true });
+    }, SLOW_LOAD_AFTER_MS);
+  }
 
   /** Stop retrying for a place the visitor left; release anyone waiting. */
   function stopLive(): void {
     live?.stop();
     live = null;
+    stopSlowTimer();
     settleLive?.({ shown: false, failed: false });
     settleLive = null;
   }
 
-  const begin = (): LatestRequest => {
+  /**
+   * A new request. It supersedes whatever the old one was saying (the "still
+   * trying" line describes a fetch that is no longer running), except when it
+   * is the visitor pressing "Try again" with nothing stored on screen
+   * (`keepSlow`): then the line is up, busy, until the attempt ends.
+   */
+  const begin = (keepSlow = false): LatestRequest => {
     stopLive();
+    if (!keepSlow && (state.slow || state.trying)) {
+      set({ slow: false, trying: false });
+    }
     return requests.begin();
   };
 
@@ -340,9 +402,14 @@ export function createPlaceController(
     seed: PlaceSeed,
     held: DeviceView | null,
     force = false,
+    keepSlow = false,
   ): Promise<PresentResult> {
     stopLive();
-    set({ fetching: true, failed: false });
+    set({ fetching: true, failed: false, slow: keepSlow, trying: keepSlow });
+    // The clock for the "still trying" line runs for the whole episode, from
+    // the first attempt to the forecast (or to the retries running out). When
+    // the line is already up (`keepSlow`) there is nothing to wait for.
+    armSlow(req);
     return new Promise<PresentResult>((resolve) => {
       let settled = false;
       const settle = (result: PresentResult) => {
@@ -358,9 +425,10 @@ export function createPlaceController(
       }) => {
         const view = liveViewFor(seed, value.weather, value.usingFallback);
         if (!req.isLatest()) return settle({ shown: false, failed: false });
+        stopSlowTimer();
         if (value.usingFallback && held) {
           // The seasonal estimate never replaces a real forecast.
-          set({ fetching: false, failed: true });
+          set({ fetching: false, failed: true, slow: false, trying: false });
           return settle({ shown: true, failed: true });
         }
         set({
@@ -369,6 +437,8 @@ export function createPlaceController(
           device: null,
           fetching: false,
           failed: false,
+          slow: false,
+          trying: false,
         });
         settle({ shown: true, failed: false });
       };
@@ -377,7 +447,7 @@ export function createPlaceController(
         weather: WeatherData;
         usingFallback: boolean;
       }>({
-        schedule: deps.schedule,
+        schedule,
         now: deps.now,
         attempt: async ({ force: retrying }) => {
           try {
@@ -399,14 +469,18 @@ export function createPlaceController(
           }
         },
         onValue: apply,
-        onState: (state) => {
+        onState: (liveState) => {
           if (!req.isLatest()) return;
-          if (state.status === "retrying") {
-            // Still trying: the skeleton stays, no notice yet.
-            set({ fetching: true, failed: false });
+          if (liveState.status === "retrying") {
+            // Still trying: the skeleton stays, no "Couldn't load" yet. If
+            // the "still trying" line is already up it stays up, and its
+            // button is free again (the attempt it was waiting for ended).
+            set({ fetching: true, failed: false, trying: false });
             settle({ shown: true, failed: true });
-          } else if (state.status === "failed") {
-            set({ fetching: false, failed: true });
+          } else if (liveState.status === "failed") {
+            // The retries are spent: the "Couldn't load" notice replaces it.
+            stopSlowTimer();
+            set({ fetching: false, failed: true, slow: false, trying: false });
             settle({ shown: true, failed: true });
           }
         },
@@ -441,6 +515,8 @@ export function createPlaceController(
         : null,
       fetching: false,
       failed: false,
+      slow: false,
+      trying: false,
       isHome: opts.isHome,
       path,
     });
@@ -457,9 +533,12 @@ export function createPlaceController(
       ) {
         return;
       }
+      stopSlowTimer();
       set({
         view: mergeStoredWithSeed(view.payload, seed),
         device: { fetchedAt: view.fetchedAt, freshness: view.freshness },
+        slow: false,
+        trying: false,
       });
     });
 
@@ -547,7 +626,11 @@ export function createPlaceController(
 
     retry() {
       if (!state.seed) return Promise.resolve({ shown: false, failed: false });
-      const req = begin();
+      // Pressed on the "still trying" line or on "Couldn't load" with nothing
+      // stored on screen: the line is up straight away, busy, rather than a
+      // silent skeleton for another 8 s.
+      const keepSlow = (state.slow || state.failed) && !state.view;
+      const req = begin(keepSlow);
       const held: DeviceView | null =
         state.view && state.device
           ? {
@@ -556,7 +639,7 @@ export function createPlaceController(
               fetchedAt: state.device.fetchedAt,
             }
           : null;
-      return refresh(req, state.seed, held, true);
+      return refresh(req, state.seed, held, true, keepSlow);
     },
 
     nudge(reason) {
