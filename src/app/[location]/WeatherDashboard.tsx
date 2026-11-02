@@ -523,10 +523,7 @@ export function WeatherDashboard({
 
           {/* Weather unavailable banner — shown when all providers failed */}
           {banner.show && (
-            <WeatherUnavailableBanner
-              banner={banner}
-              onRetry={live.retryNow}
-            />
+            <WeatherUnavailableBanner banner={banner} onRetry={live.retryNow} />
           )}
 
           {/* Frost alert banner */}

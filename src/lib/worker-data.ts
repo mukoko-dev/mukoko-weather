@@ -80,7 +80,11 @@ export type WorkerQuery = Record<string, string | number | undefined | null>;
  *   body that is not what was asked for; asking again cannot help
  */
 export type WorkerFailureKind =
-  "rate_limited" | "timeout" | "server" | "offline" | "invalid";
+  | "rate_limited"
+  | "timeout"
+  | "server"
+  | "offline"
+  | "invalid";
 
 export interface WorkerFailure {
   kind: WorkerFailureKind;

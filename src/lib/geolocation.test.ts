@@ -68,7 +68,7 @@ describe("geolocation source structure", () => {
   });
 
   it("asks the geo endpoint through the shared store (behaviour: geolocation-flow.test.ts)", () => {
-    expect(source).toContain('workerData.read<');
+    expect(source).toContain("workerData.read<");
     expect(source).toContain('"geo"');
     // GPS fixes reach /v1/geo exactly: exact-place naming and OSM-ref identity depend on them
     expect(source).toContain("lat: latitude");

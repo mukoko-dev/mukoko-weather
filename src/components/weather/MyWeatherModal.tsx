@@ -52,7 +52,10 @@ import {
 import { t } from "@/lib/i18n";
 import { Spinner } from "@/components/ui/spinner";
 import { SelectRow } from "./SelectRow";
-import { fetchActivities, fetchActivityCategories } from "@/lib/activities-client";
+import {
+  fetchActivities,
+  fetchActivityCategories,
+} from "@/lib/activities-client";
 
 /** Default category style for unknown categories */
 const DEFAULT_CATEGORY_STYLE = {

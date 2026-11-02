@@ -11,7 +11,9 @@ import {
 
 /** What a section renders from: loading, the data, or "unavailable". */
 export type WorkerDataState<T> =
-  { status: "loading" } | { status: "ready"; data: T } | { status: "error" };
+  | { status: "loading" }
+  | { status: "ready"; data: T }
+  | { status: "error" };
 
 export type UseWorkerDataOptions = Pick<
   WorkerDataOptions,

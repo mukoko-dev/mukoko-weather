@@ -14,7 +14,9 @@ describe("HazePanel data flow", () => {
   });
 
   it("reads the haze endpoint for lat/lon through the shared store", () => {
-    expect(source).toContain('useWorkerData<HazeResponse>("haze", { lat, lon })');
+    expect(source).toContain(
+      'useWorkerData<HazeResponse>("haze", { lat, lon })',
+    );
     expect(source).not.toContain("/api/py/haze");
     expect(source).not.toContain("fetchWorker(");
   });

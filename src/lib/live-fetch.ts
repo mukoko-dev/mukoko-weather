@@ -69,7 +69,8 @@ export function retryDelayMs(
 }
 
 export type AttemptResult<T> =
-  { ok: true; value: T } | { ok: false; failure: WorkerFailure };
+  | { ok: true; value: T }
+  | { ok: false; failure: WorkerFailure };
 
 export type LiveFetchStatus = "idle" | "loading" | "ok" | "retrying" | "failed";
 
