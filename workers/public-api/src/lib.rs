@@ -653,6 +653,10 @@ async fn probe_open_meteo() -> (Result<Option<f64>, u16>, u64) {
 /// the status page reads (`weather_core::status`).
 async fn status(env: &Env) -> Result<Response> {
     let started = now_ms();
+    // The probe must ask the Open-Meteo host the forecast Worker really uses:
+    // with the paid plan's key get_with_timeout moves it to the customer host,
+    // so this row no longer reports the free API's 429 while the paid one works.
+    weather_edge::open_meteo::init(env).await;
     let (forecast, places, aviation, ai, meteo) = futures::join!(
         probe_worker(env, FORECAST_BINDING),
         probe_worker(env, PLACES_BINDING),

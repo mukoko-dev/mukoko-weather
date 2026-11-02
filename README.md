@@ -179,7 +179,7 @@ priority) allows. Response headers: `X-Weather-Provider`
 `fallback`), `X-Weather-Blend`, `X-Enrichment` (`tomorrow` | `skipped-budget` |
 `skipped-error` | `none`) and `X-Current-Source`. Data credit: ECMWF, NOAA,
 DWD, ECCC, Météo-France, UK Met Office, CMA, JMA via Open-Meteo.com (CC BY 4.0). Open-Meteo's free API
-is non-commercial only — see issue #246 for the licensing options.
+is non-commercial only — see issue #246 for the licensing options. The Workers use Open-Meteo's paid ("customer") hosts whenever the subscription key is present, and the free hosts otherwise (`workers/README.md`, "Open-Meteo paid plan").
 
 **Three-layer error isolation** — `page.tsx` wraps fetching in try/catch so the
 server always renders something; each weather section sits inside a

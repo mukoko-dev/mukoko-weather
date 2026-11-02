@@ -71,6 +71,9 @@ pub async fn fetch(req: Request, env: Env, ctx: Context) -> Result<Response> {
     if req.method() != Method::Get {
         return error(405, "method_not_allowed", "Only GET is served.");
     }
+    // The paid Open-Meteo plan, when there is one: every Open-Meteo call this
+    // request makes goes through get_with_timeout, which applies it.
+    weather_edge::open_meteo::init(&env).await;
     match req.path().as_str() {
         "/weather" => weather(&req, &env, &ctx).await,
         "/daily" => daily(&req, &env, &ctx).await,
@@ -122,6 +125,12 @@ async fn health(req: &Request, env: &Env) -> Result<Response> {
                 "cache": env.kv(chain::CACHE_BINDING).is_ok(),
                 "stations_db": env.d1(stations::DB_BINDING).is_ok(),
                 "tomorrow": tomorrow,
+                // Whether a paid Open-Meteo plan is in use (never the key):
+                // `open_meteo_commercial` = a key is held (forecast and air
+                // quality use the customer hosts); `open_meteo_archive` = the
+                // archive calls do too (a key AND OPEN_METEO_ARCHIVE_LICENSED).
+                "open_meteo_commercial": weather_edge::open_meteo::is_paid(),
+                "open_meteo_archive": weather_edge::open_meteo::archive_is_paid(),
                 "nyuchi_api": nyuchi_api,
                 "mongo": mongo.is_some(),
             },
