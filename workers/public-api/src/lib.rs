@@ -28,6 +28,8 @@
 //! POST /v1/ai/{chat,history/analyze,explore/search}   Shamwari Weather (the summary, the follow-up and the agriculture
 //!                                               explanation are not public: they are signed-in routes of the app,
 //!                                               reached through mukoko-weather-internal)
+//! POST /v1/reports/clarify                      the report wizard's follow-up questions (the AI Worker, which
+//!                                               answers a fixed pair whenever the model cannot)
 //! GET /health
 //! ```
 //!
@@ -61,8 +63,6 @@ use worker::{event, Context, Env, Headers, Method, Request, RequestInit, Respons
 const FORECAST_BINDING: &str = "FORECAST";
 const AVIATION_BINDING: &str = "AVIATION";
 const AI_BINDING: &str = "AI_SERVICE";
-/// AI request bodies larger than this are refused here.
-const MAX_AI_BODY_BYTES: usize = 64 * 1024;
 /// Device profile bodies are a few hundred bytes.
 /// Device profile and community report bodies larger than this are refused here.
 const MAX_COMMUNITY_BODY_BYTES: usize = 16 * 1024;
@@ -346,17 +346,18 @@ async fn forward_community(req: &mut Request, env: &Env) -> Result<Response> {
     }
 }
 
-/// Shamwari's POST routes. The two reference-data GETs under `/v1/ai/` are
-/// answered here, not forwarded.
+/// Shamwari's POST routes and the report wizard's follow-up questions. The two
+/// reference-data GETs under `/v1/ai/` are answered here, not forwarded
+/// (`weather_core::ai::is_forwarded_path`).
 fn is_ai_path(path: &str) -> bool {
-    (path == "/v1/ai" || path.starts_with("/v1/ai/")) && !reference::serves(path)
+    weather_core::ai::is_forwarded_path(path)
 }
 
 /// Pass a Shamwari request to `mukoko-weather-ai` with the client's IP, and
 /// its answer back unchanged.
 async fn forward_ai(req: &mut Request, env: &Env) -> Result<Response> {
     let body = req.text().await.unwrap_or_default();
-    if body.len() > MAX_AI_BODY_BYTES {
+    if body.len() > weather_core::ai::public_body_cap(&req.path()) {
         return error(413, "payload_too_large", "The request body is too large.");
     }
     let headers = Headers::new();

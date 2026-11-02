@@ -7,8 +7,8 @@
 //! POST /reports/upvote   {reportId}             → 200 {upvoted[, reason]}
 //! ```
 //!
-//! (`POST /reports/clarify`, the model's follow-up questions, belongs to the AI
-//! Worker and is not served here.)
+//! (`POST /reports/clarify`, the model's follow-up questions, is the AI
+//! Worker's: `workers/ai/src/clarify.rs`. It is not served here.)
 //!
 //! A report is a document in MongoDB (`weather.weather_reports`), written and
 //! read by `mukoko-weather-mongo-bridge` through the `MONGO_BRIDGE` service
