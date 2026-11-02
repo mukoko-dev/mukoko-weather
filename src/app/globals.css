@@ -127,27 +127,22 @@
   /* Touch & Interaction — 56px optimal (Material Design 3 recommended) */
   --touch-target-min: 48px;
 
-  /* Mobile bottom nav geometry — the FLOATING bar, copied from mukoko-news's
-     island (src/components/layout/bottom-nav.tsx there): inset 1rem from both
-     screen edges, lifted --mobile-nav-inset (0.75rem) above the bottom edge
-     plus the safe area, max-w-md, pill (rounded-full), 0.5px token border,
-     shadow-lg, backdrop-blur-xl, 4rem tall. The location pager is its own
-     small floating pill one touch target tall, --mobile-nav-gap above the bar.
-     --mobile-nav-height is bar + gap + pager pill WITHOUT the lift or the
-     safe area; --mobile-nav-clearance is the space page content must leave at
-     the bottom so nothing sits under the nav (lift and safe area included).
-     Floating controls above the nav (e.g. reorder "Done") use it too.
-     Header.test.ts keeps these in step with the component. */
+  /* Mobile bottom nav geometry — ONE floating bar (option B, owner
+     2026-11-02): inset 1rem from both screen edges, lifted --mobile-nav-inset
+     (0.75rem) above the bottom edge plus the safe area, max-w-md, pill
+     (rounded-full), 0.5px token border, shadow-lg, backdrop-blur-xl, 4rem
+     tall. Map and Locations are pinned at its ends and the places lane
+     (My Location first, then the saved places) scrolls between them; there is
+     no second pill above it. --mobile-nav-clearance is the space page content
+     must leave at the bottom so nothing sits under the nav (bar, lift and safe
+     area, plus a 0.5rem breath). Floating controls above the nav (e.g.
+     reorder "Done") use it too. Header.test.ts keeps these in step with the
+     component. */
   --mobile-nav-inset: 0.75rem;
   --mobile-nav-bar-height: 4rem;
-  --mobile-nav-gap: 0.5rem;
-  --mobile-nav-height: calc(
-    var(--mobile-nav-bar-height) + var(--mobile-nav-gap) +
-      var(--touch-target-min)
-  );
   --mobile-nav-clearance: calc(
     env(safe-area-inset-bottom, 0px) + var(--mobile-nav-inset) +
-      var(--mobile-nav-height) + 0.5rem
+      var(--mobile-nav-bar-height) + 0.5rem
   );
 
   /* Mzizi border rule: a solid border on ALL four sides, 0.5px at rest and
@@ -1696,6 +1691,55 @@ body {
     @apply border-primary bg-primary/10;
   }
 
+  /* .lark — a place chip in the phone bottom bar's lane (src/components/
+     layout/PlaceLane.tsx): a link, one touch target tall, full pill with a
+     solid hairline border on every side (never a one-sided stripe). The
+     current page's chip (`aria-current`) takes the cobalt container fill and
+     the 1px active border; the rest sit on the muted surface. Label is the
+     --text-nav-label token, truncated, so a long name never crowds the lane. */
+  .lark {
+    @apply relative flex min-h-[var(--touch-target-min)] items-center
+           justify-center gap-1.5 rounded-full border-border bg-muted px-3
+           text-[length:var(--text-nav-label)] font-medium whitespace-nowrap
+           text-foreground transition-colors;
+    border-style: solid;
+    border-width: var(--border-width-rest);
+    /* Never wider than the lane it sits in (the scroller is the container),
+       so on a small phone one chip always fits whole, name truncated, instead
+       of being clipped at the lane's edges. */
+    max-width: min(10rem, calc(100cqw - 0.5rem));
+  }
+  .lark:is([aria-current]:not([aria-current="false"])) {
+    @apply border-on-container-cobalt/25 bg-container-cobalt
+           text-on-container-cobalt;
+    border-width: var(--border-width-active);
+  }
+
+  /* .sanderling — the places lane's sideways scroller. Its edges fade by an
+     alpha-only mask (any theme, no colour) while more chips lie that way:
+     PlaceLane sets data-fade-start once it has scrolled and data-fade-end
+     while chips lie past the end. No scroll-snap: snapping fought the
+     programmatic centring of the current chip (measured: the last chip
+     stopped 8px short of the end, so the fade stayed on it). */
+  .sanderling {
+    container-type: inline-size;
+    --lane-fade-start: 0px;
+    --lane-fade-end: 0px;
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      black var(--lane-fade-start),
+      black calc(100% - var(--lane-fade-end)),
+      transparent
+    );
+  }
+  .sanderling[data-fade-start="true"] {
+    --lane-fade-start: 1.25rem;
+  }
+  .sanderling[data-fade-end="true"] {
+    --lane-fade-end: 2rem;
+  }
+
   /* .chameleon — skeleton placeholder (changes/loads, blends with background) */
   /* Inset stat tile inside a card (label + value), e.g. haze and agriculture. */
   .meerkat {
@@ -1817,6 +1861,16 @@ body {
   outline: var(--focus-ring-width, 3px) solid var(--focus-ring);
   outline-offset: var(--focus-ring-offset, 2px);
   border-radius: var(--radius-button);
+}
+
+/* .lark (a place chip in the bottom bar's lane) — unlayered like the fauna
+   rules above, so the global :focus-visible radius of 4px does not square the
+   pill on keyboard focus. The ring is inset: the lane's scroller clips
+   anything drawn outside it. */
+.lark:focus-visible {
+  outline: var(--focus-ring-width, 3px) solid var(--focus-ring);
+  outline-offset: -3px;
+  border-radius: 9999px;
 }
 
 /* .bee sits on the bg-primary header action pill. The cobalt ring is the same

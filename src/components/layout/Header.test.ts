@@ -23,7 +23,7 @@ function rule(name: string): string {
   return m ? m[1] : "";
 }
 
-const pager = readFileSync(resolve(__dirname, "LocationPager.tsx"), "utf-8");
+const lane = readFileSync(resolve(__dirname, "PlaceLane.tsx"), "utf-8");
 const bottomNav = readFileSync(
   resolve(__dirname, "../ui/mzizi-bottom-nav.tsx"),
   "utf-8",
@@ -48,8 +48,8 @@ describe("Header — mounts the mobile navigation", () => {
     expect(source).not.toContain('aria-label="Primary navigation"');
     expect(source.match(/<nav[\s>]/g)).toHaveLength(1);
     expect(source).toContain('aria-label="Main navigation"');
-    // Nothing from the bottom bar's pager is a nav (it nests inside MziziBottomNav's nav).
-    expect(pager.match(/<nav[\s>]/g)).toBeNull();
+    // Nothing from the bottom bar's places lane is a nav (it nests inside MziziBottomNav's nav).
+    expect(lane.match(/<nav[\s>]/g)).toBeNull();
   });
 
   it("is a sibling of <header>, never inside it (a backdrop-filter header would capture a fixed child)", () => {
@@ -88,22 +88,24 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
     expect(bottomNav).toContain("backdrop-blur-xl");
   });
 
-  it("is 4rem tall; --mobile-nav-height is bar + gap + the pager pill; clearance adds the lift and safe area", () => {
+  it("is 4rem tall; --mobile-nav-clearance is the bar plus the lift, the safe area and a breath", () => {
     expect(bottomNav).toContain("h-[var(--mobile-nav-bar-height)]");
-    expect(bottomNav).toContain("h-[var(--touch-target-min)] max-w-full");
     expect(css).toContain("--mobile-nav-bar-height: 4rem;");
     expect(css).toContain("--mobile-nav-inset: 0.75rem;");
     expect(css).toMatch(
-      /--mobile-nav-height: calc\(\s*var\(--mobile-nav-bar-height\) \+ var\(--mobile-nav-gap\) \+\s*var\(--touch-target-min\)\s*\);/,
-    );
-    expect(css).toMatch(
-      /--mobile-nav-clearance: calc\(\s*env\(safe-area-inset-bottom, 0px\) \+ var\(--mobile-nav-inset\) \+\s*var\(--mobile-nav-height\)/,
+      /--mobile-nav-clearance: calc\(\s*env\(safe-area-inset-bottom, 0px\) \+ var\(--mobile-nav-inset\) \+\s*var\(--mobile-nav-bar-height\) \+ 0\.5rem\s*\);/,
     );
   });
 
-  it("the nav wrapper lets taps through; only the pills catch them", () => {
-    expect(bottomNav).toContain("pointer-events-none fixed");
-    expect(bottomNav).toContain("pointer-events-auto rounded-full");
+  it("is ONE surface: the nav landmark is the pill, with no second pill and no leftover tokens", () => {
+    const code = bottomNav.replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(code.match(/FLOATING_SURFACE/g)).toHaveLength(2); // the const and its one use
+    expect(code).not.toContain("indicator");
+    expect(code).not.toContain("--mobile-nav-gap");
+    expect(code).not.toContain("--mobile-nav-height");
+    expect(code).not.toContain("flex-col items-center gap-");
+    expect(css).not.toContain("--mobile-nav-gap");
+    expect(css).not.toContain("--mobile-nav-height");
   });
 
   it("items are next/link with aria-current and the 48px touch-target floor", () => {
@@ -125,15 +127,17 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
   });
 });
 
-describe("MobileNav — items and page dots", () => {
-  it("has Map, My Location and Locations, in that order", () => {
-    const order = ['id: "map"', 'id: "my-location"', 'id: "locations"'].map(
-      (k) => nav.indexOf(k),
-    );
+describe("MobileNav — pinned items and the places lane", () => {
+  it("pins Map at the start and Locations at the end, with the lane between them", () => {
+    const order = ['id: "map"', 'id: "locations"'].map((k) => nav.indexOf(k));
     expect(order.every((i) => i > 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(nav).toContain("leading={leading}");
+    expect(nav).toContain("trailing={trailing}");
+    expect(nav).toContain("lane={");
+    // My Location is the lane's first chip, not a bar item.
+    expect(nav).not.toContain('id: "my-location"');
     expect(nav).toContain("href: mapHref");
-    expect(nav).toContain("href: MY_LOCATION_HREF");
     expect(nav).toContain('href: "/locations"');
     expect(nav).toContain('? "Weather map"');
     expect(nav).toContain('ariaLabel: "All locations"');
@@ -144,17 +148,16 @@ describe("MobileNav — items and page dots", () => {
     expect(nav).toContain('return "none";');
   });
 
-  it("shows the place sequence as tappable LocationPager dots above the items, behind a harness boundary", () => {
-    expect(nav).toContain("indicator={");
-    expect(nav).toContain("<LocationPager");
-    expect(nav).toMatch(/<MziziHarness\s+name="location-pager"/);
-    expect(pager).toContain("<Link");
-    expect(pager).toContain('aria-current={isActive ? "page" : undefined}');
-    expect(pager).toContain("aria-label={name}");
-    expect(pager).toContain(
-      "h-[var(--touch-target-min)] min-w-[var(--touch-target-min)]",
-    );
-    expect(pager).toContain('method: "saved"');
+  it("shows the place sequence as tappable chips in the lane, behind a harness boundary that keeps a My Location link", () => {
+    expect(nav).toContain("<PlaceLane");
+    expect(nav).toMatch(/<MziziHarness\s+name="place-lane"/);
+    expect(nav).toContain("fallback={<LaneFallback />}");
+    expect(nav).not.toContain("LocationPager");
+    expect(lane).toContain("<Link");
+    expect(lane).toContain('aria-current={isActive ? "page" : undefined}');
+    expect(lane).toContain("trackPlaceChange(chip.href, chip.slug, from)");
+    // The chips are .lark: one touch target tall (see globals.css).
+    expect(rule("lark")).toContain("min-h-[var(--touch-target-min)]");
   });
 
   it("labels use the 16px --text-nav-label token, not upstream's 10px", () => {

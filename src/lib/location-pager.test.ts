@@ -2,6 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   MAX_PAGER_DOTS,
   MY_LOCATION_HREF,
+  homeChipShowsLabel,
+  laneActiveIndex,
+  laneChips,
+  laneScrollLeft,
   neighbour,
   pagerDots,
   pagerIndex,
@@ -183,5 +187,126 @@ describe("pagerSequence with suggested places", () => {
     const presets = ["harare", "bulawayo", "a-1", "a-2", "a-3", "a-4"];
     const dots = pagerDots(pagerSequence(saved, presets));
     expect(dots).toHaveLength(saved.length + presets.length);
+  });
+});
+
+describe("laneChips — the places lane", () => {
+  it("always starts with My Location, then one chip per place in sequence order", () => {
+    expect(laneChips(pagerSequence(["harare", "nairobi-ke"]))).toEqual([
+      { href: "/", kind: "home", slug: null },
+      { href: "/harare", kind: "place", slug: "harare" },
+      { href: "/nairobi-ke", kind: "place", slug: "nairobi-ke" },
+    ]);
+  });
+
+  it("is never empty: with no places the lane is My Location alone", () => {
+    expect(laneChips(pagerSequence([]))).toEqual([
+      { href: "/", kind: "home", slug: null },
+    ]);
+    expect(laneChips([])).toHaveLength(1);
+    expect(laneChips([])[0].kind).toBe("home");
+  });
+
+  it("puts My Location first even when the sequence is malformed", () => {
+    // A tampered sequence cannot push a place ahead of the current location.
+    expect(laneChips(["/harare", "/gweru"])[0]).toEqual({
+      href: "/",
+      kind: "home",
+      slug: null,
+    });
+  });
+
+  it("keeps the saved places before the suggested ones (the swipe order)", () => {
+    const chips = laneChips(pagerSequence(["harare"], ["bulawayo", "gweru"]));
+    expect(chips.map((c) => c.href)).toEqual([
+      "/",
+      "/harare",
+      "/bulawayo",
+      "/gweru",
+    ]);
+  });
+
+  it("is capped at My Location plus MAX_PAGER_DOTS places", () => {
+    const slugs = Array.from({ length: 30 }, (_, i) => `place-${i}`);
+    expect(laneChips(pagerSequence(slugs))).toHaveLength(MAX_PAGER_DOTS + 1);
+  });
+
+  it("lines up one to one with the sequence, so a chip index is a pager index", () => {
+    const seq = pagerSequence(["harare", "nairobi-ke", "lagos-ng"]);
+    laneChips(seq).forEach((chip, i) => expect(chip.href).toBe(seq[i]));
+  });
+});
+
+describe("laneActiveIndex — which chip is the current page", () => {
+  const seq = pagerSequence(["harare", "nairobi-ke"]);
+
+  it("is 0 (My Location) on the home page", () => {
+    expect(laneActiveIndex("/", seq, 3)).toBe(0);
+  });
+
+  it("is the place's chip on its page and on its sub-routes", () => {
+    expect(laneActiveIndex("/nairobi-ke", seq, 3)).toBe(2);
+    expect(laneActiveIndex("/harare/map", seq, 3)).toBe(1);
+  });
+
+  it("is -1 on routes that are not places, so exactly one item (or none) is current", () => {
+    expect(laneActiveIndex("/explore", seq, 3)).toBe(-1);
+    expect(laneActiveIndex("/locations", seq, 3)).toBe(-1);
+    expect(laneActiveIndex("/history", seq, 3)).toBe(-1);
+    expect(laneActiveIndex("/gweru", seq, 3)).toBe(-1);
+  });
+
+  it("is -1 for a place beyond the chips the lane renders", () => {
+    expect(laneActiveIndex("/nairobi-ke", seq, 2)).toBe(-1);
+  });
+});
+
+describe("homeChipShowsLabel — My Location spells its name only when alone", () => {
+  it("shows the label when the lane is the single chip", () => {
+    expect(homeChipShowsLabel(1)).toBe(true);
+    expect(homeChipShowsLabel(0)).toBe(true);
+  });
+
+  it("is the glyph alone once there are places beside it", () => {
+    expect(homeChipShowsLabel(2)).toBe(false);
+    expect(homeChipShowsLabel(11)).toBe(false);
+  });
+});
+
+describe("laneScrollLeft — centre the active chip in the places scroller", () => {
+  // A 190px lane over 600px of chips (My Location is pinned outside it).
+  const lane = { viewport: 190, content: 600 };
+
+  it("never scrolls for My Location or when nothing is current: back to the start", () => {
+    expect(laneScrollLeft({ ...lane, itemLeft: 4, itemWidth: 90 }, 0)).toBe(0);
+    expect(laneScrollLeft({ ...lane, itemLeft: 200, itemWidth: 90 }, -1)).toBe(
+      0,
+    );
+  });
+
+  it("centres the active chip in the scroller", () => {
+    // chip centre 300 + 45 = 345; target scroll = 345 - 95 = 250, so its
+    // centre sits at 95 px, the middle of the 190px lane.
+    const left = laneScrollLeft({ ...lane, itemLeft: 300, itemWidth: 90 }, 4);
+    expect(left).toBe(250);
+    expect(300 + 90 / 2 - left).toBe(lane.viewport / 2);
+  });
+
+  it("clamps at the start: a chip near the start leaves the lane unscrolled", () => {
+    expect(laneScrollLeft({ ...lane, itemLeft: 4, itemWidth: 90 }, 1)).toBe(0);
+  });
+
+  it("clamps at the end: the last chip scrolls the lane exactly to its end", () => {
+    const left = laneScrollLeft({ ...lane, itemLeft: 520, itemWidth: 76 }, 9);
+    expect(left).toBe(lane.content - lane.viewport);
+  });
+
+  it("does not scroll when everything already fits", () => {
+    expect(
+      laneScrollLeft(
+        { viewport: 300, content: 280, itemLeft: 150, itemWidth: 80 },
+        2,
+      ),
+    ).toBe(0);
   });
 });

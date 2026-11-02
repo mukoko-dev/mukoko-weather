@@ -38,7 +38,7 @@ describe("PlaceStage — what the page waits for and what it shows", () => {
 
   it("a place switch makes no raw fetchWorker call anywhere on its path", () => {
     // Every file a switch runs through: the stage, its state machine, the bus,
-    // the target parser, the slug lookup, the home page client and the pager.
+    // the target parser, the slug lookup, the home page client, the lane and the swipe.
     const dir = resolve(__dirname, "../..");
     for (const file of [
       "components/weather/PlaceStage.tsx",
@@ -48,7 +48,8 @@ describe("PlaceStage — what the page waits for and what it shows", () => {
       "lib/place-target.ts",
       "lib/place-resolve.ts",
       "app/CurrentLocationHome.tsx",
-      "components/layout/LocationPager.tsx",
+      "components/layout/PlaceLane.tsx",
+      "lib/use-location-pager.ts",
     ]) {
       const source = readFileSync(resolve(dir, file), "utf-8");
       expect(source, file).not.toContain("fetchWorker");
