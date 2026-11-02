@@ -24,7 +24,9 @@
   "workers_dev": false,
   "preview_urls": false,
   "keep_vars": true,
-  // Invocation metadata only. The code logs no prompts, answers or keys.
+  // Invocation metadata, and one warn line per failed model call (route,
+  // class, stage, error code and status: weather_core::ai::failure). The code
+  // logs no prompts, answers, error messages or keys.
   "observability": {
     "enabled": true,
     "redact_query_string": true,
