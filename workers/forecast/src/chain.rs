@@ -1,6 +1,6 @@
 //! The provider chain: KV cache (fresh, or kept a day as the last resort), then the Open-Meteo multi-model blend, then
-//! Open-Meteo `best_match`, then, when Open-Meteo gave nothing, MET Norway as
-//! the failover forecast (`met_no.rs`, #434). Tomorrow.io is NOT in this
+//! Open-Meteo `best_match`, then, when Open-Meteo gave nothing and no stored forecast under six hours
+//! old exists, MET Norway as the failover forecast (`met_no.rs`, #434). Tomorrow.io is NOT in this
 //! chain: it only enriches the insights afterwards (`enrich.rs`, issue #246).
 //!
 //! Ported from `api/py/_weather.py`:
@@ -115,9 +115,17 @@ pub async fn forecast(
         // not the seasonal estimate. Fresher than the stored row, which stays
         // the last resort below.
         None => {
+            // A stored forecast of this point that is only a few hours old is
+            // served as it is (labelled stale) before MET Norway is asked: the
+            // same model run, every variable, the real offset, and one request
+            // fewer for a provider whose terms ask for none that is
+            // unnecessary (`blend::STORED_PREFERRED_SECS`).
+            let recent = stale.as_ref().is_some_and(|old| {
+                blend::stored_is_preferred(blend::age_seconds(&old.fetched_at, now()))
+            });
             // Visitors only: cache warming (`refresh`) is background traffic,
             // and MET Norway's terms ask for none that is unnecessary.
-            let from_met_no = if failover && !refresh {
+            let from_met_no = if failover && !refresh && !recent {
                 let hint = offset_hint(kv.as_ref(), lat, lon, stale.as_ref()).await;
                 crate::met_no::forecast(env, ctx, lat, lon, hint).await
             } else {

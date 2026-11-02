@@ -773,6 +773,21 @@ pub fn is_fresh(provider: &str, fetched_at: &str, now: DateTime<Utc>) -> bool {
     age_seconds(fetched_at, now).is_some_and(|age| age < cache_ttl_seconds(provider) as i64)
 }
 
+/// A stored forecast younger than this (seconds) is served, labelled stale, in
+/// preference to asking a failover provider when Open-Meteo gives nothing. The
+/// models behind the blend update a few times a day, so a row several hours old
+/// carries the same model run as a fresh fetch, with all its variables and the
+/// place's real UTC offset, and it spares the failover provider a request (its
+/// terms ask for no unnecessary traffic). An older row is a worse answer than a
+/// live failover forecast.
+pub const STORED_PREFERRED_SECS: i64 = 6 * 3600;
+
+/// Whether a stored forecast of this age (see [`age_seconds`]) is preferred to a
+/// failover provider. An unreadable age is not.
+pub fn stored_is_preferred(age_seconds: Option<i64>) -> bool {
+    age_seconds.is_some_and(|age| age < STORED_PREFERRED_SECS)
+}
+
 /// Prepare a stored forecast that is served PAST its fresh lifetime (every
 /// provider failed): `current` becomes the hourly slot for the place's own
 /// current hour (the stored `current` is as old as the row), and the payload
@@ -1940,6 +1955,18 @@ mod tests {
         assert_eq!(age_seconds("yesterday", now()), None);
         assert_eq!(age_seconds(&at(3), now()), Some(180));
         const { assert!(STALE_TTL_SECONDS > BLEND_TTL_SECONDS) };
+    }
+
+    #[test]
+    fn a_recent_stored_forecast_beats_a_failover_and_an_old_one_does_not() {
+        assert!(stored_is_preferred(Some(0)));
+        assert!(stored_is_preferred(Some(STORED_PREFERRED_SECS - 1)));
+        assert!(!stored_is_preferred(Some(STORED_PREFERRED_SECS)));
+        assert!(!stored_is_preferred(Some(STALE_TTL_SECONDS as i64)));
+        // A clock a little ahead of ours: still recent. Unreadable: not.
+        assert!(stored_is_preferred(Some(-30)));
+        assert!(!stored_is_preferred(None));
+        const { assert!(STORED_PREFERRED_SECS < STALE_TTL_SECONDS as i64) };
     }
 
     #[test]
