@@ -72,6 +72,22 @@ export interface LinkClickLike {
 }
 
 /**
+ * True for a plain left click: not a modified click (new tab, new window,
+ * download) and not already handled. Only such a click is a place switch in
+ * this tab, so only it should be counted as one.
+ */
+export function isPlainLeftClick(event: LinkClickLike): boolean {
+  return !(
+    event.defaultPrevented ||
+    event.button !== 0 ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.shiftKey ||
+    event.altKey
+  );
+}
+
+/**
  * Click handler for a `<Link href>` that points at a place. A plain left
  * click is taken over (the stage shows the place; `push` is the fallback);
  * a modified click (new tab, new window, download) is left to the browser.
@@ -83,16 +99,7 @@ export function handlePlaceLinkClick(
   href: string,
   push: (href: string) => void,
 ): void {
-  if (
-    event.defaultPrevented ||
-    event.button !== 0 ||
-    event.metaKey ||
-    event.ctrlKey ||
-    event.shiftKey ||
-    event.altKey
-  ) {
-    return;
-  }
+  if (!isPlainLeftClick(event)) return;
   event.preventDefault();
   navigateToPlace(href, push);
 }
