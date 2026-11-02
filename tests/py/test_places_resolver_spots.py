@@ -77,15 +77,6 @@ class TestSynthesizedSpotsAreNotKnownPlaces:
         assert not is_synthesized_spot({"_id": "uuid-harare", "slug": "harare"})
         assert not is_synthesized_spot(None)
 
-    @patch("py._places_resolver.places_geo_collection")
-    def test_weather_history_ignores_a_made_up_spot_hint(self, mock_coll):
-        """Anyone can spell `foo--ksy4dd7`; history must not be keyed by it."""
-        from py._weather import _resolve_location_hint
-
-        mock_coll.return_value = _empty_collection()
-        slug = build_smart_slug("Anything", -17.8292, 31.0522)
-        assert _resolve_location_hint(slug, -17.8292, 31.0522) is None
-
 
 # ---------------------------------------------------------------------------
 # Review X1: junk slugs, storage keys, and every caller that persists by slug

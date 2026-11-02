@@ -71,15 +71,6 @@ class TestPlatformDatabaseAccessors:
 class TestCollectionAccessors:
     """Spot-check that each accessor reaches into the correct DB+name."""
 
-    def test_weather_cache_uses_weather_db(self, _reset_client):
-        weather_db_mock = MagicMock()
-        _reset_client.get_database.return_value = weather_db_mock
-
-        db.weather_cache_collection()
-
-        _reset_client.get_database.assert_called_with("weather")
-        weather_db_mock.__getitem__.assert_called_with("weather_cache")
-
     def test_stations_uses_weather_db(self, _reset_client):
         weather_db_mock = MagicMock()
         _reset_client.get_database.return_value = weather_db_mock
@@ -228,7 +219,6 @@ class TestLegacyAccessorsRouteToWeatherDb:
         "fn,expected_collection",
         [
             (db.locations_collection, "locations"),
-            (db.weather_cache_collection, "weather_cache"),
             (db.ai_summaries_collection, "ai_summaries"),
             (db.activities_collection, "activities"),
             (db.suitability_rules_collection, "suitability_rules"),

@@ -11,7 +11,7 @@
 //! answer can say whether the air is better or worse than at this hour
 //! yesterday ([`us_aqi_same_hour_pair`], [`trend`]). Both are pinned to the
 //! Python by `tests/fixtures/air-quality-trend.json`, whose `expected` values
-//! the real functions produced (`scripts/gen_weather_core_fixtures.py`).
+//! real functions produced before they were removed (frozen oracle data, #333).
 
 use chrono::{Duration, NaiveDate, NaiveDateTime};
 use serde_json::{json, Map, Value};

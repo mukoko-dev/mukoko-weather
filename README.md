@@ -125,8 +125,8 @@ locations.
 | `DB_INIT_SECRET`                  |    No    | Protects `/api/db-init` in production (`x-init-secret` header)                                                                                                                                                                                                                                 |
 | `INTERNAL_API_BASE_URL`           |    No    | Base URL for server-to-server SSR calls into `/api/py/*`. Overrides the default: the production domain in production, the protected deployment URL plus the automation bypass header on previews                                                                                               |
 | `NEXT_PUBLIC_WEATHER_API_URL`     |    No    | Origin of the Rust weather Worker. Unset = the production default `https://weather-api.mukoko.com`, and the app holds no `/api/py` fallback for places, search, geo, locations, or bare-name URLs. `https` only (plain `http` for localhost)                                                   |
-| `OPEN_METEO_BASE_URL`             |    No    | Server-only. Origin of a self-hosted Open-Meteo (`infra/open-meteo/`); `/v1/forecast` is appended. Unset = the public API. `https` only (plain `http` for localhost)                                                                                                                           |
-| `OPEN_METEO_AQ_BASE_URL`          |    No    | Server-only. Origin of the self-hosted air-quality (CAMS) API; `/v1/air-quality` is appended. Unset = the public API. Set apart from the forecast so the two can move separately                                                                                                               |
+| `OPEN_METEO_BASE_URL`             |    No    | Server-only. Origin of a self-hosted Open-Meteo (`infra/open-meteo/`, not deployed); `/v1/forecast` is appended. Unset = the public API. `https` only (plain `http` for localhost). Only the server-side direct-fetch fallback reads it; the Workers call the public API                       |
+| `OPEN_METEO_AQ_BASE_URL`          |    No    | Server-only. Origin of the self-hosted air-quality (CAMS) API; `/v1/air-quality` is appended. Unset = the public API. Nothing reads it today (the Workers call the public host)                                                                                                                |
 | `OPEN_METEO_API_KEY`              |    No    | Server-only secret. Gateway key, sent in the `X-Mukoko-OM-Key` header to the self-hosted hosts above only, never to an `open-meteo.com` host and never in a URL                                                                                                                                |
 
 ## Architecture
@@ -159,14 +159,14 @@ Climate normals (1991–2020, ERA5 via Open-Meteo) are served by the Rust Worker
 
 **AI search and history analysis** — `POST /v1/ai/explore/search` and `POST /v1/ai/history/analyze` on the Rust AI Worker (`weather-api.mukoko.com`; the app calls them with `postWorker`, never retried). The search gives the model two tools (the seed places, and a forecast per place) and falls back to a plain text match when it cannot answer; the analysis sends the model a compact statistical summary of the same history the page shows. Both are limited per client per hour (15 and 10) in the Workers' own D1 table, and fail closed. See `workers/README.md`.
 
-**Four-stage weather fallback** — MongoDB cache (15-min TTL) → Open-Meteo
-Africa-weighted multi-model blend (or the user's chosen model via `?model=`) →
-Open-Meteo `best_match` → `createFallbackWeather` seasonal estimates. The last
-stage always succeeds, so a request never returns nothing. Activity insights
-(GDD, heat index, thunderstorm proxy, dew point, UV, cloud base, moon phase)
-are derived from the model data; Tomorrow.io is merged on top only when its
-MongoDB-backed budget (20/hour, 400/day, with headroom reserved for seed
-locations) allows. Response headers: `X-Weather-Provider`
+**Four-stage weather fallback** (the Rust Workers) — KV cache (15-min TTL)
+→ Open-Meteo Africa-weighted multi-model blend (or the user's chosen model via
+`?model=`) → Open-Meteo `best_match` → the seasonal estimate. The last stage
+always succeeds, so a request never returns nothing. Activity insights (GDD,
+heat index, thunderstorm proxy, dew point, UV, cloud base, moon phase) are
+derived from the model data; Tomorrow.io is merged on top only when its
+D1-backed budget (12/hour and 250/day for normal traffic, 20 and 400 for
+priority) allows. Response headers: `X-Weather-Provider`
 (`open-meteo:blend` | `open-meteo:<model>` | `open-meteo:best_match` |
 `fallback`), `X-Weather-Blend`, `X-Enrichment` (`tomorrow` | `skipped-budget` |
 `skipped-error` | `none`) and `X-Current-Source`. Data credit: ECMWF, NOAA,

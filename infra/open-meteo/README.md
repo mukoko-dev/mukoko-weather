@@ -13,14 +13,14 @@ Metal, Amsterdam** (`europe-west4-drams3a`), so both services are pinned to it.
 
 The instance serves exactly what the app sends to Open-Meteo for forecasts:
 
-| Endpoint          | Used by                                                                                                                                                                                            |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/v1/forecast`    | `/api/py/weather` (blend, single model, `best_match`, nowcast, model comparison), `/api/py/model-grid` (per-model map layer, #272), `/api/py/haze`, `/api/py/status`, the TS direct-fetch fallback |
-| `/v1/air-quality` | `/api/py/airquality`, `/api/py/airquality/grid`, `/api/py/haze` (CAMS)                                                                                                                             |
+| Endpoint          | Used by                                                                                                                                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/v1/forecast`    | the forecast Worker's `/v1/weather` (blend, single model, `best_match`, nowcast, model comparison), `/v1/model-grid` (per-model map layer, #272), `/v1/haze`, `/v1/status`, the TS direct-fetch fallback |
+| `/v1/air-quality` | the Worker's `/v1/air-quality`, `/v1/air-quality/grid`, `/v1/haze` (CAMS)                                                                                                                                |
 
 Out of scope:
 
-- **ERA5 and the archive** (history backfill, `/api/py/normals`). Owner
+- **ERA5 and the archive** (history backfill, `/v1/normals`). Owner
   decision: history is not self-hosted; it is pulled from an external API
   where it is needed. That work is tracked separately, so no archive config
   lives here.
@@ -205,15 +205,23 @@ once approved):
    `OM_URL=https://<gateway-domain> OM_KEY=<key> sh infra/open-meteo/smoke.sh`
    must pass every line, including `gem_global`, `best_match` and the 401
    check.
-6. **Cut over** in Vercel (`mukoko-weather` project, Production and Preview):
+6. **Cut over.** The Python backend that read these variables is gone: the
+   Rust Workers call the public Open-Meteo hosts, and only the server-side
+   direct-fetch fallback in the Next.js app (`src/lib/open-meteo-endpoint.ts`)
+   still honours them. **Before this step, add the self-hosted base URL and the
+   gateway key to the Workers' Open-Meteo calls** (forecast chain and extras,
+   air quality and its grid, haze, agriculture, model grid, the status probe;
+   the key as a Secrets Store secret). Then set the variables
+   (`mukoko-weather` project in Vercel for the fallback, the Worker config for
+   the Workers):
    - `OPEN_METEO_BASE_URL=https://<gateway-domain>`
    - `OPEN_METEO_AQ_BASE_URL=https://<gateway-domain>`
    - `OPEN_METEO_API_KEY=<key>` (sensitive)
    - Redeploy. `/status` then shows **Open-Meteo API (self-hosted)** and an
      **Open-Meteo Air Quality (self-hosted)** row. Check
-     that `/api/py/weather` still answers `X-Weather-Provider: open-meteo:blend`.
+     that `/v1/weather` still answers `X-Weather-Provider: open-meteo:blend`.
 7. **Watch for a week.** Check Railway memory and CPU, `/status`, and the
-   `open_meteo_breaker` state. Then right-size RAM.
+   Open-Meteo breaker state. Then right-size RAM.
 
 The forecast and air-quality variables are independent. Air quality can stay
 on the public API (leave `OPEN_METEO_AQ_BASE_URL` unset) while the forecast
