@@ -7,6 +7,9 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 
 const source = readFileSync(resolve(__dirname, "ExploreChatbot.tsx"), "utf-8");
+// The same text with every run of whitespace as one space, for a statement the
+// formatter may break across lines.
+const flat = source.replace(/\s+/g, " ");
 
 describe("ExploreChatbot component structure", () => {
   it("is a client component", () => {
@@ -67,9 +70,12 @@ describe("sendMessage logic", () => {
     expect(source).toContain("!trimmed || loading");
   });
 
-  it("sends the message to the Worker's /v1/ai/chat (never retried), not the removed /api/py/chat", () => {
-    expect(source).toContain('"ai/chat"');
-    expect(source).toContain("retries: 0");
+  it("sends the message to the Worker's /v1/ai/chat through postWorker (never retried), not the removed /api/py/chat", () => {
+    expect(source).toContain('postWorker(\n          "ai/chat"');
+    // postWorker is the one POST helper the AI surfaces share: no retries, the
+    // AI timeout (src/lib/weather-api.ts), so the component carries neither.
+    expect(source).not.toContain("fetchWorker");
+    expect(source).not.toContain("timeoutMs");
     expect(source).not.toContain("/api/py/");
   });
 
@@ -80,9 +86,19 @@ describe("sendMessage logic", () => {
   });
 
   it("builds history from previous messages (sliced to last 10)", () => {
-    expect(source).toContain("messages.slice(-10).map((m) => ({");
+    expect(source).toContain(".slice(-10)");
     expect(source).toContain("role: m.role");
     expect(source).toContain("content: m.content");
+  });
+
+  it("never sends a failed question, or the error shown for it, back as history", () => {
+    // The Worker refuses a history turn with personal data (422), so a kept
+    // turn would fail every later question until it scrolled out of the window.
+    expect(source).toContain(".filter((m) => !m.unsent)");
+    expect(source).toContain(
+      "m.id === userMessage.id ? { ...m, unsent: true } : m",
+    );
+    expect(source).toContain("unsent: true,");
   });
 });
 
@@ -228,18 +244,20 @@ describe("memory management", () => {
 });
 
 describe("rate limit error surfacing", () => {
-  it("reads response body before throwing on non-ok responses", () => {
-    expect(source).toContain("res.json().catch(() => null)");
-  });
-
-  it("extracts the Worker's error_description, else response or error, from the body", () => {
-    expect(source).toContain("body?.error_description");
-    expect(source).toContain("body?.response");
-    expect(source).toContain("body?.error");
+  it("reads the Worker's error envelope before throwing on non-ok responses", () => {
+    // workerErrorMessage: error_description, else error, else the status.
+    expect(source).toContain("new Error(await workerErrorMessage(res))");
   });
 
   it("uses server error message when available instead of generic fallback", () => {
-    expect(source).toContain("err instanceof Error && err.message");
+    expect(flat).toContain("err instanceof Error && err.message");
+  });
+
+  it("shows the friendly fallback, not the raw message, for a request timeout", () => {
+    // AbortSignal.timeout rejects with a DOMException "TimeoutError" whose
+    // message ("signal timed out") is not for a reader.
+    expect(flat).toContain('err.name === "TimeoutError"');
+    expect(flat).toContain("!timedOut && err instanceof Error");
   });
 });
 
