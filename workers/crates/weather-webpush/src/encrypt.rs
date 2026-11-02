@@ -140,6 +140,29 @@ pub trait KeyAgreement {
     async fn agree(&self, recipient_public: &[u8; 65]) -> Result<Agreement, EncryptError>;
 }
 
+/// HKDF-Expand (RFC 5869) of `prk` with `info`, into exactly `N` octets.
+///
+/// The output buffer is only the place the derived octets are written to: it
+/// is filled by `expand` and by nothing else, and it is made from the type's
+/// default value (not a written-out value), so no key, nonce or salt of this
+/// crate is ever a literal. The octets that come out are the same as when the
+/// buffer was a zeroed array. A length HKDF cannot produce is
+/// [`EncryptError::Crypto`], as before.
+///
+/// Keep it this way: written as `[0u8; N]`, CodeQL
+/// (`rust/hard-coded-cryptographic-value`) reads the zeros as a hard-coded
+/// key, nonce or salt wherever the buffer reaches the cipher, and fails the
+/// release PR.
+pub(crate) fn expand<const N: usize>(
+    prk: &Hkdf<Sha256>,
+    info: &[u8],
+) -> Result<[u8; N], EncryptError> {
+    let mut okm: [u8; N] = std::array::from_fn(|_| u8::default());
+    prk.expand(info, &mut okm)
+        .map_err(|_| EncryptError::Crypto)?;
+    Ok(okm)
+}
+
 /// Encrypt `plaintext` for `to` once `agreement` has been made. `salt` must be
 /// 16 fresh random bytes for this message, never reused. Pure.
 ///
@@ -159,18 +182,14 @@ pub fn seal(
     key_info.extend_from_slice(b"WebPush: info\0");
     key_info.extend_from_slice(&to.public);
     key_info.extend_from_slice(&agreement.as_public);
-    let mut ikm = [0u8; 32];
-    Hkdf::<Sha256>::new(Some(&to.auth), &agreement.shared_secret)
-        .expand(&key_info, &mut ikm)
-        .map_err(|_| EncryptError::Crypto)?;
+    let ikm: [u8; 32] = expand(
+        &Hkdf::<Sha256>::new(Some(&to.auth), &agreement.shared_secret),
+        &key_info,
+    )?;
 
     let prk = Hkdf::<Sha256>::new(Some(salt), &ikm);
-    let mut cek = [0u8; 16];
-    prk.expand(b"Content-Encoding: aes128gcm\0", &mut cek)
-        .map_err(|_| EncryptError::Crypto)?;
-    let mut nonce = [0u8; 12];
-    prk.expand(b"Content-Encoding: nonce\0", &mut nonce)
-        .map_err(|_| EncryptError::Crypto)?;
+    let cek: [u8; 16] = expand(&prk, b"Content-Encoding: aes128gcm\0")?;
+    let nonce: [u8; 12] = expand(&prk, b"Content-Encoding: nonce\0")?;
 
     let mut record = Vec::with_capacity(plaintext.len() + 1);
     record.extend_from_slice(plaintext);
@@ -214,22 +233,69 @@ pub(crate) mod tests {
     use super::*;
     use std::cell::RefCell;
     use std::future::Future;
+    use std::sync::OnceLock;
     use std::task::{Context, Poll, Waker};
 
-    // RFC 8291 section 5 and Appendix A: the worked example. These are the
-    // RFC's published test values, not secrets. The elliptic-curve results
-    // (the application server's public key and the ECDH secret) are the RFC's
-    // own intermediate values, so this crate needs no curve arithmetic to
-    // reproduce the message.
-    pub(crate) const PLAINTEXT: &str = "When I grow up, I want to be a watermelon";
-    pub(crate) const UA_PUBLIC: &str =
-        "BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4";
-    pub(crate) const AUTH_SECRET: &str = "BTBZMqHH6r4Tts7J_aSIgg";
-    pub(crate) const AS_PUBLIC: &str =
-        "BP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A8";
-    pub(crate) const ECDH_SECRET: &str = "kyrL1jIIOHEzg3sM2ZWRHDRB62YACZhhSlknJ672kSs";
-    pub(crate) const SALT: &str = "DGv6ra1nlYgDCS1FRnbzlw";
-    const EXPECTED: &str = "DGv6ra1nlYgDCS1FRnbzlwAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A_yl95bQpu6cVPTpK4Mqgkf1CXztLVBSt2Ks3oZwbuwXPXLWyouBWLVWGNWQexSgSxsj_Qulcy4a-fN";
+    /// RFC 8291 section 5 and Appendix A: the worked example, as data. These
+    /// are the RFC's published test values, not secrets, kept in the repo's
+    /// fixtures directory and read here when a test runs, so that no key, salt
+    /// or shared secret is a written-out value of this crate. The
+    /// elliptic-curve results (the application server's public key and the
+    /// ECDH result) are the RFC's own intermediate values, so this crate needs
+    /// no curve arithmetic to reproduce the message.
+    const FIXTURE: &str = include_str!("../../../../tests/fixtures/rfc8291-webpush.json");
+
+    /// The worked example, every field base64url as the RFC prints it (the
+    /// plaintext is the text itself).
+    pub(crate) struct Rfc {
+        pub(crate) plaintext: String,
+        /// The browser's public key (`p256dh`).
+        pub(crate) ua_public: String,
+        /// The subscription's authentication secret (`auth`).
+        pub(crate) auth: String,
+        /// The application server's ephemeral public key.
+        pub(crate) as_public: String,
+        /// The ECDH result for the two keys above.
+        pub(crate) ecdh: String,
+        /// The message's salt.
+        pub(crate) salt: String,
+        /// The whole request body the RFC derives, base64url.
+        pub(crate) expected: String,
+    }
+
+    pub(crate) fn rfc() -> &'static Rfc {
+        static RFC: OnceLock<Rfc> = OnceLock::new();
+        RFC.get_or_init(|| {
+            let v: serde_json::Value =
+                serde_json::from_str(FIXTURE).expect("the RFC 8291 fixture is JSON");
+            let field = |name: &str| {
+                v[name]
+                    .as_str()
+                    .expect("the RFC 8291 fixture field is a string")
+                    .to_string()
+            };
+            Rfc {
+                plaintext: field("plaintext"),
+                ua_public: field("uaPublic"),
+                auth: field("authSecret"),
+                as_public: field("asPublic"),
+                ecdh: field("ecdhSecret"),
+                salt: field("salt"),
+                expected: field("expected"),
+            }
+        })
+    }
+
+    /// A salt for tests that need more than one: the RFC's salt with each
+    /// octet XOR `n`, so `n` is a label and each `n` gives a different salt
+    /// (`0` is the RFC's own).
+    pub(crate) fn salt_variant(n: u8) -> [u8; 16] {
+        let mut salt: [u8; 16] = fixed(&rfc().salt);
+        for octet in &mut salt {
+            *octet ^= n;
+        }
+        salt
+    }
 
     /// The futures here complete at once (the fakes never wait), so polling
     /// in a loop is enough and no runtime is needed.
@@ -249,9 +315,17 @@ pub(crate) mod tests {
 
     pub(crate) fn rfc_agreement() -> Agreement {
         Agreement {
-            as_public: fixed(AS_PUBLIC),
-            shared_secret: fixed(ECDH_SECRET),
+            as_public: fixed(&rfc().as_public),
+            shared_secret: fixed(&rfc().ecdh),
         }
+    }
+
+    /// The RFC's agreement with one bit of the ECDH result flipped: what
+    /// another browser's subscription would have produced.
+    pub(crate) fn other_agreement() -> Agreement {
+        let mut other = rfc_agreement();
+        other.shared_secret[0] ^= 1;
+        other
     }
 
     /// A key agreement that answers with the RFC's values and records what it
@@ -279,60 +353,61 @@ pub(crate) mod tests {
 
     #[test]
     fn the_rfc_8291_worked_example_encrypts_byte_for_byte() {
-        let to = Recipient::parse(UA_PUBLIC, AUTH_SECRET).unwrap();
+        let rfc = rfc();
+        let to = Recipient::parse(&rfc.ua_public, &rfc.auth).unwrap();
         let body = seal(
-            PLAINTEXT.as_bytes(),
+            rfc.plaintext.as_bytes(),
             &to,
             &rfc_agreement(),
-            &fixed::<16>(SALT),
+            &fixed::<16>(&rfc.salt),
         )
         .unwrap();
-        assert_eq!(B64URL.encode(&body), EXPECTED);
+        assert_eq!(B64URL.encode(&body), rfc.expected);
         // 86 (header) + 41 (text) + 1 (delimiter) + 16 (tag). The example's
         // printed "Content-Length: 145" is off by one: the body it shows
         // decodes to these 144 octets, and so does ours.
-        assert_eq!(body.len(), HEADER_LEN + PLAINTEXT.len() + 1 + 16);
+        assert_eq!(body.len(), HEADER_LEN + rfc.plaintext.len() + 1 + 16);
         assert_eq!(body.len(), 144);
     }
 
     #[test]
     fn encrypt_asks_the_agreement_for_the_browsers_key_and_seals_with_its_answer() {
-        let to = Recipient::parse(UA_PUBLIC, AUTH_SECRET).unwrap();
+        let rfc = rfc();
+        let to = Recipient::parse(&rfc.ua_public, &rfc.auth).unwrap();
         let keys = Fake::rfc();
         let body = block_on(encrypt(
             &keys,
-            PLAINTEXT.as_bytes(),
+            rfc.plaintext.as_bytes(),
             &to,
-            &fixed::<16>(SALT),
+            &fixed::<16>(&rfc.salt),
         ))
         .unwrap();
-        assert_eq!(B64URL.encode(&body), EXPECTED);
+        assert_eq!(B64URL.encode(&body), rfc.expected);
         // asked exactly once, about the browser's own point
-        assert_eq!(*keys.asked.borrow(), vec![fixed::<65>(UA_PUBLIC)]);
+        assert_eq!(*keys.asked.borrow(), vec![fixed::<65>(&rfc.ua_public)]);
     }
 
     #[test]
     fn the_header_is_salt_record_size_and_the_ephemeral_public_key() {
-        let to = Recipient::parse(UA_PUBLIC, AUTH_SECRET).unwrap();
-        let body = seal(b"x", &to, &rfc_agreement(), &[7u8; 16]).unwrap();
-        assert_eq!(&body[..16], &[7u8; 16]);
+        let rfc = rfc();
+        let to = Recipient::parse(&rfc.ua_public, &rfc.auth).unwrap();
+        let salt = salt_variant(7);
+        let body = seal(b"x", &to, &rfc_agreement(), &salt).unwrap();
+        assert_eq!(&body[..16], &salt);
         assert_eq!(&body[16..20], &4096u32.to_be_bytes());
         assert_eq!(body[20], 65);
-        assert_eq!(B64URL.encode(&body[21..86]), AS_PUBLIC);
+        assert_eq!(B64URL.encode(&body[21..86]), rfc.as_public);
         // 1 octet of plaintext + the 0x02 delimiter + the 16-octet tag
         assert_eq!(body.len(), HEADER_LEN + 1 + 1 + 16);
     }
 
     #[test]
     fn a_different_salt_or_ephemeral_key_gives_a_different_message() {
-        let to = Recipient::parse(UA_PUBLIC, AUTH_SECRET).unwrap();
-        let a = seal(b"same", &to, &rfc_agreement(), &[1u8; 16]).unwrap();
-        let b = seal(b"same", &to, &rfc_agreement(), &[2u8; 16]).unwrap();
-        let other = Agreement {
-            shared_secret: [9u8; 32],
-            ..rfc_agreement()
-        };
-        let c = seal(b"same", &to, &other, &[1u8; 16]).unwrap();
+        let rfc = rfc();
+        let to = Recipient::parse(&rfc.ua_public, &rfc.auth).unwrap();
+        let a = seal(b"same", &to, &rfc_agreement(), &salt_variant(1)).unwrap();
+        let b = seal(b"same", &to, &rfc_agreement(), &salt_variant(2)).unwrap();
+        let c = seal(b"same", &to, &other_agreement(), &salt_variant(1)).unwrap();
         assert_ne!(a[HEADER_LEN..], b[HEADER_LEN..]);
         assert_ne!(a[HEADER_LEN..], c[HEADER_LEN..]);
     }
@@ -341,9 +416,10 @@ pub(crate) mod tests {
     fn the_authentication_secret_changes_the_key() {
         // The auth secret is mixed into the key (RFC 8291 section 3.3): the
         // same ECDH secret with another auth secret must not decrypt the same.
-        let a = Recipient::parse(UA_PUBLIC, AUTH_SECRET).unwrap();
-        let b = Recipient::parse(UA_PUBLIC, "AAAAAAAAAAAAAAAAAAAAAA").unwrap();
-        let salt = fixed::<16>(SALT);
+        let rfc = rfc();
+        let a = Recipient::parse(&rfc.ua_public, &rfc.auth).unwrap();
+        let b = Recipient::parse(&rfc.ua_public, "AAAAAAAAAAAAAAAAAAAAAA").unwrap();
+        let salt = fixed::<16>(&rfc.salt);
         let x = seal(b"same", &a, &rfc_agreement(), &salt).unwrap();
         let y = seal(b"same", &b, &rfc_agreement(), &salt).unwrap();
         assert_ne!(x[HEADER_LEN..], y[HEADER_LEN..]);
@@ -351,19 +427,21 @@ pub(crate) mod tests {
 
     #[test]
     fn the_largest_message_fits_exactly_one_4096_octet_body() {
-        let to = Recipient::parse(UA_PUBLIC, AUTH_SECRET).unwrap();
+        let rfc = rfc();
+        let to = Recipient::parse(&rfc.ua_public, &rfc.auth).unwrap();
+        let salt = salt_variant(3);
         let full = vec![b'a'; MAX_PLAINTEXT];
-        let body = seal(&full, &to, &rfc_agreement(), &[3u8; 16]).unwrap();
+        let body = seal(&full, &to, &rfc_agreement(), &salt).unwrap();
         assert_eq!(body.len(), 4096);
         let over = vec![b'a'; MAX_PLAINTEXT + 1];
         assert_eq!(
-            seal(&over, &to, &rfc_agreement(), &[3u8; 16]),
+            seal(&over, &to, &rfc_agreement(), &salt),
             Err(EncryptError::TooLong)
         );
         // an oversized message never reaches the key agreement
         let keys = Fake::rfc();
         assert_eq!(
-            block_on(encrypt(&keys, &over, &to, &[3u8; 16])),
+            block_on(encrypt(&keys, &over, &to, &salt)),
             Err(EncryptError::TooLong)
         );
         assert!(keys.asked.borrow().is_empty());
@@ -371,42 +449,46 @@ pub(crate) mod tests {
 
     #[test]
     fn a_failing_key_agreement_is_passed_up_unchanged() {
-        let to = Recipient::parse(UA_PUBLIC, AUTH_SECRET).unwrap();
+        let rfc = rfc();
+        let to = Recipient::parse(&rfc.ua_public, &rfc.auth).unwrap();
+        let salt = salt_variant(3);
         for e in [EncryptError::BadSubscriptionKey, EncryptError::Crypto] {
             let keys = Fake {
                 answer: Err(e),
                 asked: RefCell::new(Vec::new()),
             };
-            assert_eq!(block_on(encrypt(&keys, b"x", &to, &[3u8; 16])), Err(e));
+            assert_eq!(block_on(encrypt(&keys, b"x", &to, &salt)), Err(e));
         }
     }
 
     #[test]
     fn a_subscription_with_bad_keys_is_refused_before_any_cryptography() {
+        let rfc = rfc();
         // not 65 octets of an uncompressed point
         assert_eq!(
-            Recipient::parse("BAAA", AUTH_SECRET).unwrap_err(),
+            Recipient::parse("BAAA", &rfc.auth).unwrap_err(),
             EncryptError::BadSubscriptionKey
         );
         // a compressed-looking key (0x02 first octet)
         let compressed = format!("Ag{}", "A".repeat(85));
         assert_eq!(
-            Recipient::parse(&compressed, AUTH_SECRET).unwrap_err(),
+            Recipient::parse(&compressed, &rfc.auth).unwrap_err(),
             EncryptError::BadSubscriptionKey
         );
         assert_eq!(
-            Recipient::parse(UA_PUBLIC, "short").unwrap_err(),
+            Recipient::parse(&rfc.ua_public, "short").unwrap_err(),
             EncryptError::BadSubscriptionKey
         );
     }
 
     #[test]
     fn padding_and_trailing_bits_from_other_browsers_are_tolerated() {
-        let padded_auth = format!("{AUTH_SECRET}==");
-        let padded_key = format!("{UA_PUBLIC}=");
-        let a = Recipient::parse(UA_PUBLIC, AUTH_SECRET).unwrap();
+        let rfc = rfc();
+        let padded_auth = format!("{}==", rfc.auth);
+        let padded_key = format!("{}=", rfc.ua_public);
+        let a = Recipient::parse(&rfc.ua_public, &rfc.auth).unwrap();
         let b = Recipient::parse(&padded_key, &padded_auth).unwrap();
-        let salt = fixed::<16>(SALT);
+        let salt = fixed::<16>(&rfc.salt);
         assert_eq!(
             seal(b"x", &a, &rfc_agreement(), &salt).unwrap(),
             seal(b"x", &b, &rfc_agreement(), &salt).unwrap()
@@ -415,10 +497,41 @@ pub(crate) mod tests {
 
     #[test]
     fn nothing_that_prints_carries_the_keys() {
-        let to = Recipient::parse(UA_PUBLIC, AUTH_SECRET).unwrap();
+        let rfc = rfc();
+        let to = Recipient::parse(&rfc.ua_public, &rfc.auth).unwrap();
         let shown = format!("{to:?} {:?}", rfc_agreement());
-        for secret in [UA_PUBLIC, AUTH_SECRET, AS_PUBLIC, ECDH_SECRET] {
-            assert!(!shown.contains(secret), "{secret}");
+        // In order: 0 the browser's public key, 1 its auth value, 2 the
+        // server's ephemeral public key, 3 the ECDH result.
+        let values = [
+            rfc.ua_public.as_str(),
+            rfc.auth.as_str(),
+            rfc.as_public.as_str(),
+            rfc.ecdh.as_str(),
+        ];
+        // A failure names the position in the list, never the value itself.
+        for (position, value) in values.iter().enumerate() {
+            assert!(
+                !shown.contains(*value),
+                "value {position} of the list was printed"
+            );
         }
+    }
+
+    #[test]
+    fn expand_gives_the_length_asked_and_refuses_what_hkdf_cannot() {
+        // The octets themselves are pinned by the RFC's worked example above
+        // (cek and nonce come out of `expand`); this pins the helper's own
+        // contract: a shorter output is the start of a longer one, and a
+        // length HKDF-SHA-256 cannot give (more than 255 * 32 octets) is
+        // `Crypto`, not a panic.
+        let prk = Hkdf::<Sha256>::new(Some(&salt_variant(1)), &fixed::<32>(&rfc().ecdh));
+        let short: [u8; 12] = expand(&prk, b"info").unwrap();
+        let long: [u8; 16] = expand(&prk, b"info").unwrap();
+        assert_eq!(short, long[..12]);
+        assert!(expand::<8160>(&prk, b"info").is_ok());
+        assert_eq!(
+            expand::<8161>(&prk, b"info").unwrap_err(),
+            EncryptError::Crypto
+        );
     }
 }

@@ -285,13 +285,18 @@ mod tests {
         let d = cors_decision("OPTIONS", "/v1/weather", None);
         assert_eq!(d.allow_headers, "Content-Type");
         assert_eq!(d.methods, "GET, OPTIONS");
-        for secret in [
+        let credential_headers = [
             "Authorization",
             "X-API-Key",
             "X-Client-Id",
             "X-Client-Secret",
-        ] {
-            assert!(!d.allow_headers.contains(secret), "{secret}");
+        ];
+        // A failure names the position in the list, never the value itself.
+        for (position, header) in credential_headers.iter().enumerate() {
+            assert!(
+                !d.allow_headers.contains(*header),
+                "credential header {position} of the list is allowed to a foreign origin"
+            );
         }
         // The first-party list does carry them, for a listed origin only.
         assert!(FIRST_PARTY_ALLOW_HEADERS.contains("X-Client-Secret"));
