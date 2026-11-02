@@ -246,10 +246,8 @@ pub async fn send<T: Transport, K: KeyAgreement, S: Es256Signer>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::encrypt::tests::{
-        block_on, fixed, Fake as FakeKeys, AS_PUBLIC, AUTH_SECRET, ECDH_SECRET, SALT, UA_PUBLIC,
-    };
-    use crate::encrypt::{Agreement, HEADER_LEN};
+    use crate::encrypt::tests::{block_on, fixed, other_agreement, rfc, Fake as FakeKeys};
+    use crate::encrypt::{expand, HEADER_LEN};
     use crate::vapid::tests::Fake as FakeSigner;
     use crate::B64URL;
     use base64::Engine;
@@ -298,8 +296,8 @@ mod tests {
     fn sub() -> Subscription<'static> {
         Subscription {
             endpoint: ENDPOINT,
-            p256dh: UA_PUBLIC,
-            auth: AUTH_SECRET,
+            p256dh: &rfc().ua_public,
+            auth: &rfc().auth,
         }
     }
 
@@ -311,7 +309,7 @@ mod tests {
     }
 
     fn salt() -> [u8; 16] {
-        fixed(SALT)
+        fixed(&rfc().salt)
     }
 
     fn identity(signer: &FakeSigner) -> Identity<'_, FakeSigner> {
@@ -579,8 +577,21 @@ mod tests {
     fn nothing_that_prints_carries_the_capability() {
         let r = built();
         let shown = format!("{r:?} {:?}", sub());
-        for secret in [ENDPOINT, "dQw4w9", UA_PUBLIC, AUTH_SECRET, "vapid t="] {
-            assert!(!shown.contains(secret), "{secret}");
+        // In order: 0 the endpoint, 1 the endpoint's token, 2 the browser's
+        // public key, 3 its auth value, 4 the VAPID header's start.
+        let values = [
+            ENDPOINT,
+            "dQw4w9",
+            rfc().ua_public.as_str(),
+            rfc().auth.as_str(),
+            "vapid t=",
+        ];
+        // A failure names the position in the list, never the value itself.
+        for (position, value) in values.iter().enumerate() {
+            assert!(
+                !shown.contains(*value),
+                "value {position} of the list was printed"
+            );
         }
         assert!(shown.contains(&push::endpoint_id(ENDPOINT)));
     }
@@ -596,27 +607,25 @@ mod tests {
         use hkdf::Hkdf;
         use sha2::Sha256;
 
+        let rfc = rfc();
         let r = built();
         let salt: [u8; 16] = r.body[..16].try_into().unwrap();
         let as_public = &r.body[21..HEADER_LEN];
-        assert_eq!(B64URL.encode(as_public), AS_PUBLIC);
+        assert_eq!(B64URL.encode(as_public), rfc.as_public);
         let mut key_info = b"WebPush: info\0".to_vec();
-        key_info.extend_from_slice(&B64URL.decode(UA_PUBLIC).unwrap());
+        key_info.extend_from_slice(&B64URL.decode(&rfc.ua_public).unwrap());
         key_info.extend_from_slice(as_public);
-        let mut ikm = [0u8; 32];
-        Hkdf::<Sha256>::new(
-            Some(&B64URL.decode(AUTH_SECRET).unwrap()),
-            &B64URL.decode(ECDH_SECRET).unwrap(),
+        let ikm: [u8; 32] = expand(
+            &Hkdf::<Sha256>::new(
+                Some(&B64URL.decode(&rfc.auth).unwrap()),
+                &B64URL.decode(&rfc.ecdh).unwrap(),
+            ),
+            &key_info,
         )
-        .expand(&key_info, &mut ikm)
         .unwrap();
         let prk = Hkdf::<Sha256>::new(Some(&salt), &ikm);
-        let mut cek = [0u8; 16];
-        let mut nonce = [0u8; 12];
-        prk.expand(b"Content-Encoding: aes128gcm\0", &mut cek)
-            .unwrap();
-        prk.expand(b"Content-Encoding: nonce\0", &mut nonce)
-            .unwrap();
+        let cek: [u8; 16] = expand(&prk, b"Content-Encoding: aes128gcm\0").unwrap();
+        let nonce: [u8; 12] = expand(&prk, b"Content-Encoding: nonce\0").unwrap();
         let record = Aes128Gcm::new_from_slice(&cek)
             .unwrap()
             .decrypt(
@@ -636,13 +645,9 @@ mod tests {
         assert_eq!(json["url"], "/harare");
         assert_eq!(json["title"], "Frost alert for Harare");
         // and a different ECDH secret (a different browser) cannot read it
-        let other = Agreement {
-            shared_secret: [1u8; 32],
-            ..crate::encrypt::tests::rfc_agreement()
-        };
         let signer = FakeSigner::new();
         let keys = FakeKeys {
-            answer: Ok(other),
+            answer: Ok(other_agreement()),
             ..FakeKeys::rfc()
         };
         let r2 = build_with(&sub(), &identity(&signer), &opts(), &keys).unwrap();
