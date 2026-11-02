@@ -530,3 +530,46 @@ pub async fn cached_profile(
     let profile = assemble(env, place, normals.as_ref(), (None, false)).await;
     serde_json::to_value(&profile).ok()
 }
+
+/// `GET /profile-block?slug=|lat=&lon=[&country=]` (service binding only):
+/// what the AI Worker splices into a prompt, `{"block": "…"}`. The profile of
+/// the place, as `cached_profile` builds it for the agriculture route:
+/// cache-only (the cell's normals when KV already holds them, no soil, no
+/// archive request, no `PlaceProfile` budget), so it never waits on an
+/// upstream. `block` is `""` when nothing can be said; a place that cannot be
+/// resolved or a missing profile is never an error, because the prompt does
+/// without. Only a malformed query is refused.
+pub async fn prompt_block(req: &Request, env: &Env) -> Result<Response> {
+    let pairs = query_pairs(req)?;
+    let get = |k: &str| pairs.iter().find(|(n, _)| n == k).map(|(_, v)| v.as_str());
+    let slug = get("slug").filter(|s| !s.is_empty());
+    if let Some(s) = slug {
+        if s.len() > 120 || !pp::valid_slug(s) {
+            return error(422, "invalid_request", "Invalid slug.");
+        }
+    }
+    let coord = |k: &str, lo: f64, hi: f64| -> std::result::Result<Option<f64>, ()> {
+        match get(k) {
+            None => Ok(None),
+            Some(v) => match v.trim().parse::<f64>() {
+                Ok(f) if f.is_finite() && (lo..=hi).contains(&f) => Ok(Some(f)),
+                _ => Err(()),
+            },
+        }
+    };
+    let (Ok(lat), Ok(lon)) = (coord("lat", -90.0, 90.0), coord("lon", -180.0, 180.0)) else {
+        return error(422, "invalid_request", "Invalid coordinates.");
+    };
+    if slug.is_none() && (lat.is_none() || lon.is_none()) {
+        return error(422, "invalid_request", "Provide slug, or lat and lon.");
+    }
+    let country = get("country")
+        .filter(|c| c.len() == 2 && c.chars().all(|ch| ch.is_ascii_alphabetic()))
+        .map(str::to_uppercase);
+    let Some(place) = resolve_place(env, slug, lat, lon, country.as_deref()).await else {
+        return json(200, &json!({"block": ""}));
+    };
+    let normals: Option<pp::NormalsBundle> = cached(env, &normals_key(place.lat, place.lon)).await;
+    let profile = assemble(env, place, normals.as_ref(), (None, false)).await;
+    json(200, &json!({"block": pp::profile_prompt_block(&profile)}))
+}
