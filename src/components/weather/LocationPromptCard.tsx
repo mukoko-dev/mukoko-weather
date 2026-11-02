@@ -3,14 +3,16 @@
 import { X } from "lucide-react";
 import { NavigationIcon } from "@/lib/weather-icons";
 import { Spinner } from "@/components/ui/spinner";
+import { FLOATING_CARD_CLASS } from "@/components/ui/floating-stack";
 
 /**
  * The ONE location ask on the home page.
  *
  * The page already shows weather for the server's best guess (last visited
  * place or IP location), so nothing blocks on this: it floats above the
- * mobile nav as a slim, dismissible card instead of a full-screen loader or a
- * banner that pushes the temperature below the fold. The browser's permission
+ * mobile nav (in the `FloatingStack` its page renders it in, so it never lies
+ * on top of the weather-load notice) as a slim, dismissible card instead of a
+ * full-screen loader or a banner that pushes the temperature below the fold. The browser's permission
  * prompt only appears after the visitor taps the button — never on page load —
  * so they know why it's being asked (the line under the place name says so).
  * Dismissing is "Not now", remembered on this device for a week; a block is
@@ -36,10 +38,7 @@ export function LocationPromptCard({
   onSearch: () => void;
 }) {
   return (
-    <section
-      aria-label="Use your location"
-      className="fixed inset-x-3 bottom-[var(--mobile-nav-clearance)] z-30 mx-auto max-w-md animate-fade-in-up rounded-[var(--radius-card)] border border-primary/25 bg-surface-card/95 p-3 shadow-lg backdrop-blur-xl sm:bottom-6"
-    >
+    <section aria-label="Use your location" className={FLOATING_CARD_CLASS}>
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-sm text-text-primary">

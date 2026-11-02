@@ -115,7 +115,8 @@ export interface LiveFetch {
   state(): LiveFetchState;
 }
 
-const defaultSchedule = (fn: () => void, ms: number) => {
+/** `setTimeout` as a scheduler: runs `fn` after `ms`, returns the canceller. */
+export const defaultSchedule = (fn: () => void, ms: number) => {
   const id = setTimeout(fn, ms);
   return () => clearTimeout(id);
 };
