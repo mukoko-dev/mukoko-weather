@@ -460,7 +460,8 @@ mukoko-weather/
 │       ├── _http.py               # Shared pooled httpx clients keyed by timeout (get_http_client)
 │       ├── _insights.py           # moon_phase for the place-knowledge builder (the weather insights moved to the Worker, `weather_core::insights`)
 │       ├── _ai_gateway.py         # Shared AI plumbing: shamwari AI Gateway URL/headers, GatewayClient singleton, breaker-guarded call_ai(), first_text(), OpenAI-style tool helpers
-│       ├── _weather_cache_key.py  # weather_cache_key(lat, lon) — 0.05° grid-cell cache key for the remaining Python readers (the Worker derives the same key, `weather_core::geo::cache_key`, #252)
+│       ├── _weather_cache_key.py  # weather_cache_key(lat, lon) — the 0.05° grid-cell key (`cell:-17.85_31.05`) `_agriculture` keys its AI text on (the Worker derives the same key, `weather_core::geo::cell_key`, #252); `weather.weather_cache` itself is gone
+│       ├── _worker_weather.py     # weather_api_base() + fetch_weather(lat, lon): the Rust API Worker's `/v1/weather` for the Python chat and explore-search tools, which used to read `weather.weather_cache` (their only writer, `/api/py/weather`, is gone)
 │       ├── _wmo.py                # WMO_LABELS — weather-code labels (mirror of weatherCodeToInfo in src/lib/weather.ts)
 │       ├── _ai.py                 # Season helpers only (_get_season, _resolve_seasons_with_ai) for _history_analyze and _locations; the summary route is the AI Worker's (weather_core::ai::summary, tests/fixtures/ai-summary.json)
 │       ├── _ai_followup.py        # Inline follow-up chat endpoint (pre-seeded history)
@@ -589,7 +590,7 @@ All data handling, AI operations, database CRUD, and rule evaluation run in Pyth
 **Multi-database architecture (Phase 0B):** Mukoko-weather now consumes six databases on the shared Nyuchi Platform cluster — `weather`, `places`, `identity`, `shamwari`, `device`, `integrations`. See `docs/mongodb-schema-map.md` for the full map.
 
 - DB accessors live in `api/py/_db.py`: `weather_db()`, `places_db()`, `identity_db()`, `shamwari_db()`, `device_db()`, `integrations_db()`. The legacy `get_db()` is aliased to `weather_db()` for backward compat.
-- Collection accessors (existing): `weather_cache_collection()`, `ai_summaries_collection()`, `locations_collection()`, etc. — all routed through the appropriate platform DB. `device_profiles_collection()` now lives in the platform `device` DB.
+- Collection accessors (existing): `ai_summaries_collection()`, `locations_collection()`, etc. — all routed through the appropriate platform DB. `device_profiles_collection()` now lives in the platform `device` DB.
 - Platform collection accessors (new, camelCase, schema-validated): `stations_collection()`, `observations_collection()`, `alerts_collection()`, `community_reports_collection()`, `places_collection()`, `places_geo_collection()`, `persons_collection()`, `credentials_collection()`, `activity_log_collection()`, `conversations_collection()`, `messages_collection()`, `guardrails_collection()`, `devices_collection()`, `provider_configurations_collection()`, etc.
 - **Auto-stamped writes:** `stamp_platform_fields(doc, country_code="ZW", province_slug=None)` adds the required `_id` (UUID), `_schemaVersion: "v3.1"`, `bundu` sub-doc, `createdAt`, and `updatedAt`. Strict validators (`validationAction: "error"`) reject writes that lack these fields, so call this on every insert into a platform collection.
 - TypeScript mirror: `src/lib/mongo.ts` exports `weatherDb()`, `placesDb()`, `identityDb()`, `shamwariDb()`, `deviceDb()`, `integrationsDb()`. `src/lib/db.ts` exports `stampPlatformFields()` plus the matching collection accessors (`placesCollection`, `personsCollection`, etc.).
@@ -1242,7 +1243,7 @@ The AI prompts and suggested prompt rules live in the seed files (`src/lib/seed-
 
 **Server-side (MongoDB):**
 
-- Weather cache: 15-min TTL (auto-expires via TTL index), one row per 0.05° coordinate cell (`weather_cache_key`, #252)
+- Weather cache: none in MongoDB any more. The forecast Worker caches the blend in KV for 15 min (see Weather Data); `weather.weather_cache` is no longer written or read (its TTL index stays so old rows expire; dropping it is an owner step)
 - AI summaries (KV `AI_CACHE` in the AI Worker, no database): tiered TTL — 30 min for a `city`, 60 min for farming/mining/education/border places, 120 min otherwise, for real model-generated insights. Fallback text (the model failed or the gateway blocked it) is cached for only 60 s (`summary::TTL_FALLBACK`) regardless of tier — otherwise a single transient failure would serve the generic fallback summary for up to 2 hours per location
 - Weather history: unlimited retention. One doc per `(locationSlug, date)` — see "Weather history store" below
 - History analysis: 1h TTL in `history_analysis` collection (keyed by location + days + data hash)
@@ -1679,7 +1680,8 @@ _Python backend tests (pytest):_
 - `tests/py/test_db_helpers.py` — `get_client_ip` (x-forwarded-for, x-real-ip, client.host, None), `check_rate_limit` (allow/deny/boundary/composite-key/None-result)
 - `tests/py/test_chat.py` — `_build_chat_system_prompt` (location list, count, activities, fallback vs DB template, 20-location cap), SLUG_RE, KNOWN_TAGS, tool helpers (search, list_by_tag, get_weather cache, tool dispatch)
 - `tests/py/test_insights.py` — Derived insights (the moon phase is what the place-knowledge builder still imports): dew point, heat index, GDD, WMO hazards, convective proxy, moon phase, cloud base, full derivation, intermediate-field stripping
-- `tests/py/test_weather_cache_key.py` — weather_cache grid key (#252): the shared vectors (`tests/fixtures/weather-cache-keys.json`, also read by the Rust tests), far-apart coordinates never share a row, nearby requests in one cell do
+- `tests/py/test_weather_cache_key.py` — the 0.05° cell key (#252): the shared vectors (`tests/fixtures/weather-cache-keys.json`, also read by the Rust tests), far-apart coordinates never share a key, nearby requests in one cell do
+- `tests/py/test_worker_weather.py` — the Worker weather read the chat and explore tools use: origin rule (bare https only), `/v1/weather` by coordinate, provider header, unusable coordinates never asked, a failed answer raises so each caller keeps its fallback
 - `tests/py/test_geohash.py` — Python geohash mirror: published reference vectors, cross-language parity with the TS suite, slugify/delimiter safety, smart-slug determinism and collision behaviour
 - `tests/py/test_places_resolver.py` — `search_locations_by_name` and `find_nearest_locations` (the resolver helpers the Python chat and weather code still use)
 - `tests/py/test_ai.py` — the season helpers left in `_ai.py` (`_get_season`, hemisphere fallback, background AI season resolution). The summary itself is tested natively in `weather_core::ai` against `tests/fixtures/ai-summary.json` (generated by `scripts/gen_ai_summary_fixtures.py` from the real Python)
@@ -2255,7 +2257,7 @@ An unknown slug is **rewritten** to `LOCATION_NOT_FOUND_REWRITE` (`/__mukoko/loc
 
 **Static `LOCATIONS` array still ships in code** (`src/lib/locations.ts`) — but **not as a database seed source**. It's the canonical clean-slug → display-name/tags/province/elevation map for the 265 places the app ships with. Community-created placesGeo records written before #333 carry those fields in `sourceProvenance.mukoko*`; no new ones are written.
 
-**Backward compat:** Python `get_db()` is aliased to `weather_db()` so existing call sites keep working (the TS `getDb()` alias was removed). Legacy collection accessors (`weather_cache_collection`, `locations_collection`, etc.) now route to the appropriate platform DB internally — no call-site changes required.
+**Backward compat:** Python `get_db()` is aliased to `weather_db()` so existing call sites keep working (the TS `getDb()` alias was removed). Legacy collection accessors (`locations_collection`, etc.) now route to the appropriate platform DB internally — no call-site changes required.
 
 **Other notes:**
 

@@ -13,7 +13,6 @@ import asyncio
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Request
@@ -24,14 +23,13 @@ from ._db import (
     get_known_tags,
     filter_known_activities,
     get_activities_brief,
-    weather_cache_collection,
     activities_collection,
     suitability_rules_collection,
     SLUG_RE,
     MAX_HISTORY,
     MAX_MESSAGE_LEN,
 )
-from ._weather_cache_key import weather_cache_key_for
+from ._worker_weather import fetch_weather
 from ._places_resolver import (
     find_all_locations,
     find_location,
@@ -215,7 +213,7 @@ def _execute_search_locations(query: str) -> dict:
 
 
 def _execute_get_weather(slug: str, weather_cache: dict) -> dict:
-    """Get weather from MongoDB cache."""
+    """Get weather from the Rust API Worker (``/v1/weather``, cached in KV)."""
     if not SLUG_RE.match(slug):
         return {"error": f"Invalid slug: {slug}"}
 
@@ -224,23 +222,24 @@ def _execute_get_weather(slug: str, weather_cache: dict) -> dict:
         return weather_cache[slug]
 
     try:
-        # Resolve the place first (runs in executor thread): the cache is keyed
-        # by its coordinate cell, not by slug (#252), and the name feeds
-        # reference extraction. Phase 0G: via places.placesGeo.
+        # Resolve the place first (runs in executor thread): the Worker is asked
+        # by coordinate, not by slug, and the name feeds reference extraction.
+        # Phase 0G: via places.placesGeo.
         try:
             loc_doc = find_location(slug)
         except Exception:
             loc_doc = None
         loc_name = (loc_doc or {}).get("name") or slug
 
-        key = weather_cache_key_for(loc_doc)
-        doc = weather_cache_collection().find_one(
-            {"locationSlug": key, "expiresAt": {"$gt": datetime.now(timezone.utc)}},
-        ) if key else None
-        if not doc:
-            return {"error": f"No cached weather for {slug}. Weather data may not be available yet."}
+        fetched = (
+            fetch_weather((loc_doc or {}).get("lat"), (loc_doc or {}).get("lon"))
+            if loc_doc
+            else None
+        )
+        if not fetched:
+            return {"error": f"No weather for {slug}. Weather data may not be available yet."}
 
-        data = doc.get("data", {})
+        data, _provider = fetched
         current = data.get("current", {})
         daily = data.get("daily", {})
         insights = data.get("insights", {})

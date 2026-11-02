@@ -11,7 +11,7 @@ System prompt is fetched from the database (system:explore_search).
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
@@ -19,13 +19,12 @@ from pydantic import BaseModel, Field
 
 from ._db import (
     enforce_rate_limit,
-    weather_cache_collection,
     SLUG_RE,
 )
 from ._ai_prompts import get_ai_prompt
 from ._ai_gateway import call_ai, function_tools, tool_result_message
 from ._places_resolver import find_all_locations, find_location
-from ._weather_cache_key import weather_cache_key_for
+from ._worker_weather import fetch_weather
 from ._circuit_breaker import ai_breaker
 
 router = APIRouter()
@@ -197,19 +196,15 @@ def _exec_weather(args: dict) -> str:
         return json.dumps({"error": "Invalid location slug"})
 
     try:
-        # The cache is keyed by coordinate cell, not by place slug (#252).
-        # Coordinates from the cached location context first (no DB hit),
-        # falling back to the resolver for slugs outside it.
+        # The Worker is asked by coordinate, not by place slug. Coordinates
+        # from the cached location context first (no DB hit), falling back to
+        # the resolver for slugs outside it.
         loc = next((l for l in _get_location_context() if l.get("slug") == slug), None)
         if not loc or loc.get("lat") is None:
             loc = find_location(slug)
-        key = weather_cache_key_for(loc)
-        cached = weather_cache_collection().find_one(
-            {"locationSlug": key},
-            {"_id": 0, "data": 1, "provider": 1},
-        ) if key else None
-        if cached and cached.get("data"):
-            data = cached["data"]
+        fetched = fetch_weather(loc.get("lat"), loc.get("lon")) if loc else None
+        if fetched:
+            data, provider = fetched
             current = data.get("current", {})
             return json.dumps({
                 "slug": slug,
@@ -220,7 +215,7 @@ def _exec_weather(args: dict) -> str:
                 "precipitation": current.get("precipitation"),
                 "uvIndex": current.get("uv_index"),
                 "cloudCover": current.get("cloud_cover"),
-                "provider": cached.get("provider", "unknown"),
+                "provider": provider,
             })
         return json.dumps({"error": f"No weather data for {slug}"})
     except Exception:
@@ -241,47 +236,57 @@ def _exec_tool(name: str, args: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _brief_weather(loc: dict) -> dict:
+    """Temperature and weather code for a place from the Worker; ``{}`` when it
+    has none (the fallback shows the place without weather)."""
+    try:
+        fetched = fetch_weather(loc.get("lat"), loc.get("lon"))
+    except Exception:
+        return {}
+    if not fetched:
+        return {}
+    current = fetched[0].get("current") or {}
+    return {
+        "temperature": current.get("temperature_2m"),
+        "weatherCode": current.get("weather_code"),
+    }
+
+
 def _text_search_fallback(query: str) -> dict:
     """Simple text search when AI is unavailable."""
     locations = _get_location_context()
     q = query.lower().strip()
 
-    results = []
+    matches = []
     for loc in locations:
         name = loc.get("name", "").lower()
         province = loc.get("province", "").lower()
         tags = loc.get("tags", [])
 
         if q in name or q in province or q in " ".join(tags):
-            # Try to get cached weather
-            weather_info = {}
-            try:
-                key = weather_cache_key_for(loc)
-                cached = weather_cache_collection().find_one(
-                    {"locationSlug": key},
-                    {"_id": 0, "data.current.temperature_2m": 1, "data.current.weather_code": 1},
-                ) if key else None
-                if cached and cached.get("data", {}).get("current"):
-                    curr = cached["data"]["current"]
-                    weather_info = {
-                        "temperature": curr.get("temperature_2m"),
-                        "weatherCode": curr.get("weather_code"),
-                    }
-            except Exception:
-                pass
+            matches.append(loc)
 
-            results.append({
-                "slug": loc["slug"],
-                "name": loc["name"],
-                "province": loc.get("province", ""),
-                "country": loc.get("country") or "",
-                "tags": tags,
-                **weather_info,
-            })
+    # Weather only for the places that are returned, read in parallel (each
+    # read is bounded by the Worker timeout), never for every match.
+    shown = matches[:10]
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        weather = list(pool.map(_brief_weather, shown)) if shown else []
+
+    results = [
+        {
+            "slug": loc["slug"],
+            "name": loc["name"],
+            "province": loc.get("province", ""),
+            "country": loc.get("country") or "",
+            "tags": loc.get("tags", []),
+            **info,
+        }
+        for loc, info in zip(shown, weather)
+    ]
 
     return {
-        "locations": results[:10],
-        "summary": f"Found {len(results)} locations matching \"{query}\"." if results else f"No locations found matching \"{query}\". Try a different search term.",
+        "locations": results,
+        "summary": f"Found {len(matches)} locations matching \"{query}\"." if matches else f"No locations found matching \"{query}\". Try a different search term.",
     }
 
 

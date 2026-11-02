@@ -567,9 +567,11 @@ export async function ensureIndexes(): Promise<void> {
       { expireAfterSeconds: 0 },
     ),
 
-    // Global-model baseline + Tomorrow.io enrichment (issue #246). All three
-    // rely on `expiresAt` for cleanup: budget buckets (hour/day/stats docs),
-    // the 3-hour enrichment cache, and the 180-day verification capture.
+    // Global-model baseline + Tomorrow.io enrichment (issue #246). Nothing
+    // writes these three any more (the Worker keeps its budget in D1 and its
+    // caches in KV; verification capture was not ported). The TTL indexes stay
+    // so the rows that exist still expire; dropping the collections is an
+    // owner step.
     safeCreateIndex(
       weatherDb().collection("providerBudget"),
       { expiresAt: 1 },

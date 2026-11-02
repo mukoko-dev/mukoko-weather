@@ -1,24 +1,27 @@
-"""Coordinate-grid key for ``weather.weather_cache`` rows (issue #252).
+"""Coordinate-grid key (issue #252): a 0.05 degree cell, ``cell:-17.85_31.05``.
 
-The forecast cache is keyed by WHERE the forecast is for, not by which known
-place happens to be nearest. Keying on the nearest place (searched up to
-20,000 km) let Frankfurt's weather sit under Bizerte and Bangladesh's under a
-Singapore record, so one city could be served another city's forecast.
+``weather.weather_cache`` is gone (its only writer was ``/api/py/weather``; the
+forecast Worker caches in KV), so this is no longer a Mongo row key. What still
+uses it is :mod:`_agriculture`, which keys its AI-text cache on the cell, so
+text written for one place is never served to another. The twin is
+``weather_core::geo::cell_key`` (the Worker keys history and the agriculture
+data on it); both are pinned to ``tests/fixtures/weather-cache-keys.json``.
+
+Keying on WHERE a forecast is for, not on the nearest known place (searched up
+to 20,000 km), is what stops one city being served another's: Frankfurt's
+weather used to sit under Bizerte and Bangladesh's under a Singapore record.
 
 Grid: 0.05 degrees (~5.6 km north-south; narrower east-west away from the
-equator). A request is at most ~3.9 km from the centre of its cell, which is
-finer than the forecast models behind the providers (Open-Meteo's global
-models run at ~9-25 km, Tomorrow.io's at a few km), so two requests that
-share a cell would get practically the same forecast anyway. It is still
-coarse enough that a town's page slugs, GPS fixes and the client refresh all
-share one provider fetch (Tomorrow.io free tier: 500 calls/day).
+equator). A request is at most ~3.9 km from the centre of its cell, finer than
+the forecast models behind the providers (Open-Meteo's global models run at
+~9-25 km), so two requests that share a cell get practically the same
+forecast, yet a town's page slugs, GPS fixes and client refreshes all share
+one key.
 
 The key is built from integer cell indices, never from formatted floats, so
-the Rust Worker (``weather_core::geo::cache_key``) produces the same string
-bit for bit. Both are pinned to ``tests/fixtures/weather-cache-keys.json``.
-The ``cell:`` prefix keeps new keys disjoint from every legacy key (place
-slugs and the old raw ``{lat:.2f}_{lon:.2f}`` fallback), so a legacy row can
-never be read under a new key; legacy rows just expire through the TTL.
+Python and Rust produce the same string bit for bit. The ``cell:`` prefix keeps
+these keys disjoint from every legacy key (place slugs and the old raw
+``{lat:.2f}_{lon:.2f}`` fallback).
 """
 
 from __future__ import annotations
@@ -48,7 +51,7 @@ def _fmt(idx: int) -> str:
 
 
 def weather_cache_key(lat: float, lon: float) -> str:
-    """Return the ``weather_cache.locationSlug`` value for a coordinate."""
+    """Return the ``cell:`` key for a coordinate."""
     lat_idx = max(-_LAT_MAX_IDX, min(_LAT_MAX_IDX, _cell_index(float(lat))))
     lon_idx = _cell_index(float(lon))
     if lon_idx >= _LON_MAX_IDX:  # +180 and -180 are the same meridian
@@ -56,18 +59,3 @@ def weather_cache_key(lat: float, lon: float) -> str:
     elif lon_idx < -_LON_MAX_IDX:
         lon_idx += 2 * _LON_MAX_IDX
     return f"{KEY_PREFIX}{_fmt(lat_idx)}_{_fmt(lon_idx)}"
-
-
-def weather_cache_key_for(loc: dict | None) -> str | None:
-    """Cache key for a resolved location dict (``lat``/``lon``), or ``None``.
-
-    For readers that start from a place slug (reports, chat, explore): resolve
-    the place first, then read the row for ITS coordinates. Never look a row
-    up by the place slug itself.
-    """
-    if not loc:
-        return None
-    try:
-        return weather_cache_key(float(loc["lat"]), float(loc["lon"]))
-    except (KeyError, TypeError, ValueError):
-        return None

@@ -1,7 +1,7 @@
-"""weather_cache grid key (issue #252): coordinate cells, not nearest places.
+"""Coordinate-cell key (issue #252): coordinate cells, not nearest places.
 
-The Rust forecast Worker derives the same key (`weather_core::geo::cache_key`),
-pinned to the same fixture.
+The Rust Worker derives the same key (`weather_core::geo::cell_key`), pinned to
+the same fixture.
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ from py._weather_cache_key import (
     GRID_DEG,
     KEY_PREFIX,
     weather_cache_key,
-    weather_cache_key_for,
 )
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "weather-cache-keys.json"
@@ -94,9 +93,3 @@ class TestKeyFunction:
 
     def test_no_negative_zero(self):
         assert weather_cache_key(-0.01, -0.01) == "cell:0.00_0.00"
-
-    def test_key_for_location(self):
-        assert weather_cache_key_for({"lat": -17.83, "lon": 31.05}) == "cell:-17.85_31.05"
-        assert weather_cache_key_for(None) is None
-        assert weather_cache_key_for({"slug": "x"}) is None
-        assert weather_cache_key_for({"lat": None, "lon": 1}) is None

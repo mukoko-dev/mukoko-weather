@@ -243,24 +243,36 @@ class TestGetWeather:
         assert result["current"]["temperature"] == 25
 
     @patch("py._chat.find_location")
-    @patch("py._chat.weather_cache_collection")
-    def test_reads_cache_by_coordinate_cell(self, mock_coll, mock_loc):
-        """#252: the row is found by the place's grid cell, never its slug."""
+    @patch("py._chat.fetch_weather")
+    def test_asks_the_worker_by_coordinate(self, mock_fetch, mock_loc):
+        """The Worker is asked by the place's coordinate, never its slug."""
         mock_loc.return_value = {"slug": "harare", "name": "Harare", "lat": -17.83, "lon": 31.05}
-        mock_coll.return_value.find_one.return_value = {
-            "data": {"current": {"temperature_2m": 22}, "daily": {}},
-        }
+        mock_fetch.return_value = ({"current": {"temperature_2m": 22}, "daily": {}}, "open-meteo:blend")
         result = _execute_get_weather("harare", {})
         assert result["current"]["temperature"] == 22
         assert result["location_name"] == "Harare"
-        assert mock_coll.return_value.find_one.call_args[0][0]["locationSlug"] == "cell:-17.85_31.05"
+        mock_fetch.assert_called_once_with(-17.83, 31.05)
+
+    @patch("py._chat.find_location")
+    @patch("py._chat.fetch_weather", return_value=None)
+    def test_no_weather_from_the_worker_is_an_error(self, _fetch, mock_loc):
+        mock_loc.return_value = {"slug": "harare", "name": "Harare", "lat": -17.83, "lon": 31.05}
+        result = _execute_get_weather("harare", {})
+        assert "No weather for harare" in result["error"]
+
+    @patch("py._chat.find_location")
+    @patch("py._chat.fetch_weather", side_effect=Exception("Worker down"))
+    def test_a_failing_worker_is_an_error_not_a_crash(self, _fetch, mock_loc):
+        mock_loc.return_value = {"slug": "harare", "name": "Harare", "lat": -17.83, "lon": 31.05}
+        result = _execute_get_weather("harare", {})
+        assert result["error"].startswith("Failed to fetch weather")
 
     @patch("py._chat.find_location", return_value=None)
-    @patch("py._chat.weather_cache_collection")
-    def test_unknown_place_never_reads_cache(self, mock_coll, _loc):
+    @patch("py._chat.fetch_weather")
+    def test_unknown_place_never_asks_the_worker(self, mock_fetch, _loc):
         result = _execute_get_weather("harare", {})
         assert "error" in result
-        mock_coll.return_value.find_one.assert_not_called()
+        mock_fetch.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
