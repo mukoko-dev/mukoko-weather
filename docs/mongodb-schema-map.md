@@ -293,7 +293,7 @@ The bridge keeps one official-driver `MongoClient` in a Durable Object, uses the
 `weather.locations` is **dropped**. As of Phase 0G the Python backend also reads
 exclusively through `places.placesGeo` — `api/py/_places_resolver.py` mirrors the
 TypeScript resolver in `src/lib/places.ts`, and every read/write in
-`_reports.py` and `_weather.py`
+`_reports.py`
 flows through it. The legacy `weather.countries` and `weather.provinces` collections
 are also dropped — `placesGeo.geoType=country/province` is the canonical source.
 
@@ -353,8 +353,8 @@ is gone with the module; nothing reads or writes it from this repo.
 
 1. **Refactor `api/py/_db.py`** to expose `weather_db()`, `places_db()`, `identity_db()`, `shamwari_db()`, `device_db()`, `integrations_db()` accessors.
 2. **Seed `places.places`** with the 250+ African cities/towns we have locally (using `placesGeo` for ISO codes + admin hierarchy).
-3. **Add `nearest_station_observation()`** helper in `api/py/_weather.py` — query `weather.observations` by `$nearSphere`, return latest within 50km.
-4. **Update weather priority chain** in `/api/py/weather`: StationKit → Tomorrow.io → Open-Meteo → seasonal estimate.
+3. **Add the StationKit overlay** to the weather route — done on the forecast Worker (`workers/forecast/src/stations.rs`, D1 `observations`, latest validated within 50 km and 60 min).
+4. **Update weather priority chain**: StationKit → Open-Meteo blend (Tomorrow.io enriches only) → seasonal estimate — done on the Worker (`GET /v1/weather`).
 5. **Read provider configs** from `integrations.providerConfigurations` instead of `api_keys` collection.
 6. **Add MapTiler + Anthropic provider configs** to `integrations.providerConfigurations` (and `integrations.providers` if not registered).
 7. **Adopt new schema** for all writes: `_schemaVersion: "v3.1"`, `bundu: {countryCode, provinceSlug}`, `createdAt`, `updatedAt`.

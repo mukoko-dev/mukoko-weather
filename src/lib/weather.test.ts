@@ -1,6 +1,4 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
-import { resolve } from "path";
 import {
   wmoToInsightHazards,
   checkFrostRisk,
@@ -722,22 +720,5 @@ describe("windDirection points option", () => {
     expect(eight(270)).toBe("W");
     expect(eight(315)).toBe("NW");
     expect(eight(360)).toBe("N");
-  });
-});
-
-describe("WMO label parity with api/py/_wmo.py", () => {
-  it("WMO_LABELS matches weatherCodeToInfo for every shipped code", () => {
-    const py = readFileSync(
-      resolve(__dirname, "../../api/py/_wmo.py"),
-      "utf-8",
-    );
-    const pairs = [...py.matchAll(/^\s+(\d+): "([^"]+)",$/gm)].map((m) => [
-      Number(m[1]),
-      m[2],
-    ]);
-    expect(pairs.length).toBeGreaterThan(20);
-    for (const [code, label] of pairs) {
-      expect(weatherCodeToInfo(code as number).label).toBe(label);
-    }
   });
 });
