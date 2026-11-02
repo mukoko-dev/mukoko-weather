@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "fs";
+import { resolve } from "path";
 import nextConfig from "../../next.config";
 import {
   buildCsp,
@@ -104,6 +106,34 @@ describe("CORS (B06)", () => {
   it("keeps the embeds CORS-open", () => {
     for (const s of ["/api/embed/:path*", "/embed/:path*"])
       expect(sources).toContain(s);
+  });
+
+  it("the API Worker opens exactly the documented routes", () => {
+    // `weather_core::cors::OPEN_READ_ROUTES` is the Worker's own open list: the
+    // routes that replace the open Python ones (weather and air quality, + its
+    // grid) and the two that already moved (geo, search).
+    const rust = readFileSync(
+      resolve(__dirname, "../../workers/crates/weather-core/src/cors.rs"),
+      "utf-8",
+    );
+    // Tolerates the array type being sized or a slice, and the list being one
+    // line or one entry per line.
+    const block = /pub const OPEN_READ_ROUTES[^=]*=\s*&?\[([^\]]*)\]/.exec(
+      rust,
+    );
+    expect(block).not.toBeNull();
+    const workerRoutes = [...(block?.[1] ?? "").matchAll(/"([^"]+)"/g)]
+      .map((m) => m[1])
+      .sort();
+    expect(workerRoutes).toEqual(
+      [
+        "/v1/air-quality",
+        "/v1/air-quality/grid",
+        "/v1/geo",
+        "/v1/search",
+        "/v1/weather",
+      ].sort(),
+    );
   });
 
   it("no longer opens the deleted Python weather, air-quality, geo and search routes", () => {
