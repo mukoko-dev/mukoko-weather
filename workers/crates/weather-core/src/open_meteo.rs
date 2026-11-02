@@ -110,6 +110,15 @@ pub fn paid_url(url: &str, key: &str, archive_licensed: bool) -> String {
     )
 }
 
+/// Whether an HTTP status from the customer host means the subscription key
+/// itself was refused (invalid, revoked, or the plan lapsed), as opposed to our
+/// request being wrong or the quota being spent. The call is then repeated once
+/// on the free host, so a bad key degrades to what worked before the
+/// subscription instead of to the seasonal estimate for every place.
+pub fn key_rejected(status: u16) -> bool {
+    (401..=403).contains(&status)
+}
+
 /// `text` with the key (raw and percent-encoded) and every `apikey=` query
 /// value masked. Use it on anything a failed call might put in a message.
 pub fn scrub(text: &str, key: Option<&str>) -> String {
@@ -212,6 +221,18 @@ impl fmt::Debug for Plan {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn only_a_refused_key_falls_back_to_the_free_host() {
+        for refused in [401, 402, 403] {
+            assert!(key_rejected(refused));
+        }
+        // Our request is wrong, the quota is spent or the service is down:
+        // the free host would not help (or must not be hammered).
+        for other in [200, 400, 404, 429, 500, 503] {
+            assert!(!key_rejected(other));
+        }
+    }
+
     use super::*;
 
     const KEY: &str = "om_live_AbC123xyz";

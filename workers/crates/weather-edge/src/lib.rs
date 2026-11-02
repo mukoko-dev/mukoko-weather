@@ -182,8 +182,32 @@ pub async fn get_with_timeout(
     headers: Option<Headers>,
     timeout: Duration,
 ) -> std::result::Result<Response, FetchError> {
-    let url = open_meteo::url(url);
-    let parsed = Url::parse(&url).map_err(|e| network_error(e.into()))?;
+    let upgraded = open_meteo::url(url);
+    if upgraded == url {
+        return send(url, headers, timeout).await;
+    }
+    // A covered host, requested with the subscription key. If the key is
+    // refused, repeat the call once on the free host rather than fail every
+    // place: the subscription is an upgrade, never a new way to break.
+    let retry_headers = headers.clone();
+    let resp = send(&upgraded, headers, timeout).await?;
+    if open_meteo::key_rejected(resp.status_code()) {
+        console_warn!(
+            "open-meteo: the subscription key was refused (HTTP {}); using the free host",
+            resp.status_code()
+        );
+        return send(url, retry_headers, timeout).await;
+    }
+    Ok(resp)
+}
+
+/// One `GET`, aborted on timeout, with the key masked in any error.
+async fn send(
+    url: &str,
+    headers: Option<Headers>,
+    timeout: Duration,
+) -> std::result::Result<Response, FetchError> {
+    let parsed = Url::parse(url).map_err(|e| network_error(e.into()))?;
     let fetch = match headers {
         Some(h) => {
             let mut init = worker::RequestInit::new();

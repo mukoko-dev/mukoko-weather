@@ -41,6 +41,11 @@ pub fn url(url: &str) -> String {
     PLAN.with(|p| p.url(url))
 }
 
+/// Whether `status` from the customer host means the key was refused.
+pub fn key_rejected(status: u16) -> bool {
+    om::key_rejected(status)
+}
+
 /// Whether a key is held: forecast and air quality use the customer hosts.
 pub fn is_paid() -> bool {
     PLAN.with(Plan::is_paid)
