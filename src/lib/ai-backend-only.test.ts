@@ -7,13 +7,12 @@
  * binding and the shamwari gateway) run models. The Python backend (api/py)
  * reaches them over HTTPS through mukoko-weather-internal with the service
  * key and holds no Cloudflare AI token. Browser code, Next.js server/client
- * components, NEXT_PUBLIC_* vars and the embed go through
- * our backend routes (/api/ai/* → /api/py/ai/*, /api/py/chat, and the
- * Worker's /v1/ai/explore/search and /v1/ai/history/analyze). This test
- * fails if src/ or api/py
- * references the gateway host, a Workers AI call, an AI SDK or a Cloudflare
- * AI token env name — and, when a production build exists, if the client
- * bundle does.
+ * components, NEXT_PUBLIC_* vars and the embed go through our backend routes
+ * (/api/ai/* → /api/py/ai/*, and the Worker's /v1/ai/chat,
+ * /v1/ai/explore/search and /v1/ai/history/analyze). This test fails if src/
+ * or api/py references the gateway host, a Workers AI call, an AI SDK or a
+ * Cloudflare AI token env name — and, when a production build exists, if the
+ * client bundle does.
  */
 import { describe, expect, it } from "vitest";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";

@@ -280,11 +280,25 @@ pub async fn chat(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
             }
         }
     }
-    let fetched = join_all(places.iter().map(|p| weather(ctx.env, p.lat, p.lon))).await;
+    // Each place's forecast and, beside it, what is known about the place (the
+    // Python's `placeProfile`): cache-only and bounded, so no profile is no
+    // block and a profile never slows or fails the answer.
+    let fetched = join_all(places.iter().map(|p| async move {
+        let (data, block) = futures::join!(
+            weather(ctx.env, p.lat, p.lon),
+            profile::block(ctx.env, Some(&p.slug), p.lat, p.lon, p.country.as_deref()),
+        );
+        Some((data?, block))
+    }))
+    .await;
     let facts: Vec<String> = places
         .iter()
         .zip(&fetched)
-        .filter_map(|(p, d)| d.as_ref().map(|d| prompts::weather_facts(p, d)))
+        .filter_map(|(p, d)| {
+            d.as_ref().map(|(data, block)| {
+                prompts::facts_with_profile(&prompts::weather_facts(p, data), block)
+            })
+        })
         .collect();
     let references: Vec<Value> = places
         .iter()
