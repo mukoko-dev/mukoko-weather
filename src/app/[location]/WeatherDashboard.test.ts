@@ -341,11 +341,14 @@ describe("WeatherDashboard — mobile nav clearance and touch targets", () => {
 describe("globals.css — touch-target and nav-clearance tokens", () => {
   const css = readFileSync(resolve(__dirname, "../globals.css"), "utf-8");
 
-  it("defines the mobile nav clearance token from the nav inset and height", () => {
+  it("defines the mobile nav clearance token from the lift, the safe area and the one bar", () => {
     expect(css).toContain("--mobile-nav-clearance:");
     expect(css).toContain("env(safe-area-inset-bottom");
     expect(css).toContain("--mobile-nav-inset:");
-    expect(css).toContain("--mobile-nav-height:");
+    expect(css).toContain("--mobile-nav-bar-height:");
+    // The pager pill above the bar is gone, and with it its height and gap.
+    expect(css).not.toContain("--mobile-nav-height:");
+    expect(css).not.toContain("--mobile-nav-gap:");
   });
 
   it("defines .dik-dik to reach the touch-target minimum on coarse pointers only", () => {

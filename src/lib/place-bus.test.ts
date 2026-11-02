@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  handlePlaceLinkClick,
   hasPlaceStage,
+  isPlainLeftClick,
   navigateToPlace,
   registerPlaceStage,
 } from "./place-bus";
@@ -96,5 +98,52 @@ describe("navigateToPlace", () => {
     expect(hasPlaceStage()).toBe(true);
     off();
     expect(hasPlaceStage()).toBe(false);
+  });
+});
+
+describe("isPlainLeftClick", () => {
+  const click = (over: Record<string, unknown> = {}) => ({
+    button: 0,
+    metaKey: false,
+    ctrlKey: false,
+    shiftKey: false,
+    altKey: false,
+    defaultPrevented: false,
+    preventDefault: () => undefined,
+    ...over,
+  });
+
+  it("is true for a plain left click", () => {
+    expect(isPlainLeftClick(click())).toBe(true);
+  });
+
+  it.each([
+    ["middle click", { button: 1 }],
+    ["right click", { button: 2 }],
+    ["cmd click", { metaKey: true }],
+    ["ctrl click", { ctrlKey: true }],
+    ["shift click", { shiftKey: true }],
+    ["alt click", { altKey: true }],
+    ["already handled", { defaultPrevented: true }],
+  ])(
+    "is false for a %s (a new tab or window, not a switch in this tab)",
+    (_name, over) => {
+      expect(isPlainLeftClick(click(over))).toBe(false);
+    },
+  );
+
+  it("is the rule handlePlaceLinkClick applies: a modified click is left to the browser", () => {
+    const preventDefault = vi.fn();
+    const push = vi.fn();
+    handlePlaceLinkClick(
+      click({ metaKey: true, preventDefault }),
+      "/harare",
+      push,
+    );
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+    handlePlaceLinkClick(click({ preventDefault }), "/harare", push);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith("/harare");
   });
 });
