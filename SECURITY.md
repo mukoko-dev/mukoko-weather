@@ -70,15 +70,14 @@ The Shamwari chatbot endpoint has layered security controls:
 
 ### Rate Limiting
 
-All rate-limited endpoints use a MongoDB-backed IP rate limiter (`check_rate_limit` in `api/py/_db.py`) with atomic `findOneAndUpdate` and TTL index:
+The Python endpoints use a MongoDB-backed IP rate limiter (`check_rate_limit` in `api/py/_db.py`) with atomic `findOneAndUpdate` and TTL index; the Workers' hourly limits (`/v1/reports` here) are kept in D1 `rate_events`, per client address hash:
 
-| Endpoint                   | Limit       |
-| -------------------------- | ----------- |
-| `/api/py/chat`             | 20 req/hour |
-| `/api/py/ai/followup`      | 30 req/hour |
-| `/api/py/locations/add`    | 5 req/hour  |
-| `/api/py/reports` (submit) | 5 req/hour  |
-| `/api/py/reports/clarify`  | 10 req/hour |
+| Endpoint                  | Limit       |
+| ------------------------- | ----------- |
+| `/api/py/chat`            | 20 req/hour |
+| `/api/py/ai/followup`     | 30 req/hour |
+| `/v1/reports` (submit)    | 5 req/hour  |
+| `/api/py/reports/clarify` | 10 req/hour |
 
 The routes on the Rust Workers keep their limits in the Workers' own D1 table `rate_events` (`weather_core::budget`; the client is a SHA-256 of the visitor's address, never the address). The AI location search (`/v1/ai/explore/search`, 15 an hour per client) and the AI history analysis (`/v1/ai/history/analyze`, 10 an hour per client) fail closed: when the budget cannot be read, the model is not called. See `workers/README.md`.
 

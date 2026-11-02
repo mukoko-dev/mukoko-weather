@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "fs";
+import { resolve } from "path";
 import {
   aqiGauge,
   formatPollutant,
@@ -145,11 +147,16 @@ describe("AirQualityCard exports", () => {
 // ── API contract ───────────────────────────────────────────────────────────
 
 describe("AirQualityCard API contract", () => {
-  it("targets the /api/py/airquality endpoint", () => {
-    // The component fetches `/api/py/airquality?lat=&lon=` on mount.
-    // This is the Python FastAPI endpoint in api/py/_air_quality.py.
-    const endpoint = "/api/py/airquality";
-    expect(endpoint).toBe("/api/py/airquality");
+  it("targets the Worker's air-quality route (never /api/py)", () => {
+    // The component fetches `/v1/air-quality?lat=&lon=` on mount through
+    // `fetchWorker` (weather-api.mukoko.com), the Rust forecast Worker.
+    const source = readFileSync(
+      resolve(__dirname, "AirQualityCard.tsx"),
+      "utf-8",
+    );
+    expect(source).toContain('"air-quality"');
+    expect(source).toContain("fetchWorker");
+    expect(source).not.toContain('"/api/py/airquality"');
   });
 
   it("response shape includes aqi, level, dominantPollutant, pollutants", () => {

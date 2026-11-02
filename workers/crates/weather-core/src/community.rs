@@ -11,6 +11,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::budget::Decision;
 use crate::slug::valid_slug;
 
 pub const REPORT_TYPES: [&str; 13] = [
@@ -130,6 +131,12 @@ pub struct Snapshot {
 }
 
 impl Snapshot {
+    /// From a forecast Worker KV entry (`weather_core::geo::forecast_cache_key`):
+    /// `{data: WeatherData, source, provider, ...}`. `None` for anything else.
+    pub fn from_forecast_cache(entry: &serde_json::Value) -> Option<Snapshot> {
+        Snapshot::from_current(entry.get("data")?.get("current")?)
+    }
+
     /// From the `current` block of a `WeatherData` document.
     pub fn from_current(current: &serde_json::Value) -> Option<Snapshot> {
         let obj = current.as_object().filter(|o| !o.is_empty())?;
@@ -244,6 +251,214 @@ pub fn parse_questions(text: &str) -> Vec<String> {
         .filter(|q| !q.is_empty())
         .take(2)
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Submitting, listing and upvoting a report (`POST /reports`, `GET /reports`,
+// `POST /reports/upvote`)
+// ---------------------------------------------------------------------------
+
+/// The longest place name the store keeps (the bridge refuses more).
+pub const MAX_LOCATION_NAME: usize = 120;
+/// Reports are listed for at most this many hours back.
+pub const MAX_LIST_HOURS: i64 = 72;
+
+/// The body of `POST /reports`.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SubmitRequest {
+    pub location_slug: String,
+    pub report_type: String,
+    pub severity: Option<String>,
+    pub description: Option<String>,
+    pub lat: Option<f64>,
+    pub lon: Option<f64>,
+}
+
+/// The body of `POST /reports/upvote`.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct UpvoteRequest {
+    pub report_id: String,
+}
+
+/// A report id is a MongoDB ObjectId: 24 hexadecimal characters.
+pub fn valid_report_id(id: &str) -> bool {
+    id.len() == 24 && id.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// The report types, sorted, as the Python names them in its refusal.
+fn sorted_report_types() -> String {
+    let mut types = REPORT_TYPES;
+    types.sort_unstable();
+    types.join(", ")
+}
+
+/// What can be refused before any place is looked up, with the `400` detail
+/// the Python gave (description first, then the type). The coordinates are
+/// ours: a given latitude or longitude must be on the globe.
+pub fn check_submit(req: &SubmitRequest) -> Result<(), String> {
+    if let Some(d) = &req.description {
+        if !description_ok(d) {
+            return Err(format!(
+                "Description too long (max {MAX_DESCRIPTION} characters)"
+            ));
+        }
+    }
+    if !valid_report_type(&req.report_type) {
+        return Err(format!(
+            "Invalid report type. Must be one of: {}",
+            sorted_report_types()
+        ));
+    }
+    let in_range = |v: Option<f64>, max: f64| v.is_none_or(|v| v.is_finite() && v.abs() <= max);
+    if !in_range(req.lat, 90.0) || !in_range(req.lon, 180.0) {
+        return Err("Invalid coordinates".into());
+    }
+    Ok(())
+}
+
+/// The place a report is about.
+#[derive(Debug, Clone, Copy)]
+pub struct ReportPlace<'a> {
+    pub name: &'a str,
+    pub lat: f64,
+    pub lon: f64,
+    /// The key the report is stored under ([`storage_slug`]).
+    pub storage_key: &'a str,
+}
+
+/// A validated report, ready for the bridge.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Submission {
+    /// The bridge's `POST /reports` body. It adds the times, the zero votes
+    /// and the empty voter list itself.
+    pub body: serde_json::Value,
+    pub verified: bool,
+    pub ttl_seconds: u64,
+}
+
+/// Build the report the Python `submit_report` stored. A severity outside the
+/// three levels is `moderate`; the weather snapshot is `{}` when no forecast
+/// was at hand; `verified` is the cross-validation of the type against it.
+pub fn build_report(
+    req: &SubmitRequest,
+    place: ReportPlace<'_>,
+    snapshot: Option<&Snapshot>,
+    reported_by: &str,
+) -> Submission {
+    let severity = severity_or_default(req.severity.as_deref().unwrap_or(""));
+    let verified = cross_validate(&req.report_type, snapshot);
+    let name: String = place.name.chars().take(MAX_LOCATION_NAME).collect();
+    let body = serde_json::json!({
+        "locationSlug": place.storage_key,
+        "locationName": name,
+        "lat": req.lat.unwrap_or(place.lat),
+        "lon": req.lon.unwrap_or(place.lon),
+        "reportType": req.report_type,
+        "severity": severity,
+        "description": req.description.as_deref().unwrap_or(""),
+        "weatherSnapshot": snapshot
+            .map_or_else(|| serde_json::json!({}), |s| serde_json::json!(s)),
+        "reportedBy": reported_by,
+        "verified": verified,
+    });
+    Submission {
+        body,
+        verified,
+        ttl_seconds: ttl_seconds(severity),
+    }
+}
+
+/// `hours` of a list request, clamped to 1..=72.
+pub fn clamp_hours(hours: i64) -> i64 {
+    hours.clamp(1, MAX_LIST_HOURS)
+}
+
+/// The `hours` query value: 24 when absent or empty, clamped when a whole
+/// number, the `422` detail otherwise.
+pub fn list_hours(raw: Option<&str>) -> Result<i64, String> {
+    match raw.map(str::trim).filter(|v| !v.is_empty()) {
+        None => Ok(24),
+        Some(v) => v
+            .parse::<i64>()
+            .map(clamp_hours)
+            .map_err(|_| "`hours` must be an integer.".to_owned()),
+    }
+}
+
+/// A place's data is stored under its own slug only when a record backs it:
+/// the seed list, the Nyuchi API, or a community place from `placesGeo`. A
+/// `{name}--{geohash}` spot (source `geocoded` or `geolocation`) is a
+/// coordinate, stored by its cell ([`storage_slug`]).
+pub fn is_catalogue(source: &str) -> bool {
+    matches!(source, "seed" | "places" | "community")
+}
+
+/// The bridge's path for listing a slug's reports: the slug and, for a spot,
+/// its cell ([`read_keys`]), newest first, at most [`LIST_LIMIT`].
+pub fn bridge_list_path(location: &str, hours: i64) -> String {
+    let mut path = format!("/reports?hours={hours}&limit={LIST_LIMIT}");
+    for key in read_keys(location) {
+        path.push_str("&slug=");
+        path.push_str(&key);
+    }
+    path
+}
+
+/// The list answer: the bridge's `reports` (an empty list when it sent none)
+/// and the slug that was asked about, as the Python answered.
+pub fn list_body(bridge: &serde_json::Value, location: &str) -> serde_json::Value {
+    serde_json::json!({
+        "reports": bridge.get("reports").cloned().unwrap_or_else(|| serde_json::json!([])),
+        "location": location,
+    })
+}
+
+/// What a write limited per client and per hour says when it was not taken.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Limited {
+    Reports,
+    Devices,
+}
+
+/// A refused write: the HTTP status, the error code and the description.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Refusal {
+    pub status: u16,
+    pub code: &'static str,
+    pub description: &'static str,
+}
+
+/// The answer to a refused spend (`None` when it was granted). The client's
+/// own hour is a `429`. The service's hour is a `503`, and so is a budget the
+/// database could not read or write: `budget::take_units` reports that as
+/// [`Decision::GlobalLimit`], so the write fails CLOSED and a database outage
+/// never lifts a limit.
+pub fn limit_refusal(decision: Decision, what: Limited) -> Option<Refusal> {
+    match (decision, what) {
+        (Decision::Allow, _) => None,
+        (Decision::ClientLimit, Limited::Reports) => Some(Refusal {
+            status: 429,
+            code: "rate_limited",
+            description: "Too many reports. Try again later.",
+        }),
+        (Decision::ClientLimit, Limited::Devices) => Some(Refusal {
+            status: 429,
+            code: "rate_limited",
+            description: "Too many device profiles created. Try again later.",
+        }),
+        (Decision::GlobalLimit, Limited::Reports) => Some(Refusal {
+            status: 503,
+            code: "unavailable",
+            description: "Community reports are unavailable.",
+        }),
+        (Decision::GlobalLimit, Limited::Devices) => Some(Refusal {
+            status: 503,
+            code: "unavailable",
+            description: "Device sync is unavailable.",
+        }),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -630,6 +845,286 @@ mod tests {
             ..PreferencesPatch::default()
         };
         assert_eq!(apply_patch(&base, &bad).unwrap_err(), "Invalid theme: neon");
+    }
+
+    /// What the real Python `submit_report` built for each request
+    /// (`tests/fixtures/report-submit.json`, generated by running it).
+    fn report_fixture() -> Value {
+        serde_json::from_str(include_str!(
+            "../../../../tests/fixtures/report-submit.json"
+        ))
+        .expect("fixture parses")
+    }
+
+    /// JSON equality with numbers compared by value: the Python wrote `25`
+    /// where this writes `25.0`, and the bridge reads both the same.
+    fn same(a: &Value, b: &Value) -> bool {
+        match (a, b) {
+            (Value::Number(x), Value::Number(y)) => {
+                (x.as_f64().unwrap() - y.as_f64().unwrap()).abs() < 1e-9
+            }
+            (Value::Object(x), Value::Object(y)) => {
+                x.len() == y.len() && x.iter().all(|(k, v)| y.get(k).is_some_and(|w| same(v, w)))
+            }
+            (Value::Array(x), Value::Array(y)) => {
+                x.len() == y.len() && x.iter().zip(y).all(|(p, q)| same(p, q))
+            }
+            _ => a == b,
+        }
+    }
+
+    #[test]
+    fn a_submission_is_what_the_python_stored() {
+        let f = report_fixture();
+        // The oracle names the pinned git commit it was generated from.
+        let commit = f["_generated"]["commit"].as_str().unwrap();
+        assert!(
+            commit.len() == 40 && commit.bytes().all(|b| b.is_ascii_hexdigit()),
+            "the fixture records the commit it was generated from"
+        );
+        let ip = f["ip"].as_str().unwrap();
+        let mut built = 0;
+        for case in f["cases"].as_array().unwrap() {
+            let name = case["name"].as_str().unwrap();
+            let req: SubmitRequest = serde_json::from_value(case["request"].clone()).unwrap();
+            let expected = &case["expected"];
+
+            // Refused before any place is looked up (a 400).
+            if let Err(detail) = check_submit(&req) {
+                assert_eq!(expected["error"]["status"], 400, "{name}");
+                assert_eq!(expected["error"]["detail"], detail.as_str(), "{name}");
+                continue;
+            }
+            // An unknown place is refused after the lookup (a 404).
+            let loc = &case["location"];
+            if loc.is_null() {
+                assert_eq!(expected["error"]["status"], 404, "{name}");
+                assert_eq!(expected["error"]["detail"], "Unknown location", "{name}");
+                continue;
+            }
+
+            let is_catalogue = !loc["_id"].as_str().is_some_and(|id| id.starts_with("geo:"));
+            let key = storage_slug(&req.location_slug, is_catalogue);
+            let place = ReportPlace {
+                name: loc["name"].as_str().unwrap(),
+                lat: loc["lat"].as_f64().unwrap(),
+                lon: loc["lon"].as_f64().unwrap(),
+                storage_key: &key,
+            };
+            let snapshot = Snapshot::from_current(&case["current"]);
+            let got = build_report(&req, place, snapshot.as_ref(), &hash_ip(ip));
+
+            let want = &expected["doc"];
+            assert!(
+                same(&got.body, want),
+                "{name}\n got {}\nwant {want}",
+                got.body
+            );
+            assert_eq!(got.ttl_seconds, expected["ttl"].as_u64().unwrap(), "{name}");
+            assert_eq!(
+                got.verified,
+                expected["verified"].as_bool().unwrap(),
+                "{name}"
+            );
+            built += 1;
+        }
+        assert!(built >= 8, "the fixture exercises the builder ({built})");
+    }
+
+    #[test]
+    fn submissions_are_refused_for_a_bad_description_type_or_coordinate() {
+        let ok = SubmitRequest {
+            location_slug: "harare".into(),
+            report_type: "fog".into(),
+            ..SubmitRequest::default()
+        };
+        assert!(check_submit(&ok).is_ok());
+        let with = |f: &dyn Fn(&mut SubmitRequest)| {
+            let mut r = ok.clone();
+            f(&mut r);
+            check_submit(&r)
+        };
+        assert_eq!(
+            with(&|r| r.report_type = "tornado".into()).unwrap_err(),
+            "Invalid report type. Must be one of: clear-skies, cloudy, dust, flooding, fog, \
+             frost, hail, haze, heavy-rain, light-rain, mist, strong-wind, thunderstorm"
+        );
+        assert_eq!(
+            with(&|r| r.description = Some("x".repeat(301))).unwrap_err(),
+            "Description too long (max 300 characters)"
+        );
+        assert!(with(&|r| r.description = Some("x".repeat(300))).is_ok());
+        // The description is checked before the type, as the Python did.
+        assert!(with(&|r| {
+            r.description = Some("x".repeat(301));
+            r.report_type = "tornado".into();
+        })
+        .unwrap_err()
+        .starts_with("Description"));
+        // A coordinate must be on the globe (0 is a real latitude).
+        assert!(with(&|r| {
+            r.lat = Some(0.0);
+            r.lon = Some(0.0);
+        })
+        .is_ok());
+        for (lat, lon) in [
+            (91.0, 0.0),
+            (0.0, -180.5),
+            (f64::NAN, 1.0),
+            (1.0, f64::INFINITY),
+        ] {
+            assert_eq!(
+                with(&|r| {
+                    r.lat = Some(lat);
+                    r.lon = Some(lon);
+                })
+                .unwrap_err(),
+                "Invalid coordinates",
+                "{lat},{lon}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_long_place_name_is_cut_to_what_the_store_keeps() {
+        let req = SubmitRequest {
+            location_slug: "x".into(),
+            report_type: "fog".into(),
+            ..SubmitRequest::default()
+        };
+        let name = "\u{e9}".repeat(200);
+        let place = ReportPlace {
+            name: &name,
+            lat: 1.0,
+            lon: 2.0,
+            storage_key: "x",
+        };
+        let sub = build_report(&req, place, None, "0123456789abcdef");
+        assert_eq!(
+            sub.body["locationName"].as_str().unwrap().chars().count(),
+            MAX_LOCATION_NAME
+        );
+        assert_eq!(sub.body["weatherSnapshot"], serde_json::json!({}));
+        assert!(!sub.verified, "nothing to confirm it against");
+    }
+
+    #[test]
+    fn the_hours_query_defaults_clamps_and_refuses() {
+        assert_eq!(list_hours(None), Ok(24));
+        assert_eq!(list_hours(Some("")), Ok(24));
+        assert_eq!(list_hours(Some("  ")), Ok(24));
+        assert_eq!(list_hours(Some("6")), Ok(6));
+        assert_eq!(list_hours(Some("0")), Ok(1));
+        assert_eq!(list_hours(Some("-5")), Ok(1));
+        assert_eq!(list_hours(Some("100")), Ok(72));
+        assert_eq!(
+            list_hours(Some("abc")),
+            Err("`hours` must be an integer.".to_owned())
+        );
+        assert!(list_hours(Some("1.5")).is_err());
+    }
+
+    #[test]
+    fn a_places_data_is_kept_under_its_slug_only_when_a_record_backs_it() {
+        // Every source a LocationDoc can carry. The three with a record keep
+        // their slug; a spot (named by a geocoder or a GPS fix) is a cell.
+        for source in ["seed", "places", "community"] {
+            assert!(is_catalogue(source), "{source}");
+            assert_eq!(storage_slug("harare", is_catalogue(source)), "harare");
+        }
+        for source in ["geocoded", "geolocation", "", "Seed"] {
+            assert!(!is_catalogue(source), "{source}");
+        }
+        let spot = "west-paddock--kqwy4dd7";
+        assert_eq!(
+            storage_slug(spot, is_catalogue("geolocation")),
+            "geo:kqwy4dd"
+        );
+        // A community place with a spot-shaped slug is still its own record.
+        assert_eq!(storage_slug(spot, is_catalogue("community")), spot);
+    }
+
+    #[test]
+    fn the_bridge_list_path_names_the_slug_and_a_spots_cell() {
+        assert_eq!(
+            bridge_list_path("harare", 24),
+            "/reports?hours=24&limit=20&slug=harare"
+        );
+        assert_eq!(
+            bridge_list_path("west-paddock--kqwy4dd7", 6),
+            "/reports?hours=6&limit=20&slug=west-paddock--kqwy4dd7&slug=geo:kqwy4dd"
+        );
+    }
+
+    #[test]
+    fn the_list_answer_echoes_the_slug_and_defaults_to_no_reports() {
+        let body = serde_json::json!({"reports": [{"id": "x"}]});
+        assert_eq!(
+            list_body(&body, "harare"),
+            serde_json::json!({"reports": [{"id": "x"}], "location": "harare"})
+        );
+        assert_eq!(
+            list_body(&serde_json::json!({}), "harare"),
+            serde_json::json!({"reports": [], "location": "harare"})
+        );
+    }
+
+    #[test]
+    fn a_limited_write_is_a_429_for_the_client_and_a_503_for_the_service_or_a_blind_budget() {
+        for what in [Limited::Reports, Limited::Devices] {
+            assert_eq!(limit_refusal(Decision::Allow, what), None);
+            let client = limit_refusal(Decision::ClientLimit, what).unwrap();
+            assert_eq!((client.status, client.code), (429, "rate_limited"));
+            // `take_units` answers GlobalLimit for a D1 failure too: closed.
+            let service = limit_refusal(Decision::GlobalLimit, what).unwrap();
+            assert_eq!((service.status, service.code), (503, "unavailable"));
+            assert_ne!(client.description, service.description);
+        }
+        assert_eq!(
+            limit_refusal(Decision::GlobalLimit, Limited::Devices)
+                .unwrap()
+                .description,
+            "Device sync is unavailable."
+        );
+    }
+
+    #[test]
+    fn a_forecast_cache_entry_gives_the_snapshot_of_its_current_block() {
+        let entry = serde_json::json!({
+            "data": {"current": {
+                "temperature_2m": 21.5, "weather_code": 61, "precipitation": 0.4,
+                "wind_speed_10m": 9.0, "relative_humidity_2m": 55.0
+            }},
+            "source": "open_meteo", "provider": "open-meteo:blend"
+        });
+        let s = Snapshot::from_forecast_cache(&entry).unwrap();
+        assert_eq!(s.weather_code, Some(61));
+        assert_eq!(s.temperature, Some(21.5));
+        for bad in [
+            serde_json::json!({}),
+            serde_json::json!({"data": {}}),
+            serde_json::json!({"data": {"current": {}}}),
+            serde_json::Value::Null,
+        ] {
+            assert!(Snapshot::from_forecast_cache(&bad).is_none(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn report_ids_are_object_ids_and_hours_are_clamped() {
+        assert!(valid_report_id("507f1f77bcf86cd799439011"));
+        assert!(valid_report_id("507F1F77BCF86CD799439011"));
+        for bad in [
+            "",
+            "507f1f77bcf86cd79943901",
+            "507f1f77bcf86cd7994390112",
+            "zzzzzzzzzzzzzzzzzzzzzzzz",
+        ] {
+            assert!(!valid_report_id(bad), "{bad}");
+        }
+        assert_eq!(clamp_hours(-5), 1);
+        assert_eq!(clamp_hours(24), 24);
+        assert_eq!(clamp_hours(100), 72);
     }
 
     #[test]

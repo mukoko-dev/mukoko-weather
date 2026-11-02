@@ -464,6 +464,8 @@ pub async fn history(ctx: &Ctx<'_>, body: Value) -> Result<Response> {
     // backend had); an analysis answered from the cache above was free. Over
     // the client's hour is a 429; the service's hour spent, or a budget that
     // cannot be read (it fails closed), answers with the statistics alone.
+    // No caller (it is always set on this route) would be refused: the budget
+    // fails closed.
     let decision = match ctx.caller.as_ref() {
         Some(caller) => budget::take(ctx.env, Action::HistoryAnalysis, caller).await,
         None => Decision::GlobalLimit,

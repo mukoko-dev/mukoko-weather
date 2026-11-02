@@ -106,8 +106,7 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     // text match), so it decides for itself what a missing block means.
     if matches!(route, Route::Explore) {
         let guardrails = gateway::guardrails(&env).await;
-        let caller = Caller::from_request(&req);
-        return explore::handle(&env, guardrails, caller, body).await;
+        return explore::handle(&env, guardrails, &Caller::from_request(&req), body).await;
     }
 
     // Fail closed: no guardrails block, no model call on any route.
@@ -122,19 +121,20 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     // it checked the WorkOS session and `mukoko-weather-internal` checked the
     // service key. These paths are not reachable from the public API, which
     // forwards `/v1/ai/*` only and builds its own request.
-    let caller = matches!(route, Route::Summary).then(|| {
-        let subject = req
-            .headers()
-            .get(weather_core::ai::USER_ID_HEADER)
-            .ok()
-            .flatten()
-            .and_then(|s| weather_core::ai::valid_subject(&s));
-        Caller::with_subject(&req, subject)
-    });
-    // The public history analysis spends the visitor's hour too, keyed by the
-    // visitor's address; a person header is never read on a public route.
-    let caller =
-        caller.or_else(|| matches!(route, Route::History).then(|| Caller::from_request(&req)));
+    let caller = match route {
+        Route::Summary => {
+            let subject = req
+                .headers()
+                .get(weather_core::ai::USER_ID_HEADER)
+                .ok()
+                .flatten()
+                .and_then(|s| weather_core::ai::valid_subject(&s));
+            Some(Caller::with_subject(&req, subject))
+        }
+        // The public history analysis is keyed by the visitor's address.
+        Route::History => Some(Caller::from_request(&req)),
+        _ => None,
+    };
     let ctx = handlers::Ctx {
         env: &env,
         guardrails,
