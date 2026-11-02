@@ -147,8 +147,7 @@ const serwist = new Serwist({
     {
       matcher: ({ url }) =>
         url.pathname.startsWith("/api/py/ai") ||
-        url.pathname.startsWith("/api/ai") ||
-        url.pathname.startsWith("/api/py/chat"),
+        url.pathname.startsWith("/api/ai"),
       handler: new NetworkOnly(),
     },
 
