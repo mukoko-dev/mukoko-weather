@@ -4,6 +4,8 @@ import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("@/components/ui/spinner", () => ({ Spinner: () => null }));
+
 const stage = readFileSync(resolve(__dirname, "PlaceStage.tsx"), "utf-8");
 
 describe("PlaceStage — what the page waits for and what it shows", () => {
@@ -34,6 +36,25 @@ describe("PlaceStage — what the page waits for and what it shows", () => {
     expect(stage).not.toContain("createFallbackWeather");
   });
 
+  it("a place switch makes no raw fetchWorker call anywhere on its path", () => {
+    // Every file a switch runs through: the stage, its state machine, the bus,
+    // the target parser, the slug lookup, the home page client and the pager.
+    const dir = resolve(__dirname, "../..");
+    for (const file of [
+      "components/weather/PlaceStage.tsx",
+      "components/weather/PlaceLoadNotice.tsx",
+      "lib/place-controller.ts",
+      "lib/place-bus.ts",
+      "lib/place-target.ts",
+      "lib/place-resolve.ts",
+      "app/CurrentLocationHome.tsx",
+      "components/layout/LocationPager.tsx",
+    ]) {
+      const source = readFileSync(resolve(dir, file), "utf-8");
+      expect(source, file).not.toContain("fetchWorker");
+    }
+  });
+
   it("follows the pathname with the router, never a page reload", () => {
     expect(stage).toContain("controller.reconcile(pathname)");
     expect(stage).toContain("router.replace(pathname)");
@@ -59,8 +80,6 @@ describe("PlaceStage — what the page waits for and what it shows", () => {
 });
 
 describe("PlaceLoadNotice", () => {
-  vi.mock("@/components/ui/spinner", () => ({ Spinner: () => null }));
-
   it("says what happened and offers a retry that is a request", async () => {
     const { PlaceLoadNotice } = await import("./PlaceLoadNotice");
     const html = renderToString(

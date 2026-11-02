@@ -43,18 +43,25 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/",
   useRouter: () => ({ push: () => {}, prefetch: () => {} }),
 }));
+// What the request carries, set per test: the cookie and the edge's IP-geo headers.
+let requestCookie: string | undefined = "harare";
+let requestHeaders: Record<string, string> = {};
 vi.mock("next/headers", () => ({
   cookies: async () => ({
     get: (name: string) =>
-      name === "lastLocation" ? { value: "harare" } : undefined,
+      name === "lastLocation" && requestCookie
+        ? { value: requestCookie }
+        : undefined,
   }),
-  headers: async () => new Headers(),
+  headers: async () => new Headers(requestHeaders),
 }));
 
 const WEATHER_URL = /\/v1\/weather|open-meteo\.com|api\.tomorrow\.io/i;
 let fetchSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
+  requestCookie = "harare";
+  requestHeaders = {};
   getWeatherForLocation.mockReset();
   fetchSpy = vi
     .spyOn(globalThis, "fetch")
@@ -121,6 +128,55 @@ describe("/ server render", () => {
       "location",
       "season",
     ]);
+    expect(getWeatherForLocation).not.toHaveBeenCalled();
+    expect(weatherFetches()).toEqual([]);
+  });
+
+  /** Run `/` to completion and return what it hands the client home. */
+  async function renderHome(): Promise<Record<string, unknown> | null> {
+    const { default: Home } = await import("./page");
+    const suspense = Home() as unknown as {
+      props: { children: { type: (p: object) => Promise<unknown> } };
+    };
+    const content = (await suspense.props.children.type({})) as {
+      props: { initial: Record<string, unknown> | null };
+    };
+    return content.props.initial;
+  }
+
+  it("with no cookie and no IP position seeds Harare, not a chooser, and calls no weather", async () => {
+    requestCookie = undefined;
+    requestHeaders = {};
+    const initial = await renderHome();
+    // `initial: null` is what renders the client's city chooser; it must not.
+    expect(initial).not.toBeNull();
+    expect((initial!.location as { slug: string }).slug).toBe("harare");
+    expect(initial!.countryName).toBe("Zimbabwe");
+    expect(Object.keys(initial!).sort()).toEqual([
+      "countryName",
+      "location",
+      "season",
+    ]);
+    expect(getWeatherForLocation).not.toHaveBeenCalled();
+    expect(weatherFetches()).toEqual([]);
+  });
+
+  it("seeds the nearest shipped city for a Nairobi or Lagos IP position, with no lookup and no weather", async () => {
+    for (const [lat, lon, country, city, slug] of [
+      ["-1.2921", "36.8219", "KE", "Nairobi", "nairobi-ke"],
+      ["6.5244", "3.3792", "NG", "Lagos", "lagos-ng"],
+    ]) {
+      requestCookie = undefined;
+      requestHeaders = {
+        "x-vercel-ip-latitude": lat,
+        "x-vercel-ip-longitude": lon,
+        "x-vercel-ip-country": country,
+        "x-vercel-ip-city": city,
+      };
+      const initial = await renderHome();
+      expect(initial, city).not.toBeNull();
+      expect((initial!.location as { slug: string }).slug, city).toBe(slug);
+    }
     expect(getWeatherForLocation).not.toHaveBeenCalled();
     expect(weatherFetches()).toEqual([]);
   });

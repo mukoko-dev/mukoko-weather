@@ -4,6 +4,7 @@
  * Order, cheapest first (the stage has already tried memory and the device):
  *   1. the shipped catalogue (no request),
  *   2. the Worker's `/v1/locations?slug=` (community places, platform places),
+ *      read through the shared fetch store (`workerData`), never a raw fetch,
  *   3. a spot slug (`{name}--{geohash}`), which carries its own coordinate.
  * Null means "not a place I can show in place": the caller falls back to a
  * normal navigation, where the server resolves it (or answers a real 404).
@@ -12,7 +13,7 @@
 import { LOCATIONS, type WeatherLocation } from "@/lib/locations";
 import { getDefaultSeason } from "@/lib/weather";
 import { countryDisplayName } from "@/lib/location-country";
-import { fetchWorker } from "@/lib/weather-api";
+import { workerData } from "@/lib/worker-data";
 import {
   coordinateLabel,
   isCoordinateNameSlug,
@@ -134,14 +135,17 @@ export async function resolvePlaceSeed(
   if (known) return seedFor(known);
 
   try {
-    const res = await fetchWorker(
+    // Through the shared fetch store like every other Worker read: the same
+    // slug asked twice (a double tap, a pager prefetch) is one request, and a
+    // refused or unreachable answer is remembered briefly instead of asked
+    // again on every attempt.
+    const res = await workerData.read<{ location?: WorkerLocation }>(
       "locations",
-      `slug=${encodeURIComponent(slug)}`,
+      { slug },
       { signal },
     );
     if (res.ok) {
-      const body = (await res.json()) as { location?: WorkerLocation };
-      const location = locationFromWorker(slug, body.location);
+      const location = locationFromWorker(slug, res.data?.location);
       if (location) return seedFor(location);
     }
   } catch {

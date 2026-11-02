@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "fs";
+import { resolve } from "path";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { workerData } from "./worker-data";
 import {
   catalogueLocation,
   locationFromWorker,
@@ -8,6 +11,36 @@ import {
 } from "./place-resolve";
 
 describe("resolvePlaceSeed", () => {
+  beforeEach(() => workerData.reset());
+
+  it("reads the Worker through the shared fetch store, never a raw fetchWorker call", () => {
+    const source = readFileSync(
+      resolve(__dirname, "place-resolve.ts"),
+      "utf-8",
+    );
+    expect(source).toContain("workerData.read<{ location?: WorkerLocation }>(");
+    expect(source).toContain('"locations"');
+    expect(source).not.toContain("fetchWorker");
+  });
+
+  it("asks once for the same slug, however many times it is switched to", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          location: { slug: "x-one", name: "X One", lat: 1, lon: 2 },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    await Promise.all([
+      resolvePlaceSeed("x-one-abc123"),
+      resolvePlaceSeed("x-one-abc123"),
+    ]);
+    await resolvePlaceSeed("x-one-abc123");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    fetchSpy.mockRestore();
+  });
+
   it("answers a shipped place from the catalogue with no request", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const seed = await resolvePlaceSeed("harare");
