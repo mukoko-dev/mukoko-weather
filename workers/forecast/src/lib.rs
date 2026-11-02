@@ -182,7 +182,10 @@ async fn weather(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
     let enrichment = enrich::apply(env, ctx, &mut got.data, lat, lon, priority).await;
     let station = stations::overlay(env, &mut got.data, lat, lon).await;
 
-    if get("extras") == Some("1") {
+    // The comparison series come from Open-Meteo, the provider that just
+    // refused us: a MET Norway answer does not ask it for more, and is never
+    // mixed with its models.
+    if get("extras") == Some("1") && got.provider != weather_core::met_no::PROVIDER {
         let requested: Vec<&str> = get("models")
             .map(|m| m.split(',').filter(|s| !s.trim().is_empty()).collect())
             .unwrap_or_default();

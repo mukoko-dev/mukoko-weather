@@ -71,6 +71,11 @@ impl Got {
     }
 }
 
+/// `v` rounded to 0.01 degree (the main cache key's cell).
+fn snap(v: f64) -> f64 {
+    (v * 100.0).round() / 100.0
+}
+
 /// The forecast for a point, or `None` when the cache is cold and every
 /// provider failed. `refresh` skips the cache read (the answer is still
 /// cached): the jobs Worker uses it to keep popular places warm. `model` is
@@ -120,14 +125,20 @@ pub async fn forecast(
             // same model run, every variable, the real offset, and one request
             // fewer for a provider whose terms ask for none that is
             // unnecessary (`blend::STORED_PREFERRED_SECS`).
+            // A row that itself came from MET Norway is not "the same model
+            // run" worth preferring: it is the failover, asked again.
             let recent = stale.as_ref().is_some_and(|old| {
-                blend::stored_is_preferred(blend::age_seconds(&old.fetched_at, now()))
+                old.provider != met_no::PROVIDER
+                    && blend::stored_is_preferred(blend::age_seconds(&old.fetched_at, now()))
             });
             // Visitors only: cache warming (`refresh`) is background traffic,
             // and MET Norway's terms ask for none that is unnecessary.
             let from_met_no = if failover && !refresh && !recent {
                 let hint = offset_hint(kv.as_ref(), lat, lon, stale.as_ref()).await;
-                crate::met_no::forecast(env, ctx, lat, lon, hint).await
+                // The same ~1 km cell the main cache uses, so visitors in one
+                // cell share one MET Norway request and one memo entry.
+                let (cell_lat, cell_lon) = (snap(lat), snap(lon));
+                crate::met_no::forecast(env, ctx, cell_lat, cell_lon, hint).await
             } else {
                 None
             };
@@ -152,7 +163,11 @@ pub async fn forecast(
         stale: false,
     };
 
-    if let Some(kv) = kv {
+    // The failover is never written under the main key: that key's stored row
+    // is the richer last resort (a nine-model blend with the real offset), and
+    // MET Norway has its own memo that honours its `Expires`.
+    let store = !matches!(got.source, Source::MetNo);
+    if let Some(kv) = kv.filter(|_| store) {
         if let Ok(body) = serde_json::to_string(&got) {
             ctx.wait_until(async move {
                 if let Ok(put) = kv.put(&key, body) {
