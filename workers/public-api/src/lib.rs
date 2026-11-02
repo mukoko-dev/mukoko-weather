@@ -452,9 +452,10 @@ async fn weather(req: &Request, env: &Env) -> Result<Response> {
                 // The edge lifetime follows the baseline that served it
                 // (`weather_core::blend::edge_cache_control`).
                 let provider = upstream.headers().get("X-Weather-Provider")?;
+                let stale = upstream.headers().get("X-Cache")?.as_deref() == Some("STALE");
                 resp.headers().set(
                     "Cache-Control",
-                    weather_core::blend::edge_cache_control(provider.as_deref()),
+                    weather_core::blend::edge_cache_control(provider.as_deref(), stale),
                 )?;
                 return Ok(resp);
             }

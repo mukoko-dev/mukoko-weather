@@ -92,7 +92,7 @@ import { EnsoOutlook } from "@/components/weather/EnsoOutlook";
 import { DraggableSection } from "@/components/weather/DraggableSection";
 import { cacheWeatherHint } from "@/lib/weather-scenes";
 import { rememberPlace } from "@/lib/rxdb/weather-places";
-import type { DeviceView } from "@/lib/device-weather";
+import { servedStaleAgeMs, type DeviceView } from "@/lib/device-weather";
 import { UpdatedAgo } from "@/components/weather/UpdatedAgo";
 import {
   backdropClock,
@@ -257,6 +257,7 @@ export function WeatherDashboard({
     extras,
   );
   const weather = displayed.weather;
+  const serverStaleAge = servedStaleAgeMs(displayed.weather);
   const frostAlert = useMemo(
     () =>
       displayed.override
@@ -268,9 +269,11 @@ export function WeatherDashboard({
     [displayed.override, seedFrostAlert],
   );
   const usingFallback = displayed.usingFallback;
+  const serverStale = !usingFallback && serverStaleAge !== null;
   const banner = weatherBanner({
     fallback: usingFallback,
     stale: device?.freshness === "forecast",
+    serverStale,
     live: live.state,
   });
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);

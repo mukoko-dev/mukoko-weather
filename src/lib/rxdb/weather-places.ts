@@ -19,6 +19,7 @@ import {
   parsePayload,
   planEviction,
   serialisePayload,
+  servedStaleAgeMs,
 } from "../device-weather";
 import type { WeatherPlaceDocType } from "./schemas";
 
@@ -110,7 +111,9 @@ export async function rememberPlace(
   const doc: WeatherPlaceDocType = {
     slug: payload.location.slug,
     payload: serialised.json,
-    fetchedAt: opts.fetchedAt ?? now,
+    // A forecast the Worker served stale keeps the age it had: the device must
+    // not call a day-old row "just now".
+    fetchedAt: opts.fetchedAt ?? now - (servedStaleAgeMs(payload.weather) ?? 0),
     lastAccessedAt: now,
     expiresAt,
     bytes: serialised.bytes,

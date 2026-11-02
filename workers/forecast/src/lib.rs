@@ -182,10 +182,19 @@ async fn weather(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
         let offset = got.data["utc_offset_seconds"].as_i64().unwrap_or(0);
         got.data["minutely"] = blend::fresh_minutely(&m, offset, now());
     }
+    // A stored forecast served only because no provider answered: show the
+    // place's current hour and say how old the row is.
+    if got.stale {
+        let offset = got.data["utc_offset_seconds"].as_i64().unwrap_or(0);
+        // An unreadable `fetched_at` is the oldest row, never a fresh one.
+        let age =
+            blend::age_seconds(&got.fetched_at, now()).unwrap_or(blend::STALE_TTL_SECONDS as i64);
+        blend::mark_stale(&mut got.data, age, offset, now());
+    }
 
     let resp = json(200, &got.data)?;
     let h = resp.headers();
-    h.set("X-Cache", if got.cache_hit { "HIT" } else { "MISS" })?;
+    h.set("X-Cache", got.cache_status())?;
     h.set("X-Weather-Provider", &got.provider)?;
     if let Some(b) = &got.blend {
         h.set("X-Weather-Blend", b)?;
@@ -306,7 +315,6 @@ async fn daily(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
         usize::from(query.days),
     );
     let resp = json(200, &body)?;
-    resp.headers()
-        .set("X-Cache", if got.cache_hit { "HIT" } else { "MISS" })?;
+    resp.headers().set("X-Cache", got.cache_status())?;
     Ok(resp)
 }
