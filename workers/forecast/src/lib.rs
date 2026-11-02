@@ -23,7 +23,9 @@
 //! Provider chain (ported from `api/py/_weather.py`, issue #246): KV cache
 //! (`wx:v2:`, 15 min), then the Open-Meteo Africa-weighted blend of nine global
 //! models (served only when at least FOUR members return data), then Open-Meteo
-//! `best_match`, marked as not a blend. `model=<id>` (the user's
+//! `best_match`, marked as not a blend; when Open-Meteo gave nothing (a 429 to
+//! our shared egress, an open breaker) MET Norway Locationforecast answers
+//! instead (`X-Weather-Provider: met-no`, `met_no.rs`, #434). `model=<id>` (the user's
 //! `selectedForecastModel`) makes that one model the baseline instead
 //! (`X-Weather-Provider: open-meteo:<id>`, its own KV row, `best_match`
 //! filling the variables it does not publish); with no data for it here the
@@ -35,7 +37,7 @@
 //! the seasonal estimate (the app) add it themselves.
 //!
 //! Response headers of `/weather`: `X-Cache`, `X-Weather-Provider`
-//! (`open-meteo:blend` | `open-meteo:best_match`), `X-Weather-Blend` (region
+//! (`open-meteo:blend` | `open-meteo:best_match` | `met-no`), `X-Weather-Blend` (region
 //! and weights, a blend only), `X-Enrichment` (`tomorrow` | `skipped-budget` |
 //! `skipped-error` | `none`), `X-Current-Source`, `X-Fetched-At`. The payload
 //! carries `baseline` (`blend: true|false`, and why it is not a blend).
@@ -53,6 +55,7 @@ mod enrich;
 mod enso;
 mod haze;
 mod limit;
+mod met_no;
 mod model_grid;
 mod normals;
 mod places;

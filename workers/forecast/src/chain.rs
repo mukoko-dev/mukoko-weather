@@ -1,6 +1,7 @@
 //! The provider chain: KV cache (fresh, or kept a day as the last resort), then the Open-Meteo multi-model blend, then
-//! Open-Meteo `best_match`. Tomorrow.io is NOT in this chain: it only enriches
-//! the insights afterwards (`enrich.rs`, issue #246).
+//! Open-Meteo `best_match`, then, when Open-Meteo gave nothing, MET Norway as
+//! the failover forecast (`met_no.rs`, #434). Tomorrow.io is NOT in this
+//! chain: it only enriches the insights afterwards (`enrich.rs`, issue #246).
 //!
 //! Ported from `api/py/_weather.py`:
 //!
@@ -22,8 +23,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use weather_core::blend::{self, Attempt, NotBlended, Upstream};
 use weather_core::breaker::{self, Breaker};
-use weather_core::{normalize, Source};
+use weather_core::met_no::{self, OffsetHint};
+use weather_core::{normalize, places, Source};
 use weather_edge::{get_with_timeout, now, now_ms, now_rfc3339};
+use worker::kv::KvStore;
 use worker::{Context, Env};
 
 pub const CACHE_BINDING: &str = "FORECAST_CACHE";
@@ -39,8 +42,8 @@ thread_local! {
 pub struct Got {
     pub data: Value,
     pub source: Source,
-    /// The baseline, as `X-Weather-Provider` says it: `open-meteo:blend` or
-    /// `open-meteo:best_match`.
+    /// The baseline, as `X-Weather-Provider` says it: `open-meteo:blend`,
+    /// `open-meteo:best_match` or, when Open-Meteo gave nothing, `met-no`.
     pub provider: String,
     /// `X-Weather-Blend` (a blend only).
     #[serde(default)]
@@ -100,15 +103,28 @@ pub async fn forecast(
         }
     }
 
-    let Some((data, provider, blend_header)) = baseline(env, lat, lon, model).await else {
-        return stale.map(|mut old| {
-            old.stale = true;
-            old
-        });
+    let (data, provider, blend_header, source) = match baseline(env, lat, lon, model).await {
+        Some((data, provider, blend_header)) => (data, provider, blend_header, Source::OpenMeteo),
+        // Open-Meteo gave nothing (a 429 to our shared egress, an open breaker):
+        // a second, keyless provider, so the visitor sees a real forecast and
+        // not the seasonal estimate. Fresher than the stored row, which stays
+        // the last resort below.
+        None => {
+            let hint = offset_hint(kv.as_ref(), lat, lon, stale.as_ref()).await;
+            match crate::met_no::forecast(env, ctx, lat, lon, hint).await {
+                Some(data) => (data, met_no::PROVIDER.to_owned(), None, Source::MetNo),
+                None => {
+                    return stale.map(|mut old| {
+                        old.stale = true;
+                        old
+                    });
+                }
+            }
+        }
     };
     let got = Got {
         data,
-        source: Source::OpenMeteo,
+        source,
         provider,
         blend: blend_header,
         fetched_at: now_rfc3339(),
@@ -126,6 +142,32 @@ pub async fn forecast(
         }
     }
     Some(got)
+}
+
+/// How far from the point a seed place may lend its UTC offset: far enough to
+/// reach a neighbouring city, near enough to share its country's clock almost
+/// everywhere.
+const SEED_OFFSET_KM: f64 = 100.0;
+
+/// What is known of the place's UTC offset before MET Norway answers (it sends
+/// none): the stored forecast of this very point, else the stored forecast of
+/// the nearest seed place within [`SEED_OFFSET_KM`], whose offset is lent as an
+/// estimate. `None` leaves `met_no::convert` with the longitude estimate.
+/// Called only when Open-Meteo has already failed.
+async fn offset_hint(
+    kv: Option<&KvStore>,
+    lat: f64,
+    lon: f64,
+    stale: Option<&Got>,
+) -> Option<OffsetHint> {
+    if let Some(hint) = stale.and_then(|old| met_no::hint_from_payload(&old.data, true)) {
+        return Some(hint);
+    }
+    let kv = kv?;
+    let seed = places::nearest_seed(lat, lon, SEED_OFFSET_KM)?;
+    let key = blend::forecast_cache_key(seed.lat, seed.lon, None);
+    let neighbour = kv.get(&key).json::<Got>().await.ok().flatten()?;
+    met_no::hint_from_payload(&neighbour.data, false)
 }
 
 /// What one Open-Meteo call came to.

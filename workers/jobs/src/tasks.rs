@@ -78,7 +78,11 @@ async fn place_history(env: &Env, slugs: &[String]) -> Result<()> {
             .headers()
             .get("X-Weather-Provider")?
             .unwrap_or_else(|| "unknown".to_owned());
-        if source == "fallback" {
+        // Only an Open-Meteo day is recorded. The seasonal estimate is not a
+        // forecast, and the MET Norway failover starts at the current hour
+        // (no past hours), so at 23:30 its "day" is a handful of late hours
+        // and a recorded day is permanent.
+        if source == "fallback" || source == weather_core::met_no::PROVIDER {
             continue;
         }
         let Ok(data) = resp.json::<Value>().await else {

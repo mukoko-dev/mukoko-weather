@@ -33,9 +33,10 @@ Two things keep it honest where connectivity and upstream APIs are not. The fore
 baseline is an Africa-weighted blend of global weather models (ECMWF IFS and
 AIFS weighted highest, then NOAA GFS, DWD ICON, the UK Met Office, CMA, ECCC GEM,
 Météo-France ARPEGE and JMA; every model that answers is used, and at least
-four must) served keyless by Open-Meteo, resolved through a four-stage chain —
-MongoDB cache, the blend, Open-Meteo `best_match`, then seasonal estimates that
-always succeed — so a page never renders empty. Tomorrow.io only enriches the
+four must) served keyless by Open-Meteo, resolved through a chain —
+cache, the blend, Open-Meteo `best_match`, MET Norway when Open-Meteo is
+refusing, then seasonal estimates that always succeed — so a page never renders
+empty. Tomorrow.io only enriches the
 activity insights, within a call budget, and never blocks the forecast.
 And the UI is error-isolated per section: a chart that crashes takes down the
 chart, not the page.
@@ -167,18 +168,21 @@ Climate normals (1991–2020, ERA5 via Open-Meteo) are served by the Rust Worker
 
 **AI search and history analysis** — `POST /v1/ai/explore/search` and `POST /v1/ai/history/analyze` on the Rust AI Worker (`weather-api.mukoko.com`; the app calls them with `postWorker`, never retried). The search gives the model two tools (the seed places, and a forecast per place) and falls back to a plain text match when it cannot answer; the analysis sends the model a compact statistical summary of the same history the page shows. Both are limited per client per hour (15 and 10) in the Workers' own D1 table, and fail closed. See `workers/README.md`.
 
-**Four-stage weather fallback** (the Rust Workers) — KV cache (15-min TTL)
+**Weather fallback chain** (the Rust Workers) — KV cache (15-min TTL, kept a
+day and served stale only when every provider fails)
 → Open-Meteo Africa-weighted multi-model blend (or the user's chosen model via
-`?model=`) → Open-Meteo `best_match` → the seasonal estimate. The last stage
+`?model=`) → Open-Meteo `best_match` → MET Norway Locationforecast (the keyless
+failover, only while Open-Meteo is refusing, converted to the same shape) → the
+seasonal estimate. The last stage
 always succeeds, so a request never returns nothing. Activity insights (GDD,
 heat index, thunderstorm proxy, dew point, UV, cloud base, moon phase) are
 derived from the model data; Tomorrow.io is merged on top only when its
 D1-backed budget (12/hour and 250/day for normal traffic, 20 and 400 for
 priority) allows. Response headers: `X-Weather-Provider`
-(`open-meteo:blend` | `open-meteo:<model>` | `open-meteo:best_match` |
+(`open-meteo:blend` | `open-meteo:<model>` | `open-meteo:best_match` | `met-no` |
 `fallback`), `X-Weather-Blend`, `X-Enrichment` (`tomorrow` | `skipped-budget` |
 `skipped-error` | `none`) and `X-Current-Source`. Data credit: ECMWF, NOAA,
-DWD, ECCC, Météo-France, UK Met Office, CMA, JMA via Open-Meteo.com (CC BY 4.0). Open-Meteo's free API
+DWD, ECCC, Météo-France, UK Met Office, CMA, JMA via Open-Meteo.com (CC BY 4.0); MET Norway (CC BY 4.0, converted to our format) when it is the failover. Open-Meteo's free API
 is non-commercial only — see issue #246 for the licensing options. The Workers use Open-Meteo's paid ("customer") hosts whenever the subscription key is present, and the free hosts otherwise (`workers/README.md`, "Open-Meteo paid plan").
 
 **Three-layer error isolation** — `page.tsx` wraps fetching in try/catch so the

@@ -39,6 +39,7 @@ pub mod history;
 pub mod insights;
 pub mod jobs;
 pub mod locations;
+pub mod met_no;
 pub mod model_grid;
 pub mod normalize;
 pub mod normals;

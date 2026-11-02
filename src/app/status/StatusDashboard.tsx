@@ -175,6 +175,11 @@ export function StatusDashboard() {
             NOAA GFS, DWD ICON, ECCC GEM, Météo-France ARPEGE)
           </li>
           <li>
+            <strong className="text-text-primary">MET Norway</strong> — Failover
+            forecast, used only while Open-Meteo is unavailable. It is not
+            checked here, so it does not change the overall status
+          </li>
+          <li>
             <strong className="text-text-primary">Tomorrow.io</strong> —
             Optional insights enrichment, within a call budget. When it is rate
             limited the forecast is unaffected, so it does not change the
