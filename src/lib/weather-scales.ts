@@ -66,6 +66,13 @@
  * Colour never carries the value alone: every band has a printed range or
  * name (`label`, `name`), and legends print them.
  *
+ * Blend or steps (owner, 2026-11-02): a bar for a CONTINUOUS quantity (AQI,
+ * UV index, temperature range) blends smoothly from its low end to its high
+ * end, built from the same band tokens (see `scaleAnchors` and
+ * widgets/geometry.ts `blendStops`); a CATEGORICAL scale (haze level, flight
+ * category, frost level, a legend of map fills) stays in steps, because the
+ * steps ARE the information.
+ *
  * Contrast: the official EPA / WHO / radar fills cannot all reach 3:1 against a
  * light or dark base map or card, so every data fill carries the theme-aware
  * `--wx-outline` (map cell outlines, legend and swatch rings, bubble borders).
@@ -558,6 +565,14 @@ export const UV_SCALE: WeatherScale = {
   ],
 };
 
+/**
+ * UV index at the right-hand end of a bar: a UV bar spans 0 to 14, so Extreme
+ * (11+) has room. The UV tile's marker position (metric-insights) and the
+ * position of the UV colours on the bar (widgets/geometry) both read this, so
+ * they cannot disagree.
+ */
+export const UV_SCALE_MAX = 14;
+
 export const FROST_SCALE: WeatherScale = {
   id: "frost",
   quantity: "frost alert level",
@@ -656,6 +671,51 @@ export const WEATHER_SCALES: readonly WeatherScale[] = [
   FROST_SCALE,
   FLIGHT_SCALE,
 ];
+
+/**
+ * A continuous scale drawn as a BLEND (a bar whose colour changes smoothly
+ * from the low end to the high end) puts each band's official colour at the
+ * MIDDLE of its band and lets the colours run into each other between the
+ * middles. A value in the middle of a band then shows exactly that band's
+ * colour, and a swatch in a legend and the bar cannot drift apart.
+ *
+ * `scaleAnchors` gives those middle values for a scale laid out on its own
+ * unit (temperature in Cel). The two open ends of a scale (below the first
+ * band, above the last) are closed by `min` and `max`, so their middle is a
+ * real number. Scales laid out by position on a bar instead (AQI and UV, see
+ * widgets/geometry.ts) use their band edges on the bar.
+ */
+export interface ScaleAnchor {
+  token: string;
+  /** Value, in the scale's unit, where this band's colour is shown unmixed. */
+  value: number;
+}
+
+export function scaleAnchors(
+  scale: WeatherScale,
+  min: number,
+  max: number,
+): ScaleAnchor[] {
+  return scale.bands.map((band, i) => {
+    const lo = Math.max(band.from, min);
+    const next = scale.bands[i + 1]?.from ?? max;
+    const hi = Math.min(next, max);
+    return { token: band.token, value: (lo + hi) / 2 };
+  });
+}
+
+/**
+ * Air temperature as a blend (the daily forecast's range bar). -20 to 48 Cel
+ * closes the open ends: "Very cold" is -20 to -10, "Extreme heat" 42 to 48, so
+ * the unmixed colours sit at -15, -5, 4, 12, 20, 27, 33, 39 and 45.
+ */
+export const TEMP_BLEND_MIN = -20;
+export const TEMP_BLEND_MAX = 48;
+export const TEMP_ANCHORS: readonly ScaleAnchor[] = scaleAnchors(
+  TEMP_SCALE,
+  TEMP_BLEND_MIN,
+  TEMP_BLEND_MAX,
+);
 
 /** Index of the band a value falls in, or -1 (below the first band, null, NaN). */
 export function scaleBandIndex(
