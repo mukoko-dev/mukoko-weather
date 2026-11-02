@@ -79,6 +79,54 @@ describe("PlaceStage — what the page waits for and what it shows", () => {
   });
 });
 
+describe("PlaceView: the slow-forecast line", () => {
+  it("shows the line only over the skeleton, while the retries run, never over the failed notice", () => {
+    // One notice at a time: the final "Couldn't load" (keyed on `failed`, as
+    // before) wins; the line is only for the skeleton, while the retries run.
+    expect(stage).toMatch(
+      /state\.failed \? \(\s*<PlaceLoadNotice[\s\S]*?\) : state\.slow && !view \? \(/,
+    );
+  });
+
+  it("offers the same retry (a forced read, not a reload) from the line", () => {
+    const slowBlock = stage.slice(stage.indexOf("state.slow && !view"));
+    expect(slowBlock).toContain("onRetry={retry}");
+    // Its button shows "Trying…" while the attempt it started is in flight.
+    expect(slowBlock).toContain("busy={state.trying}");
+    expect(stage).toContain("controller.retry()");
+    expect(stage).not.toContain("location.reload");
+  });
+
+  it("leaves the skeleton as it is: the line floats over it, nothing is added to the flow", () => {
+    expect(stage).toContain("<LocationSkeleton slug={seed.location.slug} />");
+    const notice = readFileSync(
+      resolve(__dirname, "PlaceLoadNotice.tsx"),
+      "utf-8",
+    );
+    // Not `fixed` itself: it sits in the stage's FloatingStack (a fixed column).
+    expect(notice).toContain("className={FLOATING_CARD_CLASS}");
+    expect(notice).not.toMatch(/\bfixed\b/);
+  });
+
+  it("puts the notice and the page's own floating card (the home page's location ask) in one column, so they stack instead of overlapping", () => {
+    expect(stage).toContain("<FloatingStack>");
+    // The page's own card above, the notice below it (reading order = visual order).
+    expect(stage).toMatch(/\{extras\}\s*\{notice\}/);
+    // Each state mounts as its own element, so the failed alert is announced.
+    expect(stage).toContain('key="failed"');
+    expect(stage).toContain('key="slow"');
+    expect(stage).toContain("Children.toArray(children)");
+    // Nothing is mounted when there is neither a notice nor a card.
+    expect(stage).toContain("(notice || extras.length > 0) && (");
+    const prompt = readFileSync(
+      resolve(__dirname, "LocationPromptCard.tsx"),
+      "utf-8",
+    );
+    expect(prompt).toContain("className={FLOATING_CARD_CLASS}");
+    expect(prompt).not.toMatch(/\bfixed\b/);
+  });
+});
+
 describe("PlaceLoadNotice", () => {
   it("says what happened and offers a retry that is a request", async () => {
     const { PlaceLoadNotice } = await import("./PlaceLoadNotice");
@@ -108,5 +156,54 @@ describe("PlaceLoadNotice", () => {
     expect(html).toContain("Showing what is saved on this device");
     expect(html).toContain('aria-busy="true"');
     expect(html).toContain("Trying");
+  });
+  it("slow: a calm polite status line with Try again available at once, not an alert", async () => {
+    const { PlaceLoadNotice } = await import("./PlaceLoadNotice");
+    const html = renderToString(
+      createElement(PlaceLoadNotice, {
+        slow: true,
+        placeName: "Lagos",
+        showingSaved: false,
+        busy: false,
+        onRetry: () => {},
+      }),
+    );
+    expect(html).toContain('role="status"');
+    expect(html).toContain('aria-live="polite"');
+    expect(html).not.toContain('role="alert"');
+    expect(html).toContain("Still trying to reach the weather service…");
+    expect(html).not.toContain("Couldn&#x27;t load");
+    expect(html).toContain("Try again");
+    // The button is usable now: the retries are running, not the button's.
+    expect(html).not.toContain("disabled");
+  });
+
+  it("slow while the visitor's own Try again is in flight: busy, disabled, still a status", async () => {
+    const { PlaceLoadNotice } = await import("./PlaceLoadNotice");
+    const html = renderToString(
+      createElement(PlaceLoadNotice, {
+        slow: true,
+        placeName: "Lagos",
+        showingSaved: false,
+        busy: true,
+        onRetry: () => {},
+      }),
+    );
+    expect(html).toContain('role="status"');
+    expect(html).toContain("Still trying to reach the weather service…");
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toContain("disabled");
+    expect(html).toContain("Trying…");
+  });
+
+  it("slow and failed are different notices of the same card, in tokens only", async () => {
+    const source = readFileSync(
+      resolve(__dirname, "PlaceLoadNotice.tsx"),
+      "utf-8",
+    );
+    expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(source).not.toContain("style={{");
+    expect(source).toContain("Still trying to reach the weather service…");
+    expect(source).toContain('slow ? "status" : "alert"');
   });
 });
