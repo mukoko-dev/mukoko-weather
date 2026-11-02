@@ -1,0 +1,74 @@
+version: 2
+# One grouped pull request per ecosystem per week, against `staging`.
+#
+# Why: Dependabot opened one pull request per package against `main`, and `main`
+# takes releases only, so each of them failed the branch gate. Version updates
+# below target `staging` and arrive in `main` with the next release.
+#
+# Security updates are different: Dependabot raises them against the default
+# branch only, and ignores `target-branch` and the settings of an ecosystem that
+# sets it (GitHub docs, "Targeting pull requests against a non-default branch").
+# One of those on `main` is retargeted with `gh pr edit <n> --base staging`
+# (see CONTRIBUTING.md, "Dependency updates").
+#
+# Major versions are not proposed here (the ignore rules below): a major upgrade
+# is planned work with its own issue. Security fixes for a major still arrive
+# through security updates.
+#
+# No `labels:` on purpose: a label that does not exist makes Dependabot report
+# an error on every run.
+updates:
+  - package-ecosystem: "npm"
+    directories:
+      - "/"
+      - "/station-console"
+      - "/workers/mongo-bridge"
+    target-branch: "staging"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 2
+    # Wait a week before proposing a newly published version: new releases can
+    # be malicious or unstable (the scan job's dependabot-missing-cooldown rule).
+    cooldown:
+      default-days: 7
+    groups:
+      npm-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "cargo"
+    directory: "/workers"
+    target-branch: "staging"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 2
+    cooldown:
+      default-days: 7
+    groups:
+      cargo-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "staging"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 1
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns:
+          - "*"
