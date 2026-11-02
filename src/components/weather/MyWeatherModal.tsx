@@ -53,6 +53,7 @@ import { t } from "@/lib/i18n";
 import { Spinner } from "@/components/ui/spinner";
 import { SelectRow } from "./SelectRow";
 import { workerUrl } from "@/lib/worker-url";
+import { navigateToPlace } from "@/lib/place-bus";
 
 /** Default category style for unknown categories */
 const DEFAULT_CATEGORY_STYLE = {
@@ -184,7 +185,9 @@ export function MyWeatherModal() {
         to: pendingSlug,
         method: pending?.method ?? "saved",
       });
-      router.push(`/${pendingSlug}`);
+      // In place when a place stage is mounted (the app stays open and only
+      // that place's data is fetched); the router otherwise.
+      navigateToPlace(`/${pendingSlug}`, (href) => router.push(href));
     }
   };
 

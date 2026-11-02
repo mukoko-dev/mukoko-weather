@@ -53,7 +53,10 @@ describe("dashboard wiring — below-the-fold fetches are deferred", () => {
     expect(dashboard).toContain(
       "shouldFetchModelExtras(model, extrasNear || afterIdle)",
     );
-    expect(dashboard).toContain("useIdleOnce(MODEL_EXTRAS_IDLE_TIMEOUT_MS)");
+    // Re-armed per place: the dashboard stays mounted across place switches.
+    expect(dashboard).toContain(
+      "useIdleOnce(MODEL_EXTRAS_IDLE_TIMEOUT_MS, location.slug)",
+    );
     expect(dashboard).toContain("if (!fetchExtras) return;");
   });
 

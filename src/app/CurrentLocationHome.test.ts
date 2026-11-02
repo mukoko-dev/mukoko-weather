@@ -20,9 +20,11 @@ const middlewareSource = readFileSync(
 );
 
 describe("CurrentLocationHome — silent-URL model", () => {
-  it("is a client component that renders the dashboard inline", () => {
+  it("is a client component that renders the place stage's dashboard inline", () => {
     expect(source).toContain('"use client"');
-    expect(source).toContain("<WeatherDashboard");
+    expect(source).toContain("<PlaceView");
+    // The stage (src/components/weather/PlaceStage.tsx) owns what is on screen.
+    expect(source).toContain("usePlaceStage(initial, true)");
   });
 
   it("NEVER redirects — no router navigation exists in the flow", () => {
@@ -35,19 +37,27 @@ describe("CurrentLocationHome — silent-URL model", () => {
   });
 
   it("swaps the dashboard in place when GPS resolves a different slug", () => {
-    expect(source).toContain("resolved.slug === view?.location.slug");
+    expect(source).toContain("resolved.slug === homeSlug()");
     expect(source).toContain("await swapTo(resolved");
+    expect(source).toContain("controller.showHome(seedFor(found)");
   });
 
-  it("loads swapped weather through our own API, not the browser's Open-Meteo quota", () => {
-    // A browser-side Open-Meteo 429 used to surface as "Could not detect
-    // location" even though GPS had worked.
-    expect(source).toContain("fetchHomeWeather(");
+  it("loads swapped weather through the stage, not the browser's Open-Meteo quota", () => {
+    // The stage fetches through fetchHomeWeather (Worker first). A browser-side
+    // Open-Meteo 429 used to surface as "Could not detect location" even
+    // though GPS had worked.
     expect(source).not.toMatch(/\bfetchWeather\(/);
+    expect(source).not.toContain("fetchHomeWeather(");
+    const stage = readFileSync(
+      resolve(__dirname, "../components/weather/PlaceStage.tsx"),
+      "utf-8",
+    );
+    expect(stage).toContain("fetchHomeWeather(lat, lon)");
   });
 
-  it("remounts the dashboard per location via key", () => {
-    expect(source).toContain("key={view.location.slug}");
+  it("does not remount the dashboard per location: the stage keeps it mounted", () => {
+    expect(source).not.toContain("key={view.location.slug}");
+    expect(source).not.toMatch(/<WeatherDashboard[^>]*key=/);
   });
 
   it("escalates to create-on-demand when the nearest known location is far", () => {
@@ -68,11 +78,11 @@ describe("CurrentLocationHome — silent-URL model", () => {
     // Singapore audit: a POI ~9 km away was shown as MY LOCATION.
     expect(source).toMatch(/const FAR_NEAREST_KM = [1-5];/);
     // Behaviour of the choice: location-choice.test.ts (chooseResolved).
-    expect(source).toContain("!usable && view");
+    expect(source).toContain("!usable && homeSlug()");
   });
 
   it("refreshes the lastLocation cookie so the next server render seeds the new spot", () => {
-    expect(source).toContain("writeLastLocationCookie(location.slug)");
+    expect(source).toContain("writeLastLocationCookie(found.slug)");
     const helper = readFileSync(
       resolve(__dirname, "../lib/current-slug.ts"),
       "utf-8",
@@ -122,7 +132,7 @@ describe("CurrentLocationHome — silent-URL model", () => {
   it("offers location through one dismissible card over the seeded weather", () => {
     expect(source).toContain("<LocationPromptCard");
     expect(source).toContain(
-      "const showCard = promptReady && !gpsConfirmed && !dismissed;",
+      "const showCard = promptReady && !gpsConfirmed && !dismissed && onHomePlace;",
     );
   });
 
@@ -137,7 +147,12 @@ describe("CurrentLocationHome — silent-URL model", () => {
   });
 
   it("syncs the store and tracks analytics on a swap", () => {
-    expect(source).toContain("setSelectedLocation(location.slug)");
+    // The store sync (selectedLocation) happens in the stage's onShow.
+    const stage = readFileSync(
+      resolve(__dirname, "../components/weather/PlaceStage.tsx"),
+      "utf-8",
+    );
+    expect(stage).toContain("setSelectedLocation(slug)");
     expect(source).toContain('trackEvent("location_changed"');
     expect(source).toContain('method: "geolocation"');
   });
@@ -177,10 +192,12 @@ describe("page.tsx — server seeding", () => {
     expect(pageSource).not.toContain('"use client"');
   });
 
-  it("renders the dashboard payload for the cookie-resolved location", () => {
-    expect(pageSource).toContain("loadLocationWeather");
-    expect(pageSource).toContain("HomeWeatherPayload");
+  it("seeds the cookie-resolved place (a place and its season, no weather)", () => {
+    expect(pageSource).toContain("PlaceSeed");
+    expect(pageSource).toContain("seasonWithinBudget(");
     expect(pageSource).toContain("<CurrentLocationHome initial={initial}");
+    expect(pageSource).not.toContain("loadLocationWeather");
+    expect(pageSource).not.toContain("getWeatherForLocation");
   });
 
   it("reads Vercel IP geolocation headers as the no-cookie fallback", () => {
@@ -237,14 +254,11 @@ describe("page.tsx — server seeding", () => {
     expect(pageSource).not.toContain("canonical: `${BASE_URL}/harare`");
   });
 
-  it("double-catches the weather fetch so the shell always renders", () => {
-    // The fallback lives in the shared payload helper (src/lib/location-payload.ts).
-    expect(pageSource).toContain("loadLocationWeather(");
-    const payload = readFileSync(
-      resolve(__dirname, "../lib/location-payload.ts"),
-      "utf-8",
-    );
-    expect(payload).toContain("createFallbackWeather(");
+  it("renders no seasonal estimate on the server: the page has no weather at all", () => {
+    // The browser fetches the forecast; the server never renders fallback
+    // numbers as if they were data (issue #414).
+    expect(pageSource).not.toContain("createFallbackWeather");
+    expect(pageSource).not.toContain("usingFallback");
   });
 
   it("skips the IP-geo lookup entirely when a cached location was already resolved", () => {
