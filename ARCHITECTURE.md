@@ -102,12 +102,15 @@ CLOSED ──(failures >= threshold)──> OPEN ──(cooldown expires)──>
 | Breaker      | Providers                                                      | Failure Threshold | Cooldown | Window |
 | ------------ | -------------------------------------------------------------- | :---------------: | :------: | :----: |
 | `TOMORROW`   | Tomorrow.io (insights enrichment, map tiles)                   |         3         |  2 min   | 5 min  |
+| `MET_NO`     | MET Norway Locationforecast (the failover forecast)            |         3         |  5 min   | 5 min  |
 | `OPEN_METEO` | Open-Meteo (forecast, grids, air quality, haze, history, ERA5) |         5         |  5 min   | 5 min  |
 | `NASA_POWER` | NASA POWER (history archive)                                   |         3         |  2 min   | 5 min  |
 | `SOILGRIDS`  | ISRIC SoilGrids                                                |         3         |  15 min  | 10 min |
 | `DEFAULT`    | NOAA CPC, NEA data.gov.sg, Aviation Weather Center             |         3         |  2 min   | 5 min  |
 
 The AI Worker has no breaker: a model call is bounded by the D1 budgets, a timeout and the gateway's own limits.
+
+`MET_NO` is the one breaker that can be tripped at once: MET Norway's terms say to stop traffic immediately when it answers `429` (and a `403` means the client is blocked), so either opens the circuit for the full cooldown (`Breaker::trip`).
 
 AI runs only in the AI Worker, `mukoko-weather-ai`: Workers AI GLM through the `shamwari` AI Gateway with the native `env.AI` binding, the Nyuchi guardrails first in every prompt. No Cloudflare AI token exists on Vercel. The signed-in app reaches it through its own server: the Next.js `/api/ai` proxy checks the WorkOS session (`withAuth()`), then calls `{WEATHER_SERVICE_URL}/internal/ai/summary` with `Authorization: Bearer WEATHER_SERVICE_API_KEY` and the person's id and address. `mukoko-weather-internal` checks the key and forwards over a service binding; the AI Worker caches the answer in KV (30/60/120 min by tag) and counts only the calls that reach the model against the person's hour in D1 (`weather_core::budget`). No Python calls a model any more: the report wizard's follow-up questions, the last Python AI route, are `POST /v1/reports/clarify` on the AI Worker.
 
@@ -116,9 +119,9 @@ AI runs only in the AI Worker, `mukoko-weather-ai`: Workers AI GLM through the `
 The forecast Worker's chain always ends in an answer, and says which stage served it (`X-Weather-Provider`):
 
 ```
-1. KV cache (wx:v2:<lat>_<lon>, 15 min; 5 min for a best_match answer)
-    |── hit ──> return cached data
-    |── miss
+1. KV cache (wx:v2:<lat>_<lon>, fresh 15 min; 5 min for a best_match answer; kept 24 h)
+    |── fresh hit ──> return cached data
+    |── miss, or past its fresh lifetime (kept as the last resort)
     v
 2. Open-Meteo Africa-weighted blend of nine global models (served only when at least four return data)
     |── success ──> cache + return (Tomorrow.io enrichment merged on top when its budget allows)
@@ -126,9 +129,16 @@ The forecast Worker's chain always ends in an answer, and says which stage serve
     v
 3. Open-Meteo best_match (labelled as not a blend)
     |── success ──> cache + return
-    |── error
+    |── error, or the breaker is open
     v
-4. Seasonal estimate (labelled `fallback`)
+4. MET Norway Locationforecast (`met-no`, keyless failover, converted at the edge; only reached here)
+    |── success ──> cache 15 min + return (the blend is asked first again after that)
+    |── error, throttled or breaker open
+    v
+5. The stored forecast past its fresh lifetime, if any (`X-Cache: STALE`)
+    |── none
+    v
+6. Seasonal estimate (labelled `fallback`, added by the public API)
     |── always succeeds ──> return
 ```
 

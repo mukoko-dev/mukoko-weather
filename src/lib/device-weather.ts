@@ -376,3 +376,19 @@ export function isQuotaError(err: unknown): boolean {
   const { name, message } = err as { name?: unknown; message?: unknown };
   return [name, message].some((v) => typeof v === "string" && /quota/i.test(v));
 }
+
+/**
+ * How old the server says the forecast is, in ms, when the Worker served a
+ * stored row past its freshness because every provider failed
+ * (`baseline.stale` / `baseline.ageSeconds`); null for a live answer. A copy
+ * kept on the device must carry this age, not the moment it was received.
+ */
+export function servedStaleAgeMs(weather: unknown): number | null {
+  const baseline = (weather as { baseline?: Record<string, unknown> } | null)
+    ?.baseline;
+  if (!baseline || baseline.stale !== true) return null;
+  const age = baseline.ageSeconds;
+  return typeof age === "number" && Number.isFinite(age) && age >= 0
+    ? age * 1000
+    : null;
+}

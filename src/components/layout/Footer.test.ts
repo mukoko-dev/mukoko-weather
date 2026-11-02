@@ -34,6 +34,19 @@ describe("Footer touch targets", () => {
     expect(source).toContain("insights enrichment by");
   });
 
+  it("credits MET Norway, the failover forecast: source, licence link, and that changes were made", () => {
+    // api.met.no/doc/TermsOfService: credit the source, link the CC BY 4.0
+    // licence and indicate that changes were made.
+    expect(source).toContain("when Open-Meteo is unavailable");
+    expect(source).toContain("MET Norway");
+    expect(source).toContain("converted to our format");
+    const credit = source.slice(source.indexOf("MET Norway") - 200);
+    expect(credit.slice(0, 900)).toContain(
+      'href="https://creativecommons.org/licenses/by/4.0/"',
+    );
+    expect(linkBlock('href="https://www.met.no/en"')).toContain("dik-dik");
+  });
+
   it("Tomorrow.io and Open-Meteo attribution links carry .dik-dik", () => {
     expect(linkBlock('href="https://www.tomorrow.io"')).toContain("dik-dik");
     expect(linkBlock('href="https://open-meteo.com"')).toContain("dik-dik");
