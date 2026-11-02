@@ -13,6 +13,8 @@ const nav = vi.hoisted(() => ({ pathname: "/" }));
 const store = vi.hoisted(() => ({
   hiddenPresetSlugs: [] as string[],
   presetAnchor: null as unknown,
+  locationLabels: {} as Record<string, string>,
+  locationNames: {} as Record<string, string>,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -28,7 +30,7 @@ vi.mock("@/lib/location-presets", () => ({
   visiblePresetSlugs: () => [],
 }));
 
-import { MobileNav } from "./MobileNav";
+import { MobileNav, mobileNavActiveId } from "./MobileNav";
 
 function render(
   pathname: string,
@@ -58,6 +60,8 @@ const current = (html: string) =>
 beforeEach(() => {
   store.hiddenPresetSlugs = [];
   store.presetAnchor = null;
+  store.locationLabels = {};
+  store.locationNames = {};
 });
 
 describe("MobileNav render — one bar, one landmark", () => {
@@ -161,7 +165,7 @@ describe("MobileNav render — the places lane", () => {
     expect(html).not.toContain("h-10");
   });
 
-  it("renders up to MAX_PAGER_DOTS places, all reachable", () => {
+  it("renders up to MAX_PAGER_PLACES places, all reachable", () => {
     const many = Array.from({ length: 10 }, (_, i) => `place-${i}`);
     const html = render("/", many);
     expect((html.match(/class="lark[^"]*"/g) ?? []).length).toBe(11);
@@ -210,5 +214,49 @@ describe("MobileNav render — aria-current is on exactly the current item", () 
     const html = render("/", ["harare"]);
     expect(html).not.toMatch(/#[0-9a-fA-F]{3,6}\b/);
     expect(html).not.toContain("style=");
+  });
+});
+
+describe("MobileNav render — what a chip says", () => {
+  it("shows the person's own label, then a name seen this session, then the slug's name", () => {
+    store.locationLabels = { harare: "Home" };
+    store.locationNames = { "nairobi-ke": "Nairobi CBD" };
+    const html = render("/", ["harare", "nairobi-ke", "lagos-ng"]);
+    expect(html).toContain(">Home</span>");
+    expect(html).toContain(">Nairobi CBD</span>");
+    expect(html).toContain(">Lagos</span>");
+    expect(html).not.toContain(">Harare</span>");
+  });
+
+  it("reads a coordinate spot as its coordinates, never as slug fragments", () => {
+    const html = render("/", ["12-35n-45-62e--ksy4dd7"]);
+    expect(html).toMatch(/>\d{1,2}\.\d{2}°[NS] \d{1,3}\.\d{2}°[EW]<\/span>/);
+    // The slug is in the href; the TEXT of the chip is the coordinates.
+    const text = [
+      ...html.matchAll(/<span class="truncate">([^<]*)<\/span>/g),
+    ].map((m) => m[1]);
+    expect(text.some((t) => /62e|35n/.test(t))).toBe(false);
+  });
+
+  it("names the places list so My Location is not counted as one of its items", () => {
+    const html = render("/", ["harare"]);
+    expect(html).toContain('aria-label="Saved places and suggestions"');
+  });
+
+  it("gives the chips the press feedback class", () => {
+    expect(render("/", ["harare"])).toContain("lark press-scale");
+  });
+});
+
+describe("mobileNavActiveId — the pinned item that is current", () => {
+  it("is Locations on /locations", () => {
+    expect(mobileNavActiveId("/locations")).toBe("locations");
+  });
+
+  it("is none everywhere else: the lane marks My Location and the places itself", () => {
+    expect(mobileNavActiveId("/")).toBe("none");
+    expect(mobileNavActiveId("/harare")).toBe("none");
+    expect(mobileNavActiveId("/harare/map")).toBe("none");
+    expect(mobileNavActiveId("/explore")).toBe("none");
   });
 });

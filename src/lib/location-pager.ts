@@ -1,4 +1,9 @@
-import { isLocationSlug } from "@/lib/current-slug";
+import { displayNameFromSlug, isLocationSlug } from "@/lib/current-slug";
+import {
+  coordinateLabel,
+  isCoordinateNameSlug,
+  parseSmartSlug,
+} from "@/lib/smart-slug";
 
 /**
  * Pure helpers for paging between the visitor's locations.
@@ -18,7 +23,7 @@ export const MY_LOCATION_HREF = "/";
  * at 10) plus the suggested places (at most 6) fit; the lane scrolls sideways
  * for overflow.
  */
-export const MAX_PAGER_DOTS = 24;
+export const MAX_PAGER_PLACES = 24;
 
 /**
  * Ordered page hrefs: `["/", "/savedA", "/savedB", "/presetA", …]`.
@@ -77,11 +82,11 @@ export function neighbour(
 
 /**
  * The place hrefs shown after the "My Location" chip, capped at
- * `MAX_PAGER_DOTS`. The home page is excluded: it is the lane's pinned first
+ * `MAX_PAGER_PLACES`. The home page is excluded: it is the lane's pinned first
  * chip.
  */
-export function pagerDots(sequence: readonly string[]): string[] {
-  return sequence.slice(1, MAX_PAGER_DOTS + 1);
+export function pagerPlaces(sequence: readonly string[]): string[] {
+  return sequence.slice(1, MAX_PAGER_PLACES + 1);
 }
 
 /** One chip in the bottom bar's places lane. */
@@ -91,20 +96,63 @@ export interface LaneChip {
   kind: "home" | "place";
   /** The place slug, null for My Location. */
   slug: string | null;
+  /** The visible name: "My Location" for home, the place's name otherwise. */
+  name: string;
+}
+
+/** What My Location is called, on its chip and in its accessible name. */
+export const MY_LOCATION_NAME = "My Location";
+
+/**
+ * The name a place's chip shows. The person's own label wins, then the real
+ * name seen this session, then a readable name from the slug; a coordinate
+ * spot (`12-35n-45-62e--ksy4dd7`, a point nothing names) reads as its
+ * coordinates, `12.35°N 45.62°E`, never as slug fragments.
+ */
+export function laneChipName(
+  slug: string,
+  labels: Readonly<Record<string, string>> = {},
+  names: Readonly<Record<string, string>> = {},
+): string {
+  const label = labels[slug]?.trim();
+  if (label) return label;
+  const seen = names[slug]?.trim();
+  if (seen) return seen;
+  const parsed = parseSmartSlug(slug);
+  if (
+    parsed &&
+    parsed.ref.kind === "spot" &&
+    isCoordinateNameSlug(parsed.nameSlug) &&
+    typeof parsed.lat === "number" &&
+    typeof parsed.lon === "number"
+  ) {
+    return coordinateLabel(parsed.lat, parsed.lon);
+  }
+  return displayNameFromSlug(slug);
 }
 
 /**
  * The chips of the places lane, in order. My Location is ALWAYS first (current
  * location comes before every saved place, owner rule), whatever the sequence
- * holds, and the lane is never empty. The rest are `pagerDots(sequence)`.
+ * holds, and the lane is never empty. The rest are `pagerPlaces(sequence)`,
+ * each named by `nameOf` (default: `laneChipName` with no stored labels).
  */
-export function laneChips(sequence: readonly string[]): LaneChip[] {
+export function laneChips(
+  sequence: readonly string[],
+  nameOf: (slug: string) => string = (slug) => laneChipName(slug),
+): LaneChip[] {
   return [
-    { href: MY_LOCATION_HREF, kind: "home", slug: null },
-    ...pagerDots(sequence).map((href): LaneChip => ({
+    {
+      href: MY_LOCATION_HREF,
+      kind: "home",
+      slug: null,
+      name: MY_LOCATION_NAME,
+    },
+    ...pagerPlaces(sequence).map((href): LaneChip => ({
       href,
       kind: "place",
       slug: href.slice(1),
+      name: nameOf(href.slice(1)),
     })),
   ];
 }

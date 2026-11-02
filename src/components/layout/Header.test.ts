@@ -145,7 +145,7 @@ describe("MobileNav — pinned items and the places lane", () => {
 
   it("marks the current page explicitly (Map never lights up on /explore)", () => {
     expect(nav).toContain("activeId={mobileNavActiveId(pathname)}");
-    expect(nav).toContain('return "none";');
+    expect(nav).toContain('pathname === "/locations" ? "locations" : "none"');
   });
 
   it("shows the place sequence as tappable chips in the lane, behind a harness boundary that keeps a My Location link", () => {

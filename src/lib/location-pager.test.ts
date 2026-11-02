@@ -1,13 +1,15 @@
 import { describe, it, expect } from "vitest";
 import {
-  MAX_PAGER_DOTS,
+  MAX_PAGER_PLACES,
   MY_LOCATION_HREF,
+  MY_LOCATION_NAME,
   homeChipShowsLabel,
   laneActiveIndex,
+  laneChipName,
   laneChips,
   laneScrollLeft,
   neighbour,
-  pagerDots,
+  pagerPlaces,
   pagerIndex,
   pagerSequence,
 } from "./location-pager";
@@ -128,23 +130,23 @@ describe("neighbour", () => {
   });
 });
 
-describe("pagerDots", () => {
+describe("pagerPlaces", () => {
   it("excludes the home page (it has its own glyph)", () => {
-    expect(pagerDots(["/", "/harare", "/gweru"])).toEqual([
+    expect(pagerPlaces(["/", "/harare", "/gweru"])).toEqual([
       "/harare",
       "/gweru",
     ]);
   });
 
   it("is empty when only the home page exists", () => {
-    expect(pagerDots(["/"])).toEqual([]);
+    expect(pagerPlaces(["/"])).toEqual([]);
   });
 
-  it("caps the visible dots at MAX_PAGER_DOTS", () => {
+  it("caps the visible dots at MAX_PAGER_PLACES", () => {
     const slugs = Array.from({ length: 30 }, (_, i) => `place-${i}`);
-    const dots = pagerDots(pagerSequence(slugs));
-    expect(MAX_PAGER_DOTS).toBe(24);
-    expect(dots).toHaveLength(MAX_PAGER_DOTS);
+    const dots = pagerPlaces(pagerSequence(slugs));
+    expect(MAX_PAGER_PLACES).toBe(24);
+    expect(dots).toHaveLength(MAX_PAGER_PLACES);
     expect(dots[0]).toBe("/place-0");
   });
 });
@@ -185,7 +187,7 @@ describe("pagerSequence with suggested places", () => {
   it("fits every saved place (10) plus every suggestion within the dot cap", () => {
     const saved = Array.from({ length: 10 }, (_, i) => `saved-${i}`);
     const presets = ["harare", "bulawayo", "a-1", "a-2", "a-3", "a-4"];
-    const dots = pagerDots(pagerSequence(saved, presets));
+    const dots = pagerPlaces(pagerSequence(saved, presets));
     expect(dots).toHaveLength(saved.length + presets.length);
   });
 });
@@ -193,15 +195,20 @@ describe("pagerSequence with suggested places", () => {
 describe("laneChips — the places lane", () => {
   it("always starts with My Location, then one chip per place in sequence order", () => {
     expect(laneChips(pagerSequence(["harare", "nairobi-ke"]))).toEqual([
-      { href: "/", kind: "home", slug: null },
-      { href: "/harare", kind: "place", slug: "harare" },
-      { href: "/nairobi-ke", kind: "place", slug: "nairobi-ke" },
+      { href: "/", kind: "home", slug: null, name: "My Location" },
+      { href: "/harare", kind: "place", slug: "harare", name: "Harare" },
+      {
+        href: "/nairobi-ke",
+        kind: "place",
+        slug: "nairobi-ke",
+        name: "Nairobi",
+      },
     ]);
   });
 
   it("is never empty: with no places the lane is My Location alone", () => {
     expect(laneChips(pagerSequence([]))).toEqual([
-      { href: "/", kind: "home", slug: null },
+      { href: "/", kind: "home", slug: null, name: MY_LOCATION_NAME },
     ]);
     expect(laneChips([])).toHaveLength(1);
     expect(laneChips([])[0].kind).toBe("home");
@@ -213,6 +220,7 @@ describe("laneChips — the places lane", () => {
       href: "/",
       kind: "home",
       slug: null,
+      name: MY_LOCATION_NAME,
     });
   });
 
@@ -226,14 +234,54 @@ describe("laneChips — the places lane", () => {
     ]);
   });
 
-  it("is capped at My Location plus MAX_PAGER_DOTS places", () => {
+  it("is capped at My Location plus MAX_PAGER_PLACES places", () => {
     const slugs = Array.from({ length: 30 }, (_, i) => `place-${i}`);
-    expect(laneChips(pagerSequence(slugs))).toHaveLength(MAX_PAGER_DOTS + 1);
+    expect(laneChips(pagerSequence(slugs))).toHaveLength(MAX_PAGER_PLACES + 1);
   });
 
   it("lines up one to one with the sequence, so a chip index is a pager index", () => {
     const seq = pagerSequence(["harare", "nairobi-ke", "lagos-ng"]);
     laneChips(seq).forEach((chip, i) => expect(chip.href).toBe(seq[i]));
+  });
+});
+
+describe("laneChipName — what a chip says", () => {
+  it("prefers the person's own label, then the real name seen this session", () => {
+    expect(
+      laneChipName("harare", { harare: " Home " }, { harare: "Harare" }),
+    ).toBe("Home");
+    expect(laneChipName("harare", {}, { harare: "Harare CBD" })).toBe(
+      "Harare CBD",
+    );
+  });
+
+  it("ignores a blank label or name", () => {
+    expect(laneChipName("harare", { harare: "  " }, { harare: "" })).toBe(
+      "Harare",
+    );
+  });
+
+  it("falls back to a readable name from the slug", () => {
+    expect(laneChipName("harare")).toBe("Harare");
+    expect(laneChipName("dar-es-salaam-tz")).toBe("Dar Es Salaam");
+  });
+
+  it("reads a coordinate spot as its coordinates, not as slug fragments", () => {
+    // 12.35 N 45.62 E, geohash cell centre rounded to two decimals.
+    const name = laneChipName("12-35n-45-62e--ksy4dd7");
+    expect(name).toMatch(/^\d{1,2}\.\d{2}°[NS] \d{1,3}\.\d{2}°[EW]$/);
+    expect(name).not.toMatch(/62e|35n/);
+  });
+
+  it("keeps the name of a named spot", () => {
+    expect(laneChipName("west-paddock--ksy4dd7")).toBe("West Paddock");
+  });
+
+  it("is what laneChips uses by default, and nameOf overrides it", () => {
+    const seq = pagerSequence(["harare"]);
+    expect(laneChips(seq)[1].name).toBe("Harare");
+    expect(laneChips(seq, () => "X")[1].name).toBe("X");
+    expect(laneChips(seq, () => "X")[0].name).toBe(MY_LOCATION_NAME);
   });
 });
 

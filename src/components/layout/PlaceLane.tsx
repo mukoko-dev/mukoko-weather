@@ -10,17 +10,20 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { NavigationIcon } from "@/lib/weather-icons";
-import { currentLocationSlug, displayNameFromSlug } from "@/lib/current-slug";
+import { useAppStore } from "@/lib/store";
+import { currentLocationSlug } from "@/lib/current-slug";
 import { getScrollBehavior } from "@/lib/utils";
 import {
+  MY_LOCATION_NAME,
   homeChipShowsLabel,
   laneActiveIndex,
+  laneChipName,
   laneChips,
   laneScrollLeft,
   type LaneChip,
 } from "@/lib/location-pager";
 import { trackPlaceChange, usePagerSequence } from "@/lib/use-location-pager";
-import { handlePlaceLinkClick } from "@/lib/place-bus";
+import { handlePlaceLinkClick, isPlainLeftClick } from "@/lib/place-bus";
 
 /**
  * The places lane in the middle of the phone bottom bar (option B, owner
@@ -56,14 +59,22 @@ export function PlaceLane({
   const from = currentLocationSlug(pathname, selectedLocation) ?? "";
   const router = useRouter();
   const sequence = usePagerSequence(savedLocations, selectedLocation);
-  const chips = laneChips(sequence);
+  const locationLabels = useAppStore((s) => s.locationLabels);
+  const locationNames = useAppStore((s) => s.locationNames);
+  const chips = laneChips(sequence, (slug) =>
+    laneChipName(slug, locationLabels, locationNames),
+  );
   const activeIndex = laneActiveIndex(pathname, sequence, chips.length);
 
   const onChipClick = (
     event: MouseEvent<HTMLAnchorElement>,
     chip: LaneChip,
   ) => {
-    if (chip.slug) trackPlaceChange(chip.href, chip.slug, from);
+    // Count a place switch only when this tab really switches: not a
+    // cmd/ctrl/middle click (a new tab) and not a tap on the current chip.
+    if (chip.slug && isPlainLeftClick(event) && chip.slug !== from) {
+      trackPlaceChange(chip.href, chip.slug, from);
+    }
     handlePlaceLinkClick(event, chip.href, (href) => router.push(href));
   };
 
@@ -99,7 +110,8 @@ export function PlaceLaneView({
   // More chips lie before / past the scroller's edges: it fades there.
   const [more, setMore] = useState({ before: false, after: false });
   const showHomeLabel = homeChipShowsLabel(chips.length);
-  const [home, ...places] = chips;
+  const home = chips.find((chip) => chip.kind === "home");
+  const places = chips.filter((chip) => chip.kind === "place");
 
   const measureFade = useCallback(() => {
     const el = scrollerRef.current;
@@ -113,23 +125,36 @@ export function PlaceLaneView({
 
   // Keep the current chip in view, centred in the scroller (on a route change
   // and on a swipe alike). My Location is outside the scroller: the lane then
-  // returns to its start.
+  // returns to its start. With NO current chip (/locations, /explore) the lane
+  // is left exactly where the person scrolled it. Re-run once the fonts are
+  // in, since a chip's width changes with them.
   useEffect(() => {
-    const scroller = scrollerRef.current;
-    const active = activeRef.current;
-    if (!scroller) return;
-    scroller.scrollTo({
-      left: laneScrollLeft(
-        {
-          viewport: scroller.clientWidth,
-          content: scroller.scrollWidth,
-          itemLeft: active?.offsetLeft ?? 0,
-          itemWidth: active?.offsetWidth ?? 0,
-        },
-        active ? activeIndex : 0,
-      ),
-      behavior: getScrollBehavior(),
+    if (activeIndex < 0) return;
+    const centre = () => {
+      const scroller = scrollerRef.current;
+      const active = activeRef.current;
+      if (!scroller) return;
+      scroller.scrollTo({
+        left: laneScrollLeft(
+          {
+            viewport: scroller.clientWidth,
+            content: scroller.scrollWidth,
+            itemLeft: active?.offsetLeft ?? 0,
+            itemWidth: active?.offsetWidth ?? 0,
+          },
+          active ? activeIndex : 0,
+        ),
+        behavior: getScrollBehavior(),
+      });
+    };
+    centre();
+    let cancelled = false;
+    void document.fonts?.ready.then(() => {
+      if (!cancelled) centre();
     });
+    return () => {
+      cancelled = true;
+    };
   }, [activeIndex, chips.length]);
 
   // Fade state follows the lane's size and its content.
@@ -152,23 +177,29 @@ export function PlaceLaneView({
         places.length === 0 ? "justify-center" : ""
       }`}
     >
-      <Link
-        href={home.href}
-        prefetch={false}
-        aria-label="My Location"
-        aria-current={activeIndex === 0 ? "page" : undefined}
-        title="My Location"
-        onClick={(event) => onChipClick(event, home)}
-        className={`lark shrink-0 ${
-          showHomeLabel ? "" : "min-w-[var(--touch-target-min)] px-0"
-        }`}
-      >
-        <NavigationIcon
-          size={18}
-          className={activeIndex === 0 ? "fill-current" : ""}
-        />
-        {showHomeLabel && <span className="truncate">My Location</span>}
-      </Link>
+      {home && (
+        <Link
+          href={home.href}
+          prefetch={false}
+          aria-label={MY_LOCATION_NAME}
+          aria-current={
+            chips.indexOf(home) === activeIndex ? "page" : undefined
+          }
+          title={MY_LOCATION_NAME}
+          onClick={(event) => onChipClick(event, home)}
+          className={`lark press-scale shrink-0 ${
+            showHomeLabel ? "" : "min-w-[var(--touch-target-min)] px-0"
+          }`}
+        >
+          <NavigationIcon
+            size={18}
+            className={
+              chips.indexOf(home) === activeIndex ? "fill-current" : ""
+            }
+          />
+          {showHomeLabel && <span className="truncate">{home.name}</span>}
+        </Link>
+      )}
       {places.length > 0 && (
         <div
           ref={scrollerRef}
@@ -177,13 +208,15 @@ export function PlaceLaneView({
           data-fade-end={more.after ? "true" : undefined}
           className="sanderling scrollbar-hide h-full min-w-0 flex-1 overflow-x-auto"
         >
+          {/* Named, so a screen reader does not count My Location (the link
+              before it) as an item of this list. */}
           <ul
             ref={listRef}
+            aria-label="Saved places and suggestions"
             className="relative m-0 flex h-full w-max list-none items-center gap-1.5 p-0 px-1"
           >
-            {places.map((chip, i) => {
-              const isActive = i + 1 === activeIndex;
-              const name = displayNameFromSlug(chip.slug ?? "");
+            {places.map((chip) => {
+              const isActive = chips.indexOf(chip) === activeIndex;
               return (
                 <li
                   key={chip.href}
@@ -194,11 +227,11 @@ export function PlaceLaneView({
                     href={chip.href}
                     prefetch={false}
                     aria-current={isActive ? "page" : undefined}
-                    title={name}
+                    title={chip.name}
                     onClick={(event) => onChipClick(event, chip)}
-                    className="lark"
+                    className="lark press-scale"
                   >
-                    <span className="truncate">{name}</span>
+                    <span className="truncate">{chip.name}</span>
                   </Link>
                 </li>
               );

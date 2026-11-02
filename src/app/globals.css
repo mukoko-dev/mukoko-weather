@@ -1713,6 +1713,11 @@ body {
     @apply border-on-container-cobalt/25 bg-container-cobalt
            text-on-container-cobalt;
     border-width: var(--border-width-active);
+    /* The thicker border comes out of the padding, so the chip keeps its
+       outer width and a place switch does not nudge the row. */
+    padding-inline: calc(
+      0.75rem - (var(--border-width-active) - var(--border-width-rest)) / 2
+    );
   }
 
   /* .sanderling — the places lane's sideways scroller. Its edges fade by an

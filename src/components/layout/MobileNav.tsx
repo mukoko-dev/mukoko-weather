@@ -56,13 +56,11 @@ export function mobileNavItems(
 /**
  * Which pinned bar item is the current page. Explicit, so the Map item (which
  * points at /explore while no location is on screen) never lights up on
- * Explore; "none" matches no item. `/` is My Location, which is the lane's
- * first chip (PlaceLane marks it), so no pinned item matches there either.
+ * Explore; "none" matches no item. The lane marks its own current chip (My
+ * Location on `/`, a place on its page), so no pinned item is current there.
  */
 export function mobileNavActiveId(pathname: string): string {
-  if (pathname === MY_LOCATION_HREF) return "my-location";
-  if (pathname === "/locations") return "locations";
-  return "none";
+  return pathname === "/locations" ? "locations" : "none";
 }
 
 /**
@@ -75,7 +73,7 @@ function LaneFallback() {
       href={MY_LOCATION_HREF}
       prefetch={false}
       aria-label="My Location"
-      className="lark min-w-[var(--touch-target-min)] px-0"
+      className="lark press-scale min-w-[var(--touch-target-min)] px-0"
     >
       <NavigationIcon size={18} />
     </Link>

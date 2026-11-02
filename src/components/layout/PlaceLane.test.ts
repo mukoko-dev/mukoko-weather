@@ -43,6 +43,14 @@ describe("PlaceLane — accessible lane", () => {
     expect(source).not.toMatch(/<nav[\s>]/);
   });
 
+  it("names the places list, so My Location (the link before it) is not an item of it", () => {
+    const html = view(["harare"], 0);
+    expect(html).toContain('aria-label="Saved places and suggestions"');
+    expect(html.indexOf('aria-label="My Location"')).toBeLessThan(
+      html.indexOf("<ul"),
+    );
+  });
+
   it("is a list of links: My Location named by aria-label, places by their text", () => {
     const html = view(["harare", "nairobi-ke"], 1);
     // My Location is the pinned link before the list; the list holds the places.
@@ -91,13 +99,42 @@ describe("PlaceLane — accessible lane", () => {
     expect(source).toContain("router.push(href)");
   });
 
-  it("switches place in place on a plain click and tracks a saved-place tap", () => {
-    expect(source).toContain(
-      "if (chip.slug) trackPlaceChange(chip.href, chip.slug, from);",
-    );
+  it("switches place in place on a plain click", () => {
     expect(source).toContain(
       "usePagerSequence(savedLocations, selectedLocation)",
     );
+    expect(source).toContain("handlePlaceLinkClick(event, chip.href");
+  });
+
+  it("counts a place change only for a plain click on a chip that is not the current one", () => {
+    expect(source).toContain(
+      "if (chip.slug && isPlainLeftClick(event) && chip.slug !== from) {",
+    );
+    // The count comes before the switch, and a modified click never reaches it.
+    expect(source.indexOf("trackPlaceChange(chip.href")).toBeLessThan(
+      source.indexOf("handlePlaceLinkClick(event"),
+    );
+  });
+
+  it("names a chip through laneChipName with the person's labels and the names seen", () => {
+    expect(source).toContain(
+      "laneChipName(slug, locationLabels, locationNames)",
+    );
+  });
+
+  it("does not trust the chip order: My Location and the places are found by kind", () => {
+    expect(source).toContain('chips.find((chip) => chip.kind === "home")');
+    expect(source).toContain('chips.filter((chip) => chip.kind === "place")');
+    // A view given no chips renders an empty lane instead of throwing.
+    expect(() =>
+      renderToStaticMarkup(
+        createElement(PlaceLaneView, {
+          chips: [],
+          activeIndex: -1,
+          onChipClick: () => undefined,
+        }),
+      ),
+    ).not.toThrow();
   });
 });
 
@@ -111,6 +148,19 @@ describe("PlaceLane — scrolling", () => {
 
   it("returns the lane to its start when My Location is current", () => {
     expect(source).toContain("active ? activeIndex : 0");
+  });
+
+  it("leaves the lane where the person scrolled it when no chip is current", () => {
+    // /locations and /explore have no current chip: no scroll at all.
+    expect(source).toContain("if (activeIndex < 0) return;");
+    expect(source.indexOf("if (activeIndex < 0) return;")).toBeLessThan(
+      source.indexOf("scroller.scrollTo({"),
+    );
+  });
+
+  it("centres again once the fonts are in, and never after it has been cleaned up", () => {
+    expect(source).toContain("document.fonts?.ready.then(");
+    expect(source).toContain("if (!cancelled) centre();");
   });
 
   it("fades an edge only while more chips lie that way, and follows resizes", () => {
@@ -143,6 +193,17 @@ describe("PlaceLane — styling comes from tokens", () => {
     expect(source).not.toMatch(/style=\{\{/);
     expect(source).not.toMatch(/#[0-9a-fA-F]{3,6}\b/);
     expect(source).not.toContain("rgba(");
+  });
+
+  it("the current chip keeps its outer width: the thicker border comes out of the padding", () => {
+    const at = css.indexOf(
+      '.lark:is([aria-current]:not([aria-current="false"])) {',
+    );
+    const r = css.slice(at, css.indexOf("}", at + 200));
+    expect(r).toContain("padding-inline: calc(");
+    expect(r).toContain(
+      "(var(--border-width-active) - var(--border-width-rest)) / 2",
+    );
   });
 
   it(".lark is never wider than the lane it sits in, so one chip always fits whole", () => {
