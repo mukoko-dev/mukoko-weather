@@ -88,6 +88,17 @@ describe("security headers (B05)", () => {
       );
   });
 
+  it("lets the flagged CouchDB sync reach the Nyuchi API, and only connect-src", () => {
+    expect(CSP_DIRECTIVES["connect-src"]).toContain("https://api.nyuchi.com");
+    for (const directive of Object.keys(CSP_DIRECTIVES)) {
+      if (directive === "connect-src") continue;
+      expect(
+        (CSP_DIRECTIVES as Record<string, string[]>)[directive],
+        directive,
+      ).not.toContain("https://api.nyuchi.com");
+    }
+  });
+
   it("allows no Google Fonts origin (fonts are self-hosted via next/font)", () => {
     const csp = buildCsp();
     expect(csp).not.toContain("fonts.googleapis.com");

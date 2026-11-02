@@ -65,6 +65,7 @@ describe("feature-flags", () => {
         "map_layers",
         "premium_maps",
         "model_map_layers",
+        "couch_sync",
         "vector_search",
         "multi_language",
       ];
@@ -84,6 +85,8 @@ describe("feature-flags", () => {
       expect(FLAGS.premium_maps).toBe(false);
       expect(FLAGS.vector_search).toBe(false);
       expect(FLAGS.multi_language).toBe(false);
+      // CouchDB sync (#396) ships dark: nothing is requested while it is off.
+      expect(FLAGS.couch_sync).toBe(false);
       // Paused, not experimental: a standalone chatbot destination doesn't
       // match how weather apps work. AI stays available as an ambient
       // enhancement (inline summaries, AI-powered explore search) instead.
@@ -105,6 +108,16 @@ describe("feature-flags", () => {
     it("does NOT check localStorage overrides", () => {
       localStorageMock.setItem("ff:premium_maps", "true");
       expect(isFeatureEnabled("premium_maps")).toBe(false);
+    });
+
+    it("couch_sync is off by default and a localStorage override can turn it on", () => {
+      expect(isFeatureEnabled("couch_sync")).toBe(false);
+      expect(getFeatureFlag("couch_sync")).toBe(false);
+      localStorageMock.setItem("ff:couch_sync", "true");
+      expect(getFeatureFlag("couch_sync")).toBe(true);
+      expect(isFeatureEnabled("couch_sync")).toBe(false);
+      localStorageMock.removeItem("ff:couch_sync");
+      expect(getFeatureFlag("couch_sync")).toBe(false);
     });
   });
 

@@ -1,0 +1,93 @@
+// PINNED COPY, not edited: nyuchi/nyuchi-api gateway/lib/couch_validate_personal.js
+// at origin/main 78f2e6f (api.nyuchi.com v0.51.0). This is the function CouchDB runs
+// on every write to user_<personId>; the sync tests execute it so a document the
+// real database would refuse can never pass here. When the gateway changes it,
+// re-copy the file and let the tests say what moved.
+// The source below this line is byte-for-byte the gateway's.
+// The write rules of a person's private database (user_<personId>), installed
+// as _design/nyuchi by gateway/lib/couch_documents.py.
+// ES5 on purpose: CouchDB's JavaScript engine runs it, and so does PouchDB in
+// the app. Docs: docs/architecture/couchdb-personal-database.md.
+//
+// Only the owner writes. There is no administrator exception: no family, no
+// organisation and no entity role is ever listed in this database's security
+// document. The content of a document may be ciphertext the device wrote, so
+// only the envelope is checked and the server never has to read the rest.
+function (newDoc, oldDoc, userCtx, secObj) {
+  var MAX_BYTES = 1048576;
+  var roles = userCtx.roles || [];
+
+  // The platform itself (the server admin) is not bound by these rules.
+  if (roles.indexOf('_admin') !== -1) {
+    return;
+  }
+
+  function fail(message) {
+    throw { forbidden: message };
+  }
+
+  // Size in bytes, attachments included (an attachment stub carries its length;
+  // an inline one carries base64 data, three bytes for every four characters).
+  function documentBytes(doc) {
+    var total = unescape(encodeURIComponent(JSON.stringify(doc))).length;
+    var atts = doc._attachments || {};
+    for (var name in atts) {
+      var att = atts[name];
+      if (typeof att.length === 'number') {
+        total += att.length;
+      } else if (typeof att.data === 'string') {
+        total += Math.floor(att.data.length * 3 / 4);
+      }
+    }
+    return total;
+  }
+
+  // A tombstone keeps the id, not the content.
+  function onlyStubKeys(doc) {
+    var allowed = { _id: 1, _rev: 1, _deleted: 1, _revisions: 1 };
+    for (var key in doc) {
+      if (!allowed[key]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  if (newDoc._id.indexOf('_design/') === 0) {
+    fail('design documents are managed by the platform');
+  }
+
+  // The owner is the one name this database's security document lists.
+  var owners = (secObj && secObj.members && secObj.members.names) || [];
+  if (!userCtx.name || owners.indexOf(userCtx.name) === -1) {
+    fail('only the owner of this database may write to it (if that is you, sign in again so the database is repaired)');
+  }
+
+  // The owner may delete their own documents.
+  if (newDoc._deleted) {
+    if (!onlyStubKeys(newDoc)) {
+      fail('a deleted document keeps only _id, _rev and _deleted');
+    }
+    return;
+  }
+
+  if (typeof newDoc.type !== 'string' || !/^[a-z][a-z0-9_.-]{0,63}$/.test(newDoc.type)) {
+    fail('type is required: lower-case letters, digits, . _ -');
+  }
+  if (newDoc._id.indexOf(newDoc.type + ':') !== 0 || newDoc._id.length <= newDoc.type.length + 1) {
+    fail('_id must be <type>:<id>');
+  }
+  if (typeof newDoc.schemaVersion !== 'number' || newDoc.schemaVersion < 1 || Math.floor(newDoc.schemaVersion) !== newDoc.schemaVersion) {
+    fail('schemaVersion must be a whole number from 1');
+  }
+  if (newDoc.ownerPersonId !== userCtx.name) {
+    fail('ownerPersonId must be you');
+  }
+  if (typeof newDoc.updatedAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(newDoc.updatedAt)) {
+    fail('updatedAt must be an RFC 3339 time');
+  }
+  // Bytes, not characters, and attachments count: the limit is on the whole document.
+  if (documentBytes(newDoc) > MAX_BYTES) {
+    fail('a document may not exceed 1 MB');
+  }
+}

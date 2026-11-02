@@ -60,6 +60,9 @@ export const CSP_DIRECTIVES: Record<string, string[]> = {
     // The Rust weather Worker (NEXT_PUBLIC_WEATHER_API_URL, src/lib/weather-api.ts).
     "https://weather-api.mukoko.com",
     "https://weather-tiles.mukoko.com",
+    // CouchDB sync replicates with the Nyuchi API (src/lib/rxdb/couch-sync.ts),
+    // only while FLAGS.couch_sync is on; the origin comes from /api/couch/session.
+    "https://api.nyuchi.com",
     "https://api.tomorrow.io",
     "https://gibs.earthdata.nasa.gov",
     "https://api.workos.com",

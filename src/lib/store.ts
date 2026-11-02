@@ -1,6 +1,9 @@
 import { create } from "zustand";
-import { updatePreferences, initRxDBBridge } from "./rxdb/bridge";
+import { updatePreferences, initRxDBBridge, getDeviceId } from "./rxdb/bridge";
 import type { PreferencesDocType } from "./rxdb/schemas";
+import { getFeatureFlag } from "./feature-flags";
+// Types only: the sync code itself is imported dynamically, behind the flag.
+import type { SyncableState, SyncedPatch } from "./rxdb/couch-docs";
 import { isLocationSlug } from "./current-slug";
 import { isPresetAnchor, type PresetAnchor } from "./location-presets";
 import { resolveTheme, type ThemePreference } from "./theme";
@@ -509,6 +512,7 @@ export function initializeDeviceSync(): void {
   })
     .then(() => {
       markStoreHydrated();
+      startCouchSyncIfEnabled();
       // Replication (RxDB's replication plugin and rxjs) loads after first
       // paint and only here, never with the page's first-load JavaScript.
       return import("./rxdb/replication").then((m) => m.startReplication());
@@ -518,4 +522,71 @@ export function initializeDeviceSync(): void {
       // This handles cases like private browsing where IndexedDB may be unavailable.
       markStoreHydrated();
     });
+}
+
+// ---------------------------------------------------------------------------
+// CouchDB sync (flagged, #396) — preferences and activities only
+// ---------------------------------------------------------------------------
+
+/** The slice of state the CouchDB sync reads and writes (`couch-docs.ts`). */
+function readSyncableState(): SyncableState {
+  const s = useAppStore.getState();
+  return {
+    theme: s.theme,
+    selectedForecastModel: s.selectedForecastModel,
+    selectedActivities: [...s.selectedActivities],
+  };
+}
+
+/**
+ * Apply what the person's other devices changed. Goes through the store's own
+ * setters, so the change is also persisted to this device's preferences
+ * (RxDB) and applied to the page (the theme attribute) exactly as if the
+ * person had made it here.
+ */
+export function applySyncedPreferences(patch: SyncedPatch): void {
+  if (
+    patch.theme !== undefined &&
+    THEME_CYCLE.includes(patch.theme as ThemePreference)
+  ) {
+    useAppStore.getState().setTheme(patch.theme as ThemePreference);
+  }
+  if (patch.selectedForecastModel !== undefined) {
+    useAppStore.getState().setSelectedForecastModel(patch.selectedForecastModel);
+  }
+  if (patch.selectedActivities !== undefined) {
+    const next = [...patch.selectedActivities];
+    useAppStore.setState({ selectedActivities: next });
+    void updatePreferences({ selectedActivities: next });
+  }
+}
+
+/**
+ * Start the CouchDB sync when `FLAGS.couch_sync` is on. With the flag off
+ * (the default) this reads one flag and returns: nothing is imported, no
+ * request is made. The sync code itself loads only here, after first paint.
+ */
+function startCouchSyncIfEnabled(): void {
+  if (!getFeatureFlag("couch_sync")) return;
+  void import("./rxdb/couch-sync-start")
+    .then((m) =>
+      m.startCouchSync(
+        {
+          read: readSyncableState,
+          subscribe: (listener) =>
+            useAppStore.subscribe((state, prev) => {
+              if (
+                state.theme !== prev.theme ||
+                state.selectedForecastModel !== prev.selectedForecastModel ||
+                state.selectedActivities !== prev.selectedActivities
+              ) {
+                listener();
+              }
+            }),
+          apply: applySyncedPreferences,
+        },
+        getDeviceId(),
+      ),
+    )
+    .catch(() => undefined);
 }
