@@ -793,6 +793,77 @@ mod tests {
     }
 
     #[test]
+    fn the_single_model_builder_turns_the_composed_raw_into_apple_with_the_filler() {
+        let raw = open_meteo_raw();
+        let s = snap();
+        let now = s.current.as_ref().unwrap().at + Duration::minutes(10);
+        let composed = compose_raw(&raw, &s, now).unwrap();
+        // The same builder the user's own single-model pick goes through.
+        let mut payload = blend::build_single_model(&composed, MODEL_ID, now).unwrap();
+        let want = fixture()["expected"].clone();
+        let h = |var: &str, i: usize| payload["hourly"][var][i].clone();
+
+        // Where Apple has a value it is the baseline's: 12:00 local is the
+        // 10:00Z row (instants), 13:00 takes the 10:00Z row's rain (a period).
+        let noon = slot("2026-11-01T12:00");
+        assert_eq!(
+            h("temperature_2m", noon),
+            want["aligned_hourly"]["12:00"]["temperature_2m"]
+        );
+        assert_eq!(
+            h("weather_code", noon),
+            want["aligned_hourly"]["12:00"]["weather_code"]
+        );
+        let one = slot("2026-11-01T13:00");
+        assert_eq!(
+            h("precipitation", one),
+            want["aligned_hourly"]["13:00"]["precipitation"]
+        );
+
+        // Where Apple has none, the filler (best_match) fills the slot: the
+        // hours of today before Apple's first row, and the 12:00 rain (its
+        // preceding hour is not an Apple row).
+        assert_eq!(h("temperature_2m", 0), json!(50.0));
+        assert_eq!(h("weather_code", 0), json!(3));
+        assert_eq!(h("precipitation", noon), json!(70.0 + noon as f64));
+        // What Apple does not publish at all is the filler's: surface pressure
+        // (Apple's is sea level) stays the station value.
+        assert_eq!(h("surface_pressure", noon), json!(850.0 + noon as f64));
+
+        // Current: Apple's temperature, Open-Meteo's own surface pressure.
+        assert_eq!(
+            payload["current"]["temperature_2m"],
+            want["current"]["temperature_2m"]
+        );
+        assert_eq!(payload["current"]["surface_pressure"], json!(851.2));
+
+        // Daily: Apple's high and local sunrise. ET0 is an input the builder
+        // strips after deriving insights, so the filler's value is read from
+        // the insights it fed (Apple publishes no ET0).
+        assert_eq!(
+            payload["daily"]["temperature_2m_max"][0],
+            want["aligned_daily"]["2026-11-01"]["temperature_2m_max"]
+        );
+        assert_eq!(payload["daily"]["sunrise"][0], json!("2026-11-01T05:27"));
+        assert_eq!(payload["insights"]["evapotranspiration"], json!(5.0));
+        assert!(payload["daily"].get("et0_fao_evapotranspiration").is_none());
+
+        // The builder marks it as an Open-Meteo single model; the answer
+        // replaces that with Apple's own marker and attribution.
+        assert_eq!(
+            payload["baseline"]["provider"],
+            json!("open-meteo:apple_weatherkit")
+        );
+        payload["baseline"] = super::super::baseline_marker();
+        assert_eq!(payload["baseline"]["provider"], json!("apple-weatherkit"));
+        assert_eq!(payload["baseline"]["attribution"]["modified"], json!(true));
+        // The sections the page reads are all still there.
+        for key in ["current", "hourly", "daily", "insights", "minutely"] {
+            assert!(payload.get(key).is_some(), "{key}");
+        }
+    }
+
+    #[test]
     fn composing_puts_apple_into_current_and_the_nowcast() {
         let raw = open_meteo_raw();
         let mut s = snap();

@@ -64,10 +64,8 @@
 //!    (5xx, 429, timeout, transport, unreadable body) records a breaker failure.
 //!    Log status codes only.
 //! 6. **Compose.** [`align::compose_raw`] then `blend::build_single_model(raw,
-//!    "apple_weatherkit", now)` (PR #398; on `staging` before it lands the
-//!    composed raw is read with `blend::blend_payload`, which the tests do);
-//!    set `payload["baseline"]` to
-//!    [`baseline_marker`]; answer `X-Weather-Provider: apple-weatherkit`
+//!    "apple_weatherkit", now)` (the tests in `align` run exactly this); set
+//!    `payload["baseline"]` to [`baseline_marker`]; answer `X-Weather-Provider: apple-weatherkit`
 //!    ([`PROVIDER`]) and no `X-Weather-Blend`. For the comparison, append
 //!    [`align::series`] to `models` and `models_available` (spend class
 //!    [`budget::Class::Comparison`]).
@@ -366,6 +364,9 @@ mod tests {
             "falls back to the default set, never forwarded"
         );
         assert!(crate::community::FORECAST_MODELS.contains(&MODEL_ID));
+        // Nothing in the Workers serves it: the Workers' own baseline
+        // sanitiser reads it as "no pick", so a request gets the blend.
+        assert_eq!(crate::blend::sanitize_baseline_model(Some(MODEL_ID)), None);
         // Its provider header is its own, not an `open-meteo:` variant.
         assert!(!PROVIDER.starts_with("open-meteo"));
     }
