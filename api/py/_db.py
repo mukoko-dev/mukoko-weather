@@ -31,18 +31,12 @@ from pymongo.database import Database
 _client: Optional[MongoClient] = None
 
 # ---------------------------------------------------------------------------
-# Shared validation constants — single source so slug format and message/
-# history caps can't drift between endpoints.
+# Shared validation constants — single source so the slug format can't drift
+# between endpoints.
 # ---------------------------------------------------------------------------
 
 #: Location slug format, shared by _locations.py and the other slug-taking routes.
 SLUG_RE = re.compile(r"^[a-z0-9-]{1,80}$")
-
-#: Follow-up message length cap, used by _ai_followup.py.
-MAX_MESSAGE_LEN = 2000
-
-#: Conversation history length cap, used by _ai_followup.py.
-MAX_HISTORY = 10
 
 
 # ---------------------------------------------------------------------------
