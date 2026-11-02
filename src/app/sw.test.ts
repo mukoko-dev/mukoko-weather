@@ -105,3 +105,68 @@ describe("service worker: the app shell (issue #414)", () => {
     }
   });
 });
+
+describe("service worker: the /offline page can start with no network", () => {
+  it("stores the page's own scripts at install, read from the page (nothing named by hand)", () => {
+    expect(source).toContain('shellScope.addEventListener("install"');
+    expect(source).toContain("shellKeeper.ensure(event)");
+    expect(source).toContain("warmShellAssets({");
+    // The list is the precached /offline HTML (else the network's), fetched
+    // without cookies like the precache entry.
+    expect(source).toContain("serwist.matchPrecache(OFFLINE_URL)");
+    expect(source).toContain('fetch(OFFLINE_URL, { credentials: "omit" })');
+    // No chunk, build id or hash is written into the worker.
+    expect(source).not.toMatch(/chunks\/[0-9a-f]{3,}/);
+    expect(source).not.toMatch(/[0-9a-f]{16}\.js/);
+  });
+
+  it("an install never waits long and never fails because of it", () => {
+    expect(source).toContain(
+      "boundedBy(shellKeeper.ensure(event), SHELL_INSTALL_TIMEOUT_MS)",
+    );
+  });
+
+  it("stores each file through the /_next/static/ route's own strategy and cache", () => {
+    // One strategy, two uses: the route and the install pass share the cache
+    // and the expiry bookkeeping.
+    expect(source).toContain("handler: staticAssets,");
+    expect(source).toContain("cacheName: STATIC_ASSETS_CACHE");
+    expect(source).toContain("staticAssets.handle({");
+    expect(source).toContain('new Request(url, { credentials: "omit" })');
+    expect(source.match(/new CacheFirst\(/g)).toHaveLength(2); // + map tiles
+  });
+
+  it("hands the strategy a stand-in for the event, never a navigation's FetchEvent", () => {
+    // Serwist answers EVERY fetch made under a navigate-mode FetchEvent with
+    // that navigation's preload response (the page's HTML). Passed the
+    // navigation event, the retry stored the page under the scripts' URLs and
+    // the offline page failed with "MIME type ('text/html') is not executable".
+    expect(source).toContain("event: lifetimeOf(event) as never,");
+    expect(source).not.toContain("event: event as never");
+    expect(source).toContain("waitUntil: (work) => event.waitUntil(work),");
+  });
+
+  it("refuses to store an HTML answer as a script, in the one strategy both paths use", () => {
+    expect(source).toContain("isStorableStaticAsset(response) ? response : null");
+    expect(source).toContain("return response.ok && isStorableStaticAsset(response);");
+  });
+
+  it("repeats an unfinished pass from a navigation, in the background and only online", () => {
+    expect(source).toContain("shellKeeper.retry(fetchEvent)");
+    expect(source).toContain("fetchEvent.waitUntil(again)");
+    expect(source).toContain("shellScope.navigator.onLine !== false");
+    // Before anything is awaited for the page itself: the visitor never waits for it.
+    expect(source.indexOf("shellKeeper.retry(fetchEvent)")).toBeLessThan(
+      source.indexOf("handleNavigation(new URL(request.url)"),
+    );
+  });
+
+  it("does not hold activation on network work", () => {
+    // `activate` stalls every fetch until it settles; it only drops old caches.
+    const activate = source.slice(source.indexOf('"activate"'));
+    expect(activate.slice(0, activate.indexOf("// Web push"))).not.toContain(
+      "shellKeeper",
+    );
+  });
+});
+

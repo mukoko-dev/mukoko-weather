@@ -226,6 +226,17 @@ export function PlaceView({
           onRetry={retry}
         />
       )}
+      {/* The retries are still running and there is nothing stored to show:
+          say so, over the same skeleton, and offer the button now. */}
+      {state.slow && !view && !state.failed && (
+        <PlaceLoadNotice
+          slow
+          placeName={seed.location.name}
+          showingSaved={false}
+          busy={false}
+          onRetry={retry}
+        />
+      )}
       {children}
     </>
   );
