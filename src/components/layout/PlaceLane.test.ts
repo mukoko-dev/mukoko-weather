@@ -125,7 +125,7 @@ describe("PlaceLane — scrolling", () => {
     expect(html).not.toContain("data-fade-end");
   });
 
-  it("does not snap: scroll-snap fought the programmatic centring (measured)", () => {
+  it("does not snap: the lane centres the current chip itself, with no second positioning rule", () => {
     expect(source).not.toContain("snap-");
     expect(rule(".sanderling")).not.toContain("scroll-snap");
   });

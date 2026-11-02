@@ -1718,9 +1718,9 @@ body {
   /* .sanderling — the places lane's sideways scroller. Its edges fade by an
      alpha-only mask (any theme, no colour) while more chips lie that way:
      PlaceLane sets data-fade-start once it has scrolled and data-fade-end
-     while chips lie past the end. No scroll-snap: snapping fought the
-     programmatic centring of the current chip (measured: the last chip
-     stopped 8px short of the end, so the fade stayed on it). */
+     while chips lie past the end. No scroll-snap: PlaceLane
+     centres the current chip itself (laneScrollLeft), and a second
+     positioning rule would compete with it (a design call, not measured). */
   .sanderling {
     container-type: inline-size;
     --lane-fade-start: 0px;
