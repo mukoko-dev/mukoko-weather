@@ -106,8 +106,6 @@ describe("CORS (B06)", () => {
   it("keeps the documented public browser API and embeds CORS-open", () => {
     for (const s of [
       "/api/py/weather",
-      "/api/py/geo",
-      "/api/py/search",
       "/api/py/airquality/:path*",
       "/api/embed/:path*",
       "/embed/:path*",
@@ -116,8 +114,9 @@ describe("CORS (B06)", () => {
   });
 
   it("the API Worker opens exactly the documented routes", () => {
-    // `weather_core::cors::OPEN_READ_ROUTES` is the Worker-side image of the
-    // open list above: weather, geo, search and air quality (+ its grid).
+    // `weather_core::cors::OPEN_READ_ROUTES` is the Worker's own open list: the
+    // routes that replace the open Python ones (weather and air quality, + its
+    // grid) and the two that already moved (geo, search).
     const rust = readFileSync(
       resolve(__dirname, "../../workers/crates/weather-core/src/cors.rs"),
       "utf-8",
@@ -137,6 +136,15 @@ describe("CORS (B06)", () => {
         "/v1/weather",
       ].sort(),
     );
+  });
+
+  it("no longer opens the deleted Python geo and search routes", () => {
+    // They moved to the Worker (/v1/geo, /v1/search), whose open routes are
+    // `weather_core::cors::OPEN_READ_ROUTES`, not this table.
+    expect(CORS_POLICY.open).not.toContain("/api/py/geo");
+    expect(CORS_POLICY.open).not.toContain("/api/py/search");
+    expect(sources).not.toContain("/api/py/geo");
+    expect(sources).not.toContain("/api/py/search");
   });
 
   it("never sends credentials with the wildcard", () => {

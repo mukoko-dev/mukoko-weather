@@ -87,7 +87,7 @@ export interface AISummaryDoc {
 
 /**
  * Provenance of a history doc: a fresh provider fetch recorded by
- * /api/py/weather, or a past day filled from the Open-Meteo archive (ERA5
+ * the jobs Worker, or a past day filled from the archives (ERA5
  * reanalysis; `current` then holds daily means). Legacy docs have no source.
  */
 export type WeatherHistorySource =

@@ -1,5 +1,15 @@
 """
-Weather history store — the single writer/reader for ``weather.weather_history``.
+Weather history store — the Python writer/reader for ``weather.weather_history``.
+
+``GET /api/py/history`` and its Open-Meteo archive backfill are gone: the app
+reads the Rust Worker's ``GET /v1/history`` (``workers/places/src/history.rs``,
+rules in ``weather_core::history``), which reads this same collection through
+the MongoDB bridge and fills the missing days from NASA POWER / Open-Meteo,
+inserting them with ``source`` ``nasa-power`` or ``open-meteo-archive``. What
+stays here is what the remaining Python needs until it is ported (#333): the
+recorder ``/api/py/weather`` calls on a fresh provider fetch
+(:func:`record_weather_history`) and the reader ``/api/py/history/analyze``
+uses (:func:`read_history`, :func:`history_slugs`).
 
 One document per ``(locationSlug, date)`` where ``date`` is the location-local
 calendar day (``YYYY-MM-DD``). db-init creates a UNIQUE index on
@@ -12,14 +22,14 @@ calendar day (``YYYY-MM-DD``). db-init creates a UNIQUE index on
   stopped growing the day #112 retired the TS writer.)
 * ``date`` is always present.
 
-Two provenances share the collection, marked by ``source``:
+Provenances share the collection, marked by ``source``:
 
 * ``"recorded"`` — a fresh provider fetch from ``/api/py/weather`` (today's
   ``current`` snapshot + day-0 ``daily`` forecast). Recorded data wins on its
   day: it ``$set``s the doc.
-* ``"open-meteo-archive"`` — a past day filled from the Open-Meteo
-  Historical/Archive API (ERA5 / best-match reanalysis). Inserted with
-  ``$setOnInsert`` only, so it never overwrites a recorded day.
+* ``"open-meteo-archive"`` / ``"nasa-power"`` — a past day written by the Rust
+  Worker's history route. Inserted with ``$setOnInsert`` only, so it never
+  overwrites a recorded day.
 
 Document shape mirrors the TS ``WeatherHistoryDoc`` the HistoryDashboard and
 ``_history_analyze`` read: ``current`` (WeatherData current fields),
@@ -29,11 +39,11 @@ Document shape mirrors the TS ``WeatherHistoryDoc`` the HistoryDashboard and
 from __future__ import annotations
 
 import logging
-import time
 from datetime import datetime, timedelta, timezone
 from typing import Iterable, Optional
 
 from ._db import get_db
+from ._places_resolver import storage_slug
 
 logger = logging.getLogger(__name__)
 
@@ -41,43 +51,6 @@ COLLECTION = "weather_history"
 
 SOURCE_RECORDED = "recorded"
 SOURCE_ARCHIVE = "open-meteo-archive"
-
-ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
-ARCHIVE_TIMEOUT_S = 8.0
-#: Max days a single archive request may span (one HTTP call per request).
-ARCHIVE_MAX_SPAN_DAYS = 366
-#: Don't re-attempt the same (or a narrower) backfill for a location within
-#: this window — the archive has a ~2-day lag, so yesterday can legitimately
-#: come back empty, and we must not hammer the API on every page view.
-BACKFILL_COOLDOWN_S = 3600
-#: Per-IP cap on backfill attempts (the endpoint is reachable directly).
-BACKFILL_RATE_LIMIT = 30
-BACKFILL_RATE_WINDOW_S = 3600
-
-ARCHIVE_DAILY_VARS = (
-    "weather_code",
-    "temperature_2m_max",
-    "temperature_2m_min",
-    "temperature_2m_mean",
-    "apparent_temperature_max",
-    "apparent_temperature_min",
-    "apparent_temperature_mean",
-    "precipitation_sum",
-    "sunrise",
-    "sunset",
-    "wind_speed_10m_max",
-    "wind_gusts_10m_max",
-    "wind_direction_10m_dominant",
-    "wind_speed_10m_mean",
-    "relative_humidity_2m_mean",
-    "cloud_cover_mean",
-    "surface_pressure_mean",
-    "dew_point_2m_mean",
-    "et0_fao_evapotranspiration",
-)
-
-# (slug) -> (attempted_at_monotonic, earliest_date_attempted)
-_backfill_attempts: dict[str, tuple[float, str]] = {}
 
 
 def _collection():
@@ -269,212 +242,15 @@ def merge_by_date(docs: Iterable[dict], slug_order: list[str]) -> list[dict]:
     return merged
 
 
-# ---------------------------------------------------------------------------
-# Backfill — Open-Meteo Historical/Archive API
-# ---------------------------------------------------------------------------
+def history_slugs(location: str, loc: dict) -> list[str]:
+    """Canonical slug first, then the platform hash slug older writes used.
 
-
-def missing_past_dates(existing: Iterable[str], days: int, *, lon: float, now: Optional[datetime] = None) -> list[str]:
-    """Past local dates in the window (today excluded) with no doc, oldest first."""
-    today = datetime.fromisoformat(local_date(estimate_utc_offset_seconds(lon), now)).date()
-    have = set(existing)
-    span = min(max(1, days), ARCHIVE_MAX_SPAN_DAYS)
-    out = []
-    for back in range(span - 1, 0, -1):
-        d = (today - timedelta(days=back)).isoformat()
-        if d not in have:
-            out.append(d)
-    return out
-
-
-def _cooldown_blocks(slug: str, earliest: str) -> bool:
-    prev = _backfill_attempts.get(slug)
-    if not prev:
-        return False
-    attempted_at, prev_earliest = prev
-    if time.monotonic() - attempted_at > BACKFILL_COOLDOWN_S:
-        return False
-    # A previous attempt already covered this range (or a wider one).
-    return prev_earliest <= earliest
-
-
-def build_archive_docs(slug: str, payload: dict, wanted: Iterable[str], *, now: Optional[datetime] = None) -> list[dict]:
-    """Turn an archive API payload into history docs for the ``wanted`` dates."""
-    now = now or datetime.now(timezone.utc)
-    daily = (payload or {}).get("daily") or {}
-    times = daily.get("time") or []
-    wanted_set = set(wanted)
-    docs: list[dict] = []
-    for i, date in enumerate(times):
-        if date not in wanted_set:
-            continue
-
-        def v(key, i=i):
-            arr = daily.get(key) or []
-            return arr[i] if i < len(arr) else None
-
-        # ERA5 lag: the newest days come back as nulls — skip, retry later.
-        if v("temperature_2m_max") is None or v("temperature_2m_min") is None:
-            continue
-
-        day_daily = {
-            "time": [date],
-            "weather_code": [v("weather_code")],
-            "temperature_2m_max": [v("temperature_2m_max")],
-            "temperature_2m_min": [v("temperature_2m_min")],
-            "apparent_temperature_max": [v("apparent_temperature_max")],
-            "apparent_temperature_min": [v("apparent_temperature_min")],
-            "precipitation_sum": [v("precipitation_sum")],
-            "sunrise": [v("sunrise")],
-            "sunset": [v("sunset")],
-            "wind_speed_10m_max": [v("wind_speed_10m_max")],
-            "wind_gusts_10m_max": [v("wind_gusts_10m_max")],
-            "wind_direction_10m_dominant": [v("wind_direction_10m_dominant")],
-        }
-        # `current` holds DAILY MEANS for archive days (there is no "current"
-        # for a past day) so the dashboard's current-based columns — humidity,
-        # cloud, pressure, wind — are populated. `aggregation` says so.
-        current = {
-            "temperature_2m": v("temperature_2m_mean"),
-            "apparent_temperature": v("apparent_temperature_mean"),
-            "relative_humidity_2m": v("relative_humidity_2m_mean"),
-            "cloud_cover": v("cloud_cover_mean"),
-            "surface_pressure": v("surface_pressure_mean"),
-            "wind_speed_10m": v("wind_speed_10m_mean"),
-            "wind_direction_10m": v("wind_direction_10m_dominant"),
-            "wind_gusts_10m": v("wind_gusts_10m_max"),
-            "precipitation": v("precipitation_sum"),
-            "weather_code": v("weather_code"),
-            "uv_index": None,  # not available in the reanalysis archive
-            "is_day": 1,
-        }
-        insights = {
-            k: val
-            for k, val in (
-                ("dewPoint", v("dew_point_2m_mean")),
-                ("evapotranspiration", v("et0_fao_evapotranspiration")),
-            )
-            if val is not None
-        }
-        doc = {
-            "locationSlug": slug,
-            "date": date,
-            "source": SOURCE_ARCHIVE,
-            "provider": "open-meteo-archive",
-            "aggregation": "daily-mean",
-            "current": current,
-            "daily": day_daily,
-            "recordedAt": now,
-            "createdAt": now,
-        }
-        if insights:
-            doc["insights"] = insights
-        docs.append(doc)
-    return docs
-
-
-def fetch_archive(http_client, lat: float, lon: float, start: str, end: str) -> tuple[int, Optional[dict]]:
-    """Returns ``(status_code, payload_or_None)``."""
-    resp = http_client.get(
-        ARCHIVE_URL,
-        params={
-            "latitude": str(lat),
-            "longitude": str(lon),
-            "start_date": start,
-            "end_date": end,
-            "timezone": "auto",
-            "daily": ",".join(ARCHIVE_DAILY_VARS),
-        },
-        timeout=ARCHIVE_TIMEOUT_S,
-    )
-    if resp.status_code != 200:
-        return resp.status_code, None
-    return 200, resp.json()
-
-
-def backfill_history(
-    slug: str,
-    lat: float,
-    lon: float,
-    days: int,
-    existing_dates: Iterable[str],
-    *,
-    http_client,
-    breaker,
-    client_ip: Optional[str] = None,
-    rate_limiter=None,
-    now: Optional[datetime] = None,
-) -> list[dict]:
-    """Fill missing past days from the Open-Meteo archive. Never raises.
-
-    At most ONE archive request per call, gated by the circuit breaker, a
-    per-location cooldown and a per-IP rate limit. Returns the newly built
-    docs (already upserted with ``$setOnInsert``, so recorded days are never
-    overwritten).
+    A synthesized spot (a ``{name}--{geohash}`` slug with no record) is a
+    coordinate path: its history is keyed by its cell (``storage_slug``), so
+    the name half of the URL never becomes a storage key.
     """
-    try:
-        missing = missing_past_dates(existing_dates, days, lon=lon, now=now)
-        if not missing:
-            return []
-        if _cooldown_blocks(slug, missing[0]):
-            return []
-        if not breaker.is_allowed:
-            return []
-        if rate_limiter is not None and client_ip:
-            if not rate_limiter(client_ip, "history-backfill", BACKFILL_RATE_LIMIT, BACKFILL_RATE_WINDOW_S).get("allowed", True):
-                return []
-
-        try:
-            status, payload = fetch_archive(http_client, lat, lon, missing[0], missing[-1])
-        except Exception as exc:  # noqa: BLE001
-            breaker.record_failure()
-            logger.warning("Open-Meteo archive fetch failed for %s: %s", slug, exc)
-            return []
-        if payload is None:
-            # Only 5xx / 429 say Open-Meteo is unwell. A 4xx is OUR request
-            # (bad range or variable) and must not open the breaker that
-            # also gates the forecast fallback, AQ, haze and normals.
-            if status >= 500 or status == 429:
-                breaker.record_failure()
-            else:
-                logger.warning("Open-Meteo archive rejected request for %s: HTTP %s", slug, status)
-            return []
-        breaker.record_success()
-
-        docs = build_archive_docs(slug, payload, missing, now=now)
-        persisted = _upsert_archive_docs(docs) if docs else True
-        # Cool down only after a fetch that succeeded AND was saved, so a
-        # transient timeout or failed write is retried on the next view.
-        if persisted:
-            _backfill_attempts[slug] = (time.monotonic(), missing[0])
-        return docs
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("History backfill failed for %s: %s", slug, exc)
-        return []
-
-
-def _upsert_archive_docs(docs: list[dict]) -> bool:
-    """Persist archive docs insert-only. Never raises: the caller still
-    returns the fetched days to the user even if saving them failed."""
-    try:
-        from pymongo import UpdateOne
-
-        ops = []
-        for doc in docs:
-            body = {k: v for k, v in doc.items() if k not in ("locationSlug", "date")}
-            ops.append(
-                UpdateOne(
-                    {"locationSlug": doc["locationSlug"], "date": doc["date"]},
-                    {"$setOnInsert": body},
-                    upsert=True,
-                )
-            )
-        _collection().bulk_write(ops, ordered=False)
-        return True
-    except Exception as exc:  # noqa: BLE001
-        # Duplicate-key races with a concurrent writer are harmless here —
-        # the other writer's doc is at least as good. Anything else failed.
-        if type(exc).__name__ == "BulkWriteError":
-            return True
-        logger.warning("Archive history upsert failed: %s", exc)
-        return False
+    slugs = [storage_slug(location, loc)]
+    platform = loc.get("platformSlug")
+    if platform and platform != location:
+        slugs.append(platform)
+    return slugs

@@ -169,7 +169,7 @@ export function displayUrl(
 }
 
 /**
- * Shape guard for a `/api/py/weather` (or `/v1/weather`) response. Only the
+ * Shape guard for a `/v1/weather` response. Only the
  * fields the display reads are checked — enough that a degraded or error body
  * never replaces good data on screen.
  */
@@ -184,7 +184,7 @@ export function isDisplayWeather(json: unknown): json is WeatherData {
   );
 }
 
-/** Shape guard for a `/api/py/airquality` (or `/v1/air-quality`) response. */
+/** Shape guard for a `/v1/air-quality` response. */
 export function isAirQuality(json: unknown): json is AirQualityResponse {
   if (!json || typeof json !== "object") return false;
   const a = json as Partial<AirQualityResponse>;

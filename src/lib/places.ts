@@ -217,8 +217,8 @@ const GEO_TYPE_RANK: Record<string, number> = {
 
 /**
  * Countries where the city IS the country, so `places.placesGeo` carries the
- * name only on a `geoType: "country"` document. Mirrors `_CITY_STATES` in
- * `api/py/_locations.py` — keep the two in sync.
+ * name only on a `geoType: "country"` document. Mirrors `CITY_STATES` in
+ * `weather_core::locations` (the Worker) — keep the two in sync.
  */
 export const CITY_STATE_COUNTRIES = new Set([
   "SG",
@@ -614,7 +614,7 @@ export async function resolveLocationSlug(
   }
 
   // 1b) Exact match on the platform's own slug (`harare-a1b2c3`). Search and
-  // the GPS lookup hand these out (`/api/py/search` returns placesGeo slugs),
+  // the GPS lookup hand these out (`/v1/search` can return placesGeo slugs),
   // so a visitor picking "Bulawayo" from search lands on `/bulawayo-e7b1f4`.
   // Without this step that URL fell through to a name guess of
   // "Bulawayo E7b1f4" and rendered "Location not found".
