@@ -121,8 +121,11 @@ describe("CORS (B06)", () => {
       resolve(__dirname, "../../workers/crates/weather-core/src/cors.rs"),
       "utf-8",
     );
-    const block =
-      /pub const OPEN_READ_ROUTES: \[&str; \d+\] = \[([^\]]*)\]/.exec(rust);
+    // Tolerates the array type being sized or a slice, and the list being one
+    // line or one entry per line.
+    const block = /pub const OPEN_READ_ROUTES[^=]*=\s*&?\[([^\]]*)\]/.exec(
+      rust,
+    );
     expect(block).not.toBeNull();
     const workerRoutes = [...(block?.[1] ?? "").matchAll(/"([^"]+)"/g)]
       .map((m) => m[1])

@@ -77,10 +77,17 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     // The documented public read routes are open to any website (a GET, no
     // credentials), as the Python routes they replace were. A listed origin
     // still gets its own origin echoed; everything else keeps the allowlist.
-    // Every CORS decision is `weather_core::cors::cors_decision`.
+    // Every CORS decision is `weather_core::cors::cors_decision`, made on the
+    // method the page wants (a preflight names it in `Access-Control-Request-
+    // Method`), so a preflight for a write never gets `*`.
     let path = req.path();
-    let decision =
-        weather_core::cors::cors_decision(req.method().as_ref(), &path, cors_origin.as_deref());
+    let method = req.method();
+    let requested = req.headers().get("Access-Control-Request-Method")?;
+    let decision = weather_core::cors::cors_decision(
+        weather_core::cors::cors_method(method.as_ref(), requested.as_deref()),
+        &path,
+        cors_origin.as_deref(),
+    );
     let allow_origin = decision.allow_origin;
     let is_ai = is_ai_path(&path);
 

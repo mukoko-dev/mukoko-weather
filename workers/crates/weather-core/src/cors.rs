@@ -44,13 +44,27 @@ pub struct Decision {
     pub vary_origin: bool,
 }
 
+/// The method a CORS decision is about. A preflight is an `OPTIONS` request
+/// whose `Access-Control-Request-Method` names the method the page wants to
+/// use, so that is the method decided on (a preflight for a `POST` is a write
+/// and never gets `*`, however the route is listed). An `OPTIONS` without the
+/// header is not a browser preflight and stays `OPTIONS`; any other method is
+/// itself.
+pub fn cors_method<'a>(method: &'a str, requested: Option<&'a str>) -> &'a str {
+    match requested.map(str::trim) {
+        Some(m) if method.eq_ignore_ascii_case("OPTIONS") && !m.is_empty() => m,
+        _ => method,
+    }
+}
+
 /// The CORS decision for a request. `listed_origin` is the request's origin
 /// when the `CORS_ORIGINS` allowlist admits it (`origin_allowed`). A listed
 /// origin gets itself echoed everywhere, with the API's full methods and
 /// headers. Any other origin gets `*` only for a read (`GET`, or the `OPTIONS`
-/// preflight of one) of an [`OPEN_READ_ROUTES`] path, and then only reads and
-/// `Content-Type`; a write (`POST`, `PATCH`) or a closed route (AI, devices,
-/// history, locations, status) never does.
+/// preflight of one: pass [`cors_method`] for the method) of an
+/// [`OPEN_READ_ROUTES`] path, and then only reads and `Content-Type`; a write
+/// (`POST`, `PATCH`) or a closed route (AI, devices, history, locations,
+/// status) never does.
 pub fn cors_decision(method: &str, path: &str, listed_origin: Option<&str>) -> Decision {
     if let Some(origin) = listed_origin {
         return Decision {
@@ -121,13 +135,7 @@ mod tests {
 
     #[test]
     fn the_open_read_routes_are_the_documented_public_ones() {
-        for open in [
-            "/v1/weather",
-            "/v1/air-quality",
-            "/v1/air-quality/grid",
-            "/v1/geo",
-            "/v1/search",
-        ] {
+        for open in OPEN_READ_ROUTES {
             assert!(is_open_read_route(open), "{open}");
         }
         // Writes and first-party routes stay on the allowlist.
@@ -197,6 +205,39 @@ mod tests {
                 assert_eq!(d.allow_origin.as_deref(), Some("*"), "{method} {path}");
             }
         }
+    }
+
+    #[test]
+    fn a_preflight_is_decided_on_the_method_it_asks_for() {
+        // A browser preflight is `OPTIONS` + `Access-Control-Request-Method`.
+        assert_eq!(cors_method("OPTIONS", Some("POST")), "POST");
+        assert_eq!(cors_method("OPTIONS", Some(" GET ")), "GET");
+        assert_eq!(cors_method("options", Some("PATCH")), "PATCH");
+        // No header (or a blank one): not a browser preflight, stays OPTIONS.
+        assert_eq!(cors_method("OPTIONS", None), "OPTIONS");
+        assert_eq!(cors_method("OPTIONS", Some("  ")), "OPTIONS");
+        // The header only means something on an OPTIONS request.
+        assert_eq!(cors_method("GET", Some("POST")), "GET");
+        assert_eq!(cors_method("POST", Some("GET")), "POST");
+
+        for path in OPEN_READ_ROUTES {
+            let read = cors_decision(cors_method("OPTIONS", Some("GET")), path, None);
+            assert_eq!(read.allow_origin.as_deref(), Some("*"), "{path}");
+            for write in ["POST", "PATCH", "PUT", "DELETE"] {
+                let d = cors_decision(cors_method("OPTIONS", Some(write)), path, None);
+                assert_eq!(d.allow_origin, None, "{write} {path}");
+            }
+        }
+        // A listed origin is unaffected: it may preflight any method.
+        let d = cors_decision(
+            cors_method("OPTIONS", Some("POST")),
+            "/v1/devices",
+            Some("https://weather.mukoko.com"),
+        );
+        assert_eq!(
+            d.allow_origin.as_deref(),
+            Some("https://weather.mukoko.com")
+        );
     }
 
     #[test]
