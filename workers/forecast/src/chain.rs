@@ -1,6 +1,7 @@
-//! The provider chain: KV cache, then the Open-Meteo multi-model blend, then
-//! Open-Meteo `best_match`. Tomorrow.io is NOT in this chain: it only enriches
-//! the insights afterwards (`enrich.rs`, issue #246).
+//! The provider chain: KV cache (fresh, or kept a day as the last resort), then the Open-Meteo multi-model blend, then
+//! Open-Meteo `best_match`, then, when Open-Meteo gave nothing and no stored forecast under six hours
+//! old exists, MET Norway as the failover forecast (`met_no.rs`, #434). Tomorrow.io is NOT in this
+//! chain: it only enriches the insights afterwards (`enrich.rs`, issue #246).
 //!
 //! Ported from `api/py/_weather.py`:
 //!
@@ -22,8 +23,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use weather_core::blend::{self, Attempt, NotBlended, Upstream};
 use weather_core::breaker::{self, Breaker};
-use weather_core::{normalize, Source};
+use weather_core::met_no::{self, OffsetHint};
+use weather_core::{normalize, places, Source};
 use weather_edge::{get_with_timeout, now, now_ms, now_rfc3339};
+use worker::kv::KvStore;
 use worker::{Context, Env};
 
 pub const CACHE_BINDING: &str = "FORECAST_CACHE";
@@ -39,8 +42,8 @@ thread_local! {
 pub struct Got {
     pub data: Value,
     pub source: Source,
-    /// The baseline, as `X-Weather-Provider` says it: `open-meteo:blend` or
-    /// `open-meteo:best_match`.
+    /// The baseline, as `X-Weather-Provider` says it: `open-meteo:blend`,
+    /// `open-meteo:best_match` or, when Open-Meteo gave nothing, `met-no`.
     pub provider: String,
     /// `X-Weather-Blend` (a blend only).
     #[serde(default)]
@@ -48,6 +51,29 @@ pub struct Got {
     pub fetched_at: String,
     #[serde(skip)]
     pub cache_hit: bool,
+    /// Served past its fresh lifetime because every provider failed
+    /// (`blend::is_fresh`); `X-Cache: STALE`.
+    #[serde(skip)]
+    pub stale: bool,
+}
+
+impl Got {
+    /// `X-Cache`: `HIT`, `MISS`, or `STALE` (a stored forecast served only
+    /// because no provider answered).
+    pub fn cache_status(&self) -> &'static str {
+        if self.stale {
+            "STALE"
+        } else if self.cache_hit {
+            "HIT"
+        } else {
+            "MISS"
+        }
+    }
+}
+
+/// `v` rounded to 0.01 degree (the main cache key's cell).
+fn snap(v: f64) -> f64 {
+    (v * 100.0).round() / 100.0
 }
 
 /// The forecast for a point, or `None` when the cache is cold and every
@@ -55,6 +81,10 @@ pub struct Got {
 /// cached): the jobs Worker uses it to keep popular places warm. `model` is
 /// the caller's single-model baseline (`?model=`, already sanitised with
 /// [`blend::sanitize_baseline_model`]); `None` is the Africa-weighted blend.
+/// `failover` lets MET Norway answer when Open-Meteo gave nothing (never for
+/// `refresh`, the jobs Worker's cache warming); the jobs Worker's history
+/// recording turns it off too (`failover=0`), because it would throw the answer
+/// away and MET Norway's terms ask for no unnecessary traffic.
 pub async fn forecast(
     env: &Env,
     ctx: &Context,
@@ -62,39 +92,117 @@ pub async fn forecast(
     lon: f64,
     refresh: bool,
     model: Option<&str>,
+    failover: bool,
 ) -> Option<Got> {
     let kv = env.kv(CACHE_BINDING).ok();
     // The key and the lifetime are `weather_core::blend`'s rules.
     let key = blend::forecast_cache_key(lat, lon, model);
 
+    // A stored row inside its fresh lifetime is the answer. One past it is
+    // kept as the last resort: if every provider fails below, it beats the
+    // seasonal estimate (Open-Meteo refusing the Workers' shared egress left
+    // every uncached or just-expired place with no forecast at all).
+    let mut stale: Option<Got> = None;
     if let Some(kv) = kv.as_ref().filter(|_| !refresh) {
         if let Ok(Some(mut hit)) = kv.get(&key).json::<Got>().await {
             hit.cache_hit = true;
-            return Some(hit);
+            if blend::is_fresh(&hit.provider, &hit.fetched_at, now()) {
+                return Some(hit);
+            }
+            stale = Some(hit);
         }
     }
 
-    let (data, provider, blend_header) = baseline(env, lat, lon, model).await?;
-    let ttl = blend::cache_ttl_seconds(&provider);
+    let (data, provider, blend_header, source) = match baseline(env, lat, lon, model).await {
+        Some((data, provider, blend_header)) => (data, provider, blend_header, Source::OpenMeteo),
+        // Open-Meteo gave nothing (a 429 to our shared egress, an open breaker):
+        // a second, keyless provider, so the visitor sees a real forecast and
+        // not the seasonal estimate. Fresher than the stored row, which stays
+        // the last resort below.
+        None => {
+            // A stored forecast of this point that is only a few hours old is
+            // served as it is (labelled stale) before MET Norway is asked: the
+            // same model run, every variable, the real offset, and one request
+            // fewer for a provider whose terms ask for none that is
+            // unnecessary (`blend::STORED_PREFERRED_SECS`).
+            // A row that itself came from MET Norway is not "the same model
+            // run" worth preferring: it is the failover, asked again.
+            let recent = stale.as_ref().is_some_and(|old| {
+                old.provider != met_no::PROVIDER
+                    && blend::stored_is_preferred(blend::age_seconds(&old.fetched_at, now()))
+            });
+            // Visitors only: cache warming (`refresh`) is background traffic,
+            // and MET Norway's terms ask for none that is unnecessary.
+            let from_met_no = if failover && !refresh && !recent {
+                let hint = offset_hint(kv.as_ref(), lat, lon, stale.as_ref()).await;
+                // The same ~1 km cell the main cache uses, so visitors in one
+                // cell share one MET Norway request and one memo entry.
+                let (cell_lat, cell_lon) = (snap(lat), snap(lon));
+                crate::met_no::forecast(env, ctx, cell_lat, cell_lon, hint).await
+            } else {
+                None
+            };
+            match from_met_no {
+                Some(data) => (data, met_no::PROVIDER.to_owned(), None, Source::MetNo),
+                None => {
+                    return stale.map(|mut old| {
+                        old.stale = true;
+                        old
+                    });
+                }
+            }
+        }
+    };
     let got = Got {
         data,
-        source: Source::OpenMeteo,
+        source,
         provider,
         blend: blend_header,
         fetched_at: now_rfc3339(),
         cache_hit: false,
+        stale: false,
     };
 
-    if let Some(kv) = kv {
+    // The failover is never written under the main key: that key's stored row
+    // is the richer last resort (a nine-model blend with the real offset), and
+    // MET Norway has its own memo that honours its `Expires`.
+    let store = !matches!(got.source, Source::MetNo);
+    if let Some(kv) = kv.filter(|_| store) {
         if let Ok(body) = serde_json::to_string(&got) {
             ctx.wait_until(async move {
                 if let Ok(put) = kv.put(&key, body) {
-                    let _ = put.expiration_ttl(ttl).execute().await;
+                    let _ = put.expiration_ttl(blend::STALE_TTL_SECONDS).execute().await;
                 }
             });
         }
     }
     Some(got)
+}
+
+/// How far from the point a seed place may lend its UTC offset: far enough to
+/// reach a neighbouring city, near enough to share its country's clock almost
+/// everywhere.
+const SEED_OFFSET_KM: f64 = 100.0;
+
+/// What is known of the place's UTC offset before MET Norway answers (it sends
+/// none): the stored forecast of this very point, else the stored forecast of
+/// the nearest seed place within [`SEED_OFFSET_KM`], whose offset is lent as an
+/// estimate. `None` leaves `met_no::convert` with the longitude estimate.
+/// Called only when Open-Meteo has already failed.
+async fn offset_hint(
+    kv: Option<&KvStore>,
+    lat: f64,
+    lon: f64,
+    stale: Option<&Got>,
+) -> Option<OffsetHint> {
+    if let Some(hint) = stale.and_then(|old| met_no::hint_from_payload(&old.data, true)) {
+        return Some(hint);
+    }
+    let kv = kv?;
+    let seed = places::nearest_seed(lat, lon, SEED_OFFSET_KM)?;
+    let key = blend::forecast_cache_key(seed.lat, seed.lon, None);
+    let neighbour = kv.get(&key).json::<Got>().await.ok().flatten()?;
+    met_no::hint_from_payload(&neighbour.data, false)
 }
 
 /// What one Open-Meteo call came to.

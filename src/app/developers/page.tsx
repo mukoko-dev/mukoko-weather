@@ -169,9 +169,16 @@ curl "https://weather-api.mukoko.com/v1/weather?lat=-17.83&lon=31.05&model=ecmwf
             <code className="termite">open-meteo:blend</code> /{" "}
             <code className="termite">open-meteo:&lt;model&gt;</code> /{" "}
             <code className="termite">open-meteo:best_match</code> /{" "}
-            <code className="termite">fallback</code>),{" "}
-            <code className="termite">X-Enrichment</code> (whether Tomorrow.io
-            insights were merged — <code className="termite">tomorrow</code> /{" "}
+            <code className="termite">met-no</code> /{" "}
+            <code className="termite">fallback</code>;{" "}
+            <code className="termite">met-no</code> is MET Norway&apos;s
+            forecast, served only while Open-Meteo is unavailable, with{" "}
+            <code className="termite">baseline.reason</code>{" "}
+            <code className="termite">failover</code>, UV as a clear-sky index
+            and no past hours; <code className="termite">fallback</code> is the
+            seasonal estimate), <code className="termite">X-Enrichment</code>{" "}
+            (whether Tomorrow.io insights were merged —{" "}
+            <code className="termite">tomorrow</code> /{" "}
             <code className="termite">skipped-budget</code> /{" "}
             <code className="termite">skipped-error</code> /{" "}
             <code className="termite">none</code>) and{" "}
@@ -337,7 +344,15 @@ curl "https://weather-api.mukoko.com/v1/search?q=nairobi"`}
             >
               Tomorrow.io
             </a>
-            . For a ready-made UI, use the{" "}
+            . While Open-Meteo is unavailable a forecast may come from{" "}
+            <a
+              href="https://www.met.no/en"
+              className="sunbird"
+              rel="noopener noreferrer"
+            >
+              MET Norway
+            </a>{" "}
+            (CC BY 4.0, converted to our format). For a ready-made UI, use the{" "}
             <Link href="/embed" prefetch={false} className="sunbird">
               embeddable widget
             </Link>

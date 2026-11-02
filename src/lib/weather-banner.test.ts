@@ -126,4 +126,15 @@ describe("weatherBanner: the reason, in plain words", () => {
     ).toBe(true);
     expect(weatherBanner(input({ fallback: true })).canRetry).toBe(true);
   });
+
+  it("a stored forecast the Worker served stale is shown and said so, with no device copy involved", () => {
+    const b = weatherBanner(input({ serverStale: true }));
+    expect(b.show).toBe(true);
+    expect(b.variant).toBe("stale");
+    expect(b.message).toBe(
+      "Showing the last forecast we received for this location.",
+    );
+    // A live answer shows nothing.
+    expect(weatherBanner(input({ serverStale: false })).show).toBe(false);
+  });
 });

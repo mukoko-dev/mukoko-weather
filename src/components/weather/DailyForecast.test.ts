@@ -99,4 +99,9 @@ describe("DailyForecast source", () => {
   it("outlines the pill so pale temperature colours hold 3:1 on the card", () => {
     expect(src).toContain("ring-wx-outline");
   });
+
+  it("shows no UV line for a day the provider has no UV maximum for", () => {
+    // The MET Norway failover has none past its hourly steps (null, not 0).
+    expect(src).toContain("{uvMax != null && (");
+  });
 });

@@ -355,9 +355,11 @@ pub fn sun_times(
 
 pub const NASA_POWER_URL: &str = "https://power.larc.nasa.gov/api/temporal/daily/point";
 pub const NASA_POWER_FILL: f64 = -999.0;
+/// The free archive host. With a subscription whose plan includes the archive
+/// API (`OPEN_METEO_ARCHIVE_LICENSED`), the Worker's outbound call moves to the
+/// customer host with the key (`weather_core::open_meteo`); this URL is what is
+/// built either way.
 pub const ARCHIVE_URL: &str = "https://archive-api.open-meteo.com/v1/archive";
-/// The commercial (paid plan) host, used with an `apikey`.
-pub const ARCHIVE_URL_COMMERCIAL: &str = "https://customer-archive-api.open-meteo.com/v1/archive";
 
 /// POWER parameter, canonical field, multiplier. Wind is m/s and pressure kPa
 /// upstream; we store km/h and hPa.
@@ -495,7 +497,8 @@ pub fn provider(id: &str) -> Option<&'static ProviderSpec> {
 /// list; unknown ids are ignored and an empty or unusable value falls back to
 /// the default chain. With `commercial_only` (`HISTORY_COMMERCIAL_ONLY`) the
 /// free Open-Meteo host is dropped unless `open_meteo_commercial` (a paid key
-/// is configured): its free tier is non-commercial.
+/// whose plan includes the archive API, `Plan::archive_is_paid`): its free tier
+/// is non-commercial.
 pub fn provider_chain(
     config: Option<&str>,
     commercial_only: bool,
@@ -557,30 +560,25 @@ pub fn nasa_power_url(lat: f64, lon: f64, start: &str, end: &str) -> String {
     )
 }
 
-/// The Open-Meteo archive request. With a key the commercial host is used;
-/// the key is a query parameter (the only way Open-Meteo accepts it), so the
-/// URL must never be logged.
-pub fn open_meteo_archive_url(
-    lat: f64,
-    lon: f64,
-    start: &str,
-    end: &str,
-    api_key: Option<&str>,
-) -> String {
-    let base = if api_key.is_some() {
-        ARCHIVE_URL_COMMERCIAL
-    } else {
-        ARCHIVE_URL
-    };
-    let mut url = format!(
-        "{base}?latitude={lat}&longitude={lon}&start_date={start}&end_date={end}&timezone=auto&daily={}",
+/// The Open-Meteo archive request, on the free host. A subscription moves it to
+/// the customer host (and adds the key) where the call is made, never here:
+/// the URL built here can be logged or cached without a key in it.
+pub fn open_meteo_archive_url(lat: f64, lon: f64, start: &str, end: &str) -> String {
+    format!(
+        "{ARCHIVE_URL}?latitude={lat}&longitude={lon}&start_date={start}&end_date={end}&timezone=auto&daily={}",
         CANONICAL_DAILY_FIELDS.join(",")
-    );
-    if let Some(k) = api_key {
-        url.push_str("&apikey=");
-        url.push_str(k);
-    }
-    url
+    )
+}
+
+/// The log line for a failed provider call: the provider, the range and what
+/// went wrong. `what` is a fixed word or an HTTP status; if a URL ever slips in
+/// (a runtime error that quotes the request), any `apikey=` value in it is
+/// masked, so a key never reaches the logs.
+pub fn failure_line(provider: &str, start: &str, end: &str, what: &str) -> String {
+    crate::open_meteo::scrub(
+        &format!("history: {provider} failed for {start}..{end}: {what}"),
+        None,
+    )
 }
 
 /// Whether an upstream HTTP status counts against the provider's breaker:
@@ -1487,15 +1485,44 @@ mod tests {
         assert!(u.contains("latitude=-17.8300&longitude=31.0500"));
         assert!(u.contains("start=20261001&end=20261030"));
         assert!(u.contains("community=AG") && u.contains("T2M_MAX"));
-        let free = open_meteo_archive_url(1.5, 2.5, "2026-01-01", "2026-01-31", None);
+        // Always the free URL, never a key: the call site (get_with_timeout)
+        // moves it to the customer host when the plan includes the archive.
+        let free = open_meteo_archive_url(1.5, 2.5, "2026-01-01", "2026-01-31");
         assert!(free.starts_with(ARCHIVE_URL) && !free.contains("apikey"));
-        let paid = open_meteo_archive_url(1.5, 2.5, "2026-01-01", "2026-01-31", Some("K"));
-        assert!(paid.starts_with(ARCHIVE_URL_COMMERCIAL) && paid.ends_with("&apikey=K"));
+        let key = "om_live_SECRET";
+        assert_eq!(crate::open_meteo::paid_url(&free, key, false), free);
+        let paid = crate::open_meteo::paid_url(&free, key, true);
+        assert!(
+            paid.starts_with("https://customer-archive-api.open-meteo.com/v1/archive?")
+                && paid.ends_with("&apikey=om_live_SECRET")
+        );
         // Only 5xx and 429 say the provider is unwell; a 4xx is our request.
         assert!(status_is_transient(500) && status_is_transient(503) && status_is_transient(429));
         assert!(
             !status_is_transient(400) && !status_is_transient(404) && !status_is_transient(422)
         );
+    }
+
+    #[test]
+    fn a_failure_line_never_carries_a_key() {
+        let key = "om_live_SECRET&1";
+        let keyed = crate::open_meteo::paid_url(
+            &open_meteo_archive_url(1.5, 2.5, "2026-01-01", "2026-01-31"),
+            key,
+            true,
+        );
+        // The ordinary reasons pass through untouched.
+        for what in ["timeout", "transport error", "HTTP 429", "invalid JSON"] {
+            assert_eq!(
+                failure_line("open-meteo-archive", "2026-01-01", "2026-01-31", what),
+                format!("history: open-meteo-archive failed for 2026-01-01..2026-01-31: {what}")
+            );
+        }
+        // A runtime error that quotes the keyed request is masked.
+        let leaked = format!("error sending request for url ({keyed})");
+        let line = failure_line("open-meteo-archive", "2026-01-01", "2026-01-31", &leaked);
+        assert!(!line.contains("SECRET") && !line.contains(key));
+        assert!(line.contains("apikey=[redacted]"));
     }
 
     fn doc(date: &str, source: &str, slug: &str) -> Value {
