@@ -28,8 +28,9 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 2
-    # Wait a week before proposing a newly published version: new releases can
-    # be malicious or unstable (the scan job's dependabot-missing-cooldown rule).
+    # Wait a week before proposing a newly published version: new releases
+    # can be malicious or unstable (the scan job's
+    # dependabot-missing-cooldown rule).
     cooldown:
       default-days: 7
     groups:
