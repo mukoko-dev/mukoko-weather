@@ -11,8 +11,9 @@
  * TRANSITIONAL: the console calls the stations Worker's own host directly.
  * Weather is to be served behind the gateway (one way in), which forwards the
  * station routes to the Worker with the protocol unchanged; then `API_BASE`
- * becomes the gateway's origin. Nothing on `weather.mukoko.com` serves these
- * routes any more (the Python behind it is deleted), so a project that still
+ * becomes the gateway's origin. `weather.mukoko.com` serves only the
+ * `/api/py/stations/*` form (a Cloudflare route to the stations Worker, once it
+ * is deployed with it), not these unprefixed paths, so a project that still
  * sets `NEXT_PUBLIC_WEATHER_API_BASE` to `https://weather.mukoko.com` must
  * unset it.
  */

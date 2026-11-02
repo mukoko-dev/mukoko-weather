@@ -28,12 +28,12 @@ We will acknowledge your report within 48 hours and provide an update within 7 d
 ### API Keys
 
 - **Model access** — there is no model API key in this repository's deployments. Every model call is a native Workers AI binding call in the AI Worker through the `shamwari` AI Gateway, so no Cloudflare AI or third-party model token exists on Vercel or in the browser. The Workers' secrets live in the Cloudflare Secrets Store
-- **Tomorrow.io API key** — stored in MongoDB (`api_keys` collection via `getApiKey`/`setApiKey` in `src/lib/db.ts`), never in environment variables or client-side code. Seeded via `POST /api/db-init`
+- **Provider API keys (Tomorrow.io, CheckWX, ...)** — Worker secrets in the Cloudflare Secrets Store, read by the Workers only, never in the client or the repository. The legacy MongoDB copy (`weather.api_keys`, still written by `setApiKey` via `POST /api/db-init`) was read only by the deleted Python backend; nothing reads it now, and removing that write path and the collection is a tracked follow-up
 - **`DB_INIT_SECRET`** — optional server-side environment variable protecting the `/api/db-init` endpoint in production (via `x-init-secret` header)
 
 ### External APIs
 
-- **Tomorrow.io** — server-side only; weather data is the only payload (no PII). API key stored in MongoDB, not environment variables
+- **Tomorrow.io** — server-side only; weather data is the only payload (no PII). The API key is a Worker secret
 - **Open-Meteo** — public API, no authentication required, no user data transmitted
 - **Workers AI (open-weights models)** — server-side only, in the AI Worker; weather data is the only payload, and prompts carrying personal data are refused (`422 personal_data_detected`)
 

@@ -68,7 +68,7 @@ This repo holds three deployables, not one:
 
 | Path                | What it is                                                                                                                                                                                                                                                                                                                                                                                                  |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/`              | **The app.** Next.js 16 App Router front end on Vercel (frontend only). This is what ships to `weather.mukoko.com`. The backend is `workers/`; there is no Python.                                                                                                                                                                                                                                          |
+| `src/`              | **The app.** Next.js 16 App Router front end on Vercel (pages and a few sign-in-bound routes; no data backend). This is what ships to `weather.mukoko.com`. The backend is `workers/`; there is no Python.                                                                                                                                                                                                  |
 | `workers/`          | **The backend.** Rust Cloudflare Workers (`weather-api.mukoko.com` and friends) plus one TypeScript Worker (the MongoDB bridge). The logic is the pure `weather-core` crate, tested natively against the frozen fixtures in `tests/fixtures/`. See `workers/README.md`.                                                                                                                                     |
 | `station-console/`  | **Mukoko Station Console** — a second, separate Next.js app (dev port 3001) for community weather-station operators to register stations and review ingest. Added in #120; not yet on its own public domain. It calls the Rust stations Worker (`workers/stations`).                                                                                                                                        |
 | `releases/`         | **Public release notes**, one Markdown file per production release (`v0.11.0.md`). Parsed at build time into `/releases` and `/releases/feed.xml`. Format and how to add one: CONTRIBUTING.md → Releases → Release notes.                                                                                                                                                                                   |
@@ -80,7 +80,7 @@ This repo holds three deployables, not one:
 | Layer             | Technology                                                                                                                                                                                                                                                                                                                             |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Framework         | [Next.js 16](https://nextjs.org) (App Router), TypeScript 5, React 19                                                                                                                                                                                                                                                                  |
-| Backend API       | [Rust Cloudflare Workers](https://developers.cloudflare.com/workers/) (`workers/`, workers-rs) — the pure logic is the `weather-core` crate. Vercel serves the frontend only; there is no Python backend (removed in #333)                                                                                                             |
+| Backend API       | [Rust Cloudflare Workers](https://developers.cloudflare.com/workers/) (`workers/`, workers-rs) — the pure logic is the `weather-core` crate. Vercel serves the Next.js app and a few sign-in-bound routes, not the data backend; there is no Python backend (removed in #333)                                                          |
 | Authentication    | [WorkOS AuthKit](https://workos.com/docs/authkit) — hosted sign-in, signed-cookie sessions, users mirrored into `identity.persons`                                                                                                                                                                                                     |
 | Database          | [MongoDB Atlas](https://mongodb.com/atlas) — cache, AI summaries, history, locations, airports; Atlas Search for fuzzy queries                                                                                                                                                                                                         |
 | Devices & reports | Device profiles and community weather reports live in MongoDB (`device.device_profiles`, `weather.weather_reports`), written and read by the TypeScript `mukoko-weather-mongo-bridge` Cloudflare Worker (official `mongodb` driver in a Durable Object, reached only through a service binding from the Rust `places` Worker). Not D1. |
@@ -133,12 +133,14 @@ locations.
 All data, AI, and CRUD work runs in the **Rust Cloudflare Workers** in
 `workers/` (`weather-api.mukoko.com` and the other `*.mukoko.com` hosts); the
 Python FastAPI backend that used to sit under `api/py/` was deleted in #333.
-Vercel serves the frontend only. A few routes remain in TypeScript on Vercel:
+Vercel serves the Next.js app, not the data backend. A few routes remain in TypeScript on Vercel:
 OG image generation, DB init, the public embed API, the auth-gated `/api/ai`
 proxy, and developer API-key and device management. A request to `/api/py/...`
-is a plain 404, except `/api/py/stations/ingest`: `vercel.json` rewrites that
-one path (the upload URL weather-station consoles in the field are configured
-with) to the stations Worker.
+is a 404 problem document (`src/app/api/retired`), except the weather-station
+upload URL `/api/py/stations/ingest` that consoles in the field are configured
+with: `vercel.json` rewrites that one path to the stations Worker, and the
+stations Worker also takes `weather.mukoko.com/api/py/stations/*` as a route
+once it is deployed with it.
 
 **Missing files 404.** A top-level path containing a dot that isn't a real
 public file or static route, such as a deleted `/favicon-48.png`, is rewritten

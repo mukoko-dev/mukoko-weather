@@ -5,6 +5,11 @@ import {
   MISSING_ASSET_DESTINATION,
   MISSING_ASSET_SOURCE,
 } from "./src/lib/missing-asset";
+import {
+  RETIRED_API_DESTINATION,
+  RETIRED_API_ROOT,
+  RETIRED_API_SOURCE,
+} from "./src/lib/retired-api";
 
 import {
   BASELINE_HEADERS,
@@ -50,6 +55,17 @@ const nextConfig: NextConfig = {
         {
           source: MISSING_ASSET_SOURCE,
           destination: MISSING_ASSET_DESTINATION,
+        },
+        // The retired Python API: a 404 problem document for any method.
+        // The station upload URL is excluded from the source itself
+        // (src/lib/retired-api.ts), so Next.js never matches it.
+        {
+          source: RETIRED_API_SOURCE,
+          destination: RETIRED_API_DESTINATION,
+        },
+        {
+          source: RETIRED_API_ROOT,
+          destination: RETIRED_API_DESTINATION,
         },
       ],
       fallback: [],

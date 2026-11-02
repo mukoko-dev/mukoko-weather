@@ -1,4 +1,6 @@
-//! `POST /internal/chat/completions`: the Python backend's model calls.
+//! `POST /internal/chat/completions`: the deleted Python backend's model calls
+//! (#333). No caller is left in this repository; this goes once its other
+//! possible callers are ruled out.
 //!
 //! Reached only from `mukoko-weather-internal`, which checks the service key
 //! first and forwards over its `AI_SERVICE` binding. `mukoko-weather-api`

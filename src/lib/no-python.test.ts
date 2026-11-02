@@ -15,14 +15,24 @@ const ROOT = join(__dirname, "..", "..");
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
 
 /** Every file under `dir` with an extension in `ext`, skipping build output. */
-function walk(dir: string, ext: RegExp, out: string[] = []): string[] {
+function walk(
+  dir: string,
+  ext: RegExp,
+  out: string[] = [],
+  skip: string[] = [],
+): string[] {
   if (!existsSync(dir)) return out;
   for (const name of readdirSync(dir)) {
-    if (name === "node_modules" || name === "target" || name.startsWith(".")) {
+    if (
+      name === "node_modules" ||
+      name === "target" ||
+      name.startsWith(".") ||
+      skip.includes(name)
+    ) {
       continue;
     }
     const full = join(dir, name);
-    if (statSync(full).isDirectory()) walk(full, ext, out);
+    if (statSync(full).isDirectory()) walk(full, ext, out, skip);
     else if (ext.test(name)) out.push(full);
   }
   return out;
@@ -40,8 +50,12 @@ const ALLOWED_NAMES = new Map([
     "CORS_POLICY.noCors: the legacy hardware upload path",
   ],
   [
-    "src/app/api/py/[...path]/route.ts",
-    "the 404 problem document every retired /api/py path answers",
+    "src/app/api/retired/route.ts",
+    "the 404 problem document, which says what was removed",
+  ],
+  [
+    "src/lib/retired-api.ts",
+    "the rewrite source that sends every retired /api/py path to a 404",
   ],
 ]);
 
@@ -58,13 +72,10 @@ describe("no Python backend", () => {
     }
   });
 
-  it("keeps one Python file: the GEOGLAM table builder, which imports nothing of the backend", () => {
-    const python = [
-      ...walk(join(ROOT, "scripts"), /\.py$/),
-      ...walk(join(ROOT, "workers"), /\.py$/),
-      ...walk(join(ROOT, "src"), /\.py$/),
-      ...walk(join(ROOT, "station-console", "src"), /\.py$/),
-    ].map((f) => relative(ROOT, f));
+  it("keeps one Python file anywhere: the GEOGLAM table builder, which imports nothing of the backend", () => {
+    const python = walk(ROOT, /\.py$/, [], ["public", "coverage"]).map((f) =>
+      relative(ROOT, f),
+    );
     expect(python).toEqual(["scripts/build_geoglam_calendars.py"]);
     const builder = read("scripts/build_geoglam_calendars.py");
     expect(builder).not.toMatch(/^\s*(from|import)\s+py\b/m);

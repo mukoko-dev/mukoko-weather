@@ -24,7 +24,7 @@ describe("station console client", () => {
       expect(api).toContain("${API_BASE}/stations/" + route);
     }
     expect(api).not.toMatch(/fetch\(`\$\{API_BASE\}\/api\/py/);
-    expect(api).not.toContain("detail");
+    expect(api).not.toMatch(/\bdetail\?:|\.detail\b/);
   });
 
   it("shows a refusal from the Worker's error_description", () => {
