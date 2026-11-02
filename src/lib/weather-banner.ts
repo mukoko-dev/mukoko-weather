@@ -25,6 +25,11 @@ export interface BannerInput {
   stale: boolean;
   /** The state of the dashboard's live fetch. */
   live: LiveFetchState;
+  /**
+   * The Worker answered with a stored forecast past its freshness because
+   * every provider failed (`baseline.stale`). It is shown, and said so.
+   */
+  serverStale?: boolean;
 }
 
 export interface BannerView {
@@ -47,6 +52,7 @@ const TITLES = {
 const MESSAGES = {
   fallback: "Showing seasonal estimates for this location.",
   stale: "Showing the last forecast saved on this device.",
+  serverStale: "Showing the last forecast we received for this location.",
 } as const;
 
 function reasonFor(
@@ -80,15 +86,19 @@ export function weatherBanner({
   fallback,
   stale,
   live,
+  serverStale = false,
 }: BannerInput): BannerView {
   const variant = fallback ? "fallback" : "stale";
   const trouble = live.status === "retrying" || live.status === "failed";
-  const show = fallback || (stale && trouble);
+  const show = fallback || serverStale || (stale && trouble);
   return {
     show,
     variant,
     title: TITLES[variant],
-    message: MESSAGES[variant],
+    message:
+      variant === "stale" && serverStale && !stale
+        ? MESSAGES.serverStale
+        : MESSAGES[variant],
     reason: show ? reasonFor(live, variant) : null,
     canRetry: live.status !== "loading",
   };
