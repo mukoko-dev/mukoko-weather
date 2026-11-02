@@ -1521,7 +1521,7 @@ mod tests {
         // A runtime error that quotes the keyed request is masked.
         let leaked = format!("error sending request for url ({keyed})");
         let line = failure_line("open-meteo-archive", "2026-01-01", "2026-01-31", &leaked);
-        assert!(!line.contains("SECRET") && !line.contains(key), "{line}");
+        assert!(!line.contains("SECRET") && !line.contains(key));
         assert!(line.contains("apikey=[redacted]"));
     }
 
