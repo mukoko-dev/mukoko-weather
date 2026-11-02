@@ -587,6 +587,26 @@ mod tests {
     }
 
     #[test]
+    fn the_iso_map_is_exactly_the_countries_of_the_table() {
+        // The map is hand-maintained now that the Python that generated it is
+        // gone: it must name every country the compiled-in table has, and no
+        // other.
+        let mut from_map: Vec<&str> = geoglam_iso_codes().collect();
+        from_map.sort_unstable();
+        let total = from_map.len();
+        from_map.dedup();
+        assert_eq!(from_map.len(), total, "one ISO code per country name");
+        let mut from_table: Vec<&str> = loaded()
+            .unwrap()
+            .regions
+            .keys()
+            .map(String::as_str)
+            .collect();
+        from_table.sort_unstable();
+        assert_eq!(from_map, from_table);
+    }
+
+    #[test]
     fn calendars_match_python_for_every_case() {
         for c in fx()["calendars"].as_array().unwrap() {
             let got = calendar_for(

@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+  CLARIFY_TIMEOUT_MS,
   REPORT_WINDOW_HOURS,
+  clarifyQuestions,
   reportRefusal,
   reportsListUrl,
   reportsSubmitUrl,
   reportsUpvoteUrl,
 } from "./reports-api";
-import { DEFAULT_WEATHER_API_URL } from "./weather-api";
+import {
+  DEFAULT_WEATHER_API_URL,
+  WORKER_AI_TIMEOUT_MS,
+  workerUrl,
+} from "./weather-api";
 
 describe("report URLs (the Rust Worker, never /api/py)", () => {
   it("lists a place's reports for the last day by default", () => {
@@ -47,9 +53,9 @@ describe("reportRefusal", () => {
     ).toBe("Unknown location");
   });
 
-  it("still reads FastAPI's detail (the follow-up questions route)", () => {
+  it("does not read FastAPI's detail: no Python route is left", () => {
     expect(reportRefusal({ detail: "Rate limit exceeded" }, "fallback")).toBe(
-      "Rate limit exceeded",
+      "fallback",
     );
   });
 
@@ -60,10 +66,59 @@ describe("reportRefusal", () => {
       "x",
       3,
       {},
-      { detail: 5 },
-      { detail: " " },
+      { error_description: 5 },
+      { error_description: " " },
     ]) {
       expect(reportRefusal(body, "fallback")).toBe("fallback");
+    }
+  });
+});
+
+describe("the follow-up questions", () => {
+  it("are asked of the Worker's route, never retried, with a wizard-sized wait", () => {
+    expect(workerUrl("reports/clarify", "")).toBe(
+      `${DEFAULT_WEATHER_API_URL}/v1/reports/clarify`,
+    );
+    // The Worker answers within ~13 s whatever happens; the wait is longer
+    // than that but nowhere near the 40 s of the other AI routes.
+    expect(CLARIFY_TIMEOUT_MS).toBeGreaterThan(13_000);
+    expect(CLARIFY_TIMEOUT_MS).toBeLessThan(WORKER_AI_TIMEOUT_MS);
+  });
+});
+
+describe("clarifyQuestions", () => {
+  it("reads the Worker's questions, ignoring its source", () => {
+    expect(
+      clarifyQuestions({
+        questions: ["How heavy is it?", "Is water pooling?"],
+        source: "ai",
+      }),
+    ).toEqual(["How heavy is it?", "Is water pooling?"]);
+  });
+
+  it("keeps at most two, and only real strings", () => {
+    expect(clarifyQuestions({ questions: ["a?", "b?", "c?"] })).toEqual([
+      "a?",
+      "b?",
+    ]);
+    expect(clarifyQuestions({ questions: ["a?", 3, " ", null, "b?"] })).toEqual(
+      ["a?", "b?"],
+    );
+  });
+
+  it("is empty for any other shape, so the wizard carries on without", () => {
+    for (const body of [
+      null,
+      undefined,
+      "x",
+      3,
+      [],
+      {},
+      { questions: "a?" },
+      { questions: {} },
+      { error: "invalid_request", error_description: "nope" },
+    ]) {
+      expect(clarifyQuestions(body)).toEqual([]);
     }
   });
 });

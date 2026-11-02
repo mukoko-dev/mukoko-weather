@@ -10,7 +10,7 @@ Thank you for your interest in contributing to mukoko weather. This project prov
 4. Create a feature branch: `git checkout -b feature/your-feature`
 5. Start the dev server: `npm run dev`
 
-AI features are optional locally: without the AI env vars every AI endpoint uses its fallback. To enable them, set `WEATHER_SERVICE_URL` (`https://weather-internal.mukoko.com`, or a local `wrangler dev` of `workers/internal-api`) and the server-only service key `WEATHER_SERVICE_API_KEY` in `.env.local`. The backend never holds a Cloudflare AI token: the weather Worker runs the model through its Workers AI binding. Never prefix either with `NEXT_PUBLIC_` or read them outside `api/py`.
+AI features are optional locally: without the AI env vars every AI endpoint uses its fallback. To enable them, set `WEATHER_SERVICE_URL` (`https://weather-internal.mukoko.com`, or a local `wrangler dev` of `workers/internal-api`) and the server-only service key `WEATHER_SERVICE_API_KEY` in `.env.local`. The backend never holds a Cloudflare AI token: the weather Worker runs the model through its Workers AI binding. Never prefix either with `NEXT_PUBLIC_` or read them outside the `/api/ai` proxy.
 
 ## Development Workflow
 
@@ -25,7 +25,7 @@ AI features are optional locally: without the AI env vars every AI endpoint uses
 ### Code Standards
 
 - **TypeScript** — all frontend code must be typed; run `npx tsc --noEmit` before committing
-- **Python** — backend API code lives in `api/py/` (FastAPI); follow existing patterns for new endpoints
+- **Rust** — backend code lives in `workers/` (the pure logic in `workers/crates/weather-core`, the Workers beside it); the Python backend is gone (#333). Put every decision in `weather-core` with native tests, keep a Worker to I/O, and run the Workers checks below
 - **ESLint** — run `npm run lint` before committing; zero errors required (warnings acceptable)
 - **Tests** — run `npm test` and ensure all tests pass
 - **No hardcoded styles** — use Tailwind classes and CSS custom properties from `globals.css`, never inline `style={{}}` or hardcoded hex/rgba values
@@ -40,7 +40,7 @@ All data models must align with **schema.org** vocabulary and **OpenAPI** standa
 
 - **Schema.org mapping** — new data entities must identify their schema.org equivalent before implementation (e.g., locations → `schema.org/Place`, weather → `schema.org/Observation`)
 - **ISO standards** — country codes use ISO 3166-1 alpha-2, dates use ISO 8601, coordinates use WGS 84, measurement units follow UN/CEFACT Recommendation 20
-- **OpenAPI contract** — all Python API endpoints must define Pydantic `BaseModel` request/response schemas. The auto-generated OpenAPI spec (available at `/api/py/docs` in dev) is the source of truth for API consumers
+- **API contract** — every Worker route has typed requests and responses in `weather-core`, documented in `workers/README.md` and, for the public routes, the `/developers` page; add the route to both in the same PR
 - **JSON-LD structured data** — all public-facing pages must include schema.org JSON-LD. New page types must add appropriate schemas
 
 ### Commit Messages
@@ -62,9 +62,7 @@ refactor: replace custom modal with shadcn Dialog
 npm test              # Run TypeScript tests (single run)
 npm run test:watch    # Run TypeScript tests in watch mode
 npm run test:coverage # Run TypeScript tests with v8 coverage reporting
-npm run test:python   # Run Python backend tests (pytest)
-npm run test:all      # Run both TypeScript and Python tests
-python -m pytest tests/py/ -v  # Run Python backend tests (direct)
+(cd workers && cargo test -p weather-core -p weather-mongo -p weather-webpush)  # Run the Rust Workers tests
 ```
 
 Write tests for:
@@ -89,7 +87,7 @@ BASE=http://localhost:3100 node scripts/browser-check/pwa-check.mjs
 
 ### Frontend / backend split
 
-Next.js serves as the **presentation layer only**. All data handling, AI operations, database CRUD, and rule evaluation run in **Python FastAPI** (`api/py/`), deployed as Vercel serverless functions. Routes are proxied via `vercel.json` rewrites (`/api/py/*` → `api/py/index.py`).
+Next.js serves as the **presentation layer only**. All data handling, AI operations, database access, and rule evaluation run in the **Rust Cloudflare Workers** (`workers/`, `weather-api.mukoko.com`); the Python FastAPI backend (`api/py`) was deleted in #333. `vercel.json` has one rewrite left, the old weather-station upload URL `/api/py/stations/ingest` to the stations Worker.
 
 Only two TypeScript API routes remain:
 
@@ -126,7 +124,7 @@ Follow the Netflix-style resilience pattern:
 2. **Always provide fallbacks.** Server-side data fetching must catch errors and return seasonal estimates
 3. **Log structured errors.** Use `logError`/`logWarn` from `src/lib/observability.ts` in API routes
 4. **Report client-side errors.** Use `reportErrorToAnalytics` from `src/lib/observability.ts` in error boundaries
-5. **Use circuit breakers.** External API calls in Python should use the circuit breaker system (`api/py/_circuit_breaker.py`)
+5. **Use circuit breakers.** External API calls in a Worker use the circuit breaker (`weather_core::breaker`) and a KV cache
 
 ### Lazy loading
 
@@ -160,7 +158,7 @@ Users can add locations at runtime via geolocation auto-detection, search, or co
 Before every commit, complete **all** of these steps:
 
 1. `npm test` — all TypeScript tests pass
-2. `python -m pytest tests/py/ -v` — all Python tests pass
+2. If you touched `workers/` or `tests/fixtures/`: `cd workers && cargo fmt --all -- --check && cargo clippy --workspace --target wasm32-unknown-unknown --all-targets -- -D warnings && cargo test -p weather-core -p weather-mongo -p weather-webpush`
 3. `npm run lint` — zero errors
 4. `npx tsc --noEmit` — zero type errors
 5. `npm run build` — production build succeeds
@@ -185,7 +183,7 @@ The old analyzer names may have silently fallen through to Atlas defaults — th
 1. Complete the Pre-Commit Checklist above
 2. Ensure the build succeeds: `npm run build`
 3. Submit a PR with a clear description of the change and why it's needed
-4. PRs are automatically checked by CI (lint → typecheck → tests), CodeQL security scanning (JS/TS, Python, Actions), and Claude AI code review — all visible as separate checks in the PR UI
+4. PRs are automatically checked by CI (lint → typecheck → tests), CodeQL security scanning (JS/TS, Rust, Actions), and Claude AI code review — all visible as separate checks in the PR UI
 5. On merge to `main`, the `db-init.yml` workflow automatically syncs seed data to MongoDB after Vercel deploys
 6. Address any review feedback before requesting merge
 
@@ -193,15 +191,14 @@ The old analyzer names may have silently fallen through to Atlas defaults — th
 
 All workflows use `concurrency` groups with `cancel-in-progress: true` — rapid pushes cancel stale runs instead of creating zombie checks.
 
-| Workflow                   | Trigger                                                       | Purpose                                                                                                                                                                                       |
-| -------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ci.yml`                   | Push/PR to `main`                                             | Single job: lint → typecheck → TypeScript tests → Python tests. All steps appear under one check in the GitHub PR UI.                                                                         |
-| `codeql.yml`               | Push/PR to `main`                                             | CodeQL security scanning for JavaScript/TypeScript, Python, and GitHub Actions workflows. Matrix strategy runs all 3 language analyses in parallel.                                           |
-| `db-init.yml`              | Vercel production deploy succeeds                             | Syncs seed data to MongoDB (locations, activities, rules, prompts)                                                                                                                            |
-| `release-pr.yml`           | Manual (`workflow_dispatch`)                                  | Cuts `release/<date>` from `staging`, asserts main's content is already in staging, records main with `git merge -s ours`, removes `CLAUDE.md` and `.claude/`, opens the release PR to `main` |
-| `no-dev-files-on-main.yml` | PR to `main`; push to `main`                                  | Fails when `CLAUDE.md` or a `.claude/` directory is tracked, so `main` never holds development-only files                                                                                     |
-| `workers.yml`              | Push/PR touching `workers/**`; called by `workers-deploy.yml` | Rust Workers: fmt, clippy (native + wasm32), test, and build every Worker bundle                                                                                                              |
-| `workers-deploy.yml`       | Manual (`workflow_dispatch`)                                  | Builds and deploys the Rust Workers to Cloudflare in service-binding order, then smoke-checks each public `/health`                                                                           |
+| Workflow                   | Trigger                                                                              | Purpose                                                                                                                                                                                       |
+| -------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci.yml`                   | Push/PR to `main`                                                                    | Single job: lint → typecheck → TypeScript tests. All steps appear under one check in the GitHub PR UI.                                                                                        |
+| `db-init.yml`              | Vercel production deploy succeeds                                                    | Syncs seed data to MongoDB (locations, activities, rules, prompts)                                                                                                                            |
+| `release-pr.yml`           | Manual (`workflow_dispatch`)                                                         | Cuts `release/<date>` from `staging`, asserts main's content is already in staging, records main with `git merge -s ours`, removes `CLAUDE.md` and `.claude/`, opens the release PR to `main` |
+| `no-dev-files-on-main.yml` | PR to `main`; push to `main`                                                         | Fails when `CLAUDE.md` or a `.claude/` directory is tracked, so `main` never holds development-only files                                                                                     |
+| `workers.yml`              | Push/PR touching `workers/**` or `tests/fixtures/**`; called by `workers-deploy.yml` | Rust Workers: fmt, clippy (native + wasm32), test, and build every Worker bundle                                                                                                              |
+| `workers-deploy.yml`       | Manual (`workflow_dispatch`)                                                         | Builds and deploys the Rust Workers to Cloudflare in service-binding order, then smoke-checks each public `/health`                                                                           |
 
 ## Releases
 
@@ -267,7 +264,7 @@ The Rust Workers in `workers/` deploy by hand only, from **Actions → Workers d
 
 `all` first runs the `workers.yml` gate (fmt, clippy, test, build), then deploys in service-binding order: `forecast`, `aviation`, `mongo-bridge`, `places`, `stations`, `tiles`, then `ai`, `internal-api`, `jobs`, then `public-api`. `mongo-bridge` (TypeScript, `workers/mongo-bridge`) comes before `places` because `places` binds it as `MONGO_BRIDGE`: the bridge is the only writer of device profiles, community weather reports and the archive days of the weather history (MongoDB, never D1), and it has no route and no workers.dev address. `places` also comes before `ai`, which binds it (`PLACES`) so the history analysis reads the same history the app shows (#268). Each Worker with a custom domain must answer `GET /health` with a 2xx, and the run summary lists every Worker's result. A single Worker skips the gate, so only deploy one alone when what it binds to is already live.
 
-**Deploy the Workers before you promote Vercel.** A route that is ported to the Workers has its Python route deleted in the same PR, and the app calls `weather-api.mukoko.com` with no `/api/py` fallback (`src/lib/weather-api.ts`). The Workers deploy by hand and the Vercel release is promoted separately, so promoting Vercel first sends the app to a route that does not exist yet: it answers `404` and the card it feeds renders nothing. Always deploy `forecast`, then `public-api` (the order `all` uses, and the order the service bindings need; a route on the AI Worker, such as `/v1/ai/explore/search` or `/v1/ai/history/analyze`, needs `ai` before `public-api`), check each custom domain's `/health` and the new route, and only then promote the Vercel release. To roll back, roll Vercel back first; a Worker rolled back past a ported route breaks the live app the same way. Check the PR's own list of new bindings, secrets and D1 migrations as well: those must exist before the Worker that uses them deploys.
+**Deploy the Workers before you promote Vercel.** Every route is a Worker route now (the Python backend is deleted), and the app calls `weather-api.mukoko.com` with no fallback (`src/lib/weather-api.ts`). The Workers deploy by hand and the Vercel release is promoted separately, so promoting Vercel first sends the app to a route that does not exist yet: it answers `404` and the card it feeds renders nothing. Always deploy `forecast`, then `public-api` (the order `all` uses, and the order the service bindings need; a route on the AI Worker, such as `/v1/ai/explore/search`, `/v1/ai/history/analyze` or `/v1/reports/clarify`, needs `ai` before `public-api`), check each custom domain's `/health` and the new route, and only then promote the Vercel release. To roll back, roll Vercel back first; a Worker rolled back past a ported route breaks the live app the same way. Check the PR's own list of new bindings, secrets and D1 migrations as well: those must exist before the Worker that uses them deploys.
 
 The workflow needs the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets. The token needs **Account → Secrets Store → Edit** as well as Workers edit: binding a Secrets Store secret on deploy counts as a write. The Workers' own runtime secrets live in the account's Cloudflare Secrets Store (`56f84bfa8a564c54a95dbf4f4b4281b4`), never in the workflow. Each key is one store secret, bound by every Worker that needs it (`secrets_store_secrets` in each `wrangler.jsonc`):
 

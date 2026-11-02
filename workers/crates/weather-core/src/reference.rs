@@ -213,7 +213,7 @@ fn terms(raw: &str) -> Vec<String> {
 }
 
 /// `GET /v1/activities` (`id`, `category`, `q`, `labels`, `mode=categories`),
-/// in the order and with the answers of `/api/py/activities`.
+/// in the order and with the answers of Python `/activities`.
 pub fn activities_reply(query: &[(String, String)]) -> Reply {
     let all = activities();
 

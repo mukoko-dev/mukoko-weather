@@ -6,8 +6,8 @@
 //! Worker (`workers/mongo-bridge`, which applies the same rules again before it
 //! writes). The vectors in
 //! `tests/fixtures/community-contract.json` are read by this module's tests
-//! and by `tests/py/test_community_contract.py`, so the two backends cannot
-//! drift apart while the Python still exists.
+//! (and by the bridge's tests), so the Worker and the bridge cannot drift
+//! apart. The Python backend that once shared them is deleted (#333).
 
 use serde::{Deserialize, Serialize};
 
@@ -237,8 +237,9 @@ pub fn clarify_prompt(location_name: &str, report_type: &str) -> String {
         .replace("{reportType}", report_type)
 }
 
-/// The numbered lines of a model answer, at most two, numbering stripped.
-pub fn parse_questions(text: &str) -> Vec<String> {
+/// Every numbered line of a model answer, numbering stripped, empty ones
+/// dropped.
+pub fn numbered_questions(text: &str) -> impl Iterator<Item = String> + '_ {
     text.trim()
         .lines()
         .map(str::trim)
@@ -249,8 +250,11 @@ pub fn parse_questions(text: &str) -> Vec<String> {
                 .to_owned()
         })
         .filter(|q| !q.is_empty())
-        .take(2)
-        .collect()
+}
+
+/// The numbered lines of a model answer, at most two, numbering stripped.
+pub fn parse_questions(text: &str) -> Vec<String> {
+    numbered_questions(text).take(2).collect()
 }
 
 // ---------------------------------------------------------------------------

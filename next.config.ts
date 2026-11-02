@@ -5,6 +5,11 @@ import {
   MISSING_ASSET_DESTINATION,
   MISSING_ASSET_SOURCE,
 } from "./src/lib/missing-asset";
+import {
+  RETIRED_API_DESTINATION,
+  RETIRED_API_ROOT,
+  RETIRED_API_SOURCE,
+} from "./src/lib/retired-api";
 
 import {
   BASELINE_HEADERS,
@@ -50,6 +55,17 @@ const nextConfig: NextConfig = {
         {
           source: MISSING_ASSET_SOURCE,
           destination: MISSING_ASSET_DESTINATION,
+        },
+        // The retired Python API: a 404 problem document for any method.
+        // The station upload URL is excluded from the source itself
+        // (src/lib/retired-api.ts), so Next.js never matches it.
+        {
+          source: RETIRED_API_SOURCE,
+          destination: RETIRED_API_DESTINATION,
+        },
+        {
+          source: RETIRED_API_ROOT,
+          destination: RETIRED_API_DESTINATION,
         },
       ],
       fallback: [],
@@ -101,10 +117,11 @@ const nextConfig: NextConfig = {
           { key: "Content-Security-Policy", value: "frame-ancestors *" },
         ],
       },
-      // CORS (B06): `*` (no credentials) only on the documented public read
-      // API and the embed endpoints. Everything else under /api/py is
-      // answered by FastAPI's allowlist; /api/ai, /api/keys, /api/db-init are
-      // same-origin. Policy data: CORS_POLICY in src/lib/security-headers.ts.
+      // CORS (B06): `*` (no credentials) only on the embed endpoints (the
+      // documented public read API is the Rust API Worker, which carries the
+      // same policy). /api/ai, /api/keys, /api/db-init are same-origin; the
+      // Workers answer their own CORS. Policy data: CORS_POLICY in
+      // src/lib/security-headers.ts.
       ...CORS_POLICY.open.map((source) => ({
         source,
         headers: [...CORS_POLICY.headers],

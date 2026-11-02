@@ -2,7 +2,7 @@
 
 /// The documented public read API: `GET` routes any website may call from the
 /// browser (`Access-Control-Allow-Origin: *`, never with credentials). This is
-/// the policy the Python routes `/api/py/weather`, `/geo`, `/search` and
+/// the policy the Python routes `weather`, `geo`, `search` and
 /// `/airquality/*` had (`CORS_POLICY.open` in `src/lib/security-headers.ts`),
 /// carried to the Worker that replaces them. Every other route, and every
 /// write (`/v1/ai/*`, `/v1/devices`), keeps the `CORS_ORIGINS` allowlist.
@@ -185,6 +185,7 @@ mod tests {
             ("GET", "/v1/weather"),
             ("GET", "/v1/history"),
             ("POST", "/v1/ai/chat"),
+            ("POST", "/v1/reports/clarify"),
             ("POST", "/v1/devices"),
             ("PATCH", "/v1/devices/abc"),
             ("OPTIONS", "/v1/devices"),
@@ -259,6 +260,9 @@ mod tests {
             "/v1/ai",
             "/v1/ai/summary",
             "/v1/ai/chat",
+            "/v1/reports",
+            "/v1/reports/upvote",
+            "/v1/reports/clarify",
             "/v1/devices",
             "/v1/devices/abc",
             "/v1/history",
@@ -278,6 +282,32 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn the_report_questions_are_for_the_apps_own_origins_only() {
+        // `POST /v1/reports/clarify` spends a model call: a listed origin may
+        // preflight and send it, a foreign website may not (no wildcard on a
+        // write, and the route is not in the open read list).
+        let path = crate::ai::clarify::PATH;
+        assert!(!is_open_read_route(path));
+        for foreign in [
+            cors_decision(cors_method("OPTIONS", Some("POST")), path, None),
+            cors_decision("POST", path, None),
+        ] {
+            assert_eq!(foreign.allow_origin, None);
+        }
+        let ours = cors_decision(
+            cors_method("OPTIONS", Some("POST")),
+            path,
+            Some("https://weather.mukoko.com"),
+        );
+        assert_eq!(
+            ours.allow_origin.as_deref(),
+            Some("https://weather.mukoko.com")
+        );
+        assert!(ours.methods.contains("POST"));
+        assert!(ours.allow_headers.contains("Content-Type"));
     }
 
     #[test]

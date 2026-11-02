@@ -1,6 +1,6 @@
 //! `GET /profile?slug=<slug> | lat=&lon=[&country=]`: a place's knowledge and
 //! its current context (ported from `api/py/_place_knowledge.py`, endpoint
-//! `/api/py/locations/profile`).
+//! Python `/locations/profile`).
 //!
 //! The logic is `weather_core::place_profile`, pinned to the Python. This is
 //! the I/O around it:

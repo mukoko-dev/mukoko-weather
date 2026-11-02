@@ -110,7 +110,7 @@ pub fn span_days(start: &str, end: &str) -> i64 {
 }
 
 /// Solar-meridian UTC offset in seconds (15 degrees per hour, quarter-hour
-/// steps). The same estimator as `/api/py/weather` and `location-time.ts`.
+/// steps). The same estimator as Python `/weather` and `location-time.ts`.
 pub fn estimate_utc_offset_seconds(lon: f64) -> i64 {
     if !lon.is_finite() {
         return 0;

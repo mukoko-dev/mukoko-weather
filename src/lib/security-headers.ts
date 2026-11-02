@@ -101,8 +101,9 @@ export const FRAME_HEADER = { key: "X-Frame-Options", value: "SAMEORIGIN" };
 
 /**
  * Origins allowed to call the first-party API cross-origin: the Workers'
- * `CORS_ORIGINS` (`workers/public-api` and `workers/stations`). The Python CORS
- * list, still being retired, is a subset (it no longer lists the station console).
+ * `CORS_ORIGINS` (`workers/public-api` and `workers/stations`), which echo the
+ * origin themselves. This table is the data the tests and the docs check them
+ * against; nothing on Vercel answers a cross-origin API call any more.
  */
 export const FIRST_PARTY_ORIGINS = [
   "https://weather.mukoko.com",
@@ -117,13 +118,18 @@ export const FIRST_PARTY_ORIGINS = [
  * never with credentials. The documented public browser API (developers page:
  * weather, air quality, geo and search) is on the Rust API Worker now
  * (`weather_core::cors::OPEN_READ_ROUTES`), which carries the same policy.
- * Every other route is same-origin plus {@link FIRST_PARTY_ORIGINS}, echoed by
- * the API layer (FastAPI CORSMiddleware).
+ * Every other route is same-origin here; the Workers echo
+ * {@link FIRST_PARTY_ORIGINS} on their own routes.
  */
 export const CORS_POLICY = {
   open: ["/api/embed/:path*", "/embed/:path*"],
   allowlist: FIRST_PARTY_ORIGINS,
-  /** Hardware ingest is not a browser: no CORS needed. */
+  /**
+   * Hardware ingest is not a browser: no CORS needed. This is the one
+   * `/api/py` path left: the upload URL consoles in the field are configured
+   * with, which `vercel.json` rewrites to the stations Worker (and that Worker
+   * also takes as a route on this host).
+   */
   noCors: ["/api/py/stations/ingest"],
   headers: [
     { key: "Access-Control-Allow-Origin", value: "*" },

@@ -9,10 +9,10 @@ import {
 } from "./derived-insights";
 import { createFallbackWeather, synthesizeOpenMeteoInsights } from "./weather";
 
-// Same reference vectors as tests/py/test_insights.py — the two
-// implementations must agree (issue #246).
+// Same reference vectors as the former tests/py/test_insights.py (deleted,
+// #333) — the two implementations must agree (issue #246).
 
-describe("derived-insights helpers (parity with api/py/_insights.py)", () => {
+describe("derived-insights helpers (parity with the Worker's weather_core::insights)", () => {
   it("dew point (Magnus)", () => {
     expect(dewPointC(20, 100)).toBeCloseTo(20, 1);
     expect(dewPointC(25, 50)).toBeCloseTo(13.9, 0);
