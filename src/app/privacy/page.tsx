@@ -206,6 +206,29 @@ export default function PrivacyPage() {
                 </dd>
               </div>
               <div>
+                <dt className="font-semibold text-text-primary">MET Norway</dt>
+                <dd className="mt-1">
+                  A backup weather forecast provider (the Norwegian
+                  Meteorological Institute), used only when our main provider
+                  cannot answer, so you still see a real forecast instead of a
+                  seasonal estimate. Our own weather service (not your browser)
+                  asks it for the forecast of a place: it sends geographic
+                  coordinates rounded to four decimal places (about 11 metres)
+                  and identifies itself as mukoko weather. Your IP address is
+                  not forwarded: its request logs, kept in Norway, hold those
+                  coordinates with the address of our server, not yours. The
+                  data is licensed under CC BY 4.0. See their{" "}
+                  <a
+                    href="https://api.met.no/doc/TermsOfService"
+                    className="sunbird"
+                    rel="noopener noreferrer"
+                  >
+                    terms
+                  </a>
+                  .
+                </dd>
+              </div>
+              <div>
                 <dt className="font-semibold text-text-primary">Tomorrow.io</dt>
                 <dd className="mt-1">
                   Primary weather data API and weather map tile provider. We

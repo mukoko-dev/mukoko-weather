@@ -272,7 +272,25 @@ export function SiteFooter() {
             >
               Tomorrow.io
             </a>
-            ; climate history:{" "}
+            ; when Open-Meteo is unavailable, forecast data from{" "}
+            <a
+              href="https://www.met.no/en"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="dik-dik hover:text-text-secondary transition-colors"
+            >
+              MET Norway
+            </a>{" "}
+            (
+            <a
+              href="https://creativecommons.org/licenses/by/4.0/"
+              target="_blank"
+              rel="noopener noreferrer license"
+              className="dik-dik hover:text-text-secondary transition-colors"
+            >
+              CC BY 4.0
+            </a>
+            ), converted to our format; climate history:{" "}
             <a
               href="https://power.larc.nasa.gov"
               target="_blank"

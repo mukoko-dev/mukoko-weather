@@ -747,6 +747,10 @@ pub const BLEND_TTL_SECONDS: u64 = 900;
 /// How long a `best_match` answer is cached: less, so a blend missed to a
 /// passing upstream problem is back within minutes, not a quarter of an hour.
 pub const BEST_MATCH_TTL_SECONDS: u64 = 300;
+/// How long an answer from the failover provider (MET Norway, `met_no`) is
+/// cached: a quarter of an hour, so Open-Meteo is asked again as often as for
+/// a blend and the blend returns the moment it recovers.
+pub const FAILOVER_TTL_SECONDS: u64 = 900;
 /// How long a stored forecast stays in KV (seconds). It is FRESH only for
 /// [`cache_ttl_seconds`]; after that it is kept so an outage of every provider
 /// (Open-Meteo answering 429 to the Workers' shared egress, an open breaker)
@@ -767,6 +771,21 @@ pub fn age_seconds(fetched_at: &str, now: DateTime<Utc>) -> Option<i64> {
 /// resort).
 pub fn is_fresh(provider: &str, fetched_at: &str, now: DateTime<Utc>) -> bool {
     age_seconds(fetched_at, now).is_some_and(|age| age < cache_ttl_seconds(provider) as i64)
+}
+
+/// A stored forecast younger than this (seconds) is served, labelled stale, in
+/// preference to asking a failover provider when Open-Meteo gives nothing. The
+/// models behind the blend update a few times a day, so a row several hours old
+/// carries the same model run as a fresh fetch, with all its variables and the
+/// place's real UTC offset, and it spares the failover provider a request (its
+/// terms ask for no unnecessary traffic). An older row is a worse answer than a
+/// live failover forecast.
+pub const STORED_PREFERRED_SECS: i64 = 6 * 3600;
+
+/// Whether a stored forecast of this age (see [`age_seconds`]) is preferred to a
+/// failover provider. An unreadable age is not.
+pub fn stored_is_preferred(age_seconds: Option<i64>) -> bool {
+    age_seconds.is_some_and(|age| age < STORED_PREFERRED_SECS)
 }
 
 /// Prepare a stored forecast that is served PAST its fresh lifetime (every
@@ -836,12 +855,12 @@ pub fn forecast_cache_key(lat: f64, lon: f64, model: Option<&str>) -> String {
 
 /// KV lifetime of an answer by its `X-Weather-Provider`: a blend and a picked
 /// model [`BLEND_TTL_SECONDS`], the `best_match` fallback
-/// [`BEST_MATCH_TTL_SECONDS`].
+/// [`BEST_MATCH_TTL_SECONDS`], the MET Norway failover [`FAILOVER_TTL_SECONDS`].
 pub fn cache_ttl_seconds(provider: &str) -> u64 {
-    if provider == PROVIDER_BEST_MATCH {
-        BEST_MATCH_TTL_SECONDS
-    } else {
-        BLEND_TTL_SECONDS
+    match provider {
+        PROVIDER_BEST_MATCH => BEST_MATCH_TTL_SECONDS,
+        crate::met_no::PROVIDER => FAILOVER_TTL_SECONDS,
+        _ => BLEND_TTL_SECONDS,
     }
 }
 
@@ -970,8 +989,9 @@ pub fn attempt_single_model(upstream: Upstream, model: &str, now: DateTime<Utc>)
 
 /// `Cache-Control` for a `/v1/weather` answer at the edge. Only the full
 /// blend, or a model the caller picked, is worth five minutes; a degraded
-/// answer (`best_match`, the seasonal `fallback`, a stored forecast served
-/// `stale`) is short-lived so the blend comes back as soon as it recovers.
+/// answer (`best_match`, the MET Norway failover `met-no`, the seasonal
+/// `fallback`, a stored forecast served `stale`) is short-lived so the blend
+/// comes back as soon as it recovers.
 pub fn edge_cache_control(provider: Option<&str>, stale: bool) -> &'static str {
     let healthy =
         provider.is_some_and(|p| p.starts_with("open-meteo:") && p != PROVIDER_BEST_MATCH);
@@ -1911,6 +1931,16 @@ mod tests {
     }
 
     #[test]
+    fn the_failover_provider_is_cached_a_quarter_of_an_hour_and_expires_like_a_blend() {
+        assert_eq!(FAILOVER_TTL_SECONDS, 900);
+        assert_eq!(cache_ttl_seconds(crate::met_no::PROVIDER), 900);
+        let at = |m: i64| (now() - chrono::Duration::minutes(m)).to_rfc3339();
+        // Fresh for 15 minutes, then Open-Meteo is asked again first.
+        assert!(is_fresh(crate::met_no::PROVIDER, &at(14), now()));
+        assert!(!is_fresh(crate::met_no::PROVIDER, &at(15), now()));
+    }
+
+    #[test]
     fn a_stored_forecast_is_fresh_for_its_ttl_then_only_a_last_resort() {
         let at = |m: i64| (now() - chrono::Duration::minutes(m)).to_rfc3339();
         assert!(is_fresh(PROVIDER_BLEND, &at(14), now()));
@@ -1925,6 +1955,18 @@ mod tests {
         assert_eq!(age_seconds("yesterday", now()), None);
         assert_eq!(age_seconds(&at(3), now()), Some(180));
         const { assert!(STALE_TTL_SECONDS > BLEND_TTL_SECONDS) };
+    }
+
+    #[test]
+    fn a_recent_stored_forecast_beats_a_failover_and_an_old_one_does_not() {
+        assert!(stored_is_preferred(Some(0)));
+        assert!(stored_is_preferred(Some(STORED_PREFERRED_SECS - 1)));
+        assert!(!stored_is_preferred(Some(STORED_PREFERRED_SECS)));
+        assert!(!stored_is_preferred(Some(STALE_TTL_SECONDS as i64)));
+        // A clock a little ahead of ours: still recent. Unreadable: not.
+        assert!(stored_is_preferred(Some(-30)));
+        assert!(!stored_is_preferred(None));
+        const { assert!(STORED_PREFERRED_SECS < STALE_TTL_SECONDS as i64) };
     }
 
     #[test]
@@ -1986,13 +2028,17 @@ mod tests {
                 "public, max-age=30"
             );
         }
+        // The MET Norway failover is a degraded answer too: 30 seconds at the
+        // edge, so the blend is back within the minute Open-Meteo recovers.
         for degraded in [
             Some("open-meteo:best_match"),
+            Some("met-no"),
             Some("fallback"),
             Some(""),
             None,
         ] {
             assert_eq!(edge_cache_control(degraded, false), "public, max-age=30");
+            assert_eq!(edge_cache_control(degraded, true), "public, max-age=30");
         }
     }
 
