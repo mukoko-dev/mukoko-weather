@@ -11,6 +11,12 @@ import { resolve } from "path";
 
 const PLACES = resolve(__dirname, "../../workers/places/src");
 const read = (file: string) => readFileSync(resolve(PLACES, file), "utf-8");
+// The budget runner is shared with the AI Worker (`weather_edge::budget`);
+// the places Worker's own `budget.rs` re-exports it.
+const sharedBudget = readFileSync(
+  resolve(__dirname, "../../workers/crates/weather-edge/src/budget.rs"),
+  "utf-8",
+);
 
 describe("places Worker community writes", () => {
   it("has no count-then-insert limiter left", () => {
@@ -24,8 +30,9 @@ describe("places Worker community writes", () => {
       expect(text, file).not.toMatch(/INSERT INTO rate_events/);
       expect(text, file).not.toMatch(/FROM rate_events/);
     }
-    expect(read("budget.rs")).toContain("budget::SPEND_SQL");
-    expect(read("budget.rs")).not.toMatch(/INSERT INTO rate_events/);
+    expect(read("budget.rs")).toContain("weather_edge::budget");
+    expect(sharedBudget).toContain("budget::SPEND_SQL");
+    expect(sharedBudget).not.toMatch(/INSERT INTO rate_events/);
   });
 
   it("takes a report's budget with the report action and answers 429 or 503 from the core mapping", () => {
