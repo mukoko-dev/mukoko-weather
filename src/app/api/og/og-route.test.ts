@@ -382,10 +382,10 @@ describe("OG image wiring in metadata", () => {
 
   it("[location]/page.tsx uses local season from DB with error handling", () => {
     // Season comes from the DB-driven season lookup (getSeasonForDate, via the
-    // shared payload helper), not getDefaultSeason (generic fallback)
+    // shared season helper), not getDefaultSeason (generic fallback)
     expect(locationPageSource).toContain("getCachedSeason");
     const payload = readFileSync(
-      resolve(__dirname, "../../../lib/location-payload.ts"),
+      resolve(__dirname, "../../../lib/place-seed-server.ts"),
       "utf-8",
     );
     expect(payload).toContain("getSeasonForDate");
@@ -398,7 +398,7 @@ describe("OG image wiring in metadata", () => {
     expect(locationPageSource).toContain("getCachedSeason");
     // Uses React cache() for per-request deduplication (generateMetadata + page component)
     const payload = readFileSync(
-      resolve(__dirname, "../../../lib/location-payload.ts"),
+      resolve(__dirname, "../../../lib/place-seed-server.ts"),
       "utf-8",
     );
     expect(payload).toContain("cache((");

@@ -338,7 +338,17 @@ describe("database init works outside RxDB dev-mode", () => {
     expect(source).not.toMatch(/ignoreDuplicate:\s*true/);
   });
   it("adds the migration plugin the migrationStrategies need", () => {
-    expect(source).toContain("addRxPlugin(RxDBMigrationSchemaPlugin)");
+    expect(source).toContain(
+      "addRxPlugin(migration.RxDBMigrationSchemaPlugin)",
+    );
+  });
+  it("imports RxDB inside the init, never at the top (first-load JavaScript)", () => {
+    // A static import put RxDB and Dexie (about 130 KB gzipped) in the
+    // first-load JavaScript of every page.
+    expect(source).not.toMatch(/^import (?!type)[^;]*from "rxdb[^"]*";/m);
+    expect(source).toContain('import("rxdb")');
+    expect(source).toContain('import("rxdb/plugins/storage-dexie")');
+    expect(source).toContain('import("rxdb/plugins/migration-schema")');
   });
   it("registers the weather_places collection", () => {
     expect(source).toContain("weather_places: { schema: weatherPlaceSchema }");

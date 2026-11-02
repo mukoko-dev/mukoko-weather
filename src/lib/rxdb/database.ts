@@ -3,11 +3,15 @@
  *
  * Returns null on server (no IndexedDB in Node). Uses Dexie storage adapter
  * (IndexedDB) which can be swapped to SQLite for Capacitor later.
+ *
+ * RxDB itself (about 130 KB gzipped with Dexie) is imported inside the init,
+ * not at the top: this module is reachable from the shell (the preferences
+ * store, the device-copy reads), and a static import put the whole database
+ * in every page's first-load JavaScript. It is fetched after first paint,
+ * when something first asks for the database.
  */
 
-import { addRxPlugin, createRxDatabase, type RxDatabase } from "rxdb";
-import { RxDBMigrationSchemaPlugin } from "rxdb/plugins/migration-schema";
-import { getRxStorageDexie } from "rxdb/plugins/storage-dexie";
+import type { RxDatabase } from "rxdb";
 import {
   migratePreferencesV2ToV3,
   preferencesSchema,
@@ -121,14 +125,19 @@ async function wipeIndexedDb(name: string): Promise<void> {
 // The collections declare `migrationStrategies`; RxDB needs this plugin to
 // run them when a device holds data from an older schema version.
 let pluginsAdded = false;
-function addPlugins(): void {
-  if (pluginsAdded) return;
-  pluginsAdded = true;
-  addRxPlugin(RxDBMigrationSchemaPlugin);
-}
 
 async function _initDb(): Promise<MukokoDatabase> {
-  addPlugins();
+  const [{ addRxPlugin, createRxDatabase }, migration, dexie] =
+    await Promise.all([
+      import("rxdb"),
+      import("rxdb/plugins/migration-schema"),
+      import("rxdb/plugins/storage-dexie"),
+    ]);
+  if (!pluginsAdded) {
+    pluginsAdded = true;
+    addRxPlugin(migration.RxDBMigrationSchemaPlugin);
+  }
+  const { getRxStorageDexie } = dexie;
   const db = await createRxDatabase<MukokoCollections>({
     name: "mukoko_weather",
     storage: getRxStorageDexie(),

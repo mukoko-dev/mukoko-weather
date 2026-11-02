@@ -1,6 +1,6 @@
-// Shared "Location not found" UI — used by the root not-found boundary and
-// by `[location]/not-found.tsx`, so an unknown slug looks the same whichever
-// boundary catches it. The layout (PageShell, skip-link target, bottom
+// Shared "Location not found" UI — rendered by the root `not-found.tsx`, which
+// catches `[location]` pages and sub-routes too, so an unknown slug looks the
+// same however it is reached. The layout (PageShell, skip-link target, bottom
 // clearance) lives in NotFoundView.
 import Link from "next/link";
 import { getLocationsForContext } from "@/lib/db";

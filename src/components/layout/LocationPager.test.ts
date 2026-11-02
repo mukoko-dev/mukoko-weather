@@ -66,10 +66,15 @@ describe("LocationPager — accessible page indicator", () => {
     expect(source).toContain("scrollbar-hide");
   });
 
-  it("navigates by plain links (no JS router push) and tracks saved-location taps", () => {
+  it("keeps real links and switches in place on a plain click, tracking saved-location taps", () => {
+    // Still an <a href>: middle-click, new tab and no-JS keep working. A plain
+    // left click is taken over by the place stage (src/lib/place-bus.ts),
+    // with the router as the fallback.
     expect(source).toContain("href={href}");
+    expect(source).toContain("trackPageChange(href, slug, from);");
+    expect(source).toContain("handlePlaceLinkClick(event, href, push);");
     expect(source).toContain(
-      "onClick={() => trackPageChange(href, slug, from)}",
+      "handlePlaceLinkClick(event, MY_LOCATION_HREF, push)",
     );
     expect(source).toContain('method: "saved"');
   });
@@ -91,7 +96,11 @@ describe("useLocationSwipe — swipe between locations", () => {
       "neighbour(sequence, pagerIndex(pathname, sequence), dir)",
     );
     expect(source).toContain("if (!target) return;");
-    expect(source).toContain("router.push(target);");
+    expect(source).toContain(
+      "navigateToPlace(target, (href) => router.push(href));",
+    );
+    // The swipe no longer calls the router directly for a place.
+    expect(source).not.toContain("router.push(target);");
   });
 
   it("takes its sequence from the shared usePagerSequence hook, the same as the dots", () => {
@@ -103,11 +112,11 @@ describe("useLocationSwipe — swipe between locations", () => {
     );
   });
 
-  it("warms both neighbouring pages when idle so a swipe lands quickly", () => {
-    expect(source).toContain("router.prefetch(target)");
-    expect(source).toContain("requestIdleCallback");
-    expect(source).toContain("neighbour(sequence, index, 1)");
-    expect(source).toContain("neighbour(sequence, index, -1)");
+  it("does not prefetch neighbouring routes: a swipe is a state change, not a navigation", () => {
+    // It used to warm both neighbours' RSC payloads when idle; switching in
+    // place needs no route, and a prefetch is a request per neighbour per page.
+    expect(source).not.toContain("router.prefetch");
+    expect(source).not.toContain("requestIdleCallback");
   });
 
   it("can be switched off, e.g. while reordering sections", () => {

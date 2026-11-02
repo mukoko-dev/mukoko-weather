@@ -1,23 +1,16 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
-import {
-  CurrentLocationHome,
-  type HomeWeatherPayload,
-} from "./CurrentLocationHome";
-import {
-  getLocationFromDb,
-  getCountryByCode,
-  getSeasonForDate,
-} from "@/lib/db";
+import { CurrentLocationHome } from "./CurrentLocationHome";
+import { getLocationFromDb, getCountryByCode } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { readLastLocation } from "@/lib/last-location";
-import { loadLocationWeather } from "@/lib/location-payload";
+import { seasonWithinBudget } from "@/lib/place-seed-server";
+import type { PlaceSeed } from "@/lib/place-controller";
 import type { WeatherLocation } from "@/lib/locations";
 import { ipFallbackLocation } from "@/lib/home-location";
-import { defaultHomeLocation } from "@/lib/default-home";
-import { countryDisplayName, reconcileCountry } from "@/lib/location-country";
-import { reconcileElevation } from "@/lib/location-elevation";
+import { defaultHomeLocation } from "@/lib/default-home-place";
+import { countryDisplayName } from "@/lib/location-country";
 import { SITE_URL } from "@/lib/site";
 import { fetchPlaces } from "@/lib/weather-api";
 import { usableIpGeo } from "@/lib/location-choice";
@@ -47,10 +40,10 @@ export const dynamic = "force-dynamic";
  * stays silent (no slug); explicit `/{slug}` URLs remain the shareable/SEO
  * surface for saved and browsed locations.
  *
- * Server side seeds the dashboard with the best location it can know without
- * device GPS (which only exists in the browser):
- * 1. lastLocation cookie that resolves to a real location → full
- *    server-rendered dashboard for it, instantly.
+ * Server side seeds the page with the best location it can know without
+ * device GPS (which only exists in the browser). It sends the shell and the
+ * place, never weather:
+ * 1. lastLocation cookie that resolves to a real location → that place.
  * 2. Else IP geo (Vercel's x-vercel-ip-latitude/longitude headers, find-only).
  * 3. Else Harare, a shipped seed that renders without any lookup. Never a page
  *    for choosing cities (#414): search and browse are one tap away in My
@@ -76,11 +69,10 @@ export default function Home() {
 }
 
 /**
- * Longest the server render may spend resolving the seeded location and its
- * weather. Past it the page streams the client home (which paints the last
- * place from the device, else loads Harare from the Worker itself) instead of
- * holding the first paint: an installed iOS app sat on its loading screen for
- * 30 s behind a slow upstream.
+ * Longest the server render may spend resolving the seeded location. Past it
+ * the page streams the client home (which paints the last place from the
+ * device, else shows Harare) instead of holding the first paint: an installed
+ * iOS app sat on its loading screen for 30 s behind a slow upstream.
  */
 const HOME_SEED_DEADLINE_MS = 3_500;
 
@@ -215,28 +207,20 @@ async function buildHome() {
       _id?: unknown;
     };
 
-  // Same double-caught weather fetch as the /{slug} page — the home shell
-  // ALWAYS renders, worst case with seasonal estimates.
-  const { weather, usingFallback, frostAlert } =
-    await loadLocationWeather(seededLocation);
-  const location = reconcileElevation(
-    reconcileCountry(seededLocation, weather.timezone),
-    weather.elevation,
-  );
-
+  // The place and its season, no weather: this page never calls the weather
+  // Worker or Open-Meteo (issue #414). The visitor's own browser fetches the
+  // forecast, painted over the copy stored on the device.
+  const location = seededLocation;
   const countryCode = (location.country ?? "").toUpperCase();
   const [countryDoc, season] = await Promise.all([
     countryCode
       ? getCountryByCode(countryCode).catch(() => null)
       : Promise.resolve(null),
-    getSeasonForDate(new Date(), location.country ?? "", location.lat ?? 0),
+    seasonWithinBudget(countryCode, location.lat ?? 0),
   ]);
 
-  const initial: HomeWeatherPayload = {
+  const initial: PlaceSeed = {
     location,
-    weather,
-    usingFallback,
-    frostAlert,
     season,
     countryName: countryDoc?.name ?? countryDisplayName(countryCode),
   };

@@ -1,6 +1,6 @@
 /**
- * LocationNotFound is the site-wide 404 (rendered by the root not-found.tsx
- * as well as `[location]/not-found.tsx`). Its layout comes from NotFoundView,
+ * LocationNotFound is the site-wide 404 (rendered by the root not-found.tsx,
+ * which also catches `[location]` pages and sub-routes). Its layout comes from NotFoundView,
  * which sits in PageShell, so it inherits the single <main id="main-content">
  * skip-link target and the mobile-nav bottom clearance. Its server HTML must
  * carry the landmark and the heading too (#263): visitors and crawlers
