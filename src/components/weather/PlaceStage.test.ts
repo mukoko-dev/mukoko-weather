@@ -26,7 +26,10 @@ describe("PlaceStage — what the page waits for and what it shows", () => {
   });
 
   it("never renders weather it did not get from memory, the device or the visitor's own request", () => {
-    expect(stage).toContain("fetchHomeWeather(lat, lon, signal)");
+    // Through the shared Worker read (worker-data.ts), never a raw fetchWorker.
+    expect(stage).toContain("fetchHomeWeather(lat, lon)");
+    expect(stage).not.toContain("fetchWorker");
+    expect(stage).toContain('workerData.invalidate("weather", { lat, lon })');
     expect(stage).toContain("recallPlace(slug)");
     expect(stage).not.toContain("createFallbackWeather");
   });

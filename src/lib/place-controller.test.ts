@@ -127,6 +127,8 @@ interface Harness {
   /** Make fetchWeather wait until released; returns the release function. */
   hold(slug: string): () => void;
   failFetch: { on: boolean };
+  /** Run every scheduled retry timer now; the delays asked for, in order. */
+  runTimers(): Promise<number[]>;
   fallbackAnswer: { on: boolean };
   path: { current: string };
   places: Map<string, PlaceSeed>;
@@ -147,6 +149,7 @@ function harness(initialPath: string): Harness {
   const failFetch = { on: false };
   const fallbackAnswer = { on: false };
   const path = { current: initialPath };
+  const timers: Array<{ fn: () => void; ms: number; cancelled: boolean }> = [];
   const places = new Map<string, PlaceSeed>([
     ["harare", HARARE],
     ["nairobi-ke", NAIROBI],
@@ -188,6 +191,13 @@ function harness(initialPath: string): Harness {
     },
     onShow: ({ seed: s, url }) => calls.shown.push(`${s.location.slug}:${url}`),
     recallTimeoutMs: 30,
+    schedule: (fn, ms) => {
+      const timer = { fn, ms, cancelled: false };
+      timers.push(timer);
+      return () => {
+        timer.cancelled = true;
+      };
+    },
   };
   return {
     deps,
@@ -198,6 +208,12 @@ function harness(initialPath: string): Harness {
     fallbackAnswer,
     path,
     places,
+    async runTimers() {
+      const due = timers.splice(0).filter((t) => !t.cancelled);
+      for (const t of due) t.fn();
+      await new Promise((r) => setTimeout(r, 5));
+      return due.map((t) => t.ms);
+    },
     hold(slug) {
       let release!: () => void;
       holds.set(
@@ -333,8 +349,9 @@ describe("start: the server's place, then the device, then the visitor's own req
     expect(c.getState().view).toBeNull();
     await new Promise((r) => setTimeout(r, 120));
     expect(temp(c.getState())).toBe(21);
-    expect(c.getState().failed).toBe(true);
     expect(c.getState().device).not.toBeNull();
+    for (let i = 0; i < 3; i++) await h.runTimers();
+    expect(c.getState().failed).toBe(true);
   });
 
   it("ignores a slow device's copy once the live forecast is on screen", async () => {
@@ -445,6 +462,7 @@ describe("switching places is a state change", () => {
     await c.showSlug("lagos-ng"); // swiped on before B's forecast arrived
     releaseB();
     await toB;
+    await new Promise((r) => setTimeout(r, 5)); // B's late answer lands
     expect(c.getState().seed?.location.slug).toBe("lagos-ng");
     expect(temp(c.getState())).toBe(6);
     // B's answer was paid for: swiping back to B needs no request.
@@ -646,7 +664,7 @@ describe("My Location (the silent-URL home)", () => {
 });
 
 describe("when the visitor's own request fails", () => {
-  it("shows the skeleton state with failed set, and Try again fetches again", async () => {
+  it("retries by itself (2 s, 5 s, 15 s) before it shows the notice, and recovers when the Worker does", async () => {
     const h = harness("/harare");
     h.failFetch.on = true;
     const c = createPlaceController(h.deps, {
@@ -654,11 +672,38 @@ describe("when the visitor's own request fails", () => {
       isHome: false,
       path: "/harare",
     });
-    const result = await c.start();
-    expect(result).toEqual({ shown: true, failed: true });
+    // The first failure: the skeleton stays and no notice yet.
+    expect(await c.start()).toEqual({ shown: true, failed: true });
+    expect(c.getState().failed).toBe(false);
+    expect(c.getState().fetching).toBe(true);
+
+    expect(await h.runTimers()).toEqual([2_000]);
+    expect(c.getState().failed).toBe(false);
+    // The Worker comes back before the retries run out.
+    h.failFetch.on = false;
+    expect(await h.runTimers()).toEqual([5_000]);
+    expect(temp(c.getState())).toBe(-18);
+    expect(c.getState().failed).toBe(false);
+    expect(c.getState().fetching).toBe(false);
+    expect(h.calls.fetch).toEqual(["harare", "harare", "harare"]);
+  });
+
+  it("shows the notice once the retries are spent, and Try again fetches again, now", async () => {
+    const h = harness("/harare");
+    h.failFetch.on = true;
+    const c = createPlaceController(h.deps, {
+      seed: HARARE,
+      isHome: false,
+      path: "/harare",
+    });
+    await c.start();
+    expect(await h.runTimers()).toEqual([2_000]);
+    expect(await h.runTimers()).toEqual([5_000]);
+    expect(await h.runTimers()).toEqual([15_000]);
     expect(c.getState().view).toBeNull();
     expect(c.getState().failed).toBe(true);
     expect(c.getState().fetching).toBe(false);
+    expect(h.calls.fetch).toHaveLength(4);
 
     h.failFetch.on = false;
     const again = await c.retry();
@@ -667,7 +712,70 @@ describe("when the visitor's own request fails", () => {
     expect(temp(c.getState())).toBe(-18);
   });
 
-  it("keeps the device copy on screen and says it is not live", async () => {
+  it("a retry reads past the shared store's remembered failure", async () => {
+    const h = harness("/harare");
+    const forced: boolean[] = [];
+    const inner = h.deps.fetchWeather;
+    h.deps.fetchWeather = (lat, lon, signal, options) => {
+      forced.push(options?.force ?? false);
+      return inner(lat, lon, signal, options);
+    };
+    h.failFetch.on = true;
+    const c = createPlaceController(h.deps, {
+      seed: HARARE,
+      isHome: false,
+      path: "/harare",
+    });
+    await c.start();
+    await h.runTimers();
+    h.failFetch.on = false;
+    await c.retry();
+    // The first attempt is a normal read; every retry (timer or button) forces.
+    expect(forced).toEqual([false, true, true]);
+  });
+
+  it("the browser coming back online makes one more attempt", async () => {
+    const h = harness("/harare");
+    h.failFetch.on = true;
+    const c = createPlaceController(h.deps, {
+      seed: HARARE,
+      isHome: false,
+      path: "/harare",
+    });
+    await c.start();
+    await h.runTimers();
+    await h.runTimers();
+    await h.runTimers();
+    expect(c.getState().failed).toBe(true);
+    const before = h.calls.fetch.length;
+
+    h.failFetch.on = false;
+    h.clock.now += 5_000;
+    c.nudge("online");
+    await new Promise((r) => setTimeout(r, 5));
+    expect(h.calls.fetch.length).toBe(before + 1);
+    expect(temp(c.getState())).toBe(-18);
+    expect(c.getState().failed).toBe(false);
+  });
+
+  it("leaving a place stops its retries", async () => {
+    const h = harness("/harare");
+    h.failFetch.on = true;
+    const c = createPlaceController(h.deps, {
+      seed: HARARE,
+      isHome: false,
+      path: "/harare",
+    });
+    await c.start();
+    h.failFetch.on = false;
+    await c.showSlug("nairobi-ke");
+    const before = h.calls.fetch.length;
+    expect(await h.runTimers()).toEqual([]); // Harare's retry timer was cancelled
+    expect(h.calls.fetch.length).toBe(before);
+    expect(c.getState().seed?.location.slug).toBe("nairobi-ke");
+  });
+
+  it("keeps the device copy on screen and says it is not live, once the retries are spent", async () => {
     const h = harness("/harare");
     h.stored.set("harare", storedView(HARARE, 21, REFRESH_AFTER_MS + 60_000));
     h.failFetch.on = true;
@@ -677,6 +785,8 @@ describe("when the visitor's own request fails", () => {
       path: "/harare",
     });
     await c.start();
+    expect(temp(c.getState())).toBe(21);
+    for (let i = 0; i < 3; i++) await h.runTimers();
     expect(temp(c.getState())).toBe(21);
     expect(c.getState().failed).toBe(true);
     expect(c.getState().device).not.toBeNull();

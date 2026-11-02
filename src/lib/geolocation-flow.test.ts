@@ -4,6 +4,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { detectUserLocation } from "./geolocation";
+import { workerData } from "./worker-data";
 
 function stubGps(lat: number, lon: number) {
   vi.stubGlobal("navigator", {
@@ -29,6 +30,7 @@ function answer(body: unknown, status = 200) {
 }
 
 beforeEach(() => {
+  workerData.reset();
   vi.stubEnv("NEXT_PUBLIC_WEATHER_API_URL", "https://weather-api.test");
 });
 afterEach(() => {

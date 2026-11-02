@@ -22,6 +22,11 @@ const withSerwist = withSerwistInit({
   // (it was never there). A new revision per build keeps it current.
   additionalPrecacheEntries: [{ url: "/offline", revision: randomUUID() }],
   disable: process.env.NODE_ENV === "development",
+  // The default injects `window.addEventListener("online", () =>
+  // location.reload())`, which restarts the whole app (and drops the open
+  // sheet, the scroll position and the place being read) every time the
+  // browser reports it is back online. Data refreshes on its own cadence.
+  reloadOnOnline: false,
 });
 
 const nextConfig: NextConfig = {

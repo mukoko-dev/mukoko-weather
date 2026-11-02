@@ -52,7 +52,7 @@ describe("CurrentLocationHome — silent-URL model", () => {
       resolve(__dirname, "../components/weather/PlaceStage.tsx"),
       "utf-8",
     );
-    expect(stage).toContain("fetchHomeWeather(lat, lon, signal)");
+    expect(stage).toContain("fetchHomeWeather(lat, lon)");
   });
 
   it("does not remount the dashboard per location: the stage keeps it mounted", () => {
@@ -158,32 +158,33 @@ describe("CurrentLocationHome — silent-URL model", () => {
   });
 });
 
-describe("CurrentLocationHome — GPS chooser fallback", () => {
-  it("keeps the manual GPS + browse fallback for visitors with nothing seeded", () => {
-    expect(source).toContain("Use my current location");
-    expect(source).toContain("Browse all locations");
-    expect(source).toContain("Find your weather");
+describe("CurrentLocationHome — never a chooser (#414)", () => {
+  it("has no city chooser: Harare loads instead, and search and browse live elsewhere", () => {
+    expect(source).not.toContain("Use my current location");
+    expect(source).not.toContain("Browse all locations");
+    expect(source).not.toContain("Find your weather");
+    expect(source).toContain(
+      "controller.showHome(seedFor(remembered ?? defaultHomeLocation()))",
+    );
   });
 
   it("accepts a created location from the lookup", () => {
     expect(source).toContain('result.status !== "created"');
   });
 
-  it("never blocks the screen while GPS runs — the button shows progress", () => {
-    // The old full-screen "Finding your location…" scene had no way out.
-    expect(source).not.toContain("LocationSkeleton");
-    expect(source).toContain('aria-busy={gpsState === "detecting"}');
-    expect(source).toContain("Finding your location…");
+  it("shows the structural skeleton (with a guaranteed exit) while Harare loads", () => {
+    // The place stage never leaves it stuck: a failed forecast request ends in
+    // the retry notice (PlaceLoadNotice), never made-up numbers.
+    expect(source).toContain("return <LocationSkeleton />;");
   });
 
-  it("always offers search as a way forward", () => {
-    expect(source).toContain("Search for a city");
+  it("always offers search as a way forward (the location card opens My Weather)", () => {
     expect(source).toContain("onSearch={() => openMyWeather()}");
   });
 
-  it("keeps the accessible main landmark in the chooser state", () => {
-    expect(source).toContain('id="main-content"');
-    expect(source).toContain("aria-label");
+  it("keeps the location card and the GPS refresh behaviour", () => {
+    expect(source).toContain("<LocationPromptCard");
+    expect(source).toContain('ask !== "refresh-silently"');
   });
 });
 

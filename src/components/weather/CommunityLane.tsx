@@ -9,7 +9,7 @@ import {
 import { CardHitArea } from "@/components/ui/card-hit-area";
 import { fetchSuitabilityRules } from "@/lib/suitability-cache";
 import { getReportTypeInfo } from "@/lib/report-types";
-import { reportsListUrl } from "@/lib/reports-api";
+import { loadReports } from "@/lib/reports-api";
 import { useAppStore } from "@/lib/store";
 import type { WeatherData } from "@/lib/weather";
 import { weatherOffsetSeconds } from "@/lib/location-time";
@@ -177,8 +177,8 @@ export function CommunityLane({
   useEffect(() => {
     if (!slug || activities.length === 0) return;
     let alive = true;
-    fetch(reportsListUrl(slug))
-      .then((res) => (res.ok ? res.json() : { reports: [] }))
+    // Shared with the recent-reports card: one call for both.
+    loadReports<ReportLike>(slug)
       .then((data) => {
         if (alive) setReports(Array.isArray(data?.reports) ? data.reports : []);
       })

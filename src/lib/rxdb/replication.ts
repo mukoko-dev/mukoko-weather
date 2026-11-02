@@ -1,7 +1,8 @@
 /**
  * RxDB replication to the Python backend.
  *
- * Preferences: bidirectional (push to PATCH /v1/devices/{id}, pull from GET /v1/devices/{id} on the Rust Worker)
+ * Preferences: bidirectional (push to PATCH /v1/devices/{id}, pull from GET /v1/devices/{id} on the Rust Worker;
+ * a 404 creates the profile once with POST /v1/devices, see device-profile.ts)
  * Suitability rules: pull-only (GET /v1/suitability on the Rust Worker every 10 min)
  *
  * Uses leader election — only the leader tab replicates to avoid conflicts.
@@ -15,8 +16,12 @@ import {
   preferencesCollection,
   suitabilityRulesCollection,
 } from "./collections";
-import { fetchWorker, workerUrl } from "../weather-api";
+import { fetchWorker } from "../weather-api";
 import { getDeviceId } from "./bridge";
+import {
+  createDeviceProfileClient,
+  type DevicePrefsBody,
+} from "./device-profile";
 import type { PreferencesDocType } from "./schemas";
 
 // ---------------------------------------------------------------------------
@@ -24,17 +29,6 @@ import type { PreferencesDocType } from "./schemas";
 // ---------------------------------------------------------------------------
 
 const RULES_PULL_INTERVAL_MS = 10 * 60_000; // 10 min
-
-/** UUID v4 format — validates deviceId before interpolating into URL paths. */
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function validateDeviceId(id: string): string {
-  if (!UUID_RE.test(id)) {
-    throw new Error(`Invalid device ID format: ${id.slice(0, 20)}`);
-  }
-  return id;
-}
 
 // ---------------------------------------------------------------------------
 // Replication state
@@ -48,11 +42,33 @@ let rulesRefreshTimer: ReturnType<typeof setInterval> | null = null;
 // Preferences replication (bidirectional)
 // ---------------------------------------------------------------------------
 
+/** The slice of a preferences document the Worker's profile carries. */
+function toPrefsBody(prefs: PreferencesDocType): DevicePrefsBody {
+  return {
+    theme: prefs.theme,
+    selectedLocation: prefs.selectedLocation,
+    savedLocations: prefs.savedLocations,
+    locationLabels: prefs.locationLabels,
+    selectedActivities: prefs.selectedActivities,
+    hasOnboarded: prefs.hasOnboarded,
+    selectedForecastModel: prefs.selectedForecastModel,
+  };
+}
+
 async function startPrefsReplication(): Promise<void> {
   const col = await preferencesCollection();
   if (!col) return;
 
-  const deviceId = validateDeviceId(getDeviceId());
+  const deviceId = getDeviceId();
+  // Creates the device's profile on the Worker the first time it is missing
+  // (a 404), backs off on failure and never loops on a 404 (device-profile.ts).
+  const profile = createDeviceProfileClient({
+    deviceId,
+    localPrefs: async () => {
+      const local = await col.findOne(deviceId).exec();
+      return local ? toPrefsBody(local) : null;
+    },
+  });
 
   prefsReplication = replicateRxCollection<PreferencesDocType, unknown>({
     collection: col,
@@ -66,26 +82,9 @@ async function startPrefsReplication(): Promise<void> {
       handler: async (changeRows) => {
         for (const row of changeRows) {
           if (!row.newDocumentState) continue;
-          const prefs = row.newDocumentState;
-
-          try {
-            await fetch(workerUrl(`devices/${deviceId}`, ""), {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                theme: prefs.theme,
-                selectedLocation: prefs.selectedLocation,
-                savedLocations: prefs.savedLocations,
-                locationLabels: prefs.locationLabels,
-                selectedActivities: prefs.selectedActivities,
-                hasOnboarded: prefs.hasOnboarded,
-                selectedForecastModel: prefs.selectedForecastModel,
-              }),
-            });
-          } catch {
-            // Network error — will retry automatically
-            throw new Error("Push failed — will retry");
-          }
+          // Throws when the push should be retried later (offline, a failing
+          // Worker, backing off); RxDB then calls this handler again.
+          await profile.push(toPrefsBody(row.newDocumentState));
         }
         return [];
       },
@@ -97,11 +96,8 @@ async function startPrefsReplication(): Promise<void> {
       // full profile, so incremental pull optimization doesn't apply here.
       handler: async (_lastCheckpoint, _batchSize) => {
         try {
-          const res = await fetchWorker(`devices/${deviceId}`, "");
-          if (!res.ok) return { documents: [], checkpoint: null };
-
-          const profile = await res.json();
-          const serverPrefs = profile.preferences;
+          const server = await profile.pull();
+          const serverPrefs = server?.preferences;
           if (!serverPrefs) return { documents: [], checkpoint: null };
 
           // homeLocation is device-local until the device profile API carries

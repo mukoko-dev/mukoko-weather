@@ -27,7 +27,7 @@ describe("RecentReports structure", () => {
 
 describe("data fetching", () => {
   it("fetches reports from the Worker's GET /v1/reports", () => {
-    expect(source).toContain("reportsListUrl(locationSlug)");
+    expect(source).toContain("loadReports<Report>(locationSlug)");
     expect(source).not.toContain("/api/py/reports");
   });
 

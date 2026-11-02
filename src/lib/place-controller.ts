@@ -24,6 +24,10 @@
  *   in memory, so swiping back needs no request.
  * - A Worker answer that is the seasonal estimate never replaces real data
  *   already on screen.
+ * - A failed request is retried by the shared recovery rules (live-fetch.ts:
+ *   about 2 s, 5 s and 15 s, `Retry-After` honoured, one more attempt when
+ *   the browser comes back online or the page becomes visible). Only when
+ *   those are spent is `failed` set, which shows the "Try again" notice.
  */
 
 import type { WeatherLocation } from "./locations";
@@ -38,6 +42,8 @@ import {
   type Freshness,
 } from "./device-weather";
 import { createLatestRequests, type LatestRequest } from "./latest-request";
+import { createLiveFetch, type LiveFetch } from "./live-fetch";
+import { classifyTransportError } from "./worker-data";
 import { countryDisplayName, reconcileCountry } from "./location-country";
 import { reconcileElevation } from "./location-elevation";
 import { pathOfTarget, placeTargetOf, type PlaceTarget } from "./place-target";
@@ -72,11 +78,17 @@ export interface PlaceDeps {
   now(): number;
   /** The stored copy of a place (memory misses fall through to the device). */
   recall(slug: string): Promise<DeviceView | null>;
-  /** Live weather from the Worker (the visitor's own request). */
+  /**
+   * Live weather from the Worker (the visitor's own request, through the
+   * shared Worker read: one call per place, a remembered failure replayed).
+   * `force`: read again past a remembered failure (the visitor pressed
+   * "Try again").
+   */
   fetchWeather(
     lat: number,
     lon: number,
     signal: AbortSignal,
+    options?: { force?: boolean },
   ): Promise<{ weather: WeatherData; usingFallback: boolean }>;
   /** A place for a slug the stage has not seen (catalogue, Worker, spot). */
   resolve(slug: string, signal: AbortSignal): Promise<PlaceSeed | null>;
@@ -89,6 +101,8 @@ export interface PlaceDeps {
   onShow?(event: { seed: PlaceSeed; isHome: boolean; url: UrlAction }): void;
   /** Longest to wait for the device before fetching without it. */
   recallTimeoutMs?: number;
+  /** Run `fn` after `ms`; returns the canceller. Default: setTimeout. */
+  schedule?: (fn: () => void, ms: number) => () => void;
 }
 
 // ── In-memory copies ────────────────────────────────────────────────────────
@@ -243,8 +257,10 @@ export interface PlaceController {
   reconcile(pathname: string): Promise<boolean>;
   /** Show a target (used by the switch bus). */
   showTarget(target: PlaceTarget, url?: UrlAction): Promise<boolean>;
-  /** Fetch the place on screen again. */
+  /** Fetch the place on screen again, now ("Try again"). */
   retry(): Promise<PresentResult>;
+  /** The browser came online / the page became visible: one more attempt if the last failed. */
+  nudge(reason: "online" | "visible"): void;
   /** The place `/` shows, when this stage knows it. */
   homeSeed(): PlaceSeed | null;
   dispose(): void;
@@ -298,42 +314,106 @@ export function createPlaceController(
       : { found: first, late: null };
   };
 
-  /** Fetch live weather for `seed` and put it on screen if still the latest. */
-  async function refresh(
+  let live: LiveFetch | null = null;
+  let settleLive: ((result: PresentResult) => void) | null = null;
+
+  /** Stop retrying for a place the visitor left; release anyone waiting. */
+  function stopLive(): void {
+    live?.stop();
+    live = null;
+    settleLive?.({ shown: false, failed: false });
+    settleLive = null;
+  }
+
+  const begin = (): LatestRequest => {
+    stopLive();
+    return requests.begin();
+  };
+
+  /**
+   * Fetch live weather for `seed` and put it on screen if still the latest.
+   * Resolves at the first outcome (a forecast, or the first failure); the
+   * retries carry on in the background and set `failed` only when spent.
+   */
+  function refresh(
     req: LatestRequest,
     seed: PlaceSeed,
     held: DeviceView | null,
+    force = false,
   ): Promise<PresentResult> {
+    stopLive();
     set({ fetching: true, failed: false });
-    try {
-      const { weather, usingFallback } = await deps.fetchWeather(
-        seed.location.lat,
-        seed.location.lon,
-        req.signal,
-      );
-      const view = liveViewFor(seed, weather, usingFallback);
-      const at = deps.now();
-      // Kept even if the visitor already moved on: the request was paid for.
-      rememberInMemory(view, at);
-      if (!req.isLatest()) return { shown: false, failed: false };
-      if (usingFallback && held) {
-        // The seasonal estimate never replaces a real forecast.
-        set({ fetching: false, failed: true });
-        return { shown: true, failed: true };
-      }
-      set({
-        seed: { ...seed, location: view.location },
-        view,
-        device: null,
-        fetching: false,
-        failed: false,
+    return new Promise<PresentResult>((resolve) => {
+      let settled = false;
+      const settle = (result: PresentResult) => {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      };
+      settleLive = settle;
+
+      const apply = (value: {
+        weather: WeatherData;
+        usingFallback: boolean;
+      }) => {
+        const view = liveViewFor(seed, value.weather, value.usingFallback);
+        if (!req.isLatest()) return settle({ shown: false, failed: false });
+        if (value.usingFallback && held) {
+          // The seasonal estimate never replaces a real forecast.
+          set({ fetching: false, failed: true });
+          return settle({ shown: true, failed: true });
+        }
+        set({
+          seed: { ...seed, location: view.location },
+          view,
+          device: null,
+          fetching: false,
+          failed: false,
+        });
+        settle({ shown: true, failed: false });
+      };
+
+      const fetcher = createLiveFetch<{
+        weather: WeatherData;
+        usingFallback: boolean;
+      }>({
+        schedule: deps.schedule,
+        now: deps.now,
+        attempt: async ({ force: retrying }) => {
+          try {
+            const value = await deps.fetchWeather(
+              seed.location.lat,
+              seed.location.lon,
+              req.signal,
+              { force: force || retrying },
+            );
+            // Kept even if the visitor has already moved on (the recovery
+            // stops and drops the answer): the request was paid for.
+            rememberInMemory(
+              liveViewFor(seed, value.weather, value.usingFallback),
+              deps.now(),
+            );
+            return { ok: true, value };
+          } catch (err) {
+            return { ok: false, failure: classifyTransportError(err) };
+          }
+        },
+        onValue: apply,
+        onState: (state) => {
+          if (!req.isLatest()) return;
+          if (state.status === "retrying") {
+            // Still trying: the skeleton stays, no notice yet.
+            set({ fetching: true, failed: false });
+            settle({ shown: true, failed: true });
+          } else if (state.status === "failed") {
+            set({ fetching: false, failed: true });
+            settle({ shown: true, failed: true });
+          }
+        },
       });
-      return { shown: true, failed: false };
-    } catch {
-      if (!req.isLatest()) return { shown: false, failed: false };
-      set({ fetching: false, failed: true });
-      return { shown: true, failed: true };
-    }
+      live = fetcher;
+      fetcher.start();
+    });
   }
 
   async function present(
@@ -400,7 +480,7 @@ export function createPlaceController(
 
     start() {
       if (!state.seed) return Promise.resolve({ shown: false, failed: false });
-      return present(requests.begin(), state.seed, {
+      return present(begin(), state.seed, {
         isHome: state.isHome,
         url: "none",
       });
@@ -421,14 +501,14 @@ export function createPlaceController(
       ) {
         return Promise.resolve({ shown: true, failed: false });
       }
-      return present(requests.begin(), seed, {
+      return present(begin(), seed, {
         isHome: true,
         url: state.isHome ? "none" : "push",
       });
     },
 
     async showSlug(slug, url = "push") {
-      const req = requests.begin();
+      const req = begin();
       // A place we already hold needs no lookup.
       let found = recallFromMemory(slug, deps.now());
       let seed: PlaceSeed | null = found ? seedOfPayload(found.payload) : null;
@@ -453,7 +533,7 @@ export function createPlaceController(
     async showTarget(target, url = "push") {
       if (target.kind === "slug") return controller.showSlug(target.slug, url);
       if (!home) return false;
-      await present(requests.begin(), home, { isHome: true, url });
+      await present(begin(), home, { isHome: true, url });
       return true;
     },
 
@@ -467,7 +547,7 @@ export function createPlaceController(
 
     retry() {
       if (!state.seed) return Promise.resolve({ shown: false, failed: false });
-      const req = requests.begin();
+      const req = begin();
       const held: DeviceView | null =
         state.view && state.device
           ? {
@@ -476,12 +556,17 @@ export function createPlaceController(
               fetchedAt: state.device.fetchedAt,
             }
           : null;
-      return refresh(req, state.seed, held);
+      return refresh(req, state.seed, held, true);
+    },
+
+    nudge(reason) {
+      live?.nudge(reason);
     },
 
     homeSeed: () => home,
 
     dispose() {
+      stopLive();
       requests.cancel();
       listeners.clear();
     },

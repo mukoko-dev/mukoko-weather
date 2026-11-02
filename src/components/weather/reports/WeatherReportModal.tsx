@@ -14,7 +14,11 @@ import {
 import { useAppStore } from "@/lib/store";
 import { trackEvent } from "@/lib/analytics";
 import { REPORT_TYPES } from "@/lib/report-types";
-import { reportRefusal, reportsSubmitUrl } from "@/lib/reports-api";
+import {
+  forgetReports,
+  reportRefusal,
+  reportsSubmitUrl,
+} from "@/lib/reports-api";
 
 const SEVERITIES = [
   { id: "mild", label: "Mild", description: "Noticeable but not disruptive" },
@@ -115,6 +119,8 @@ export function WeatherReportModal() {
         throw new Error(reportRefusal(body, "Failed to submit report"));
       }
 
+      // The kept list for this place is now out of date.
+      forgetReports(selectedLocation);
       setSubmitted(true);
       setStep("confirm");
       trackEvent("report_submitted", {

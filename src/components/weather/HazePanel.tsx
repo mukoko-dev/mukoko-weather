@@ -1,8 +1,7 @@
 "use client";
 
-import { roundCoord } from "@/lib/location-privacy";
-import { fetchWorker } from "@/lib/weather-api";
-import { useEffect, useRef, useState, type ComponentType } from "react";
+import { useWorkerData } from "@/lib/use-worker-data";
+import type { ComponentType } from "react";
 import {
   CloudIcon,
   CloudFogIcon,
@@ -52,46 +51,10 @@ const ICON_COMPONENTS: Record<HazeIconKey, IconComponent> = {
   fog: CloudFogIcon,
 };
 
-type HazeState =
-  | { status: "loading" }
-  | { status: "ready"; data: HazeResponse }
-  | { status: "error" };
-
 export function HazePanel({ lat, lon }: Props) {
-  const [state, setState] = useState<HazeState>({ status: "loading" });
-  const abortRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    let cancelled = false;
-
-    fetchWorker("haze", `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`, {
-      signal: controller.signal,
-    })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return (await res.json()) as HazeResponse;
-      })
-      .then((json) => {
-        if (cancelled) return;
-        setState({ status: "ready", data: json });
-      })
-      .catch((err: unknown) => {
-        if (
-          cancelled ||
-          (err as { name?: string } | null)?.name === "AbortError"
-        )
-          return;
-        setState({ status: "error" });
-      });
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [lat, lon]);
+  // Shared read: one `/v1/haze` per 0.05 degree cell, however often this
+  // section is mounted and unmounted by LazySection.
+  const state = useWorkerData<HazeResponse>("haze", { lat, lon });
 
   if (state.status === "loading") {
     return (

@@ -73,9 +73,8 @@ describe("no whole-page reloads", () => {
     const dashboard = sources.find(
       (s) => s.file === "app/[location]/WeatherDashboard.tsx",
     )!;
-    expect(dashboard.text).toContain(
-      "<WeatherUnavailableBanner onRetry={onRetry} />",
-    );
+    // The live-fetch controller's "Try again" (src/lib/live-fetch.ts).
+    expect(dashboard.text).toContain("onRetry={live.retryNow}");
     const stage = sources.find(
       (s) => s.file === "components/weather/PlaceStage.tsx",
     )!;

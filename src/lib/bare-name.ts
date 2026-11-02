@@ -172,6 +172,20 @@ export function bareNameQuery(slug: string): string {
   return slug.replace(/-+/g, " ").trim();
 }
 
+/**
+ * A slug in the older community form `{name}-{cc}` (`london-gb`, the format
+ * every community place used to get): the name and the ISO 3166-1 alpha-2
+ * country the slug claims, or null. The geocoder is asked for the name alone
+ * and a hit counts only when it is in that country.
+ */
+export function legacyCountrySlug(
+  slug: string,
+): { name: string; country: string } | null {
+  const m = /^(.{3,}?)-([a-z]{2})$/.exec(slug);
+  if (!m) return null;
+  return { name: bareNameQuery(m[1]), country: m[2].toUpperCase() };
+}
+
 /** What the redirect may point at: a seed slug or a spot, never anything else. */
 function acceptableTarget(target: unknown, from: string): string | null {
   if (typeof target !== "string" || target === from) return null;
@@ -245,8 +259,10 @@ export interface BareNameOptions {
 }
 
 interface ResolveResponse {
-  locations?: Array<{ slug?: unknown }>;
+  locations?: Array<{ slug?: unknown; country?: unknown }>;
   resolve?: string;
+  /** The answer carried `Cache-Control: no-store`: the Worker's own sign of a degraded (over-budget, outage) answer. */
+  noStore?: boolean;
 }
 
 async function lookup(
@@ -258,24 +274,56 @@ async function lookup(
 ): Promise<string | null> {
   const base = weatherApiBase(env);
   if (!base) return null;
-  const url = `${base}/v1/search?mode=resolve&q=${encodeURIComponent(bareNameQuery(slug))}`;
   const controller = new AbortController();
   // The lookup has its own ceiling, longer than the proxy's wait, so a slow
   // answer still gets cached for the next request.
   const abort = setTimeout(() => controller.abort(), timeoutMs * 4);
-  try {
-    const res = await fetcher(url, {
+  const ask = async (
+    query: string,
+    mode: "resolve" | "search" = "resolve",
+  ): Promise<ResolveResponse> => {
+    const params =
+      mode === "resolve"
+        ? `mode=resolve&q=${encodeURIComponent(query)}`
+        : `q=${encodeURIComponent(query)}&limit=10`;
+    const res = await fetcher(`${base}/v1/search?${params}`, {
       cache: "no-store",
       redirect: "manual",
       signal: controller.signal,
     });
     if (!res.ok) throw new Error(`resolve ${res.status}`);
     const body = (await res.json()) as ResolveResponse;
+    body.noStore = /no-store/i.test(res.headers?.get("Cache-Control") ?? "");
+    return body;
+  };
+  try {
+    let body = await ask(bareNameQuery(slug));
     if (body.resolve === "over_budget" || body.resolve === "unavailable") {
       backoffUntil = now + BARE_BACKOFF_MS;
       return null;
     }
-    const target = acceptableTarget(body.locations?.[0]?.slug, slug);
+    let target = acceptableTarget(body.locations?.[0]?.slug, slug);
+    if (!target) {
+      // `london-gb`: list the places called "london" and take the first one
+      // in GB. (The single best hit of a resolve is the best match in the
+      // world, which is not necessarily the one in that country.)
+      const legacy = legacyCountrySlug(slug);
+      if (legacy) {
+        body = await ask(legacy.name, "search");
+        const inCountry = body.locations?.find(
+          (l) =>
+            typeof l.country === "string" &&
+            l.country.toUpperCase() === legacy.country,
+        );
+        target = acceptableTarget(inCountry?.slug, slug);
+        if (!target && body.noStore) {
+          // A budget-degraded list says nothing about the place: do not
+          // remember it as a miss, but stop asking for a while.
+          backoffUntil = now + BARE_BACKOFF_MS;
+          return null;
+        }
+      }
+    }
     if (target) {
       remember(hits, MAX_BARE_HITS, slug, {
         target,

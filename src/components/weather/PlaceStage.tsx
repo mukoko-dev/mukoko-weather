@@ -14,6 +14,7 @@ import { PlaceLoadNotice } from "@/components/weather/PlaceLoadNotice";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import type { AISummaryUser } from "@/components/weather/AISummary";
 import { fetchHomeWeather } from "@/lib/home-weather";
+import { workerData } from "@/lib/worker-data";
 import {
   createPlaceController,
   type PlaceController,
@@ -48,7 +49,14 @@ function browserDeps(): PlaceDeps {
   return {
     now: () => Date.now(),
     recall: (slug) => recallPlace(slug),
-    fetchWeather: (lat, lon, signal) => fetchHomeWeather(lat, lon, signal),
+    // Through the shared Worker read (src/lib/worker-data.ts) via
+    // fetchHomeWeather: one call per place, never a raw Worker call. The
+    // shared request outlives a place the visitor left, so its answer is
+    // there if they come back; the controller ignores it for the screen.
+    fetchWeather: (lat, lon, _signal, options) => {
+      if (options?.force) workerData.invalidate("weather", { lat, lon });
+      return fetchHomeWeather(lat, lon);
+    },
     resolve: (slug, signal) => resolvePlaceSeed(slug, signal),
     history: {
       path: () => window.location.pathname,
@@ -143,6 +151,21 @@ export function usePlaceStage(
     };
   }, [controller, pathname, router]);
 
+  // The browser coming back online, or the page becoming visible again, is one
+  // more attempt for a place whose forecast has not arrived (live-fetch.ts).
+  useEffect(() => {
+    const onOnline = () => controller.nudge("online");
+    const onVisible = () => {
+      if (document.visibilityState === "visible") controller.nudge("visible");
+    };
+    window.addEventListener("online", onOnline);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [controller]);
+
   const retry = useCallback(() => void controller.retry(), [controller]);
   return { state, controller, retry };
 }
@@ -182,7 +205,6 @@ export function PlaceView({
             user={user}
             isCurrentLocation={isCurrentLocation && state.isHome}
             device={device}
-            onRetry={retry}
           />
         </ChartErrorBoundary>
       ) : (
