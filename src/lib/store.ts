@@ -552,7 +552,9 @@ export function applySyncedPreferences(patch: SyncedPatch): void {
     useAppStore.getState().setTheme(patch.theme as ThemePreference);
   }
   if (patch.selectedForecastModel !== undefined) {
-    useAppStore.getState().setSelectedForecastModel(patch.selectedForecastModel);
+    useAppStore
+      .getState()
+      .setSelectedForecastModel(patch.selectedForecastModel);
   }
   if (patch.selectedActivities !== undefined) {
     const next = [...patch.selectedActivities];

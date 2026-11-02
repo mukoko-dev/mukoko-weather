@@ -95,10 +95,7 @@ describe("ids and vocabulary", () => {
   it("every activity id the app ships fits the data model's id pattern", async () => {
     const { readFileSync } = await import("node:fs");
     const { join } = await import("node:path");
-    const source = readFileSync(
-      join(__dirname, "..", "activities.ts"),
-      "utf8",
-    );
+    const source = readFileSync(join(__dirname, "..", "activities.ts"), "utf8");
     const ids = [...source.matchAll(/^\s+id: "([^"]+)",\s*$/gm)].map(
       (m) => m[1],
     );
@@ -322,7 +319,11 @@ describe("the plaintext gate", () => {
 
   it("the push modifier throws instead of sending a refused document", () => {
     expect(() =>
-      toPushDoc({ ...base, id: "preference:homePlace", preferenceKey: "homePlace" as never }),
+      toPushDoc({
+        ...base,
+        id: "preference:homePlace",
+        preferenceKey: "homePlace" as never,
+      }),
     ).toThrow();
     expect(toPushDoc({ ...base, _deleted: true })).toEqual({
       id: "preference:theme",
@@ -423,7 +424,11 @@ describe("seeding: defaults never win", () => {
       new Set(),
       ctx(),
     );
-    expect(upserts(ops).map((d) => d.id).sort()).toEqual([
+    expect(
+      upserts(ops)
+        .map((d) => d.id)
+        .sort(),
+    ).toEqual([
       "activity:gardening",
       "activity:livestock",
       "preference:forecastModel",
@@ -463,7 +468,9 @@ describe("documents -> state", () => {
     });
 
   it("returns only what differs from the current state", () => {
-    expect(patchFromDocs([theme("dark")], state({ theme: "dark" }))).toEqual({});
+    expect(patchFromDocs([theme("dark")], state({ theme: "dark" }))).toEqual(
+      {},
+    );
     expect(patchFromDocs([theme("dark")], state())).toEqual({ theme: "dark" });
   });
 

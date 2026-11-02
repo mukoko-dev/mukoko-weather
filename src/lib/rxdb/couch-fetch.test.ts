@@ -1,14 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  CouchHttpError,
-  createCouchFetch,
-  filterChanges,
-} from "./couch-fetch";
+import { CouchHttpError, createCouchFetch, filterChanges } from "./couch-fetch";
 
 const DB = "https://api.test/v1/couch/db/user_abc/";
 const TOKEN = "secret-token-value-0123456789";
 
-function transport(handler: (req: { url: string; init: RequestInit }) => Response) {
+function transport(
+  handler: (req: { url: string; init: RequestInit }) => Response,
+) {
   return vi.fn(async (input: string | URL | Request, init?: RequestInit) =>
     handler({ url: String(input), init: init ?? {} }),
   ) as unknown as typeof fetch & ReturnType<typeof vi.fn>;
@@ -130,12 +128,19 @@ describe("_changes filtering", () => {
       { id: "preference:homePlace", doc: {} },
       { id: "savedPlace:0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b", doc: {} },
       { id: "_design/nyuchi", doc: {} },
-      { id: "activity:gone", deleted: true, doc: { _id: "activity:gone", _deleted: true } },
+      {
+        id: "activity:gone",
+        deleted: true,
+        doc: { _id: "activity:gone", _deleted: true },
+      },
     ],
   };
 
   it("keeps only owned ids and the checkpoint", () => {
-    const out = filterChanges(feed) as { results: { id: string }[]; last_seq: string };
+    const out = filterChanges(feed) as {
+      results: { id: string }[];
+      last_seq: string;
+    };
     expect(out.results.map((r) => r.id)).toEqual([
       "activity:livestock",
       "preference:theme",

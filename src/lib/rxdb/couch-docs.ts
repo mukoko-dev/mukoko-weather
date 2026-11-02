@@ -203,7 +203,9 @@ export function assertPlaintextDoc(doc: UserDocType): void {
       !(SYNCED_PREFERENCE_KEYS as readonly string[]).includes(key) ||
       doc.id !== preferenceDocId(key)
     ) {
-      throw new Error("couch-sync: refused a preference this client does not own");
+      throw new Error(
+        "couch-sync: refused a preference this client does not own",
+      );
     }
     const ok =
       key === "theme"
@@ -416,7 +418,12 @@ export function planChangeOps(
   if (prev.theme !== next.theme && isThemeValue(next.theme)) {
     ops.push({
       kind: "upsert",
-      doc: prefDoc("theme", next.theme, live.get(preferenceDocId("theme")), ctx),
+      doc: prefDoc(
+        "theme",
+        next.theme,
+        live.get(preferenceDocId("theme")),
+        ctx,
+      ),
     });
   }
   if (
@@ -482,7 +489,12 @@ export function planSeedOps(
   ) {
     ops.push({
       kind: "upsert",
-      doc: prefDoc("forecastModel", state.selectedForecastModel, undefined, ctx),
+      doc: prefDoc(
+        "forecastModel",
+        state.selectedForecastModel,
+        undefined,
+        ctx,
+      ),
     });
   }
   for (const id of state.selectedActivities) {

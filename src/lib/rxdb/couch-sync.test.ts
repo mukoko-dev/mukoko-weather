@@ -63,7 +63,9 @@ describe("a normal cycle", () => {
   });
 
   it("pushes the seeds of settings that predate sync in a second replication", async () => {
-    const h = harness({ bridge: { theme: "dark", selectedActivities: ["livestock"] } });
+    const h = harness({
+      bridge: { theme: "dark", selectedActivities: ["livestock"] },
+    });
     const engine = await started(h);
     expect(h.stores[0].upserts.sort()).toEqual([
       "activity:livestock",
@@ -87,7 +89,10 @@ describe("credential lifetime", () => {
     const h = harness();
     const engine = await started(h);
     expect(h.sessions.fetched).toBe(1);
-    await h.clock.advance(600_000 - REFRESH_LEAD_MS - 1_000, settleWith(engine));
+    await h.clock.advance(
+      600_000 - REFRESH_LEAD_MS - 1_000,
+      settleWith(engine),
+    );
     expect(h.sessions.fetched).toBe(1);
     await h.clock.advance(1_000, settleWith(engine));
     expect(h.sessions.fetched).toBe(2);
@@ -199,8 +204,14 @@ describe("failures", () => {
         await h.clock.advance(next, settleWith(engine));
       }
       expect(waits).toEqual([
-        30_000, 60_000, 120_000, 240_000, 480_000,
-        BACKOFF_MAX_MS, BACKOFF_MAX_MS, BACKOFF_MAX_MS,
+        30_000,
+        60_000,
+        120_000,
+        240_000,
+        480_000,
+        BACKOFF_MAX_MS,
+        BACKOFF_MAX_MS,
+        BACKOFF_MAX_MS,
       ]);
       expect(engine.status()).toBe("backing_off");
       expect(h.stores).toHaveLength(0);
@@ -392,7 +403,10 @@ describe("local changes", () => {
     const engine = await started(h);
     h.flags.online = false;
     h.bridge.change({ theme: "dark" });
-    await h.clock.advance(LOCAL_WRITE_DEBOUNCE_MS + PUSH_DEBOUNCE_MS, settleWith(engine));
+    await h.clock.advance(
+      LOCAL_WRITE_DEBOUNCE_MS + PUSH_DEBOUNCE_MS,
+      settleWith(engine),
+    );
     expect(store.upserts).toEqual(["preference:theme"]);
     const before = store.replications;
     h.flags.online = true;
@@ -425,7 +439,10 @@ describe("local changes", () => {
     const engine = await started(h);
     expect(h.bridge.state.theme).toBe("dark");
     expect(h.bridge.applied).toEqual([{ theme: "dark" }]);
-    await h.clock.advance(LOCAL_WRITE_DEBOUNCE_MS + PUSH_DEBOUNCE_MS, settleWith(engine));
+    await h.clock.advance(
+      LOCAL_WRITE_DEBOUNCE_MS + PUSH_DEBOUNCE_MS,
+      settleWith(engine),
+    );
     expect(store.upserts).toEqual([]);
     await engine.stop();
   });
@@ -451,7 +468,10 @@ describe("local changes", () => {
     };
     const engine = await started(h);
     // Both survive: the remote one is applied, the local one was flushed first.
-    expect([...h.bridge.state.selectedActivities].sort()).toEqual(["livestock", "old"]);
+    expect([...h.bridge.state.selectedActivities].sort()).toEqual([
+      "livestock",
+      "old",
+    ]);
     await engine.stop();
   });
 });

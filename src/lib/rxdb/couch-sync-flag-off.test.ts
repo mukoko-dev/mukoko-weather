@@ -139,7 +139,9 @@ function staticImportersOf(name: string): string[] {
     `^\\s*(?:import|export)\\s+(?!type\\b)[^;]*?from\\s+["'][^"']*/${name}["']`,
     "m",
   );
-  return files.filter((f) => !rel(f).startsWith("lib/rxdb/couch-") && re.test(text(f))).map(rel);
+  return files
+    .filter((f) => !rel(f).startsWith("lib/rxdb/couch-") && re.test(text(f)))
+    .map(rel);
 }
 
 describe("source", () => {

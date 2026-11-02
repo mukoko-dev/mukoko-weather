@@ -43,7 +43,15 @@ export interface RecordedCall {
   status: number;
 }
 
-const DENIED_PARAMS = new Set(["view", "style_not", "purge", "rev_limit", "w", "q", "n"]);
+const DENIED_PARAMS = new Set([
+  "view",
+  "style_not",
+  "purge",
+  "rev_limit",
+  "w",
+  "q",
+  "n",
+]);
 const CHANGES_LIMIT_MAX = 1000;
 
 type Validator = (
@@ -105,7 +113,10 @@ export function classify(method: string, path: string): Decision {
     }
     return { allowed: false, status: 403, reason: "endpoint_not_allowed" };
   }
-  return { allowed: true, kind: parts.length === 1 ? "document" : "attachment" };
+  return {
+    allowed: true,
+    kind: parts.length === 1 ? "document" : "attachment",
+  };
 }
 
 /** Port of `couch_proxy_policy.check_query`: the query, or a reason to refuse. */
@@ -117,7 +128,8 @@ export function checkQuery(
   for (const [key, rawValue] of params) {
     let value = rawValue;
     const low = key.toLowerCase();
-    if (DENIED_PARAMS.has(low)) return { query: [], reason: `parameter_not_allowed:${low}` };
+    if (DENIED_PARAMS.has(low))
+      return { query: [], reason: `parameter_not_allowed:${low}` };
     if (low === "feed" && kind === "changes") {
       if (value !== "normal" && value !== "longpoll") {
         return { query: [], reason: "feed_not_allowed" };
@@ -175,7 +187,9 @@ export class FakeCouch {
   }
 
   liveIds(): string[] {
-    return [...this.docs.entries()].filter(([, s]) => !s.deleted).map(([id]) => id);
+    return [...this.docs.entries()]
+      .filter(([, s]) => !s.deleted)
+      .map(([id]) => id);
   }
 
   /** Write a document directly, as another device would have (validated). */
@@ -185,15 +199,27 @@ export class FakeCouch {
   }
 
   /** `fetch`-shaped entry point for the replication plugin. */
-  fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-    const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+  fetch = async (
+    input: string | URL | Request,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    const url = new URL(
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url,
+    );
     const method = (init?.method ?? "GET").toUpperCase();
     const headers = new Headers(init?.headers);
     const auth = headers.get("authorization");
     const marker = `/v1/couch/db/user_${this.personId}`;
     const idx = url.pathname.indexOf(marker);
-    const path = idx < 0 ? "" : url.pathname.slice(idx + marker.length).replace(/^\//, "");
-    const body = init?.body ? (JSON.parse(String(init.body)) as unknown) : undefined;
+    const path =
+      idx < 0 ? "" : url.pathname.slice(idx + marker.length).replace(/^\//, "");
+    const body = init?.body
+      ? (JSON.parse(String(init.body)) as unknown)
+      : undefined;
 
     const respond = (status: number, payload: unknown): Response => {
       this.calls.push({
@@ -214,23 +240,35 @@ export class FakeCouch {
       this.failNext.count -= 1;
       const { status } = this.failNext;
       if (status === 0) {
-        this.calls.push({ method, path, query: url.search, authorization: auth, body, status: 0 });
+        this.calls.push({
+          method,
+          path,
+          query: url.search,
+          authorization: auth,
+          body,
+          status: 0,
+        });
         throw new TypeError("network error");
       }
       return respond(status, { error: "injected" });
     }
     if (idx < 0) return respond(404, { detail: "No such database." });
-    if (auth !== `Bearer ${this.token}`) return respond(401, { detail: "Invalid or expired token" });
+    if (auth !== `Bearer ${this.token}`)
+      return respond(401, { detail: "Invalid or expired token" });
 
     const decision = classify(method, path);
     if (!decision.allowed) {
-      return respond(decision.status ?? 403, { detail: `Not allowed: ${decision.reason}` });
+      return respond(decision.status ?? 403, {
+        detail: `Not allowed: ${decision.reason}`,
+      });
     }
     const q = checkQuery(decision.kind ?? "", [...url.searchParams.entries()]);
     if (q.reason) return respond(400, { detail: `Not allowed: ${q.reason}` });
     if (decision.kind === "bulk_docs") {
       const b = body as Json | undefined;
-      const extra = b ? Object.keys(b).filter((k) => k !== "docs" && k !== "new_edits") : [];
+      const extra = b
+        ? Object.keys(b).filter((k) => k !== "docs" && k !== "new_edits")
+        : [];
       if (!b || !Array.isArray(b.docs) || extra.length > 0) {
         return respond(400, { detail: "Not allowed: body_not_allowed" });
       }
@@ -241,7 +279,10 @@ export class FakeCouch {
       case "_changes":
         return respond(200, this.changes(params));
       case "_all_docs":
-        return respond(200, this.allDocs(method, params, body as Json | undefined));
+        return respond(
+          200,
+          this.allDocs(method, params, body as Json | undefined),
+        );
       case "_bulk_docs":
         return respond(201, this.bulkDocs((body as Json).docs as Json[]));
       case "":
@@ -267,21 +308,34 @@ export class FakeCouch {
       if (includeDocs) row.doc = this.get(id);
       return row;
     });
-    const last = rows.length > 0 ? rows[rows.length - 1][1].seq : since || this.seq;
+    const last =
+      rows.length > 0 ? rows[rows.length - 1][1].seq : since || this.seq;
     return { results, last_seq: last, pending: 0 };
   }
 
-  private allDocs(method: string, params: Map<string, string>, body: Json | undefined): Json {
+  private allDocs(
+    method: string,
+    params: Map<string, string>,
+    body: Json | undefined,
+  ): Json {
     const keys: string[] =
       method === "POST"
         ? ((body?.keys as string[]) ?? [])
         : (JSON.parse(params.get("keys") ?? "[]") as string[]);
     const includeDocs =
-      method === "POST" ? body?.include_docs === true : params.get("include_docs") === "true";
+      method === "POST"
+        ? body?.include_docs === true
+        : params.get("include_docs") === "true";
     const rows = keys.map((key) => {
       const s = this.docs.get(key);
       if (!s) return { key, error: "not_found" };
-      if (s.deleted) return { id: key, key, value: { rev: s.rev, deleted: true }, doc: null };
+      if (s.deleted)
+        return {
+          id: key,
+          key,
+          value: { rev: s.rev, deleted: true },
+          doc: null,
+        };
       const row: Json = { id: key, key, value: { rev: s.rev } };
       if (includeDocs) row.doc = this.get(key);
       return row;
@@ -305,14 +359,30 @@ export class FakeCouch {
     const existing = this.docs.get(id);
     const sent = doc._rev as string | undefined;
 
-    const old = existing && !existing.deleted ? { _id: id, _rev: existing.rev, ...existing.body } : null;
+    const old =
+      existing && !existing.deleted
+        ? { _id: id, _rev: existing.rev, ...existing.body }
+        : null;
     // CouchDB: a write over a live document needs its current revision; over a
     // tombstone it may omit it.
     if (existing && !existing.deleted && sent !== existing.rev) {
-      return { ok: false, error: "conflict", reason: "Document update conflict." };
+      return {
+        ok: false,
+        error: "conflict",
+        reason: "Document update conflict.",
+      };
     }
-    if (existing && existing.deleted && sent !== undefined && sent !== existing.rev) {
-      return { ok: false, error: "conflict", reason: "Document update conflict." };
+    if (
+      existing &&
+      existing.deleted &&
+      sent !== undefined &&
+      sent !== existing.rev
+    ) {
+      return {
+        ok: false,
+        error: "conflict",
+        reason: "Document update conflict.",
+      };
     }
 
     const incoming: Json = { ...doc };
@@ -326,7 +396,8 @@ export class FakeCouch {
       );
     } catch (err) {
       const reason = (err as { forbidden?: string }).forbidden;
-      if (reason !== undefined) return { ok: false, error: "forbidden", reason };
+      if (reason !== undefined)
+        return { ok: false, error: "forbidden", reason };
       throw err;
     }
 

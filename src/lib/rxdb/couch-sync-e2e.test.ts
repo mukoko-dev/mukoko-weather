@@ -13,11 +13,7 @@ import { getRxStorageMemory } from "rxdb/plugins/storage-memory";
 import { createCouchSyncEngine, type CouchSyncEngine } from "./couch-sync";
 import { openUserDocStore } from "./couch-rxdb";
 import { FakeCouch } from "./test-support/couch-fake-server";
-import {
-  Clock,
-  FakeBridge,
-  PERSON,
-} from "./test-support/couch-engine-harness";
+import { Clock, FakeBridge, PERSON } from "./test-support/couch-engine-harness";
 import {
   LOCAL_WRITE_DEBOUNCE_MS,
   POLL_INTERVAL_MS,
@@ -145,7 +141,9 @@ describe("settings follow the person", () => {
     fresh();
     const a = device("a", { theme: "dark" });
     await startDevice(a);
-    const writesBefore = couch.calls.filter((c) => c.path === "_bulk_docs").length;
+    const writesBefore = couch.calls.filter(
+      (c) => c.path === "_bulk_docs",
+    ).length;
     const b = device("b");
     await startDevice(b);
     await flush(b);
@@ -246,7 +244,13 @@ describe("what never leaves the device", () => {
         schemaVersion: 1,
         ownerPersonId: PERSON,
         updatedAt: "2026-11-02T09:00:00.000Z",
-        envelope: { protected: "p", aad: "a", iv: "i", ciphertext: "c", tag: "t" },
+        envelope: {
+          protected: "p",
+          aad: "a",
+          iv: "i",
+          ciphertext: "c",
+          tag: "t",
+        },
       }).ok,
     ).toBe(true);
     const a = device("a", { theme: "dark" });
@@ -255,20 +259,27 @@ describe("what never leaves the device", () => {
     await flush(a);
 
     for (const call of couch.calls.filter((c) => c.path === "_bulk_docs")) {
-      const ids = (call.body as { docs: { _id: string }[] }).docs.map((d) => d._id);
+      const ids = (call.body as { docs: { _id: string }[] }).docs.map(
+        (d) => d._id,
+      );
       expect(ids.every((id) => /^(activity|preference):/.test(id))).toBe(true);
     }
     // Still on the server, untouched, and never on this device.
     expect(couch.get(foreign)).toMatchObject({ type: "interest" });
-    expect(a.bridge.applied.every((p) => !JSON.stringify(p).includes("interest"))).toBe(true);
+    expect(
+      a.bridge.applied.every((p) => !JSON.stringify(p).includes("interest")),
+    ).toBe(true);
   });
 
   it("a locational setting in the app state is never turned into a document", async () => {
     fresh();
     const a = device("a", { theme: "dark" });
     // The app state may carry more fields; the engine only knows three.
-    (a.bridge.state as unknown as Record<string, unknown>).homeLocation = "harare";
-    (a.bridge.state as unknown as Record<string, unknown>).savedLocations = ["nairobi-ke"];
+    (a.bridge.state as unknown as Record<string, unknown>).homeLocation =
+      "harare";
+    (a.bridge.state as unknown as Record<string, unknown>).savedLocations = [
+      "nairobi-ke",
+    ];
     await startDevice(a);
     await flush(a);
     expect(couch.liveIds().sort()).toEqual(["preference:theme"]);

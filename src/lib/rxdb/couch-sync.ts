@@ -145,9 +145,7 @@ function candidateIds(state: SyncableState): string[] {
   return [
     preferenceDocId("theme"),
     preferenceDocId("forecastModel"),
-    ...state.selectedActivities
-      .filter(isSyncableActivityId)
-      .map(activityDocId),
+    ...state.selectedActivities.filter(isSyncableActivityId).map(activityDocId),
   ];
 }
 
@@ -386,10 +384,13 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
     failures += 1;
     status = action === "stay_idle" ? "signed_out" : "backing_off";
     backoffTimer = clear(backoffTimer);
-    backoffTimer = deps.setTimer(() => {
-      backoffTimer = null;
-      requestSync();
-    }, backoffDelayMs(failures, random));
+    backoffTimer = deps.setTimer(
+      () => {
+        backoffTimer = null;
+        requestSync();
+      },
+      backoffDelayMs(failures, random),
+    );
   }
 
   function requestSync(): void {

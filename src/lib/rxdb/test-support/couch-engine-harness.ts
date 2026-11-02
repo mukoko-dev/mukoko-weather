@@ -4,18 +4,9 @@
  * engine tests. Nothing here waits on real time.
  */
 
-import type {
-  EngineDeps,
-  SyncBridge,
-  SyncStore,
-  Trigger,
-} from "../couch-sync";
+import type { EngineDeps, SyncBridge, SyncStore, Trigger } from "../couch-sync";
 import type { CouchSession } from "../couch-session";
-import type {
-  SyncableState,
-  SyncedPatch,
-  UserDocType,
-} from "../couch-docs";
+import type { SyncableState, SyncedPatch, UserDocType } from "../couch-docs";
 
 export const PERSON = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
 export const DEVICE = "11111111-2222-4333-8444-555555555555";
@@ -102,7 +93,8 @@ export function session(
   const personId = over.personId ?? PERSON;
   return {
     token: over.token ?? "credential-for-tests-0123456789",
-    expiresAtMs: over.expiresAtMs ?? (over.now ?? START) + (over.ttlMs ?? 600_000),
+    expiresAtMs:
+      over.expiresAtMs ?? (over.now ?? START) + (over.ttlMs ?? 600_000),
     database: `user_${personId}`,
     personId,
     databaseUrl: `https://api.test/v1/couch/db/user_${personId}/`,
@@ -182,7 +174,9 @@ export function harness(
       return nextSession(sessions.fetched, clock.now);
     },
     openStore: async (personId) => {
-      const s = options.makeStore ? options.makeStore(personId) : new FakeStore();
+      const s = options.makeStore
+        ? options.makeStore(personId)
+        : new FakeStore();
       if (s) stores.push(s);
       return s;
     },

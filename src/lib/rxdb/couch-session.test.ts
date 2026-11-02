@@ -15,7 +15,9 @@ const good = {
 };
 
 const reply = (status: number, body: unknown) =>
-  vi.fn(async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
+  vi.fn(
+    async () => new Response(JSON.stringify(body), { status }),
+  ) as unknown as typeof fetch;
 
 describe("parseSessionBody", () => {
   it("builds the database URL under the API host and reads the person", () => {
@@ -51,7 +53,9 @@ describe("parseSessionBody", () => {
   });
 
   it("accepts plain http only for localhost", () => {
-    expect(parseApiOrigin("http://localhost:8000")).toBe("http://localhost:8000");
+    expect(parseApiOrigin("http://localhost:8000")).toBe(
+      "http://localhost:8000",
+    );
     expect(parseApiOrigin("http://example.com")).toBeNull();
   });
 });

@@ -47,11 +47,20 @@ const post = (
   }) as never;
 
 beforeEach(() => {
-  for (const m of [withAuthMock, rateLimitMock, warnMock, issuerMock, issueMock])
+  for (const m of [
+    withAuthMock,
+    rateLimitMock,
+    warnMock,
+    issuerMock,
+    issueMock,
+  ])
     m.mockReset();
   vi.stubEnv("NYUCHI_API_URL", "https://api.nyuchi.com");
   rateLimitMock.mockResolvedValue({ allowed: true });
-  withAuthMock.mockResolvedValue({ user: { id: "user_1" }, accessToken: ACCESS });
+  withAuthMock.mockResolvedValue({
+    user: { id: "user_1" },
+    accessToken: ACCESS,
+  });
   issuerMock.mockReturnValue({ issue: issueMock });
   issueMock.mockResolvedValue({
     token: CREDENTIAL,
@@ -70,7 +79,9 @@ async function noSecrets(res: Response) {
 describe("guards, in order", () => {
   it("415 without application/json, before anything else runs", async () => {
     const { POST } = await import("./route");
-    const res = await POST(post({ origin: SITE, "content-type": "text/plain" }));
+    const res = await POST(
+      post({ origin: SITE, "content-type": "text/plain" }),
+    );
     expect(res.status).toBe(415);
     expect(withAuthMock).not.toHaveBeenCalled();
     expect(issueMock).not.toHaveBeenCalled();
@@ -119,7 +130,12 @@ describe("guards, in order", () => {
     expect(res.status).toBe(429);
     expect(res.headers.get("retry-after")).toBe("42");
     expect(issueMock).not.toHaveBeenCalled();
-    expect(rateLimitMock).toHaveBeenCalledWith("couch-session", "user_1", 30, 3600);
+    expect(rateLimitMock).toHaveBeenCalledWith(
+      "couch-session",
+      "user_1",
+      30,
+      3600,
+    );
   });
 });
 
@@ -141,7 +157,11 @@ describe("503 until the gateway can issue a credential", () => {
 
   it("503 when NYUCHI_API_URL is unset or not a bare https origin", async () => {
     const { POST } = await import("./route");
-    for (const value of ["", "http://api.nyuchi.com", "https://api.nyuchi.com/v1"]) {
+    for (const value of [
+      "",
+      "http://api.nyuchi.com",
+      "https://api.nyuchi.com/v1",
+    ]) {
       vi.stubEnv("NYUCHI_API_URL", value);
       const res = await POST(post());
       expect(res.status, value).toBe(503);
@@ -169,7 +189,10 @@ describe("when a credential is issued", () => {
       database: `user_${PERSON}`,
       apiOrigin: "https://api.nyuchi.com",
     });
-    expect(issueMock).toHaveBeenCalledWith({ userId: "user_1", accessToken: ACCESS });
+    expect(issueMock).toHaveBeenCalledWith({
+      userId: "user_1",
+      accessToken: ACCESS,
+    });
   });
 
   it("drops any extra field the issuer returns", async () => {
@@ -192,7 +215,11 @@ describe("when a credential is issued", () => {
     const { POST } = await import("./route");
     for (const bad of [
       { token: "short", expiresAtMs: 1, database: `user_${PERSON}` },
-      { token: CREDENTIAL, expiresAtMs: Number.NaN, database: `user_${PERSON}` },
+      {
+        token: CREDENTIAL,
+        expiresAtMs: Number.NaN,
+        database: `user_${PERSON}`,
+      },
       { token: CREDENTIAL, expiresAtMs: 1, database: "family_abc" },
       { token: CREDENTIAL, expiresAtMs: 1, database: "user_" },
     ]) {

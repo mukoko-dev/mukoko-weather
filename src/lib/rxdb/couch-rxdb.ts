@@ -257,4 +257,3 @@ export async function openUserDocStore(
     return null;
   }
 }
-

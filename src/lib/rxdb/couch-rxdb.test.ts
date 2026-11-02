@@ -158,7 +158,11 @@ describe("push", () => {
 
     const stored = couch.get("activity:gardening");
     expect(stored).toMatchObject({ _id: "activity:gardening", _deleted: true });
-    expect(Object.keys(stored ?? {}).sort()).toEqual(["_deleted", "_id", "_rev"]);
+    expect(Object.keys(stored ?? {}).sort()).toEqual([
+      "_deleted",
+      "_id",
+      "_rev",
+    ]);
     const bulk = couch.calls.filter((c) => c.path === "_bulk_docs").at(-1);
     const sent = (bulk?.body as { docs: Record<string, unknown>[] }).docs[0];
     expect(Object.keys(sent).sort()).toEqual(["_deleted", "_id", "_rev"]);
@@ -170,7 +174,9 @@ describe("push", () => {
     await store.runReplication(session());
     const before = couch.calls.filter((c) => c.path === "_bulk_docs").length;
     await store.runReplication(session());
-    expect(couch.calls.filter((c) => c.path === "_bulk_docs").length).toBe(before);
+    expect(couch.calls.filter((c) => c.path === "_bulk_docs").length).toBe(
+      before,
+    );
   });
 
   it("re-selecting an activity after it was deleted writes it again", async () => {
@@ -208,7 +214,13 @@ describe("pull", () => {
       schemaVersion: 1,
       ownerPersonId: PERSON,
       updatedAt: toRfc3339(T0),
-      envelope: { protected: "x", aad: "y", iv: "z", ciphertext: "c", tag: "t" },
+      envelope: {
+        protected: "x",
+        aad: "y",
+        iv: "z",
+        ciphertext: "c",
+        tag: "t",
+      },
     });
     couch.seed({
       _id: "preference:homePlace",
@@ -331,7 +343,10 @@ describe("failures", () => {
   it("a write the validator refuses fails the cycle instead of looping", async () => {
     const store = await open();
     // The document claims another person: CouchDB's rule 'ownerPersonId must be you'.
-    await store.upsert({ ...activity("livestock"), ownerPersonId: "someone-else" });
+    await store.upsert({
+      ...activity("livestock"),
+      ownerPersonId: "someone-else",
+    });
     await expect(store.runReplication(session())).rejects.toBeInstanceOf(
       CouchHttpError,
     );
