@@ -20,7 +20,7 @@ if str(_api_root) not in sys.path:
     sys.path.insert(0, str(_api_root))
 
 # Evict the installed `py` module (single-file, not a package) so that
-# `from py._weather import ...` resolves to `api/py/_weather.py`.
+# `from py._db import ...` resolves to `api/py/_db.py`.
 for _key in list(sys.modules.keys()):
     if _key == "py" or _key.startswith("py."):
         del sys.modules[_key]

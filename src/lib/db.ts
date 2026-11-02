@@ -8,7 +8,7 @@
  * components in `src/app/[location]/*` keep working without changes.
  *
  * Collections:
- *   - weather_cache   : Short-lived weather API response cache (replaces KV WEATHER_CACHE)
+ *   - weather_cache   : Unused: nothing writes or reads it (the forecast Worker caches in KV); only its TTL index is kept so old rows expire
  *   - ai_summaries    : Tiered-TTL AI summary cache (replaces KV AI_SUMMARIES)
  *   - weather_history : Historical weather recordings for analytics
  *   - activities      : User activities for personalized weather insights

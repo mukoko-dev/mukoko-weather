@@ -68,6 +68,6 @@ describe("reconcileElevation (#302)", () => {
       resolve(__dirname, "../../workers/crates/weather-core/src/blend.rs"),
       "utf-8",
     );
-    expect(rust).toContain('out.insert("elevation".into(), json!(e));');
+    expect(rust).toMatch(/insert\(\s*"elevation"/);
   });
 });

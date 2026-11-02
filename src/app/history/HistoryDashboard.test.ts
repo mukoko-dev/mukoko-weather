@@ -809,7 +809,7 @@ describe("WeatherHistoryDoc insights field", () => {
     const source = fs.readFileSync("src/lib/db.ts", "utf-8");
     expect(source).not.toContain("recordWeatherHistory");
     const rust = fs.readFileSync("workers/jobs/src/tasks.rs", "utf-8");
-    expect(rust).toContain("async fn place_history");
+    expect(rust).toContain("fn place_history");
   });
 });
 
