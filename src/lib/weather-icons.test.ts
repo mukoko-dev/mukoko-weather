@@ -90,36 +90,60 @@ describe("ICON_REGISTRY", () => {
 });
 
 describe("ActivityIcon component", () => {
+  // ActivityIcon lives in activity-icon.tsx: it needs the WHOLE lucide library
+  // (a lookup by name), which must stay out of the shell's first-load JS.
+  const activityIcon = readFileSync(
+    resolve(__dirname, "activity-icon.tsx"),
+    "utf-8",
+  );
+
   it("exports the ActivityIcon function", () => {
-    expect(source).toContain("export function ActivityIcon");
+    expect(activityIcon).toContain("export function ActivityIcon");
   });
 
   it("accepts activity and icon props", () => {
-    expect(source).toContain("activity: string");
-    expect(source).toContain("icon?: string");
+    expect(activityIcon).toContain("activity: string");
+    expect(activityIcon).toContain("icon?: string");
   });
 
   it("looks up icon from custom ICON_REGISTRY first", () => {
-    expect(source).toContain("ICON_REGISTRY[icon]");
+    expect(activityIcon).toContain("ICON_REGISTRY[icon]");
   });
 
   it("falls back to Lucide icons for dynamic resolution", () => {
-    expect(source).toContain("lucideIcons");
-    expect(source).toContain("toPascalCase");
+    expect(activityIcon).toContain("lucideIcons");
+    expect(activityIcon).toContain("toPascalCase");
   });
 
   it("falls back to SunIcon as final default", () => {
-    const activityIconSection = source.slice(
-      source.indexOf("export function ActivityIcon"),
-      source.indexOf("export function WeatherIcon"),
-    );
-    expect(activityIconSection).toContain("SunIcon");
+    expect(activityIcon).toContain("return <SunIcon");
   });
 
   it("imports lucide-react icons for scalable icon resolution", () => {
-    expect(source).toContain(
+    expect(activityIcon).toContain(
       'import { icons as lucideIcons } from "lucide-react"',
     );
+  });
+
+  it("is NOT in weather-icons.tsx, which every page imports", () => {
+    // `icons` is the whole library (about 130 KB gzipped).
+    expect(source).not.toContain("export function ActivityIcon");
+    expect(source).not.toMatch(
+      /import\s*\{[^}]*\bicons\b[^}]*\}\s*from\s*"lucide-react"/,
+    );
+    expect(source).not.toContain("lucideIcons");
+  });
+
+  it("only the lazily loaded activity surfaces import it", () => {
+    const importers = [
+      "../components/weather/ActivityCard.tsx",
+      "../components/weather/MyWeatherModal.tsx",
+    ];
+    for (const f of importers) {
+      expect(readFileSync(resolve(__dirname, f), "utf-8")).toContain(
+        'from "@/lib/activity-icon"',
+      );
+    }
   });
 });
 

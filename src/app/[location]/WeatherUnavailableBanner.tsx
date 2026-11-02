@@ -2,7 +2,12 @@
 
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 
-export function WeatherUnavailableBanner() {
+export function WeatherUnavailableBanner({
+  onRetry,
+}: {
+  /** Fetch again in place (the place stage). Without it the page reloads. */
+  onRetry?: () => void;
+}) {
   // role="status" overrides Alert's default role="alert" — this banner is
   // informational (not urgent), so polite live region is correct.
   return (
@@ -21,7 +26,7 @@ export function WeatherUnavailableBanner() {
           for this location.
         </p>
         <button
-          onClick={() => window.location.reload()}
+          onClick={onRetry ?? (() => window.location.reload())}
           className="dikdik mt-2"
         >
           Refresh now

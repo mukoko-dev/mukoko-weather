@@ -39,3 +39,69 @@ describe("service worker routes for the Worker's data", () => {
     expect(route).not.toContain('"POST"');
   });
 });
+
+describe("service worker: the app shell (issue #414)", () => {
+  const nextConfig = readFileSync(
+    resolve(__dirname, "../../next.config.ts"),
+    "utf-8",
+  );
+
+  it("answers page navigations through handleNavigation, first in the route list", () => {
+    const first = source.indexOf("runtimeCaching: [");
+    const nav = source.indexOf('request.mode === "navigate"');
+    expect(nav).toBeGreaterThan(first);
+    // Before every other route, so nothing else can claim a navigation.
+    expect(nav).toBeLessThan(source.indexOf('startsWith("/_next/static/")'));
+    expect(source).toContain("handleNavigation(new URL(request.url), {");
+    expect(source).toContain("fetchEvent.preloadResponse");
+    expect(source).toContain("navigationPreload: true");
+  });
+
+  it("falls back to the precached /offline itself, not through Serwist's fallbacks option", () => {
+    expect(source).toContain("serwist.matchPrecache(OFFLINE_URL)");
+    expect(source).not.toMatch(/\bfallbacks:/);
+  });
+
+  it("precaches /offline without cookies and adds it to the manifest at build time", () => {
+    expect(source).toContain('fetchOptions: { credentials: "omit" }');
+    expect(nextConfig).toContain(
+      'additionalPrecacheEntries: [{ url: "/offline", revision: randomUUID() }]',
+    );
+  });
+
+  it("names the page cache by build version and deletes other builds' caches on activate", () => {
+    expect(source).toContain("versionOfManifest(MANIFEST)");
+    // @serwist/next rejects a second reference to the injection point.
+    expect(source.match(/self\.__SW_MANIFEST/g)).toHaveLength(1);
+    expect(source).toContain("pagesCacheName(BUILD_VERSION)");
+    expect(source).toContain('"activate"');
+    expect(source).toContain("stalePagesCaches(names, BUILD_VERSION)");
+  });
+
+  it("updates cleanly: a new worker takes over at once", () => {
+    expect(source).toContain("skipWaiting: true");
+    expect(source).toContain("clientsClaim: true");
+    const updater = readFileSync(
+      resolve(__dirname, "../components/pwa/ServiceWorkerUpdater.tsx"),
+      "utf-8",
+    );
+    expect(updater).toContain("hadControllerAtLoad");
+  });
+
+  it("keeps the last good weather payload and never caches personal endpoints", () => {
+    expect(entry('startsWith("/v1/weather")')).toContain("new NetworkFirst");
+    for (const needle of [
+      'startsWith("/api/ai")',
+      'startsWith("/v1/devices")',
+    ]) {
+      const route = entry(needle);
+      expect(route).toContain("new NetworkOnly()");
+      expect(route).not.toContain("cacheName");
+    }
+    // /api/keys, /auth, /profile are navigations or same-origin API calls the
+    // worker has no caching route for at all.
+    for (const never of ["/api/keys", '"/auth', '"/profile', "/callback"]) {
+      expect(source).not.toContain(`startsWith(${never}`);
+    }
+  });
+});

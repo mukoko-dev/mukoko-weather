@@ -13,6 +13,12 @@ export const LAST_LOCATION_COOKIE = "lastLocation";
 /** 30 days, in seconds. */
 export const LAST_LOCATION_MAX_AGE_S = 2592000;
 
+/**
+ * The slug last shown at `/`, in localStorage (via safe-storage). The home
+ * page and the offline page read it to paint that place from the device.
+ */
+export const LAST_HOME_PLACE_KEY = "mukoko-home-place";
+
 /** The subset of `cookies()` / `request.cookies` that the reader needs. */
 export interface CookieJar {
   get(name: string): { value: string } | undefined;

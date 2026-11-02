@@ -191,6 +191,11 @@ interface WeatherDashboardProps {
    * written back to the device store.
    */
   device?: Pick<DeviceView, "fetchedAt" | "freshness"> | null;
+  /**
+   * Fetch this place's weather again without reloading the page (the place
+   * stage's retry). Offered on the "temporarily unavailable" banner.
+   */
+  onRetry?: () => void;
 }
 
 export function WeatherDashboard({
@@ -203,6 +208,7 @@ export function WeatherDashboard({
   user,
   isCurrentLocation = false,
   device = null,
+  onRetry,
 }: WeatherDashboardProps) {
   // A user-picked forecast model (My Weather → Settings) becomes the
   // baseline the whole dashboard renders (issue #246). Null = the server
@@ -552,7 +558,7 @@ export function WeatherDashboard({
           )}
 
           {/* Weather unavailable banner — shown when all providers failed */}
-          {usingFallback && <WeatherUnavailableBanner />}
+          {usingFallback && <WeatherUnavailableBanner onRetry={onRetry} />}
 
           {/* Frost alert banner */}
           {frostAlert && <FrostAlertBanner alert={frostAlert} />}

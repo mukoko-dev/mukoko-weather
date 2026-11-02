@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import { updatePreferences, initRxDBBridge } from "./rxdb/bridge";
-import { startReplication } from "./rxdb/replication";
 import type { PreferencesDocType } from "./rxdb/schemas";
 import { isLocationSlug } from "./current-slug";
 import { isPresetAnchor, type PresetAnchor } from "./location-presets";
@@ -510,7 +509,9 @@ export function initializeDeviceSync(): void {
   })
     .then(() => {
       markStoreHydrated();
-      return startReplication();
+      // Replication (RxDB's replication plugin and rxjs) loads after first
+      // paint and only here, never with the page's first-load JavaScript.
+      return import("./rxdb/replication").then((m) => m.startReplication());
     })
     .catch(() => {
       // RxDB init failed — store still works with defaults.

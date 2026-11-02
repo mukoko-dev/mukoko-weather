@@ -29,6 +29,7 @@ import { seedOfPayload, type PlaceSeed } from "@/lib/place-controller";
 import { seedFor } from "@/lib/place-resolve";
 import { recallPlace } from "@/lib/rxdb/weather-places";
 import { readStorage, writeStorage } from "@/lib/safe-storage";
+import { LAST_HOME_PLACE_KEY } from "@/lib/last-location";
 
 /**
  * The place `/` starts on — the server seeds this from the lastLocation
@@ -38,9 +39,10 @@ import { readStorage, writeStorage } from "@/lib/safe-storage";
  */
 export type HomeSeed = PlaceSeed;
 
-/** The slug last shown at `/`, so a visit with nothing seeded by the server
- *  can paint that place from the device (issue #269). */
-export const LAST_HOME_PLACE_KEY = "mukoko-home-place";
+// The slug last shown at `/` (kept in src/lib/last-location.ts, which the
+// offline page reads too): a visit with nothing seeded by the server paints
+// that place from the device (issue #269).
+export { LAST_HOME_PLACE_KEY };
 
 interface Props {
   /** Server-seeded place (cookie-resolved or IP-geo location) — null when

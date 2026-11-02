@@ -37,7 +37,9 @@ const loadDashboard = () =>
   import("@/app/[location]/WeatherDashboard").then((m) => m.WeatherDashboard);
 const WeatherDashboard = dynamic(loadDashboard, {
   ssr: false,
-  loading: () => null,
+  // The stored copy is ready before the dashboard's code is: keep the skeleton
+  // up for that moment rather than a blank page.
+  loading: () => <LocationSkeleton />,
 });
 
 /** The browser's side of `PlaceDeps`. */
@@ -173,6 +175,7 @@ export function PlaceView({
           user={user}
           isCurrentLocation={isCurrentLocation && state.isHome}
           device={device}
+          onRetry={retry}
         />
       ) : (
         <>

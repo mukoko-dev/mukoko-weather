@@ -130,13 +130,15 @@ describe("no root loading boundary", () => {
 });
 
 describe("not-found UI", () => {
-  it("root and [location] boundaries render the same LocationNotFound view", () => {
-    for (const file of ["not-found.tsx", "[location]/not-found.tsx"]) {
-      expect(read(file)).toMatch(
-        /import \{ LocationNotFound \} from "@\/components\/layout\/LocationNotFound"/,
-      );
-      expect(read(file)).toMatch(/export default LocationNotFound/);
-    }
+  it("the root boundary renders the LocationNotFound view, and [location] adds no second copy", () => {
+    expect(read("not-found.tsx")).toMatch(
+      /import \{ LocationNotFound \} from "@\/components\/layout\/LocationNotFound"/,
+    );
+    expect(read("not-found.tsx")).toMatch(/export default LocationNotFound/);
+    // A segment boundary would serialise the whole 404 view a second time into
+    // every place page's HTML (about 4 KB); the root one catches the same
+    // notFound() calls, and renders the same view.
+    expect(existsSync(resolve(appDir, "[location]/not-found.tsx"))).toBe(false);
   });
 
   it("keeps the existing copy and city suggestions", () => {

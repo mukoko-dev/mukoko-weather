@@ -17,7 +17,7 @@ import {
   TrashIcon,
   NavigationIcon,
 } from "@/lib/weather-icons";
-import { ActivityIcon } from "@/lib/weather-icons";
+import { ActivityIcon } from "@/lib/activity-icon";
 import { detectUserLocation, type GeoResult } from "@/lib/geolocation";
 import {
   type Activity,
