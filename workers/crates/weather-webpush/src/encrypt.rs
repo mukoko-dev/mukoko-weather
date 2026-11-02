@@ -281,9 +281,9 @@ pub(crate) mod tests {
         })
     }
 
-    /// A salt that is not the RFC's and differs from every other `n`: the
-    /// RFC's salt with each octet XOR `n` (so `n` is a label, not a value).
-    /// For tests that need more than one distinct salt.
+    /// A salt for tests that need more than one: the RFC's salt with each
+    /// octet XOR `n`, so `n` is a label and each `n` gives a different salt
+    /// (`0` is the RFC's own).
     pub(crate) fn salt_variant(n: u8) -> [u8; 16] {
         let mut salt: [u8; 16] = fixed(&rfc().salt);
         for octet in &mut salt {
