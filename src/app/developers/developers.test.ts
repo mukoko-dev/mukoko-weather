@@ -100,6 +100,17 @@ describe("developers page — documented public endpoints", () => {
     expect(pageSource).toContain("X-Current-Source");
   });
 
+  it("documents the MET Norway failover provider and credits it (#434)", () => {
+    const text = pageSource.replace(/\s+/g, " ");
+    // The header value, what it means and what it is not.
+    expect(text).toContain('<code className="termite">met-no</code>');
+    expect(text).toContain("served only while Open-Meteo is unavailable");
+    expect(text).toContain("clear-sky index");
+    // The licence asks for the source, a licence note and a note of changes.
+    expect(text).toContain("MET Norway");
+    expect(text).toContain("CC BY 4.0, converted to our format");
+  });
+
   it("links to Shamwari for the AI endpoints, gated behind the shamwari_chat feature flag", () => {
     expect(pageSource).toContain('href="/shamwari"');
     expect(pageSource).toContain('isFeatureEnabled("shamwari_chat")');
