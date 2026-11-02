@@ -28,6 +28,8 @@
 //! POST /v1/ai/{chat,history/analyze,explore/search}   Shamwari Weather (the summary, the follow-up and the agriculture
 //!                                               explanation are not public: they are signed-in routes of the app,
 //!                                               reached through mukoko-weather-internal)
+//! POST /v1/reports/clarify                      the report wizard's follow-up questions (the AI Worker, which
+//!                                               answers a fixed pair whenever the model cannot)
 //! GET /health
 //! ```
 //!
@@ -346,17 +348,24 @@ async fn forward_community(req: &mut Request, env: &Env) -> Result<Response> {
     }
 }
 
-/// Shamwari's POST routes. The two reference-data GETs under `/v1/ai/` are
-/// answered here, not forwarded.
+/// Shamwari's POST routes and the report wizard's follow-up questions. The two
+/// reference-data GETs under `/v1/ai/` are answered here, not forwarded
+/// (`weather_core::ai::is_forwarded_path`).
 fn is_ai_path(path: &str) -> bool {
-    (path == "/v1/ai" || path.starts_with("/v1/ai/")) && !reference::serves(path)
+    weather_core::ai::is_forwarded_path(path)
 }
 
 /// Pass a Shamwari request to `mukoko-weather-ai` with the client's IP, and
 /// its answer back unchanged.
 async fn forward_ai(req: &mut Request, env: &Env) -> Result<Response> {
     let body = req.text().await.unwrap_or_default();
-    if body.len() > MAX_AI_BODY_BYTES {
+    // The wizard's request is a slug and a report type.
+    let cap = if req.path() == weather_core::ai::clarify::PATH {
+        weather_core::ai::clarify::MAX_BODY_BYTES
+    } else {
+        MAX_AI_BODY_BYTES
+    };
+    if body.len() > cap {
         return error(413, "payload_too_large", "The request body is too large.");
     }
     let headers = Headers::new();

@@ -70,7 +70,8 @@ export type WorkerRoute =
   | "devices"
   | `devices/${string}`
   | "reports"
-  | "reports/upvote";
+  | "reports/upvote"
+  | "reports/clarify";
 
 /** The Worker's URL for a route and its query string (no leading `?`). */
 export function workerUrl(

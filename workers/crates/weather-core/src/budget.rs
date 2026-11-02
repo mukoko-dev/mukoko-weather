@@ -64,6 +64,10 @@ pub enum Action {
     /// An AI history analysis (`/v1/ai/history/analyze`) that calls the model:
     /// an analysis answered from the cache is free.
     HistoryAnalysis,
+    /// The report wizard's follow-up questions
+    /// (`/v1/reports/clarify`) that go to the model. A refused spend is not an
+    /// error: the fixed questions answer.
+    ReportClarify,
 }
 
 /// Hourly limits for one action.
@@ -93,6 +97,7 @@ impl Action {
             Action::AiAgriculture => "ai-agriculture",
             Action::ExploreSearch => "ai-explore-search",
             Action::HistoryAnalysis => "ai-history-analysis",
+            Action::ReportClarify => "ai-report-clarify",
         }
     }
 
@@ -195,6 +200,14 @@ impl Action {
             Action::HistoryAnalysis => Limits {
                 per_client: 10,
                 global: 300,
+            },
+            // 10 an hour per client, as in the Python backend. Each is one
+            // short model call (150 tokens); the service-wide cap is 60
+            // clients at their limit, and past it the fixed questions answer,
+            // so the wizard never waits on or fails for the budget.
+            Action::ReportClarify => Limits {
+                per_client: crate::community::CLARIFY_PER_HOUR,
+                global: 600,
             },
         }
     }
@@ -398,6 +411,25 @@ mod tests {
         // Each has its own rows: one surface cannot starve another.
         assert_ne!(Action::AiSummary.name(), Action::AiFollowup.name());
         assert_ne!(Action::AiSummary.name(), Action::AiAgriculture.name());
+    }
+
+    #[test]
+    fn the_report_questions_are_the_pythons_ten_an_hour_with_their_own_rows() {
+        let l = Action::ReportClarify.limits();
+        assert_eq!(Action::ReportClarify.name(), "ai-report-clarify");
+        assert_eq!(l.per_client, 10, "as in the Python backend");
+        assert_eq!(l.per_client, crate::community::CLARIFY_PER_HOUR);
+        assert!(l.per_client <= l.global);
+        // Not shared with another model surface: each has its own rows.
+        for other in [
+            Action::AiSummary,
+            Action::AiFollowup,
+            Action::AiAgriculture,
+            Action::ExploreSearch,
+            Action::HistoryAnalysis,
+        ] {
+            assert_ne!(other.name(), Action::ReportClarify.name());
+        }
     }
 
     #[test]
