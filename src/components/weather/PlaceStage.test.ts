@@ -110,7 +110,11 @@ describe("PlaceView: the slow-forecast line", () => {
 
   it("puts the notice and the page's own floating card (the home page's location ask) in one column, so they stack instead of overlapping", () => {
     expect(stage).toContain("<FloatingStack>");
-    expect(stage).toMatch(/\{notice\}\s*\{extras\}/);
+    // The page's own card above, the notice below it (reading order = visual order).
+    expect(stage).toMatch(/\{extras\}\s*\{notice\}/);
+    // Each state mounts as its own element, so the failed alert is announced.
+    expect(stage).toContain('key="failed"');
+    expect(stage).toContain('key="slow"');
     expect(stage).toContain("Children.toArray(children)");
     // Nothing is mounted when there is neither a notice nor a card.
     expect(stage).toContain("(notice || extras.length > 0) && (");

@@ -8,8 +8,8 @@ describe("FloatingStack: floating cards share one column above the mobile nav", 
     createElement(
       FloatingStack,
       null,
-      createElement("section", { key: "a" }, "load notice"),
-      createElement("section", { key: "b" }, "location ask"),
+      createElement("section", { key: "a" }, "location ask"),
+      createElement("section", { key: "b" }, "load notice"),
     ),
   );
 
@@ -21,16 +21,17 @@ describe("FloatingStack: floating cards share one column above the mobile nav", 
     expect(html).toContain("max-w-md");
   });
 
-  it("stacks its cards (the first is the lowest) instead of laying them on top of each other", () => {
-    expect(html).toContain("flex-col-reverse");
-    expect(html).toContain("gap-2");
+  it("stacks its cards, in reading order (the last is the lowest), instead of laying them on top of each other", () => {
+    expect(html).toMatch(/\bflex\b[^"]*\bflex-col\b[^"]*\bgap-2\b/);
+    // DOM order is visual order: no reversed flow for tab and screen-reader order to disagree with.
+    expect(html).not.toContain("flex-col-reverse");
     // The cards are in the flow of the column, not fixed themselves.
     expect(FLOATING_CARD_CLASS).not.toMatch(/\bfixed\b|\babsolute\b/);
   });
 
   it("holds both cards", () => {
-    expect(html.indexOf("load notice")).toBeLessThan(
-      html.indexOf("location ask"),
+    expect(html.indexOf("location ask")).toBeLessThan(
+      html.indexOf("load notice"),
     );
   });
 

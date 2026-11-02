@@ -94,7 +94,10 @@ const staticAssets = new CacheFirst({
         isStorableStaticAsset(response) ? response : null,
     },
     new ExpirationPlugin({
-      maxEntries: 200,
+      // The /offline page's own files (about 35) live here too: headroom over
+      // the old 200, so a visitor who opens many pages online does not push
+      // them out (a pass repairs that on the next navigation, but only online).
+      maxEntries: 250,
       maxAgeSeconds: 365 * 24 * 60 * 60,
     }),
   ],
@@ -294,8 +297,13 @@ const shellKeeper = createShellKeeper<ShellEvent>({
       // A plain lookup in every cache first (the precache holds the
       // stylesheets): a pass runs on the first navigation of every worker
       // start and must not touch the network or the expiry bookkeeping for
-      // files that are there.
-      has: async (url) => !!(await caches.match(url)),
+      // files that are there. An entry that is not a usable file (a page's
+      // HTML stored under a script's URL by a worker from before the guard
+      // above) does not count as stored.
+      has: async (url) => {
+        const held = await caches.match(url);
+        return !!held && isStorableStaticAsset(held);
+      },
       // A missing one goes through the route's own strategy: fetched, stored
       // and counted for expiry like any file cached on use.
       // The strategy gets a stand-in that only extends the worker's lifetime,
@@ -304,6 +312,11 @@ const shellKeeper = createShellKeeper<ShellEvent>({
       // response (the page's HTML), which would be stored under the script's
       // URL. (Found by the real-browser check of the retry.)
       load: async (url) => {
+        // The strategy answers from the cache first: drop a bad entry so it
+        // is fetched again rather than served again.
+        const cache = await caches.open(STATIC_ASSETS_CACHE);
+        const held = await cache.match(url);
+        if (held && !isStorableStaticAsset(held)) await cache.delete(url);
         const response = await staticAssets.handle({
           request: new Request(url, { credentials: "omit" }),
           event: lifetimeOf(event) as never,

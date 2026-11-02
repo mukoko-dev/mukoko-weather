@@ -149,12 +149,18 @@ describe("service worker: the /offline page can start with no network", () => {
   });
 
   it("looks a file up before it goes near the network or the expiry bookkeeping", () => {
-    expect(source).toContain(
-      "has: async (url) => !!(await caches.match(url)),",
-    );
+    expect(source).toContain("const held = await caches.match(url);");
     expect(source.indexOf("has: async (url)")).toBeLessThan(
       source.indexOf("load: async (url)"),
     );
+    // A bad entry (HTML under a script's URL) is not "stored", and is dropped
+    // before the strategy, which would otherwise answer it from the cache again.
+    expect(source).toContain("return !!held && isStorableStaticAsset(held);");
+    expect(source).toContain(
+      "if (held && !isStorableStaticAsset(held)) await cache.delete(url);",
+    );
+    // Headroom for the /offline page's own files in the capped cache.
+    expect(source).toContain("maxEntries: 250,");
   });
 
   it("refuses to store an HTML answer as a script, in the one strategy both paths use", () => {

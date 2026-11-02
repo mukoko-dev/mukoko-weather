@@ -253,17 +253,22 @@ run(async () => {
     "t=6.5 s",
   );
 
-  await slow.waitForTimeout(10_000 - (Date.now() - t0));
+  // The 8 s clock starts when the forecast is first asked for (after the page
+  // hydrates), so wait for the line up to a ceiling instead of a fixed instant.
   const line = slow
     .getByRole("status")
     .filter({ hasText: "Still trying to reach the weather service" });
   const button = slow.getByRole("button", { name: /try again/i });
-  await slow.screenshot({ path: `${SHOTS}/banner-10s.png` });
+  await line.waitFor({ state: "visible", timeout: 12_000 });
+  const lineAt = (Date.now() - t0) / 1000;
+  await slow.screenshot({ path: `${SHOTS}/banner-line.png` });
   note(
     "After 8 s one calm line says it is still trying (a polite status region)",
-    (await line.count()) === 1 &&
+    lineAt >= 7.5 &&
+      lineAt <= 14 &&
+      (await line.count()) === 1 &&
       (await line.getAttribute("aria-live")) === "polite",
-    "t=10 s",
+    `t=${lineAt.toFixed(1)} s`,
   );
   note('"Try again" is offered at the same time', (await button.count()) === 1);
   note(
@@ -276,23 +281,26 @@ run(async () => {
     JSON.stringify(geometryBefore) === JSON.stringify(geometryAfter),
     `${JSON.stringify(geometryBefore)} -> ${JSON.stringify(geometryAfter)}`,
   );
-  const failuresBy10 = weatherSeen.filter((c) => c.failing).length;
+  const failuresByLine = weatherSeen.filter((c) => c.failing).length;
   note(
     "Failing forecast is retried with back-off, not hammered",
-    failuresBy10 >= 2 && failuresBy10 <= 6,
-    `${failuresBy10} requests in ~10 s`,
+    failuresByLine >= 2 && failuresByLine <= 6,
+    `${failuresByLine} requests in ~${lineAt.toFixed(0)} s`,
   );
 
   // The retries run out (about 22 s): the existing "Couldn't load" state.
-  await slow.waitForTimeout(26_000 - (Date.now() - t0));
+  const spentNotice = slow.getByText(/Couldn't load the weather for Lagos/);
+  await spentNotice.waitFor({ state: "visible", timeout: 30_000 });
+  const spentAt = (Date.now() - t0) / 1000;
   const spent = await bodyText(slow);
-  await slow.screenshot({ path: `${SHOTS}/banner-26s.png` });
+  await slow.screenshot({ path: `${SHOTS}/banner-failed.png` });
   note(
     'When the retries are spent the existing "Couldn\'t load" notice replaces the line',
-    /Couldn't load the weather for Lagos/.test(spent) &&
+    spentAt >= 20 &&
+      spentAt <= 32 &&
       !/Still trying/.test(spent) &&
       (await button.count()) === 1,
-    "t=26 s",
+    `t=${spentAt.toFixed(1)} s`,
   );
 
   // "Try again" reads the forecast again now, and the page recovers.
@@ -330,11 +338,13 @@ run(async () => {
   await third.route(/open-meteo\.com/, (route) => route.abort("failed"));
   const homePage = await third.newPage();
   await homePage.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
-  await homePage.waitForTimeout(10_000);
   const locationAsk = homePage.getByLabel("Use your location");
   const stackedLine = homePage
     .getByRole("status")
     .filter({ hasText: "Still trying to reach the weather service" });
+  await stackedLine
+    .waitFor({ state: "visible", timeout: 14_000 })
+    .catch(() => {});
   const askBox = (await locationAsk.count())
     ? await locationAsk.boundingBox()
     : null;

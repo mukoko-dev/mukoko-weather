@@ -33,7 +33,8 @@
  *   forecast was first asked for, `slow` is set, which shows one calm
  *   "still trying" line and "Try again" over the same skeleton. It does not
  *   change the retries; it only says they are happening. Pressing "Try again"
- *   on that line keeps it up, busy, until that attempt ends.
+ *   (on that line, or on "Couldn't load" with nothing stored) shows the line,
+ *   busy, until that attempt ends.
  */
 
 import type { WeatherLocation } from "./locations";
@@ -380,8 +381,8 @@ export function createPlaceController(
   /**
    * A new request. It supersedes whatever the old one was saying (the "still
    * trying" line describes a fetch that is no longer running), except when it
-   * is the visitor pressing "Try again" on that very line (`keepSlow`): then
-   * the line stays up, busy, until the attempt ends.
+   * is the visitor pressing "Try again" with nothing stored on screen
+   * (`keepSlow`): then the line is up, busy, until the attempt ends.
    */
   const begin = (keepSlow = false): LatestRequest => {
     stopLive();
@@ -625,9 +626,10 @@ export function createPlaceController(
 
     retry() {
       if (!state.seed) return Promise.resolve({ shown: false, failed: false });
-      // Pressed on the "still trying" line (nothing stored on screen): the
-      // line stays, busy, rather than vanishing for another 8 s.
-      const keepSlow = state.slow && !state.view;
+      // Pressed on the "still trying" line or on "Couldn't load" with nothing
+      // stored on screen: the line is up straight away, busy, rather than a
+      // silent skeleton for another 8 s.
+      const keepSlow = (state.slow || state.failed) && !state.view;
       const req = begin(keepSlow);
       const held: DeviceView | null =
         state.view && state.device

@@ -256,14 +256,22 @@ export async function warmShellAssets(
   await Promise.all(
     Array.from({ length: lanes }, async () => {
       for (let url = queue.shift(); url !== undefined; url = queue.shift()) {
+        // A file already stored costs one lookup: a pass runs on the first
+        // navigation of every worker start, and must not touch the network
+        // or the expiry bookkeeping for files that are there. A lookup that
+        // fails says nothing about the file: it is fetched as if missing.
         let ok = false;
         try {
-          // A file already stored costs one lookup: a pass runs on the first
-          // navigation of every worker start, and must not touch the network
-          // or the expiry bookkeeping for files that are there.
-          ok = (await deps.has(url)) || (await deps.load(url));
+          ok = await deps.has(url);
         } catch {
           ok = false;
+        }
+        if (!ok) {
+          try {
+            ok = await deps.load(url);
+          } catch {
+            ok = false;
+          }
         }
         if (ok) loaded += 1;
         else failed += 1;

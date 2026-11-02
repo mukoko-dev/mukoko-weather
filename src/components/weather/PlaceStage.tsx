@@ -193,8 +193,12 @@ export function PlaceView({
   const { seed, view, device } = state;
   if (!seed) return null;
 
+  // Distinct keys: the failed notice is an `alert` that must MOUNT as a new
+  // element (a role changed on a reused node is not announced), not turn into
+  // one when the retries run out.
   const notice = state.failed ? (
     <PlaceLoadNotice
+      key="failed"
       placeName={seed.location.name}
       showingSaved={!!view}
       busy={state.fetching}
@@ -204,6 +208,7 @@ export function PlaceView({
     // The retries are still running and there is nothing stored to show: say
     // so, over the same skeleton, and offer the button now.
     <PlaceLoadNotice
+      key="slow"
       slow
       placeName={seed.location.name}
       showingSaved={false}
@@ -244,8 +249,8 @@ export function PlaceView({
           share one column above the mobile nav, so two never overlap. */}
       {(notice || extras.length > 0) && (
         <FloatingStack>
-          {notice}
           {extras}
+          {notice}
         </FloatingStack>
       )}
     </>

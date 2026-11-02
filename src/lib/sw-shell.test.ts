@@ -220,17 +220,16 @@ describe("warmShellAssets", () => {
     expect(load).not.toHaveBeenCalled();
   });
 
-  it("a lookup that rejects counts as a failure of that file only", async () => {
+  it("a lookup that rejects says nothing about the file: it is fetched as if missing", async () => {
     const shell = fakeShell(OFFLINE_HTML);
     const result = await warmShellAssets({
       ...shell.deps,
-      has: async (url) => {
-        if (url.endsWith(".css")) throw new Error("storage");
-        return false;
+      has: async () => {
+        throw new Error("storage");
       },
     });
-    expect(result.failed).toBe(2);
-    expect(result.loaded).toBe(4);
+    expect(result).toEqual({ wanted: 6, loaded: 6, failed: 0, complete: true });
+    expect(shell.fetched).toHaveLength(6);
   });
 
   it("reports what failed, stores the rest and is not complete", async () => {

@@ -12,12 +12,13 @@ export const FLOATING_CARD_CLASS =
  * Where floating cards sit: ONE fixed column above the mobile nav (the bottom
  * edge on `sm` and up, where the nav is hidden). Cards are in the column, not
  * fixed themselves, so two shown at once stack instead of lying on top of each
- * other, hiding a button. The first child is the lowest (nearest the thumb);
- * the column is only as tall as its cards, so it never blocks the page.
+ * other, hiding a button. The LAST child is the lowest (nearest the thumb), so
+ * reading and tab order are the visual order top to bottom; the column is only
+ * as tall as its cards, so it never blocks the page.
  */
 export function FloatingStack({ children }: { children: ReactNode }) {
   return (
-    <div className="fixed inset-x-3 bottom-[var(--mobile-nav-clearance)] z-30 mx-auto flex max-w-md flex-col-reverse gap-2 sm:bottom-6">
+    <div className="fixed inset-x-3 bottom-[var(--mobile-nav-clearance)] z-30 mx-auto flex max-w-md flex-col gap-2 sm:bottom-6">
       {children}
     </div>
   );

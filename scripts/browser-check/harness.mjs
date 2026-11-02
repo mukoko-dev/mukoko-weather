@@ -4,6 +4,7 @@
 // (or point NODE_PATH at its node_modules). Everything here is read-only: the
 // public weather API is read through the test browser, every write is refused,
 // and nothing is created in production.
+import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -13,8 +14,8 @@ export const { chromium } = require("playwright");
 export const BASE = process.env.BASE ?? "http://localhost:3100";
 /** The public weather API the app reads. */
 export const API = "https://weather-api.mukoko.com";
-/** Where screenshots go. */
-export const SHOTS = process.env.SHOTS ?? ".";
+/** Where screenshots go (never the working tree by default). */
+export const SHOTS = process.env.SHOTS ?? tmpdir();
 
 export const PHONE = { width: 390, height: 844 };
 
