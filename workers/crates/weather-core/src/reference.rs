@@ -107,6 +107,24 @@ pub fn activity_brief(id: &str) -> Option<ActivityBrief> {
     })
 }
 
+/// The template and output budget of an active AI prompt document by key (any
+/// key, `system:*` included: this is for the AI Worker, which has them compiled
+/// in; the public `/v1/ai/prompts` route never serves a `system:*` prompt).
+pub fn ai_prompt(key: &str) -> Option<(&'static str, Option<u32>)> {
+    let doc = prompts()
+        .iter()
+        .find(|p| active(p) && text(p, "promptKey") == key)?;
+    let template = text(doc, "template");
+    (!template.is_empty()).then(|| {
+        (
+            template,
+            doc.get("maxTokens")
+                .and_then(Value::as_u64)
+                .and_then(|t| u32::try_from(t).ok()),
+        )
+    })
+}
+
 /// Whether `slug` is one of the app's location tags (the allowlist that
 /// replaces `get_known_tags`' database lookup).
 pub fn is_known_tag(slug: &str) -> bool {

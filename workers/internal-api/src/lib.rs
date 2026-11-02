@@ -22,14 +22,19 @@
 //! 422 personal data or a guardrails block   429 model busy
 //! 502 model or AI Worker failed   503 key or guardrails not configured
 //!
-//! POST /internal/ai/summary
+//! POST /internal/ai/summary | /internal/ai/followup | /internal/ai/agriculture
 //!     Authorization: Bearer <WEATHER_SERVICE_API_KEY>
 //!     X-Mukoko-User-Id: <the signed-in person>   X-Mukoko-Client-IP: <their address>
-//!     {location: {slug, name, lat, lon, elevation, country, tags}, activities}
-//! 200 {insight, cached, generatedAt}   429 the person's hour is used
-//! (the signed-in app's weather summary: the app's Next.js server checks the
-//! WorkOS session and then calls this with the service key; the AI Worker
-//! counts the model call against the person)
+//!     summary:     {location: {slug, name, lat, lon, elevation, country, tags}, activities}
+//!                  → {insight, cached, generatedAt}
+//!     followup:    {message, locationName, locationSlug, weatherSummary, activities,
+//!                   season, history} → {response}
+//!     agriculture: {location: {slug, name, country, elevation, lat, lon}, activities,
+//!                   mode: "snapshot" | "briefing"} → {text, source, cached, mode, generatedAt}
+//! 429 the person's hour is used
+//! (the signed-in app's AI routes: the app's Next.js server checks the WorkOS
+//! session and then calls these with the service key; the AI Worker counts
+//! each model call against the person)
 //! GET /health  liveness, no auth, no detail
 //! ```
 //!
@@ -74,16 +79,31 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
             Some(refused) => Ok(refused),
             None => completions(&mut req, &env).await,
         },
-        ("/internal/ai/summary", Method::Post) => match authorised(&req, &env).await? {
+        (
+            path @ ("/internal/ai/summary" | "/internal/ai/followup" | "/internal/ai/agriculture"),
+            Method::Post,
+        ) => match authorised(&req, &env).await? {
             Some(refused) => Ok(refused),
-            None => app_ai(&mut req, &env, "/internal/summary").await,
+            // `/internal/ai/<name>` on this Worker is `/internal/<name>` on the AI Worker.
+            None => {
+                app_ai(
+                    &mut req,
+                    &env,
+                    &path.replacen("/internal/ai/", "/internal/", 1),
+                )
+                .await
+            }
         },
         ("/health" | "/internal/forecast", _) => {
             error(405, "method_not_allowed", "Only GET is served.")
         }
-        ("/internal/ai/chat/completions" | "/internal/ai/summary", _) => {
-            error(405, "method_not_allowed", "Only POST is served.")
-        }
+        (
+            "/internal/ai/chat/completions"
+            | "/internal/ai/summary"
+            | "/internal/ai/followup"
+            | "/internal/ai/agriculture",
+            _,
+        ) => error(405, "method_not_allowed", "Only POST is served."),
         _ => error(404, "not_found", "No such route."),
     }
 }

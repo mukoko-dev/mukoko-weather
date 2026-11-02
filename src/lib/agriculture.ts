@@ -1,9 +1,11 @@
 /**
  * Agriculture helpers — pure, framework-free.
  *
- * Types mirror `api/py/_agriculture.py` (`AgricultureResponse`,
- * `AgriAIResponse`). Keep the two in sync. Status classes are static
- * lookups so Tailwind sees every class name at build time.
+ * Types mirror the Worker's `GET /v1/agriculture` (`AgricultureResponse`,
+ * `weather_core::agriculture`) and the AI Worker's `POST /internal/agriculture`
+ * answer (`AgriAIResponse`, `weather_core::ai::agriculture`). Keep them in
+ * sync. Status classes are static lookups so Tailwind sees every class name at
+ * build time.
  */
 
 import { workerUrl } from "./weather-api";

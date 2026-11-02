@@ -24,9 +24,7 @@ from ._logging import configure_logging
 
 configure_logging()
 
-from ._ai_followup import router as ai_followup_router
 from ._reports import router as reports_router
-from ._agriculture import router as agriculture_router
 from ._db import get_db
 
 # ---------------------------------------------------------------------------
@@ -83,9 +81,7 @@ app.add_middleware(
 # Mount routers
 # ---------------------------------------------------------------------------
 
-app.include_router(ai_followup_router)
 app.include_router(reports_router)
-app.include_router(agriculture_router)
 
 
 # ---------------------------------------------------------------------------

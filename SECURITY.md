@@ -70,11 +70,10 @@ The Python endpoints use a MongoDB-backed IP rate limiter (`check_rate_limit` in
 
 | Endpoint                  | Limit       |
 | ------------------------- | ----------- |
-| `/api/py/ai/followup`     | 30 req/hour |
 | `/v1/reports` (submit)    | 5 req/hour  |
 | `/api/py/reports/clarify` | 10 req/hour |
 
-The routes on the Rust Workers keep their limits in the Workers' own D1 table `rate_events` (`weather_core::budget`; the client is a SHA-256 of the visitor's address, never the address). The AI location search (`/v1/ai/explore/search`, 15 an hour per client) and the AI history analysis (`/v1/ai/history/analyze`, 10 an hour per client) fail closed: when the budget cannot be read, the model is not called. See `workers/README.md`.
+The routes on the Rust Workers keep their limits in the Workers' own D1 table `rate_events` (`weather_core::budget`; the client is a SHA-256 of the visitor's address, never the address). The AI location search (`/v1/ai/explore/search`, 15 an hour per client) and the AI history analysis (`/v1/ai/history/analyze`, 10 an hour per client) fail closed: when the budget cannot be read, the model is not called. The signed-in app's model routes (the summary, the follow-up chat and the agriculture explanation, on the AI Worker's `/internal/*` paths, reached only through the app's WorkOS-checked `/api/ai` proxy and `mukoko-weather-internal`) are counted per person instead, 30 model calls an hour each (a cached answer is free), and fail closed the same way. See `workers/README.md`.
 
 ### Circuit Breaker System
 
