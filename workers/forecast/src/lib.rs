@@ -186,7 +186,9 @@ async fn weather(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
     // place's current hour and say how old the row is.
     if got.stale {
         let offset = got.data["utc_offset_seconds"].as_i64().unwrap_or(0);
-        let age = blend::age_seconds(&got.fetched_at, now()).unwrap_or(0);
+        // An unreadable `fetched_at` is the oldest row, never a fresh one.
+        let age =
+            blend::age_seconds(&got.fetched_at, now()).unwrap_or(blend::STALE_TTL_SECONDS as i64);
         blend::mark_stale(&mut got.data, age, offset, now());
     }
 

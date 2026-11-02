@@ -777,33 +777,42 @@ pub fn is_fresh(provider: &str, fetched_at: &str, now: DateTime<Utc>) -> bool {
 pub fn mark_stale(data: &mut Value, age_seconds: i64, offset_seconds: i64, now: DateTime<Utc>) {
     let local = now + chrono::Duration::seconds(offset_seconds);
     let hour = local.format("%Y-%m-%dT%H").to_string();
-    let slot = data
-        .pointer("/hourly/time")
-        .and_then(Value::as_array)
-        .and_then(|times| {
-            times
-                .iter()
-                .position(|t| t.as_str().is_some_and(|s| s.starts_with(&hour)))
-        });
-    if let Some(i) = slot {
-        let hourly = data["hourly"].clone();
-        if let Some(current) = data.get_mut("current").and_then(Value::as_object_mut) {
-            for var in CURRENT_VARS.split(',') {
+    // Read the values for the place's current hour first (a borrow of
+    // `hourly`), then write them: no copy of the whole hourly block.
+    let mut rebased: Vec<(&str, Value)> = Vec::new();
+    if let Some(hourly) = data.get("hourly") {
+        let slot = hourly
+            .get("time")
+            .and_then(Value::as_array)
+            .and_then(|times| {
+                times
+                    .iter()
+                    .position(|t| t.as_str().is_some_and(|s| s.starts_with(&hour)))
+            });
+        if let Some(i) = slot {
+            for var in CURRENT_VARS.split(',').chain(std::iter::once("time")) {
                 if let Some(v) = hourly
                     .get(var)
                     .and_then(Value::as_array)
                     .and_then(|a| a.get(i))
                     .filter(|v| !v.is_null())
                 {
-                    current.insert(var.to_owned(), v.clone());
+                    rebased.push((var, v.clone()));
                 }
-            }
-            if let Some(t) = hourly["time"].get(i) {
-                current.insert("time".to_owned(), t.clone());
             }
         }
     }
+    if let Some(current) = data.get_mut("current").and_then(Value::as_object_mut) {
+        for (var, v) in rebased {
+            current.insert(var.to_owned(), v);
+        }
+    }
     if let Some(root) = data.as_object_mut() {
+        // The nowcast is the next hour of a model run that is hours old: it
+        // describes the past, so it is not served as "what happens next".
+        if root.contains_key("minutely") {
+            root.insert("minutely".to_owned(), Value::Null);
+        }
         let baseline = root.entry("baseline").or_insert_with(|| json!({}));
         if let Some(b) = baseline.as_object_mut() {
             b.insert("stale".to_owned(), json!(true));
@@ -1930,6 +1939,7 @@ mod tests {
                 "weather_code": [1, 3, 3],
                 "uv_index": [null, 6.0, 5.0]
             },
+            "minutely": {"precipitation": [0.0, 0.2]},
             "baseline": {"blend": true}
         });
         let at = Utc.with_ymd_and_hms(2026, 11, 2, 14, 8, 0).unwrap();
@@ -1940,6 +1950,8 @@ mod tests {
         assert_eq!(data["current"]["uv_index"], 6.0);
         assert_eq!(data["baseline"]["stale"], true);
         assert_eq!(data["baseline"]["ageSeconds"], 46_800);
+        // The next-hour nowcast of an old run is not served.
+        assert!(data["minutely"].is_null());
         // Existing baseline facts are kept.
         assert_eq!(data["baseline"]["blend"], true);
     }
