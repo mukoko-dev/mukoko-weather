@@ -53,17 +53,29 @@ export function startCouchSync(
 
   starting = (async () => {
     try {
-      const [{ createCouchSyncEngine }, session, rxdb] = await Promise.all([
-        import("./couch-sync"),
-        import("./couch-session"),
-        import("./couch-rxdb"),
-      ]);
+      const [{ createCouchSyncEngine }, session, rxdb, people, pending] =
+        await Promise.all([
+          import("./couch-sync"),
+          import("./couch-session"),
+          import("./couch-rxdb"),
+          import("./sync-people-index"),
+          import("./sync-pending"),
+        ]);
       const engine = createCouchSyncEngine({
         fetchSession: () => session.fetchCouchSession(),
         ensureDatabase: (s) => session.ensurePersonalDatabase(s),
         // Sign-out (401) and a different person remove the local database of
         // anyone but the signed-in person; see `couch-rxdb.ts`.
         purgeStores: (keep) => rxdb.purgeUserDocStores(keep),
+        // The one person this browser holds a database for, so it opens at
+        // start with no network and no credential. Several is a browser nobody
+        // can guess for: then it waits for the credential.
+        recordedPerson: () => {
+          const ids = people.recordedSyncPeople();
+          return ids.length === 1 ? ids[0] : null;
+        },
+        // Changes not yet written to documents, kept past the page.
+        journal: pending.syncJournal,
         openStore: (personId) => rxdb.openUserDocStore(personId),
         bridge,
         deviceId,
@@ -86,12 +98,20 @@ export function startCouchSync(
       const onPageShow = (event: Event) => {
         if ((event as PageTransitionEvent).persisted) void engine.start();
       };
+      // A page that is hidden may be killed without a pagehide (mobile
+      // browsers do), so a change still inside the write debounce is written
+      // the moment the page is hidden.
+      const onHidden = () => {
+        if (document.visibilityState === "hidden") void engine.flush();
+      };
       window.addEventListener("pagehide", onPageHide);
       window.addEventListener("pageshow", onPageShow);
+      document.addEventListener("visibilitychange", onHidden);
       return {
         stop: async () => {
           window.removeEventListener("pagehide", onPageHide);
           window.removeEventListener("pageshow", onPageShow);
+          document.removeEventListener("visibilitychange", onHidden);
           await engine.stop();
           starting = null;
         },

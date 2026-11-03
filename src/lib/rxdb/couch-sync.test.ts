@@ -1112,14 +1112,14 @@ describe("local changes", () => {
     store.onReplicate = async (n) => {
       if (n === 1) {
         await store.upsert({
-          id: "activity:old",
+          id: "activity:harvest",
           type: "activity",
           schemaVersion: 1,
           ownerPersonId: PERSON,
           deviceId: "22222222-2222-4222-8222-222222222222",
           createdAt: "2026-11-02T09:00:00.000Z",
           updatedAt: "2026-11-02T09:00:00.000Z",
-          activityId: "old",
+          activityId: "harvest",
         });
         // The person selects something while the pull is landing.
         h.bridge.change({ selectedActivities: ["livestock"] });
@@ -1128,8 +1128,8 @@ describe("local changes", () => {
     const engine = await started(h);
     // Both survive: the remote one is applied, the local one was flushed first.
     expect([...h.bridge.state.selectedActivities].sort()).toEqual([
+      "harvest",
       "livestock",
-      "old",
     ]);
     await engine.stop();
   });

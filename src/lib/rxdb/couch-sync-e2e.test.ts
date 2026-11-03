@@ -19,6 +19,7 @@ import {
   Clock,
   FakeBridge,
   GRANT_TTL_MS,
+  MemoryJournal,
   PERSON,
   START,
 } from "./test-support/couch-engine-harness";
@@ -34,6 +35,7 @@ import { ensurePersonalDatabase, type CouchSession } from "./couch-session";
 const TOKEN = "sign-in-token-for-tests-0123456789";
 
 interface Device {
+  browser: Browser;
   bridge: FakeBridge;
   engine: CouchSyncEngine;
   clock: Clock;
@@ -47,17 +49,50 @@ let couch: FakeCouch;
 let counter = 0;
 const devices: Device[] = [];
 
+/**
+ * What a device keeps between page loads: the same database (one RxDB storage
+ * and database name), the same app state, the same record of unwritten changes
+ * and the same clock, so a "reload" is a new engine over all of them.
+ */
+interface Browser {
+  name: string;
+  storage: ReturnType<typeof getRxStorageMemory>;
+  bridge: FakeBridge;
+  journal: MemoryJournal;
+  clock: Clock;
+  deviceId: string;
+  /** The person whose database this browser holds, once it has one. */
+  recorded: string | null;
+}
+
+function browser(
+  name: string,
+  initial: ConstructorParameters<typeof FakeBridge>[0] = {},
+): Browser {
+  counter += 1;
+  return {
+    name,
+    storage: getRxStorageMemory(),
+    bridge: new FakeBridge(initial),
+    journal: new MemoryJournal(),
+    clock: new Clock(),
+    deviceId: `${String(counter).padStart(8, "0")}-2222-4333-8444-555555555555`,
+    recorded: null,
+  };
+}
+
 function device(
   name: string,
   initial: ConstructorParameters<typeof FakeBridge>[0] = {},
+  existing?: Browser,
 ): Device {
-  counter += 1;
-  const clock = new Clock();
-  const bridge = new FakeBridge(initial);
+  const b = existing ?? browser(name, initial);
+  const { clock, bridge, deviceId } = b;
   const flags = { online: true };
   const triggers = new Set<(k: Trigger) => void>();
-  const deviceId = `${String(counter).padStart(8, "0")}-2222-4333-8444-555555555555`;
   const engine = createCouchSyncEngine({
+    recordedPerson: () => b.recorded,
+    journal: b.journal,
     fetchSession: async (): Promise<CouchSession> => ({
       token: TOKEN,
       expiresAtMs: clock.now + GRANT_TTL_MS,
@@ -70,11 +105,11 @@ function device(
       ensurePersonalDatabase(s, couch.fetch as typeof fetch),
     openStore: (personId) =>
       openUserDocStore(personId, {
-        storage: getRxStorageMemory() as never,
+        storage: b.storage as never,
         baseFetch: couch.fetch as typeof fetch,
         retryTimeMs: 10,
         cycleTimeoutMs: 5_000,
-        nameSuffix: `_${name}_${counter}`,
+        nameSuffix: `_${b.name}_${deviceId.slice(0, 8)}`,
       }),
     bridge,
     deviceId,
@@ -89,6 +124,7 @@ function device(
     },
   });
   const d: Device = {
+    browser: b,
     bridge,
     engine,
     clock,
@@ -316,6 +352,113 @@ describe("settings follow the person", () => {
     // while the first credential fetch is failing and the engine backs off.)
   });
 
+  describe("offline first: a change survives the page, however early it goes away", () => {
+    /** A browser that has synced once, so it holds the person's database. */
+    async function syncedBrowser(name: string): Promise<Browser> {
+      const first = device(name);
+      await startDevice(first);
+      first.browser.recorded = PERSON;
+      await first.engine.stop();
+      return first.browser;
+    }
+    /** The same browser, a new page: a new engine over the same everything. */
+    const reload = (b: Browser, online: boolean) => {
+      const next = device(b.name, {}, b);
+      next.flags.online = online;
+      return next;
+    };
+
+    it("offline start, a change, a reload, then the connection comes back: it wins over an OLDER remote value and reaches the server", async () => {
+      fresh();
+      const a = device("a", { theme: "dark" }); // the remote value, at START
+      await startDevice(a);
+      expect(couch.get("preference:theme")?.preferenceValue).toBe("dark");
+
+      const b = await syncedBrowser("b");
+      expect(b.bridge.state.theme).toBe("dark"); // it received a's choice
+
+      // Page two: starts offline and the person picks light.
+      const madeAt = START + 120_000;
+      b.clock.now = madeAt;
+      const page2 = reload(b, false);
+      await startDevice(page2);
+      b.bridge.change({ theme: "light" });
+      await b.clock.advance(LOCAL_WRITE_DEBOUNCE_MS, page2.settle);
+      // Written to the person's database on the device, offline: nothing is
+      // left only in the record.
+      expect(b.journal.record).toBeNull();
+      await page2.engine.stop(); // closed offline
+
+      // Page three: still offline, then the connection returns.
+      b.clock.now = madeAt + 600_000;
+      const page3 = reload(b, false);
+      await startDevice(page3);
+      expect(b.bridge.state.theme).toBe("light");
+      page3.flags.online = true;
+      page3.triggers.forEach((t) => t("online"));
+      await page3.settle();
+      await flush(page3);
+
+      expect(couch.get("preference:theme")).toMatchObject({
+        preferenceValue: "light",
+        updatedAt: toRfc3339(madeAt),
+      });
+      expect(b.bridge.state.theme).toBe("light");
+      await a.sync();
+      expect(a.bridge.state.theme).toBe("light");
+    });
+
+    it("a change inside the debounce window when the page goes away is written, and arrives", async () => {
+      fresh();
+      const a = device("a", { theme: "dark" });
+      await startDevice(a);
+      const b = await syncedBrowser("b");
+
+      const madeAt = START + 120_000;
+      b.clock.now = madeAt;
+      const page2 = reload(b, false);
+      await startDevice(page2);
+      b.bridge.change({ theme: "light" });
+      await page2.engine.stop(); // pagehide, 0 ms after the change
+
+      b.clock.now = madeAt + 600_000;
+      const page3 = reload(b, true);
+      await startDevice(page3);
+      await flush(page3);
+      expect(couch.get("preference:theme")).toMatchObject({
+        preferenceValue: "light",
+        updatedAt: toRfc3339(madeAt),
+      });
+      expect(page3.bridge.state.theme).toBe("light");
+    });
+
+    it("a person's first session, offline, closed before any database exists: the next page still writes the change and it beats the older remote value", async () => {
+      fresh();
+      const a = device("a", { theme: "dark" });
+      await startDevice(a);
+
+      const b = browser("fresh-b", {});
+      const page1 = device("fresh-b", {}, b);
+      page1.flags.online = false;
+      await startDevice(page1);
+      const madeAt = START + 120_000;
+      b.clock.now = madeAt;
+      b.bridge.change({ theme: "light" });
+      await page1.engine.stop(); // nothing was written anywhere
+      expect(b.journal.record).not.toBeNull();
+
+      b.clock.now = madeAt + 600_000;
+      const page2 = device("fresh-b", {}, b);
+      await startDevice(page2);
+      await flush(page2);
+      expect(couch.get("preference:theme")).toMatchObject({
+        preferenceValue: "light",
+        updatedAt: toRfc3339(madeAt),
+      });
+      expect(page2.bridge.state.theme).toBe("light");
+    });
+  });
+
   it("the person's own order of activities survives another device's add and remove", async () => {
     fresh();
     const a = device("a", { selectedActivities: ["livestock", "gardening"] });
@@ -332,21 +475,24 @@ describe("settings follow the person", () => {
 
     a.clock.now = START + 120_000;
     a.bridge.change({
-      selectedActivities: ["livestock", "gardening", "soccer"],
+      selectedActivities: ["livestock", "gardening", "football"],
     });
     await flush(a);
     await b.sync();
     expect(b.bridge.state.selectedActivities).toEqual([
       "livestock",
       "gardening",
-      "soccer",
+      "football",
     ]);
 
     a.clock.now = START + 240_000;
-    a.bridge.change({ selectedActivities: ["livestock", "soccer"] });
+    a.bridge.change({ selectedActivities: ["livestock", "football"] });
     await flush(a);
     await b.sync();
-    expect(b.bridge.state.selectedActivities).toEqual(["livestock", "soccer"]);
+    expect(b.bridge.state.selectedActivities).toEqual([
+      "livestock",
+      "football",
+    ]);
   });
 
   it("the later of two concurrent edits wins on both devices", async () => {

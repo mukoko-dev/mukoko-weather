@@ -4,7 +4,14 @@
  * engine tests. Nothing here waits on real time.
  */
 
-import type { EngineDeps, SyncBridge, SyncStore, Trigger } from "../couch-sync";
+import type {
+  ChangeJournal,
+  EngineDeps,
+  JournalRecord,
+  SyncBridge,
+  SyncStore,
+  Trigger,
+} from "../couch-sync";
 import type { CouchSession } from "../couch-session";
 import type { SyncableState, SyncedPatch, UserDocType } from "../couch-docs";
 
@@ -86,6 +93,42 @@ export class FakeBridge implements SyncBridge {
   };
   get listenerCount(): number {
     return this.listeners.size;
+  }
+}
+
+/**
+ * The record of changes not yet written to documents, in memory. What
+ * `sync-pending.ts` keeps in web storage in the browser: it survives an engine
+ * (a page load) because a test hands the same object to the next one.
+ */
+export class MemoryJournal implements ChangeJournal {
+  record: JournalRecord | null = null;
+  writes = 0;
+  clears = 0;
+  read(): JournalRecord | null {
+    return this.record
+      ? {
+          at: this.record.at,
+          base: {
+            ...this.record.base,
+            selectedActivities: [...this.record.base.selectedActivities],
+          },
+        }
+      : null;
+  }
+  write(record: JournalRecord): void {
+    this.writes += 1;
+    this.record = {
+      at: record.at,
+      base: {
+        ...record.base,
+        selectedActivities: [...record.base.selectedActivities],
+      },
+    };
+  }
+  clear(): void {
+    this.clears += 1;
+    this.record = null;
   }
 }
 
@@ -190,6 +233,14 @@ export function harness(
     ensure?: (n: number, s: CouchSession) => Promise<void> | void;
     /** Runs when the engine purges other people's local databases; may throw. */
     purge?: (keep: string | null) => Promise<void> | void;
+    /**
+     * The person whose local database this browser already holds (the engine
+     * opens it at start, before any credential). Omit for a browser that has
+     * none yet: the first session of a person.
+     */
+    recorded?: string | null;
+    /** Where changes not yet written to documents are kept between page loads. */
+    journal?: ChangeJournal;
   } = {},
 ): Harness {
   const clock = new Clock();
@@ -235,6 +286,10 @@ export function harness(
       triggers.add(listener);
       return () => triggers.delete(listener);
     },
+    ...(options.recorded !== undefined
+      ? { recordedPerson: () => options.recorded ?? null }
+      : {}),
+    ...(options.journal ? { journal: options.journal } : {}),
   };
   return {
     clock,

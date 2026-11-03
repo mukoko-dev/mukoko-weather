@@ -11,10 +11,43 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { _resetCouchSyncStart, startCouchSync } from "./couch-sync-start";
+import type { CouchSyncEngine } from "./couch-sync";
 import { SYNC_PEOPLE_KEY, recordedSyncPeople } from "./sync-people-index";
+import { SYNC_PENDING_KEY } from "./sync-pending";
 import { FakeBridge } from "./test-support/couch-engine-harness";
 
 const PERSON = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
+
+// The real engine, with its `flush` observable.
+const flushes: ReturnType<typeof vi.fn>[] = [];
+vi.mock("./couch-sync", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./couch-sync")>();
+  return {
+    ...real,
+    createCouchSyncEngine: (
+      deps: Parameters<typeof real.createCouchSyncEngine>[0],
+    ) => {
+      const engine: CouchSyncEngine = real.createCouchSyncEngine(deps);
+      const flush = vi.fn(engine.flush);
+      engine.flush = flush as never;
+      flushes.push(flush);
+      return engine;
+    },
+  };
+});
+
+// The real RxDB layer, with the order of its opens against requests observable.
+const order: string[] = [];
+vi.mock("./couch-rxdb", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./couch-rxdb")>();
+  return {
+    ...real,
+    openUserDocStore: (...args: Parameters<typeof real.openUserDocStore>) => {
+      order.push("local database");
+      return real.openUserDocStore(...args);
+    },
+  };
+});
 
 type Handler = (event?: unknown) => void;
 let handlers: Map<string, Set<Handler>>;
@@ -196,5 +229,83 @@ describe("flag on: signed out", () => {
     expect(indexedDbCalls.length).toBeGreaterThan(0);
     expect(recordedSyncPeople()).toEqual([PERSON]);
     await handle?.stop();
+  });
+});
+
+describe("flag on: offline first", () => {
+  beforeEach(() => {
+    flushes.length = 0;
+    order.length = 0;
+  });
+
+  /** The route is down for a while (not signed out), and every ask is logged. */
+  function routeDown(): void {
+    fetchSpy.mockImplementation(async () => {
+      order.push("credential");
+      return new Response(JSON.stringify({ error: "couch_unavailable" }), {
+        status: 503,
+      });
+    });
+  }
+
+  it("a browser that holds one person's database opens it before it asks the route for anything", async () => {
+    stubBrowser("true");
+    storage.set(SYNC_PEOPLE_KEY, JSON.stringify([PERSON]));
+    routeDown();
+    const handle = await startCouchSync(new FakeBridge(), "device");
+    await untilRequests(1);
+    await settle();
+    expect(order[0]).toBe("local database");
+    expect(order).toContain("credential");
+    await handle?.stop();
+  });
+
+  it("with several people recorded the starter guesses none", async () => {
+    stubBrowser("true");
+    storage.set(
+      SYNC_PEOPLE_KEY,
+      JSON.stringify([PERSON, "0190ffff-0000-7000-8000-00000000abcd"]),
+    );
+    routeDown();
+    const handle = await startCouchSync(new FakeBridge(), "device");
+    await untilRequests(1);
+    await settle();
+    expect(order[0]).toBe("credential");
+    await handle?.stop();
+  });
+
+  it("a change the person makes is recorded in web storage at once, and only the settings", async () => {
+    stubBrowser("true");
+    routeDown(); // signed in, the credential just is not available yet
+    const bridge = new FakeBridge();
+    const handle = await startCouchSync(bridge, "device");
+    await untilRequests(1);
+    await settle();
+    expect(storage.has(SYNC_PENDING_KEY)).toBe(false);
+    bridge.change({ theme: "dark" });
+    const raw = storage.get(SYNC_PENDING_KEY);
+    expect(raw).toBeDefined();
+    expect(JSON.parse(raw as string)).toMatchObject({
+      base: { theme: "system" },
+    });
+    await handle?.stop();
+  });
+
+  it("the page being hidden writes the pending change now; being shown does not", async () => {
+    stubBrowser("true");
+    const handle = await startCouchSync(new FakeBridge(), "device");
+    await untilRequests(1);
+    await settle();
+    const [flush] = flushes;
+    const doc = (globalThis as { document: { visibilityState: string } })
+      .document;
+    doc.visibilityState = "visible";
+    fire("visibilitychange");
+    expect(flush).not.toHaveBeenCalled();
+    doc.visibilityState = "hidden";
+    fire("visibilitychange");
+    expect(flush).toHaveBeenCalledTimes(1);
+    await handle?.stop();
+    expect(listenerCount()).toBe(0);
   });
 });
