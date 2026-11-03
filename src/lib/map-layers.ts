@@ -143,21 +143,35 @@ export function getMapLayerById(id: string): MapLayer | undefined {
 /**
  * Tomorrow.io weather overlay tiles are only served for zoom levels 1–12
  * (see the tiles Worker, which rejects z<1 or z>12 with HTTP 400).
- * Pinning the raster source to this range makes MapLibre overzoom the z12 tile
- * when the user zooms in past 12 instead of requesting z13+ tiles the proxy
+ * Pinning the raster source's maxzoom makes MapLibre overzoom the last tile
+ * when the user zooms in further instead of requesting tiles the Worker
  * rejects — which would otherwise make the overlay vanish when zoomed in.
+ *
+ * The cap is 10, not 12 (#266): a z10 tile is already ~150 m per pixel, far
+ * finer than the forecast grid behind it, so z11–12 tiles add requests against
+ * a small shared quota without adding detail.
  */
 export const WEATHER_OVERLAY_MIN_ZOOM = 1;
-export const WEATHER_OVERLAY_MAX_ZOOM = 12;
+export const WEATHER_OVERLAY_MAX_ZOOM = 10;
+
+/**
+ * Display size of one overlay tile, in CSS pixels. Tomorrow.io tiles are
+ * 256 px images; drawing them at 512 makes MapLibre fetch tiles one zoom level
+ * shallower, about a quarter as many per screen (a phone view at zoom 8 needs
+ * ~4 instead of ~10). At z8 one source pixel is still ~0.6 km, finer than the
+ * forecast data, so nothing visible is lost; the quota and the wait both drop.
+ */
+export const WEATHER_OVERLAY_TILE_SIZE = 512;
 
 /**
  * Where the browser loads MapLibre's web worker from. maplibre-gl v6 ships
  * its worker as a separate ES module and, by default, looks for it next to
  * the bundled chunk, where webpack never puts it, so the worker fails to load
  * and every map renders blank. scripts/copy-maplibre-worker.mjs copies the
- * worker (and the shared module it imports) into a per-version folder before
- * every build/dev run; MapLibreMap passes `maplibreWorkerUrl(getVersion())` to
- * setWorkerUrl() before creating a map. Keying the path by version keeps an
+ * worker, and any module the worker imports (6.12 splits it from a shared
+ * module; 6.13 and later ship it self-contained), into a per-version folder
+ * before every build/dev run; MapLibreMap passes `maplibreWorkerUrl(getVersion())`
+ * to setWorkerUrl() before creating a map. Keying the path by version keeps an
  * old tab's bundle paired with its own worker across deploys.
  */
 export function maplibreWorkerUrl(version: string): string {
@@ -188,8 +202,8 @@ export function weatherOverlayTileUrl(
 
 /**
  * Raster source spec for a weather overlay layer, with minzoom/maxzoom pinned
- * to the Tomorrow.io tile availability range so the overlay keeps rendering
- * (via overzoom) at high map zooms instead of silently disappearing.
+ * to the useful tile range so the overlay keeps rendering (via overzoom) at
+ * high map zooms instead of silently disappearing.
  */
 export function buildWeatherOverlaySource(layerId: string, timestamp?: string) {
   const gibs = getGibsLayer(layerId);
@@ -206,7 +220,7 @@ export function buildWeatherOverlaySource(layerId: string, timestamp?: string) {
   return {
     type: "raster" as const,
     tiles: [weatherOverlayTileUrl(layerId, timestamp)],
-    tileSize: 256,
+    tileSize: WEATHER_OVERLAY_TILE_SIZE,
     minzoom: WEATHER_OVERLAY_MIN_ZOOM,
     maxzoom: WEATHER_OVERLAY_MAX_ZOOM,
     attribution: attributionHtml(overlayAttribution(layerId)),

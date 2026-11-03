@@ -10,6 +10,10 @@ import { isBareNameCandidate, resolveBareName } from "@/lib/bare-name";
 import { resolveLocationSlug } from "@/lib/places";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { SHELL_ANONYMOUS, SHELL_HEADER } from "@/lib/sw-navigation";
+import {
+  COUCH_ACCESS_TOKEN_REFRESH_BUFFER_SECONDS,
+  COUCH_SESSION_PATH,
+} from "@/lib/couch-session-timing";
 // Constants only: the cookie name is read by the home page and display (last-location.ts).
 import {
   LAST_LOCATION_COOKIE,
@@ -19,6 +23,18 @@ import {
 /** The gate needs DB errors to throw, not to read as "not found". */
 const strictResolve = (slug: string) =>
   resolveLocationSlug(slug, { strict: true });
+
+/**
+ * AuthKit options per path. Only the CouchDB sync's credential route asks for
+ * more: the WorkOS access token it exchanges must have life left, because the
+ * credential it yields never outlives that token (`couch-session-timing.ts`).
+ * Every other path keeps AuthKit's own refresh buffer.
+ */
+function authkitOptionsFor(pathname: string) {
+  return pathname === COUCH_SESSION_PATH
+    ? { refreshBufferSeconds: COUCH_ACCESS_TOKEN_REFRESH_BUFFER_SECONDS }
+    : {};
+}
 
 /**
  * Top-level routes that are NOT location slugs. Every directory under
@@ -79,7 +95,7 @@ export default async function proxy(
   // runs alongside the refresh instead of after it.
   const path = classifyLocationPath(pathname, KNOWN_ROUTES);
   const [{ headers, session }, renderable] = await Promise.all([
-    authkit(request),
+    authkit(request, authkitOptionsFor(pathname)),
     path.kind === "slug"
       ? isRenderableLocation(path.slug, strictResolve, {
           // A lookup that outlives the timeout keeps running after the

@@ -20,6 +20,11 @@
  * There is deliberately no shared service token that can act for a person.
  */
 
+import { parseBareOrigin } from "./bare-origin";
+
+/** The Nyuchi API's production origin: what `NYUCHI_API_URL` is set to. */
+export const NYUCHI_API_DEFAULT_ORIGIN = "https://api.nyuchi.com";
+
 /** One request to the gateway; the path is absolute (`/v1/...`). */
 export type GatewayTransport = (request: Request) => Promise<Response>;
 
@@ -36,7 +41,6 @@ export interface GatewayConfig {
 
 /** Placeholder origin for a service binding (the host is ignored). */
 const BINDING_ORIGIN = "https://nyuchi-api.internal";
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const KEY_RE = /^(nyk_[A-Za-z0-9_-]{8,128})\.(nys_[A-Za-z0-9_-]{8,256})$/;
 export const GATEWAY_TIMEOUT_MS = 8_000;
 
@@ -50,21 +54,8 @@ function assertServer(): void {
 
 /** A bare https origin (http only for localhost), else null. */
 export function gatewayOrigin(env: Env = process.env): string | null {
-  const raw = env.NYUCHI_API_URL?.trim();
-  if (!raw) return null;
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    return null;
-  }
-  const local = LOCAL_HOSTS.has(url.hostname);
-  if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) {
-    return null;
-  }
-  if (url.username || url.password || url.search || url.hash) return null;
-  if (url.pathname !== "/" && url.pathname !== "") return null;
-  return url.origin;
+  // The rule is `parseBareOrigin`'s, shared with the browser's sync client.
+  return parseBareOrigin(env.NYUCHI_API_URL?.trim());
 }
 
 /** The key pair, or null when unset or malformed (never echoed). */
@@ -161,10 +152,22 @@ export function parseRetryAfter(raw: string | null): number | undefined {
   return n > 0 ? Math.min(n, 3600) : undefined;
 }
 
-/** Read the gateway's `{detail: {error, error_description}}` code, safely. */
-export async function gatewayErrorCode(
+/** The gateway's `{detail: {error, error_description}}`, read safely. */
+export interface GatewayErrorDetail {
+  /** The RFC 6749 error code (`^[a-z_]{1,48}$`), else null. */
+  code: string | null;
+  /**
+   * The human text, at most 200 characters, else null. It is for matching
+   * only: never log it or return it to a browser (the gateway's text can name
+   * the situation of a person, for example a scheduled deletion).
+   */
+  description: string | null;
+}
+
+/** Read the gateway's error code and description, never throwing. */
+export async function gatewayErrorDetail(
   response: Response,
-): Promise<string | null> {
+): Promise<GatewayErrorDetail> {
   try {
     const body = (await response.json()) as Record<string, unknown>;
     const detail =
@@ -172,10 +175,21 @@ export async function gatewayErrorCode(
         ? (body.detail as Record<string, unknown>)
         : body;
     const code = detail?.error;
-    return typeof code === "string" && /^[a-z_]{1,48}$/.test(code)
-      ? code
-      : null;
+    const description = detail?.error_description;
+    return {
+      code:
+        typeof code === "string" && /^[a-z_]{1,48}$/.test(code) ? code : null,
+      description:
+        typeof description === "string" ? description.slice(0, 200) : null,
+    };
   } catch {
-    return null;
+    return { code: null, description: null };
   }
+}
+
+/** Read the gateway's `{detail: {error, error_description}}` code, safely. */
+export async function gatewayErrorCode(
+  response: Response,
+): Promise<string | null> {
+  return (await gatewayErrorDetail(response)).code;
 }

@@ -82,8 +82,23 @@ const MapLibreMap = dynamic(
   { ssr: false, loading: () => <MapSkeleton fill className="rounded-none" /> },
 );
 
-/** Milliseconds per timeline stop while playing. */
+// Start downloading MapLibre as soon as this page's code runs, rather than
+// after hydration mounts the dynamic map component below (#266). The browser
+// guard keeps it out of the server render; the chunk is shared, so the map
+// component's own import() resolves from it.
+if (typeof window !== "undefined") {
+  import("maplibre-gl").catch(() => {
+    // The map component retries and shows its own error state.
+  });
+}
+
+/** Milliseconds each loaded timeline frame stays up while playing. */
 const TIMELINE_TICK_MS = 900;
+/**
+ * Longest a playing timeline waits for a frame's tiles before moving on
+ * anyway, so one slow or failed frame cannot stall playback.
+ */
+const TIMELINE_MAX_WAIT_MS = 8000;
 
 /** Storage handle, or null when the browser blocks localStorage (it can throw on access). */
 function getStorage(): Storage | null {
@@ -141,6 +156,11 @@ export function MapDashboard({ location }: MapDashboardProps) {
   const [sheetOpen, setSheetOpen] = useState(true);
   // null = the layer's default frame (Now for forecasts, newest for imagery).
   const [stepChoice, setStepChoice] = useState<number | null>(null);
+  // Set once the user plays or scrubs the timeline. Only then is the next
+  // frame preloaded: every preload spends real upstream tile requests.
+  const [timelineEngaged, setTimelineEngaged] = useState(false);
+  // Timestamp of the overlay frame that last finished loading on the map.
+  const [loadedTimestamp, setLoadedTimestamp] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   // Model picker: opens on the user's forecast-model preference. Picking a
   // model here only changes the map — the preference drives every location
@@ -292,19 +312,32 @@ export function MapDashboard({ location }: MapDashboardProps) {
     setStepChoice(null);
   }, []);
 
+  // The raster overlay frame on screen (none for model fields or air quality).
+  const rasterOverlay = !aqOn && !modelOn;
+  const weatherTimestamp =
+    timelineOn && !modelOn ? (frames[step]?.timestamp ?? "now") : "now";
+  const prefetchTimestamp =
+    rasterOverlay && timelineOn && timelineEngaged && frameCount > 1
+      ? (frames[(step + 1) % frameCount]?.timestamp ?? null)
+      : null;
+  const frameReady = !rasterOverlay || loadedTimestamp === weatherTimestamp;
+
+  // Playback waits for each frame to load, then shows it for one tick. The
+  // next frame is preloaded meanwhile, so on a fast connection this is a
+  // steady tick and on a slow one it never runs ahead of the tiles.
   useEffect(() => {
     if (!isPlaying || frameCount < 2) return;
-    const id = window.setInterval(
+    const id = window.setTimeout(
       () =>
         setStepChoice((s) => {
           // Continue from the frame on screen (imagery opens on the newest).
           const current = s ?? defaultStep;
           return (current + 1) % frameCount;
         }),
-      TIMELINE_TICK_MS,
+      frameReady ? TIMELINE_TICK_MS : TIMELINE_MAX_WAIT_MS,
     );
-    return () => window.clearInterval(id);
-  }, [isPlaying, frameCount, defaultStep]);
+    return () => window.clearTimeout(id);
+  }, [isPlaying, frameCount, defaultStep, step, frameReady]);
 
   const fieldOverlay: FieldOverlay | null = useMemo(() => {
     if (!modelOn) return null;
@@ -428,9 +461,9 @@ export function MapDashboard({ location }: MapDashboardProps) {
         zoom={8}
         interactive
         weatherLayer={aqOn || modelOn ? null : activeLayer}
-        weatherTimestamp={
-          timelineOn && !modelOn ? (frames[step]?.timestamp ?? "now") : "now"
-        }
+        weatherTimestamp={weatherTimestamp}
+        weatherPrefetchTimestamp={prefetchTimestamp}
+        onWeatherFrameLoaded={setLoadedTimestamp}
         aqiOverlay={aqOn ? aqFill : null}
         fieldOverlay={fieldOverlay}
         aqiBubbles={aqOn ? bubbles : null}
@@ -630,8 +663,14 @@ export function MapDashboard({ location }: MapDashboardProps) {
                   frames={frames}
                   step={step}
                   playing={isPlaying}
-                  onStepChange={setStepChoice}
-                  onPlayingChange={setPlaying}
+                  onStepChange={(next) => {
+                    setTimelineEngaged(true);
+                    setStepChoice(next);
+                  }}
+                  onPlayingChange={(next) => {
+                    setTimelineEngaged(true);
+                    setPlaying(next);
+                  }}
                   zone={timelineZone}
                   inputLabel={gibsLayer ? "Observation time" : "Forecast time"}
                 />

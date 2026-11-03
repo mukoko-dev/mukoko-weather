@@ -83,7 +83,8 @@ describe("MapDashboard — timeline", () => {
     expect(source).toContain("forecastTimelineFrames(now)");
     expect(source).toContain("frames[step]?.timestamp");
     expect(source).toContain("<MapTimeline");
-    expect(source).toContain("onStepChange={setStepChoice}");
+    expect(source).toContain("setStepChoice(next);");
+    expect(source).toContain("onStepChange={(next) => {");
   });
 
   it("labels forward timelines in the place's time zone, not the viewer's", () => {
@@ -168,6 +169,41 @@ describe("MapDashboard — bottom sheet", () => {
     expect(source).toContain('const ICON_CLASS = "h-5 w-5";');
     expect(source).not.toMatch(/className="h-5 w-5"/);
     expect(source).toContain("top-[max(1rem,env(safe-area-inset-top))]");
+  });
+});
+
+describe("MapDashboard — timeline load speed (#266)", () => {
+  it("preloads the next frame only once the timeline is used", () => {
+    expect(source).toContain("timelineOn && timelineEngaged");
+    expect(source).toContain("frames[(step + 1) % frameCount]?.timestamp");
+    expect(source).toContain("weatherPrefetchTimestamp={prefetchTimestamp}");
+    expect(source).toContain("setTimelineEngaged(true);");
+  });
+
+  it("waits for each frame to load before advancing playback", () => {
+    expect(source).toContain("onWeatherFrameLoaded={setLoadedTimestamp}");
+    expect(source).toContain("loadedTimestamp === weatherTimestamp");
+    // Model fields and air quality draw no raster frame, so never wait on one.
+    expect(source).toContain("!rasterOverlay ||");
+    expect(source).toContain(
+      "frameReady ? TIMELINE_TICK_MS : TIMELINE_MAX_WAIT_MS",
+    );
+    expect(source).not.toContain(
+      "window.setInterval(\n      () =>\n        setStepChoice",
+    );
+  });
+
+  it("starts the MapLibre download before hydration, in the browser only", () => {
+    expect(source).toContain('if (typeof window !== "undefined") {');
+    expect(source).toContain('import("maplibre-gl").catch(');
+  });
+
+  it("preconnects to MapTiler from the server page", () => {
+    const page = readFileSync(resolve(__dirname, "page.tsx"), "utf-8");
+    expect(page).toContain('import { preconnect } from "react-dom";');
+    expect(page).toContain(
+      'preconnect("https://api.maptiler.com", { crossOrigin: "anonymous" });',
+    );
   });
 });
 

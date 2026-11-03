@@ -121,8 +121,8 @@ locations.
 | `NEXT_PUBLIC_WORKOS_REDIRECT_URI` |   Yes    | OAuth callback URL; must match the WorkOS dashboard (`https://weather.mukoko.com/callback` in production)                                                                                                                                                                |
 | `WEATHER_SERVICE_URL`             |    No    | Internal weather Worker origin (`https://weather-internal.mukoko.com`). The signed-in `/api/ai` proxy calls its `/internal/ai/*` paths. Without the AI vars `/api/ai` answers 503 and the summary card says it is unavailable                                            |
 | `WEATHER_SERVICE_API_KEY`         |    No    | Server-only. The service key `mukoko-weather-internal` checks (sent by the `/api/ai` proxy; never to the browser). Vercel holds no Cloudflare AI token; the model is set by the AI Worker                                                                                |
-| `NYUCHI_API_URL`                  |    No    | Server-only. Nyuchi API gateway origin (`https://api.nyuchi.com`) for `/api/app-keys`. Unset = that route answers `503`                                                                                                                                                  |
-| `NYUCHI_APP_KEYS_API_KEY`         |    No    | Server-only secret. This app's internal gateway key `nyk_….nys_…`, scoped `identity app-keys weather` only. Exchanges each user's own WorkOS token for a person token; never `NEXT_PUBLIC_*`                                                                             |
+| `NYUCHI_API_URL`                  |    No    | Server-only. Nyuchi API gateway origin (`https://api.nyuchi.com`) for `/api/app-keys` and `/api/couch/session` (the latter hands it to the browser as the only host the CouchDB sync replicates with). Unset = those routes answer `503`                                 |
+| `NYUCHI_APP_KEYS_API_KEY`         |    No    | Server-only secret. This app's internal gateway key `nyk_….nys_…`, scoped `identity app-keys weather` only. Exchanges each user's own WorkOS token for a person token (`/api/app-keys`) and for the CouchDB sync grant (`/api/couch/session`); never `NEXT_PUBLIC_*`     |
 | `DB_INIT_SECRET`                  |    No    | Protects `/api/db-init` in production (`x-init-secret` header)                                                                                                                                                                                                           |
 | `NEXT_PUBLIC_WEATHER_API_URL`     |    No    | Origin of the Rust weather Worker. Unset = the production default `https://weather-api.mukoko.com`, and the app holds no fallback for any route (there is no Python backend). `https` only (plain `http` for localhost)                                                  |
 | `OPEN_METEO_BASE_URL`             |    No    | Server-only. Origin of a self-hosted Open-Meteo (`infra/open-meteo/`, not deployed); `/v1/forecast` is appended. Unset = the public API. `https` only (plain `http` for localhost). Only the server-side direct-fetch fallback reads it; the Workers call the public API |
@@ -136,12 +136,29 @@ All data, AI, and CRUD work runs in the **Rust Cloudflare Workers** in
 Python FastAPI backend that used to sit under `api/py/` was deleted in #333.
 Vercel serves the Next.js app, not the data backend. A few routes remain in TypeScript on Vercel:
 OG image generation, DB init, the public embed API, the auth-gated `/api/ai`
-proxy, and developer API-key and device management. A request to `/api/py/...`
+proxy, developer API-key and device management, and the session credential of
+the (flagged) CouchDB sync, `POST /api/couch/session`. A request to `/api/py/...`
 is a 404 problem document (`src/app/api/retired`), except the weather-station
 upload URL `/api/py/stations/ingest` that consoles in the field are configured
 with: `vercel.json` rewrites that one path to the stations Worker, and the
 stations Worker also takes `weather.mukoko.com/api/py/stations/*` as a route
 once it is deployed with it.
+
+**CouchDB sync (flagged, off by default).** `FLAGS.couch_sync` (#396) replicates
+a person's theme, forecast model and selected activities with their own CouchDB
+database `user_<personId>` through the Nyuchi API, offline first (RxDB on the
+device). Only these plaintext settings sync; saved places, the home place and
+history are encrypted on the device and wait for a key-custody decision. With
+the flag off nothing is imported and no request is made. The credential is the
+Nyuchi API's `couch:user` sync grant: the site's server trades the person's own
+WorkOS access token for it (`POST /api/couch/session`, the same exchange
+`/api/app-keys` uses, with this app's existing key; no new secret or variable)
+and the page replicates with it. Until the owner steps are done (the key's
+client id on the gateway's `COUCH_SYNC_CLIENT_IDS`, CouchDB's JWT handler) the
+route answers `503` and the app stays local-only. See
+[docs/couchdb-sync.md](docs/couchdb-sync.md) for the design, the gateway facts
+it was checked against and the steps. The existing `/v1/devices` sync is
+unchanged.
 
 **Missing files 404.** A top-level path containing a dot that isn't a real
 public file or static route, such as a deleted `/favicon-48.png`, is rewritten
@@ -184,6 +201,8 @@ priority) allows. Response headers: `X-Weather-Provider`
 `skipped-error` | `none`) and `X-Current-Source`. Data credit: ECMWF, NOAA,
 DWD, ECCC, Météo-France, UK Met Office, CMA, JMA via Open-Meteo.com (CC BY 4.0); MET Norway (CC BY 4.0, converted to our format) when it is the failover. Open-Meteo's free API
 is non-commercial only — see issue #246 for the licensing options. The Workers use Open-Meteo's paid ("customer") hosts whenever the subscription key is present, and the free hosts otherwise (`workers/README.md`, "Open-Meteo paid plan").
+
+**Apple Weather (WeatherKit) — coming, off for now** ([#408](https://github.com/mukoko-dev/mukoko-weather/issues/408)) — the Apple Developer Program membership includes 500,000 WeatherKit calls a month, and `apple_weatherkit` ("Apple Weather") is being added to the model list: a model you can pick in My Weather and a series in the model comparison, not a member of the default blend. The provider rules are built and tested (`weather_core::weatherkit`: conversion to our names and units, the condition-code map, the developer token with an injected signer, the call budget, the 15-minute cache rule), but nothing serves the model yet (the weather backend is moving to Gwaihir, a server of the Nyuchi Servers API), so the picker row is behind `FLAGS.apple_weatherkit` and stays off. Wherever Apple data is shown the app credits it (Apple Weather trademark, the legal link, and a notice when the data was modified) from `src/lib/forecast-sources.ts`. Apple's account steps and the secrets are in CONTRIBUTING.md, "Apple WeatherKit".
 
 **Three-layer error isolation** — `page.tsx` wraps fetching in try/catch so the
 server always renders something; each weather section sits inside a
