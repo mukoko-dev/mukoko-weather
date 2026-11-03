@@ -9,6 +9,7 @@ import { CouchHttpError } from "./couch-fetch";
 import { CouchSessionError } from "./couch-session";
 import {
   FakeStore,
+  GRANT_TTL_MS,
   PERSON,
   harness,
   session,
@@ -84,13 +85,156 @@ describe("a normal cycle", () => {
   });
 });
 
+describe("preparing the person's database on the server", () => {
+  it("once per person, before the first replication, and not again on later cycles", async () => {
+    const order: string[] = [];
+    const store = new FakeStore();
+    store.onReplicate = () => {
+      order.push("replicate");
+    };
+    const h = harness({
+      makeStore: () => store,
+      ensure: () => {
+        order.push("ensure");
+      },
+    });
+    const engine = await started(h);
+    await h.clock.advance(POLL_INTERVAL_MS, settleWith(engine));
+    await h.clock.advance(POLL_INTERVAL_MS, settleWith(engine));
+    expect(order).toEqual(["ensure", "replicate", "replicate", "replicate"]);
+    expect(h.ensured).toHaveLength(1);
+    expect(h.ensured[0].personId).toBe(PERSON);
+    await engine.stop();
+  });
+
+  it("is given the credential that was just issued, and a renewal does not prepare again", async () => {
+    const h = harness();
+    const engine = await started(h);
+    await h.clock.advance(GRANT_TTL_MS, settleWith(engine));
+    expect(h.sessions.fetched).toBe(2);
+    expect(h.ensured).toHaveLength(1);
+    expect(h.ensured[0].token).toBe("credential-for-tests-0123456789");
+    await engine.stop();
+  });
+
+  it("a failure backs off like any other and replicates nothing meanwhile; the retry prepares again", async () => {
+    let calls = 0;
+    const h = harness({
+      ensure: () => {
+        calls += 1;
+        if (calls === 1) throw new CouchHttpError(503);
+      },
+    });
+    const engine = createCouchSyncEngine(h.deps);
+    await engine.start();
+    await engine.idle();
+    expect(engine.status()).toBe("backing_off");
+    expect(h.clock.pending()).toContain(30_000);
+    expect(h.stores[0].replications).toBe(0);
+
+    await h.clock.advance(30_000, settleWith(engine));
+    expect(h.ensured).toHaveLength(2);
+    expect(h.stores[0].replications).toBe(1);
+    expect(engine.status()).toBe("idle");
+    await engine.stop();
+  });
+
+  it("403 (the client is no longer permitted, or the account is being deleted) drops the credential and backs off", async () => {
+    const h = harness({
+      ensure: () => {
+        throw new CouchHttpError(403);
+      },
+    });
+    const engine = createCouchSyncEngine(h.deps);
+    await engine.start();
+    await engine.idle();
+    expect(engine.status()).toBe("backing_off");
+    expect(h.stores[0].replications).toBe(0);
+    await h.clock.advance(30_000, settleWith(engine));
+    // A new credential was asked for: the refused one was not kept.
+    expect(h.sessions.fetched).toBe(2);
+    await engine.stop();
+  });
+
+  it("401 asks for one new credential and prepares again at once", async () => {
+    let calls = 0;
+    const h = harness({
+      ensure: () => {
+        calls += 1;
+        if (calls === 1) throw new CouchHttpError(401);
+      },
+    });
+    const engine = createCouchSyncEngine(h.deps);
+    await engine.start();
+    await engine.idle();
+    expect(h.sessions.fetched).toBe(2);
+    expect(h.ensured).toHaveLength(2);
+    expect(h.stores[0].replications).toBe(1);
+    expect(engine.status()).toBe("idle");
+    await engine.stop();
+  });
+
+  it("a 404 from the database means it is gone: the next cycle prepares it again", async () => {
+    let n = 0;
+    const store = new FakeStore();
+    store.onReplicate = () => {
+      n += 1;
+      if (n === 2) throw new CouchHttpError(404);
+    };
+    const h = harness({ makeStore: () => store });
+    const engine = await started(h);
+    expect(h.ensured).toHaveLength(1);
+    await h.clock.advance(POLL_INTERVAL_MS, settleWith(engine)); // the 404
+    expect(engine.status()).toBe("backing_off");
+    await h.clock.advance(30_000, settleWith(engine));
+    expect(h.ensured).toHaveLength(2);
+    expect(engine.status()).toBe("idle");
+    await engine.stop();
+  });
+
+  it("nothing is prepared when the device cannot open its local database", async () => {
+    const h = harness({ makeStore: () => null });
+    const engine = await started(h);
+    expect(engine.status()).toBe("unavailable");
+    expect(h.ensured).toEqual([]);
+    await engine.stop();
+  });
+
+  it("a restart (stop, then start) prepares again; a different person is prepared too", async () => {
+    const h = harness();
+    const engine = await started(h);
+    await engine.stop();
+    await engine.start();
+    await engine.idle();
+    expect(h.ensured).toHaveLength(2);
+    await engine.stop();
+
+    const other = "0190ffff-0000-7000-8000-00000000abcd";
+    const h2 = harness({
+      session: async (_n, now) => session({ now, personId: other }),
+    });
+    const e2 = await started(h2);
+    expect(h2.ensured.map((s) => s.personId)).toEqual([other]);
+    await e2.stop();
+  });
+
+  it("an engine given no way to prepare it works as before", async () => {
+    const h = harness();
+    delete h.deps.ensureDatabase;
+    const engine = await started(h);
+    expect(h.stores[0].replications).toBe(1);
+    expect(engine.status()).toBe("idle");
+    await engine.stop();
+  });
+});
+
 describe("credential lifetime", () => {
   it("asks again a minute before it expires, while the page is visible", async () => {
     const h = harness();
     const engine = await started(h);
     expect(h.sessions.fetched).toBe(1);
     await h.clock.advance(
-      600_000 - REFRESH_LEAD_MS - 1_000,
+      GRANT_TTL_MS - REFRESH_LEAD_MS - 1_000,
       settleWith(engine),
     );
     expect(h.sessions.fetched).toBe(1);
@@ -103,7 +247,7 @@ describe("credential lifetime", () => {
     const h = harness();
     const engine = await started(h);
     h.flags.visible = false;
-    await h.clock.advance(600_000, settleWith(engine));
+    await h.clock.advance(GRANT_TTL_MS, settleWith(engine));
     expect(h.sessions.fetched).toBe(1);
     h.flags.visible = true;
     h.triggers.forEach((t) => t("focus"));
@@ -177,7 +321,7 @@ describe("failures", () => {
 
     signedOut = true;
     // The credential lapses; the poll then asks the route again.
-    await h.clock.advance(600_000, settleWith(engine));
+    await h.clock.advance(GRANT_TTL_MS, settleWith(engine));
     expect(engine.status()).toBe("signed_out");
     const replications = h.stores[0].replications;
     // No more replication, only occasional quiet re-checks at the back-off pace.

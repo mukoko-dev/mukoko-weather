@@ -161,10 +161,22 @@ export function parseRetryAfter(raw: string | null): number | undefined {
   return n > 0 ? Math.min(n, 3600) : undefined;
 }
 
-/** Read the gateway's `{detail: {error, error_description}}` code, safely. */
-export async function gatewayErrorCode(
+/** The gateway's `{detail: {error, error_description}}`, read safely. */
+export interface GatewayErrorDetail {
+  /** The RFC 6749 error code (`^[a-z_]{1,48}$`), else null. */
+  code: string | null;
+  /**
+   * The human text, at most 200 characters, else null. It is for matching
+   * only: never log it or return it to a browser (the gateway's text can name
+   * the situation of a person, for example a scheduled deletion).
+   */
+  description: string | null;
+}
+
+/** Read the gateway's error code and description, never throwing. */
+export async function gatewayErrorDetail(
   response: Response,
-): Promise<string | null> {
+): Promise<GatewayErrorDetail> {
   try {
     const body = (await response.json()) as Record<string, unknown>;
     const detail =
@@ -172,10 +184,21 @@ export async function gatewayErrorCode(
         ? (body.detail as Record<string, unknown>)
         : body;
     const code = detail?.error;
-    return typeof code === "string" && /^[a-z_]{1,48}$/.test(code)
-      ? code
-      : null;
+    const description = detail?.error_description;
+    return {
+      code:
+        typeof code === "string" && /^[a-z_]{1,48}$/.test(code) ? code : null,
+      description:
+        typeof description === "string" ? description.slice(0, 200) : null,
+    };
   } catch {
-    return null;
+    return { code: null, description: null };
   }
+}
+
+/** Read the gateway's `{detail: {error, error_description}}` code, safely. */
+export async function gatewayErrorCode(
+  response: Response,
+): Promise<string | null> {
+  return (await gatewayErrorDetail(response)).code;
 }

@@ -9,20 +9,27 @@
  *     required (415 / 403), checked before anything else, so a cross-site
  *     form costs nothing;
  *   - the visitor must be signed in (`withAuth()`; 401 otherwise);
- *   - a per-user limit (Mongo, `checkUserRateLimit`, 30 an hour; the
- *     credential lives ten minutes, so one tab asks about six times an hour);
+ *   - a per-user limit (Mongo, `checkUserRateLimit`, 120 an hour: the
+ *     credential lives five minutes at most and the page renews it a minute
+ *     before, so one visible tab asks about fifteen times an hour and a few
+ *     tabs stay well inside; the gateway holds a person to 30 exchanges a
+ *     minute on top);
  *   - no cookie, WorkOS token or body is forwarded, logged or returned.
  *
  * It answers exactly `{ token, expiresAt, database, apiOrigin }` and nothing
  * else, `Cache-Control: no-store`. It is not in `CORS_POLICY.open`: only this
  * site's own pages can call it.
  *
- * The credential comes from `couchSessionIssuer()` (`@/lib/couch-session-issuer`),
- * which has no implementation yet: the gateway cannot issue this site one
- * (see that file). Until it does, the answer after the guards is 503
- * `couch_unavailable`, which the client treats as "stay local-only, back
- * off". The API origin comes from `NYUCHI_API_URL`, which is already
- * documented; no new environment variable and no new secret.
+ * The credential is the gateway's CouchDB sync grant (`couch:user`), made by
+ * `couchSessionIssuer()` (`@/lib/couch-session-issuer`, which cites the
+ * gateway code it was checked against): the person's own WorkOS access token
+ * traded on the server, the grant returned to the page as the replication
+ * bearer. Without the gateway origin, this app's key or `WORKOS_CLIENT_ID` the
+ * issuer is null and the answer after the guards is 503 `couch_unavailable`,
+ * which the client treats as "stay local-only, back off". It is the same
+ * answer while the owner steps are not done (the client id on the gateway's
+ * allow-list, CouchDB's JWT handler: docs/couchdb-sync.md). The API origin
+ * comes from `NYUCHI_API_URL`; no new environment variable and no new secret.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -43,7 +50,7 @@ import { logWarn } from "@/lib/observability";
 export const dynamic = "force-dynamic";
 
 /** Per user: [max requests, window seconds]. (A route file exports handlers only.) */
-const COUCH_SESSION_LIMIT: [number, number] = [30, 3600];
+const COUCH_SESSION_LIMIT: [number, number] = [120, 3600];
 
 const MESSAGES: Record<string, string> = {
   unauthorized: "Sign in to sync your settings.",

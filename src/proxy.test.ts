@@ -46,6 +46,10 @@ const { authkit } = await import("@workos-inc/authkit-nextjs");
 const { resetLocationGateCache } = await import("@/lib/location-gate");
 const { resetBareNameCache } = await import("@/lib/bare-name");
 const { buildSmartSlug } = await import("@/lib/smart-slug");
+const {
+  COUCH_ACCESS_TOKEN_REFRESH_BUFFER_SECONDS,
+  COUCH_MIN_ACCESS_TOKEN_LIFE_MS,
+} = await import("@/lib/couch-session-timing");
 
 /** The geocoder behind /v1/search?mode=resolve, stubbed (#317). Every
  * test starts with "nothing found", so the 404 tests below are unaffected. */
@@ -521,5 +525,46 @@ describe("the app shell the service worker may keep (x-mukoko-shell)", () => {
       );
       expect(res.headers.get("x-mukoko-shell"), path).toBeNull();
     }
+  });
+});
+
+describe("proxy — the AuthKit refresh buffer for the CouchDB sync credential", () => {
+  it("asks AuthKit to keep the access token fresh on /api/couch/session only", async () => {
+    const mocked = vi.mocked(authkit);
+    mocked.mockClear();
+    await proxy(
+      new NextRequest("https://weather.mukoko.com/api/couch/session", {
+        method: "POST",
+      }),
+    );
+    expect(mocked).toHaveBeenCalledTimes(1);
+    expect(mocked.mock.calls[0][1]).toEqual({
+      refreshBufferSeconds: COUCH_ACCESS_TOKEN_REFRESH_BUFFER_SECONDS,
+    });
+  });
+
+  it("leaves AuthKit's own buffer alone on every other path", async () => {
+    const mocked = vi.mocked(authkit);
+    for (const path of [
+      "/",
+      "/harare",
+      "/harare/forecast",
+      "/profile",
+      "/api/ai",
+      "/api/app-keys",
+      "/api/couch",
+      "/api/couch/session/extra",
+      "/api/couch/sessions",
+    ]) {
+      mocked.mockClear();
+      await proxy(new NextRequest(`https://weather.mukoko.com${path}`));
+      expect(mocked.mock.calls[0]?.[1], path).toEqual({});
+    }
+  });
+
+  it("the buffer is above what the issuer needs, so a refresh that works always clears it", () => {
+    expect(COUCH_ACCESS_TOKEN_REFRESH_BUFFER_SECONDS * 1000).toBeGreaterThan(
+      COUCH_MIN_ACCESS_TOKEN_LIFE_MS,
+    );
   });
 });

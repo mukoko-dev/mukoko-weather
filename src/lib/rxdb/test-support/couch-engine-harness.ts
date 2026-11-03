@@ -11,6 +11,8 @@ import type { SyncableState, SyncedPatch, UserDocType } from "../couch-docs";
 export const PERSON = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
 export const DEVICE = "11111111-2222-4333-8444-555555555555";
 export const START = Date.parse("2026-11-02T10:00:00.000Z");
+/** How long a sync grant lives at most (nyuchi-api `COUCH_SYNC_MAX_SECONDS`). */
+export const GRANT_TTL_MS = 300_000;
 
 export class Clock {
   now = START;
@@ -94,7 +96,7 @@ export function session(
   return {
     token: over.token ?? "credential-for-tests-0123456789",
     expiresAtMs:
-      over.expiresAtMs ?? (over.now ?? START) + (over.ttlMs ?? 600_000),
+      over.expiresAtMs ?? (over.now ?? START) + (over.ttlMs ?? GRANT_TTL_MS),
     database: `user_${personId}`,
     personId,
     databaseUrl: `https://api.test/v1/couch/db/user_${personId}/`,
@@ -150,6 +152,8 @@ export interface Harness {
   flags: { visible: boolean; online: boolean };
   /** How many credentials were asked for. */
   sessions: { fetched: number };
+  /** The sessions `ensureDatabase` was called with, in order. */
+  ensured: CouchSession[];
 }
 
 export function harness(
@@ -157,6 +161,8 @@ export function harness(
     bridge?: Partial<SyncableState>;
     session?: (n: number, now: number) => Promise<CouchSession>;
     makeStore?: (personId: string) => FakeStore | null;
+    /** Runs when the engine prepares the server-side database; throw to fail it. */
+    ensure?: (n: number, s: CouchSession) => Promise<void> | void;
   } = {},
 ): Harness {
   const clock = new Clock();
@@ -165,6 +171,7 @@ export function harness(
   const triggers = new Set<(kind: Trigger) => void>();
   const flags = { visible: true, online: true };
   const sessions = { fetched: 0 };
+  const ensured: CouchSession[] = [];
   const nextSession: (n: number, now: number) => Promise<CouchSession> =
     options.session ?? (async (_n, now) => session({ now }));
 
@@ -172,6 +179,10 @@ export function harness(
     fetchSession: async () => {
       sessions.fetched += 1;
       return nextSession(sessions.fetched, clock.now);
+    },
+    ensureDatabase: async (s) => {
+      ensured.push(s);
+      await options.ensure?.(ensured.length, s);
     },
     openStore: async (personId) => {
       const s = options.makeStore
@@ -193,5 +204,5 @@ export function harness(
       return () => triggers.delete(listener);
     },
   };
-  return { clock, bridge, stores, deps, triggers, flags, sessions };
+  return { clock, bridge, stores, deps, triggers, flags, sessions, ensured };
 }

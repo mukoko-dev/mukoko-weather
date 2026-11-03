@@ -14,8 +14,15 @@
  * Anything else is refused, so a route that starts returning more cannot make
  * this client keep or forward it. The token lives in the engine's memory only:
  * never in storage, a cookie, the URL or a log.
+ *
+ * The token is the gateway's sync grant (`couch:user`, five minutes at most;
+ * `lib/couch-session-issuer.ts`). The gateway's replication route never
+ * creates a database, so before the first replication of a run the page also
+ * asks the gateway to prepare the person's database (`ensurePersonalDatabase`,
+ * `POST /v1/couch/personal`, which accepts the grant for its own subject only).
  */
 
+import { COUCH_REQUEST_TIMEOUT_MS, CouchHttpError } from "./couch-fetch";
 import { personIdFromDatabase } from "./couch-docs";
 
 export interface CouchSession {
@@ -120,4 +127,73 @@ export async function fetchCouchSession(
     throw new CouchSessionError(502, "bad_session");
   }
   return parseSessionBody(body);
+}
+
+/** `https://<api>/v1/couch/personal`, on the same origin as the database URL. */
+export function personalDatabaseUrl(session: CouchSession): string {
+  return new URL("/v1/couch/personal", session.databaseUrl).href;
+}
+
+/**
+ * Ask the gateway to make sure the person's own database exists and enforces
+ * its owner-only rules (`POST /v1/couch/personal`). The replication route only
+ * forwards to a database that is already there, so this runs once per person
+ * per run, before the first replication, and again after a 404.
+ *
+ * The grant is the bearer; no cookie travels (`credentials: "omit"`), nothing
+ * is sent in a body (the gateway derives the database from the grant's
+ * subject and never reads the request for it), and the answer must name this
+ * very database and say `ready`. Failures throw `CouchHttpError` with the
+ * status (0 when nothing was answered), which the engine backs off on: 503 is
+ * the gateway saying CouchDB is not ready yet, 403 that the grant's client is
+ * no longer permitted or the person's deletion has started, 429 the per-IP
+ * limit. Nothing here logs or puts the token in an error.
+ */
+export async function ensurePersonalDatabase(
+  session: CouchSession,
+  fetchImpl: typeof fetch = fetch,
+  timeoutMs: number = COUCH_REQUEST_TIMEOUT_MS,
+): Promise<void> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    let response: Response;
+    try {
+      response = await fetchImpl(personalDatabaseUrl(session), {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${session.token}`,
+          accept: "application/json",
+        },
+        credentials: "omit",
+        cache: "no-store",
+        redirect: "error",
+        signal: controller.signal,
+      });
+    } catch {
+      // Offline, DNS, CORS, timeout, aborted: no answer to read.
+      throw new CouchHttpError(0);
+    }
+    if (!response.ok) throw new CouchHttpError(response.status);
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      throw new CouchHttpError(502);
+    }
+    const answer = (body && typeof body === "object" ? body : {}) as {
+      ready?: unknown;
+      database?: unknown;
+      person_id?: unknown;
+    };
+    if (
+      answer.ready !== true ||
+      answer.database !== session.database ||
+      answer.person_id !== session.personId
+    ) {
+      throw new CouchHttpError(502);
+    }
+  } finally {
+    clearTimeout(timer);
+  }
 }

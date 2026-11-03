@@ -10,7 +10,10 @@
  * ONE CYCLE (serialised: at most one runs, at most one more waits):
  *
  *   1. credential   reuse the token while it has more than a minute left,
- *                   else ask the route for a new one
+ *                   else ask the route for a new one (the gateway's sync
+ *                   grant: five minutes at most, so about every four)
+ *      prepare      once per person per run (and after a 404): ask the gateway
+ *                   to make sure the person's database exists
  *   2. local writes the changes the person made since the last write become
  *                   documents (offline too: they wait in the local database)
  *   3. replicate    one non-live pull + push against the person's database
@@ -91,6 +94,14 @@ export type Trigger = "focus" | "online";
 export interface EngineDeps {
   /** Ask the same-origin route for a credential. */
   fetchSession(): Promise<CouchSession>;
+  /**
+   * Make sure the person's database exists on the server (the gateway's
+   * replication route never creates one). Called once per person per run,
+   * before the first replication, and again after a 404 from the database.
+   * Rejects with a `CouchHttpError`, which the engine backs off on. Optional:
+   * without it the engine assumes the database is there.
+   */
+  ensureDatabase?(session: CouchSession): Promise<void>;
   /** Open the local database of one person; null when RxDB is unavailable. */
   openStore(personId: string): Promise<SyncStore | null>;
   bridge: SyncBridge;
@@ -162,6 +173,8 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
   let store: SyncStore | null = null;
   let storePerson: string | null = null;
   let seededPerson: string | null = null;
+  /** The person whose server-side database `ensureDatabase` has prepared. */
+  let ensuredPerson: string | null = null;
   let lastWritten: SyncableState | null = null;
   let failures = 0;
   let refetchedThisRun = false;
@@ -261,6 +274,7 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
       store = null;
       storePerson = null;
       seededPerson = null;
+      ensuredPerson = null;
     }
     const opened = await deps.openStore(personId);
     if (!opened) return null;
@@ -335,6 +349,10 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
         status = "unavailable";
         return;
       }
+      if (deps.ensureDatabase && ensuredPerson !== s.personId) {
+        await deps.ensureDatabase(s);
+        ensuredPerson = s.personId;
+      }
       await flushLocal();
       await db.runReplication(s);
       const seeded = await seedOnce();
@@ -367,6 +385,9 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
       status_,
       refetchedThisRun,
     );
+    // The database is not there (never prepared, or gone): prepare it again
+    // on the next cycle, after the back-off.
+    if (!fromRoute && status_ === 404) ensuredPerson = null;
 
     if (action === "refetch_token_once") {
       session = null;
@@ -466,6 +487,7 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
       store = null;
       storePerson = null;
       seededPerson = null;
+      ensuredPerson = null;
       lastWritten = null;
       failures = 0;
       refetchedThisRun = false;

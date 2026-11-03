@@ -3,7 +3,9 @@
  * the fake CouchDB behind the gateway rules. The scenarios that matter to a
  * person: settings follow them to a new device, a fresh device never overwrites
  * what they chose elsewhere, an unselected activity goes away everywhere, and
- * an edit made offline arrives when the connection returns.
+ * an edit made offline arrives when the connection returns. The database does
+ * not exist until the first device prepares it (`POST /v1/couch/personal`), as
+ * on the real server. The credential itself is `couch-sync-grant-e2e.test.ts`.
  *
  * NOT VERIFIED here (needs the live service): the credential, CORS, the JWT
  * handler, the real CouchDB and PouchDB behaviours.
@@ -13,14 +15,19 @@ import { getRxStorageMemory } from "rxdb/plugins/storage-memory";
 import { createCouchSyncEngine, type CouchSyncEngine } from "./couch-sync";
 import { openUserDocStore } from "./couch-rxdb";
 import { FakeCouch } from "./test-support/couch-fake-server";
-import { Clock, FakeBridge, PERSON } from "./test-support/couch-engine-harness";
+import {
+  Clock,
+  FakeBridge,
+  GRANT_TTL_MS,
+  PERSON,
+} from "./test-support/couch-engine-harness";
 import {
   LOCAL_WRITE_DEBOUNCE_MS,
   POLL_INTERVAL_MS,
   PUSH_DEBOUNCE_MS,
 } from "./couch-schedule";
 import type { Trigger } from "./couch-sync";
-import type { CouchSession } from "./couch-session";
+import { ensurePersonalDatabase, type CouchSession } from "./couch-session";
 
 const TOKEN = "sign-in-token-for-tests-0123456789";
 
@@ -51,11 +58,14 @@ function device(
   const engine = createCouchSyncEngine({
     fetchSession: async (): Promise<CouchSession> => ({
       token: TOKEN,
-      expiresAtMs: clock.now + 600_000,
+      expiresAtMs: clock.now + GRANT_TTL_MS,
       database: `user_${PERSON}`,
       personId: PERSON,
       databaseUrl: `https://api.test/v1/couch/db/user_${PERSON}/`,
     }),
+    // The first device to sync makes the database; the others find it there.
+    ensureDatabase: (s) =>
+      ensurePersonalDatabase(s, couch.fetch as typeof fetch),
     openStore: (personId) =>
       openUserDocStore(personId, {
         storage: getRxStorageMemory() as never,
@@ -108,7 +118,11 @@ afterEach(async () => {
 });
 
 function fresh(): void {
-  couch = new FakeCouch({ personId: PERSON, token: TOKEN });
+  couch = new FakeCouch({
+    personId: PERSON,
+    token: TOKEN,
+    databaseExists: false,
+  });
 }
 
 describe("settings follow the person", () => {
@@ -303,9 +317,21 @@ describe("every request is one the gateway allows", () => {
     expect(refused).toEqual([]);
     const kinds = new Set(couch.calls.map((c) => `${c.method} ${c.path}`));
     for (const kind of kinds) {
-      expect(["GET _changes", "POST _all_docs", "POST _bulk_docs"]).toContain(
-        kind,
-      );
+      expect([
+        "POST /v1/couch/personal",
+        "GET _changes",
+        "POST _all_docs",
+        "POST _bulk_docs",
+      ]).toContain(kind);
     }
+    // The database is made before anything is read from it, once per device.
+    expect(couch.calls[0]).toMatchObject({
+      method: "POST",
+      path: "/v1/couch/personal",
+      status: 200,
+    });
+    expect(
+      couch.calls.filter((c) => c.path === "/v1/couch/personal"),
+    ).toHaveLength(2);
   });
 });

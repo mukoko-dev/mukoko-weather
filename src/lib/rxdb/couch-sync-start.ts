@@ -53,14 +53,14 @@ export function startCouchSync(
 
   starting = (async () => {
     try {
-      const [{ createCouchSyncEngine }, { fetchCouchSession }, rxdb] =
-        await Promise.all([
-          import("./couch-sync"),
-          import("./couch-session"),
-          import("./couch-rxdb"),
-        ]);
+      const [{ createCouchSyncEngine }, session, rxdb] = await Promise.all([
+        import("./couch-sync"),
+        import("./couch-session"),
+        import("./couch-rxdb"),
+      ]);
       const engine = createCouchSyncEngine({
-        fetchSession: () => fetchCouchSession(),
+        fetchSession: () => session.fetchCouchSession(),
+        ensureDatabase: (s) => session.ensurePersonalDatabase(s),
         openStore: (personId) => rxdb.openUserDocStore(personId),
         bridge,
         deviceId,

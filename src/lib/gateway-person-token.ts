@@ -38,12 +38,19 @@
  * on every request. The token never reaches the browser, a cookie, storage
  * or a log, and there is no fallback to a shared token: every failure fails
  * closed.
+ *
+ * The exchanger is parameterised by the one scope it asks for, so the CouchDB
+ * sync grant (`scope=couch:user`, issued to the browser as a replication
+ * bearer, `couch-session-issuer.ts`) runs on the same transport, in-flight
+ * dedupe, negative cache and issuing-client guard instead of a copy. The
+ * subject-token rules are the gateway's for BOTH scopes (the sync path calls
+ * the same `verify_subject_token`, `token_exchange.py` l.369-441).
  */
 
 import { createHash } from "node:crypto";
 import {
   gatewayConfig,
-  gatewayErrorCode,
+  gatewayErrorDetail,
   gatewayRequest,
   parseRetryAfter,
   type GatewayConfig,
@@ -126,6 +133,30 @@ export interface ExchangerOptions {
   /** Expected issuing WorkOS client of subject tokens (Mukoko Account, this app's WORKOS_CLIENT_ID). */
   consoleClientId: () => string;
   now?: () => number;
+  /**
+   * The one scope this exchanger asks for, and the only scope it accepts back.
+   * Default `app-keys`. The CouchDB sync grant (`couch:user`,
+   * `couch-session-issuer.ts`) is the second user.
+   */
+  scope?: string;
+  /**
+   * The longest a good answer is served again from this process, in ms.
+   * Default 5 minutes. `0` never serves one again: every caller gets an
+   * exchange of its own (concurrent callers still share the one in flight).
+   * Use it when the caller hands the token to a page that renews it just
+   * before it expires: a cached token with little life left would answer
+   * that renewal with the same nearly-expired token, again and again.
+   */
+  maxCacheMs?: number;
+  /**
+   * True when a 400 `invalid_grant` description means the person's account
+   * is scheduled for deletion. The sync-grant exchange answers that with
+   * `invalid_grant` and no `account_state` (nyuchi-api `routers/auth.py`
+   * `_issue_sync_grant`), and the description is the only difference on the
+   * wire from an ended session. Matching it is a convenience: when the text
+   * changes, the person sees "sign in again" instead, which is still safe.
+   */
+  pendingDeletion?: (description: string | null) => boolean;
 }
 
 /** Unverified read of a JWT's payload — only to bound and pre-check. */
@@ -167,6 +198,8 @@ function cacheKey(userId: string, accessToken: string): string {
 
 export function createPersonTokenExchanger(options: ExchangerOptions) {
   const now = options.now ?? Date.now;
+  const scope = options.scope ?? REQUESTED_SCOPE;
+  const maxCacheMs = options.maxCacheMs ?? MAX_CACHE_MS;
   const cache = new Map<string, Entry>();
   const inFlight = new Map<string, Promise<PersonToken>>();
   const failures = new Map<
@@ -261,7 +294,7 @@ export function createPersonTokenExchanger(options: ExchangerOptions) {
       grant_type: TOKEN_EXCHANGE_GRANT,
       subject_token: accessToken,
       subject_token_type: ACCESS_TOKEN_TYPE,
-      scope: REQUESTED_SCOPE,
+      scope,
       client_id: config.credentials.clientId,
       client_secret: config.credentials.clientSecret,
     });
@@ -287,8 +320,11 @@ export function createPersonTokenExchanger(options: ExchangerOptions) {
     }
 
     if (response.status !== 200) {
-      const code = await gatewayErrorCode(response);
+      const { code, description } = await gatewayErrorDetail(response);
       if (response.status === 400 && code === "invalid_grant") {
+        if (options.pendingDeletion?.(description)) {
+          throw new PersonTokenError("account_pending_deletion");
+        }
         throw invalidGrant(userId, sid, iatMs);
       }
       throw mapExchangeFailure(response, code);
@@ -307,13 +343,14 @@ export function createPersonTokenExchanger(options: ExchangerOptions) {
       throw new PersonTokenError("account_pending_deletion");
     }
     const token = data.access_token;
-    const scope = typeof data.scope === "string" ? data.scope.trim() : "";
+    const grantedScope =
+      typeof data.scope === "string" ? data.scope.trim() : "";
     const expiresIn = Number(data.expires_in);
     // Exactly the narrowed scope: a wider token is not used.
     if (
       typeof token !== "string" ||
       !token ||
-      scope !== REQUESTED_SCOPE ||
+      grantedScope !== scope ||
       !Number.isFinite(expiresIn) ||
       expiresIn <= 0
     ) {
@@ -330,9 +367,12 @@ export function createPersonTokenExchanger(options: ExchangerOptions) {
     );
     const cacheUntilMs = Math.min(
       expiresAtMs - SAFETY_MARGIN_MS,
-      t + MAX_CACHE_MS,
+      t + maxCacheMs,
     );
-    return { value: { token, scope, expiresAtMs }, cacheUntilMs };
+    return {
+      value: { token, scope: grantedScope, expiresAtMs },
+      cacheUntilMs,
+    };
   }
 
   /**

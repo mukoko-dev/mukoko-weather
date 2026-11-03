@@ -2,8 +2,12 @@
  * Timing rules of the CouchDB sync (pure: every function takes the clock or a
  * random source as an argument, none reads them).
  *
- * The credential lives ten minutes (nyuchi-api `COUCH_TOKEN_SECONDS`), so the
- * sync asks for a new one before the old one runs out. A failure never retries
+ * The credential is the gateway's sync grant: five minutes at most
+ * (nyuchi-api `COUCH_SYNC_MAX_SECONDS`) and never longer than the WorkOS access
+ * token it was made from, so the sync asks for a new one a minute before the
+ * old one runs out, about every four minutes. The server side keeps every
+ * grant at least `COUCH_MIN_ACCESS_TOKEN_LIFE_MS` long (`lib/couch-session-timing.ts`),
+ * so a grant is never due the moment it arrives. A failure never retries
  * on a tight loop: the wait starts at 30 s, doubles, and stops at 15 minutes,
  * the same shape as the device-profile sync (`device-profile.ts`).
  */
@@ -74,8 +78,8 @@ export type FailureAction =
  * is one (0 or undefined: no response, i.e. offline, DNS, timeout).
  * `alreadyRefetched` is true when this attempt already used its one refetch.
  *
- * 401 from CouchDB's side: the 10-minute token was refused (expired early, or
- * the key rotated), so fetch a new one once; a second 401 is a real problem
+ * 401 from CouchDB's side: the grant was refused (expired early, or the
+ * gateway's key rotated), so fetch a new one once; a second 401 is a real problem
  * and backs off. 401 from OUR session route means the person is signed out.
  * 403, 404, 429, 5xx and network errors all back off.
  */

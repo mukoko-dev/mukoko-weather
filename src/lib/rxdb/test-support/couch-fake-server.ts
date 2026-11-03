@@ -8,7 +8,11 @@
  *     (ported here: which paths, which methods, which query parameters, the
  *     clamps, no continuous feed, `_bulk_docs` body keys), so a request the
  *     gateway would turn away is a 4xx here;
- *   - the bearer must be the one the test issued (401 otherwise);
+ *   - the bearer must be the one the test issued (401 otherwise), or, with
+ *     `authorize`, a sync grant the fake gateway issued, still in date and from
+ *     a client still on its allow-list, for THIS person (401 / 403);
+ *   - `POST /v1/couch/personal` makes the database; with `databaseExists:
+ *     false` every replication request is a 404 until it has;
  *   - every write runs the pinned `validate_doc_update` function of
  *     `gateway/lib/couch_validate_personal.js` (`__fixtures__/`), with the
  *     person as `userCtx.name` and the only member of the security document;
@@ -156,8 +160,23 @@ export function checkQuery(
 
 export interface FakeCouchOptions {
   personId: string;
-  /** The bearer the gateway accepts (the person's sign-in token). */
+  /** The bearer the gateway accepts (the credential the test issued). */
   token: string;
+  /**
+   * Decide the bearer instead of comparing it with `token`: the gateway's rule
+   * for the sync grant (`FakeNyuchiGateway.authorize`). A refusal carries its
+   * status; a grant for another person is a 403, as on `couch_proxy.py` l.109.
+   */
+  authorize?: (
+    authorization: string | null,
+  ) => { ok: true; claims: { sub: string } } | { ok: false; status: number };
+  /**
+   * False: the person's database does not exist until the grant calls
+   * `POST /v1/couch/personal`, and every replication request is a 404 before
+   * that, as on the real server (the proxy never creates a database).
+   * Default true, so tests that do not care need not prepare it.
+   */
+  databaseExists?: boolean;
 }
 
 export class FakeCouch {
@@ -167,14 +186,29 @@ export class FakeCouch {
   /** Set to change the accepted bearer (a rotated or revoked credential). */
   token: string;
   readonly personId: string;
+  /** Whether `user_<personId>` exists (made by `POST /v1/couch/personal`). */
+  databaseExists: boolean;
   private readonly docs = new Map<string, Stored>();
   private seq = 0;
   private revCounter = 0;
   private readonly validate = loadValidator();
+  private readonly authorize: FakeCouchOptions["authorize"];
 
   constructor(options: FakeCouchOptions) {
     this.personId = options.personId;
     this.token = options.token;
+    this.authorize = options.authorize;
+    this.databaseExists = options.databaseExists ?? true;
+  }
+
+  /** The refusing status for a bearer, or null when it is accepted. */
+  private refusal(auth: string | null): number | null {
+    if (this.authorize) {
+      const verdict = this.authorize(auth);
+      if (!verdict.ok) return verdict.status;
+      return verdict.claims.sub === this.personId ? null : 403;
+    }
+    return auth === `Bearer ${this.token}` ? null : 401;
   }
 
   /** A document as CouchDB would return it, or undefined. */
@@ -215,8 +249,12 @@ export class FakeCouch {
     const auth = headers.get("authorization");
     const marker = `/v1/couch/db/user_${this.personId}`;
     const idx = url.pathname.indexOf(marker);
-    const path =
-      idx < 0 ? "" : url.pathname.slice(idx + marker.length).replace(/^\//, "");
+    const isPersonal = url.pathname === "/v1/couch/personal";
+    const path = isPersonal
+      ? "/v1/couch/personal"
+      : idx < 0
+        ? ""
+        : url.pathname.slice(idx + marker.length).replace(/^\//, "");
     const body = init?.body
       ? (JSON.parse(String(init.body)) as unknown)
       : undefined;
@@ -252,9 +290,31 @@ export class FakeCouch {
       }
       return respond(status, { error: "injected" });
     }
+    // `POST /v1/couch/personal` (`couch.py` `ensure_personal_database`): the
+    // grant for its own subject makes the database; the body is never read.
+    if (isPersonal) {
+      if (method !== "POST")
+        return respond(405, { detail: "Method Not Allowed" });
+      const refused = this.refusal(auth);
+      if (refused) return respond(refused, { detail: "Not allowed" });
+      this.databaseExists = true;
+      return respond(200, {
+        person_id: this.personId,
+        database: `user_${this.personId}`,
+        ready: true,
+      });
+    }
     if (idx < 0) return respond(404, { detail: "No such database." });
-    if (auth !== `Bearer ${this.token}`)
-      return respond(401, { detail: "Invalid or expired token" });
+    const refused = this.refusal(auth);
+    if (refused)
+      return respond(refused, { detail: "Invalid or expired token" });
+    if (!this.databaseExists) {
+      // The proxy forwards to CouchDB, which has no such database.
+      return respond(404, {
+        error: "not_found",
+        reason: "Database does not exist.",
+      });
+    }
 
     const decision = classify(method, path);
     if (!decision.allowed) {
