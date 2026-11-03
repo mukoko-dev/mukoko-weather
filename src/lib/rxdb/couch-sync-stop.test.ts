@@ -179,8 +179,7 @@ describe("a cycle ends at its next step once the page has said stop", () => {
     store.docs.set("preference:forecastModel", {
       id: "preference:forecastModel",
       type: "preference",
-      schemaVersion: 1,
-      ownerPersonId: PERSON,
+      schemaVersion: "v3.1",
       deviceId: "99999999-2222-4333-8444-555555555555",
       createdAt: "2026-11-02T09:00:00.000Z",
       updatedAt: "2026-11-02T09:00:00.000Z",

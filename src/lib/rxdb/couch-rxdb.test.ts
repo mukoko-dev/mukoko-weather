@@ -4,10 +4,12 @@
  * storage), the real CouchDB replication plugin, no network.
  *
  * What this proves: the requests the plugin makes are all ones the gateway
- * lets through; what it writes passes the validator CouchDB runs; deletes are
- * stubs; documents the client does not own never reach the device; and the
- * conflict rule decides concurrent edits. What it cannot prove: behaviour of
- * the live CouchDB, the JWT handler, CORS or the credential (see the PR).
+ * lets through; what it writes passes the validator CouchDB runs (the pinned
+ * copy of nyuchi-api's generated function, `__fixtures__/`); a delete carries
+ * the common fields the validator requires; documents the client does not own
+ * never reach the device; and the conflict rule decides concurrent edits,
+ * deletes included. What it cannot prove: behaviour of the live CouchDB, the JWT
+ * handler, CORS or the credential (see the PR).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getRxStorageMemory } from "rxdb/plugins/storage-memory";
@@ -22,7 +24,9 @@ import {
   recordedSyncPeople,
 } from "./sync-people-index";
 import { FakeCouch } from "./test-support/couch-fake-server";
+import { envelopeFor } from "./test-support/couch-validator-facts";
 import {
+  COUCH_DOC_SCHEMA_VERSION,
   activityDocId,
   preferenceDocId,
   toRfc3339,
@@ -70,8 +74,7 @@ function activity(id: string, atMs = T0): UserDocType {
   return {
     id: activityDocId(id),
     type: "activity",
-    schemaVersion: 1,
-    ownerPersonId: PERSON,
+    schemaVersion: COUCH_DOC_SCHEMA_VERSION,
     deviceId: DEVICE,
     createdAt: t,
     updatedAt: t,
@@ -84,13 +87,48 @@ function theme(value: string, atMs = T0): UserDocType {
   return {
     id: preferenceDocId("theme"),
     type: "preference",
-    schemaVersion: 1,
-    ownerPersonId: PERSON,
+    schemaVersion: COUCH_DOC_SCHEMA_VERSION,
     deviceId: DEVICE,
     createdAt: t,
     updatedAt: t,
     preferenceKey: "theme",
     preferenceValue: value,
+  };
+}
+
+function forecastModel(value: string, atMs = T0): UserDocType {
+  const t = toRfc3339(atMs);
+  return {
+    id: preferenceDocId("forecastModel"),
+    type: "preference",
+    schemaVersion: COUCH_DOC_SCHEMA_VERSION,
+    deviceId: DEVICE,
+    createdAt: t,
+    updatedAt: t,
+    preferenceKey: "forecastModel",
+    preferenceValue: value,
+  };
+}
+
+/**
+ * A deletion as another device writes it: the common fields (the validator
+ * makes every document carry them) and nothing else.
+ */
+function remoteTombstone(
+  id: string,
+  type: "activity" | "preference",
+  rev: string,
+  atMs: number,
+): Record<string, unknown> {
+  return {
+    _id: id,
+    _rev: rev,
+    _deleted: true,
+    type,
+    schemaVersion: COUCH_DOC_SCHEMA_VERSION,
+    deviceId: DEVICE,
+    createdAt: toRfc3339(T0),
+    updatedAt: toRfc3339(atMs),
   };
 }
 
@@ -267,7 +305,7 @@ describe("knownIds (the seeding guard: defaults never win)", () => {
     await store.upsert(theme("dark"));
     await store.upsert(activity("a"));
     await store.upsert(activity("b"));
-    await store.tombstone("activity:b", T0 + 1_000);
+    await store.tombstone("activity:b", T0 + 1_000, DEVICE);
     const known = await store.knownIds([
       "preference:theme",
       "activity:a",
@@ -295,10 +333,43 @@ describe("push", () => {
     expect(stored).toMatchObject({
       type: "activity",
       activityId: "crop-farming",
-      ownerPersonId: PERSON,
-      schemaVersion: 1,
+      schemaVersion: "v3.1",
+      deviceId: DEVICE,
     });
+    // The database is the ownership: the old contract's field is not written.
+    expect(stored).not.toHaveProperty("ownerPersonId");
     expect(couch.calls.every((c) => c.status < 400)).toBe(true);
+  });
+
+  it("every setting it syncs and every activity is accepted by the validator, in one push", async () => {
+    const store = await open();
+    await store.upsert(theme("dark"));
+    await store.upsert(forecastModel("gfs_seamless"));
+    await store.upsert(activity("crop-farming"));
+    await store.upsert(activity("livestock"));
+    await store.runReplication(session());
+    expect(couch.liveIds().sort()).toEqual([
+      "activity:crop-farming",
+      "activity:livestock",
+      "preference:forecastModel",
+      "preference:theme",
+    ]);
+    expect(couch.calls.every((c) => c.status < 400)).toBe(true);
+  });
+
+  it("refuses, before it is stored, a document the validator would refuse", async () => {
+    const store = await open();
+    await expect(
+      store.upsert({ ...activity("livestock"), schemaVersion: "v2.0" }),
+    ).rejects.toThrow(/couch-sync/);
+    await expect(
+      store.upsert({ ...activity("livestock"), deviceId: "device-1" }),
+    ).rejects.toThrow(/couch-sync/);
+    // The Météo-France pick is not in the validator's enum: it stays local.
+    await expect(
+      store.upsert(forecastModel("meteofrance_seamless")),
+    ).rejects.toThrow(/couch-sync/);
+    expect(await store.liveDocs()).toEqual([]);
   });
 
   it("sends the person's credential on every request and nothing else", async () => {
@@ -394,25 +465,66 @@ describe("push", () => {
     }
   });
 
-  it("deletes with a stub tombstone: only the id and the deleted flag", async () => {
+  it("deletes with a tombstone that carries the common fields (and not the activity): a bare stub would be refused", async () => {
     const store = await open();
     await store.upsert(activity("gardening"));
     await store.runReplication(session());
     expect(couch.liveIds()).toContain("activity:gardening");
 
-    await store.tombstone("activity:gardening", T0 + 1000);
+    await store.tombstone("activity:gardening", T0 + 1000, DEVICE);
     await store.runReplication(session());
 
     const stored = couch.get("activity:gardening");
-    expect(stored).toMatchObject({ _id: "activity:gardening", _deleted: true });
-    expect(Object.keys(stored ?? {}).sort()).toEqual([
+    expect(stored).toMatchObject({
+      _id: "activity:gardening",
+      _deleted: true,
+      type: "activity",
+      schemaVersion: "v3.1",
+      deviceId: DEVICE,
+      createdAt: toRfc3339(T0),
+      // The time of the deletion, which orders it against an edit elsewhere.
+      updatedAt: toRfc3339(T0 + 1000),
+    });
+    const common = [
       "_deleted",
       "_id",
       "_rev",
-    ]);
+      "createdAt",
+      "deviceId",
+      "schemaVersion",
+      "type",
+      "updatedAt",
+    ];
+    expect(Object.keys(stored ?? {}).sort()).toEqual(common);
     const bulk = couch.calls.filter((c) => c.path === "_bulk_docs").at(-1);
     const sent = (bulk?.body as { docs: Record<string, unknown>[] }).docs[0];
-    expect(Object.keys(sent).sort()).toEqual(["_deleted", "_id", "_rev"]);
+    expect(Object.keys(sent).sort()).toEqual(common);
+    expect(couch.calls.every((c) => c.status < 400)).toBe(true);
+  });
+
+  it("the tombstone is written by the install that deleted it, even when another install wrote the document", async () => {
+    const OTHER_DEVICE = "99999999-aaaa-4bbb-8ccc-dddddddddddd";
+    const store = await open();
+    await store.upsert({ ...activity("gardening"), deviceId: OTHER_DEVICE });
+    await store.runReplication(session());
+    await store.tombstone("activity:gardening", T0 + 1000, DEVICE);
+    await store.runReplication(session());
+    expect(couch.get("activity:gardening")).toMatchObject({
+      _deleted: true,
+      deviceId: DEVICE,
+    });
+  });
+
+  it("a deleted setting is a tombstone too, without its key or value", async () => {
+    const store = await open();
+    await store.upsert(theme("dark"));
+    await store.runReplication(session());
+    await store.tombstone("preference:theme", T0 + 1000, DEVICE);
+    await store.runReplication(session());
+    const stored = couch.get("preference:theme");
+    expect(stored).toMatchObject({ _deleted: true, type: "preference" });
+    expect(stored).not.toHaveProperty("preferenceKey");
+    expect(stored).not.toHaveProperty("preferenceValue");
   });
 
   it("a second cycle with no changes pushes nothing", async () => {
@@ -430,7 +542,7 @@ describe("push", () => {
     const store = await open();
     await store.upsert(activity("gardening"));
     await store.runReplication(session());
-    await store.tombstone("activity:gardening", T0 + 1000);
+    await store.tombstone("activity:gardening", T0 + 1000, DEVICE);
     await store.runReplication(session());
     await store.upsert(activity("gardening", T0 + 2000));
     await store.runReplication(session());
@@ -455,36 +567,35 @@ describe("pull", () => {
   });
 
   it("drops documents of types this client does not own", async () => {
-    couch.seed({
-      _id: "savedPlace:0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
-      type: "savedPlace",
-      schemaVersion: 1,
-      ownerPersonId: PERSON,
+    // Other clients' documents, each one the validator accepts: encrypted
+    // places and the home place carry an envelope, a language is plaintext.
+    const common = {
+      schemaVersion: "v3.1",
+      deviceId: DEVICE,
+      createdAt: toRfc3339(T0),
       updatedAt: toRfc3339(T0),
-      envelope: {
-        protected: "x",
-        aad: "y",
-        iv: "z",
-        ciphertext: "c",
-        tag: "t",
-      },
-    });
-    couch.seed({
-      _id: "preference:homePlace",
-      type: "preference",
-      schemaVersion: 1,
-      ownerPersonId: PERSON,
-      updatedAt: toRfc3339(T0),
-    });
-    couch.seed({
-      _id: "preference:language",
-      type: "preference",
-      schemaVersion: 1,
-      ownerPersonId: PERSON,
-      updatedAt: toRfc3339(T0),
-      preferenceKey: "language",
-      preferenceValue: "sn",
-    });
+    };
+    const saved = "savedPlace:0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
+    const interest = "interest:0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5c";
+    for (const [id, type] of [
+      [saved, "savedPlace"],
+      [interest, "interest"],
+      ["preference:homePlace", "preference"],
+    ] as const) {
+      expect(
+        couch.seed({ _id: id, type, ...common, envelope: envelopeFor(id) }),
+        id,
+      ).toEqual({ ok: true });
+    }
+    expect(
+      couch.seed({
+        _id: "preference:language",
+        type: "preference",
+        ...common,
+        preferenceKey: "language",
+        preferenceValue: "sn",
+      }),
+    ).toEqual({ ok: true });
     couch.seed(wire(activity("livestock")));
 
     const store = await open();
@@ -507,11 +618,34 @@ describe("pull", () => {
     );
 
     const rev = couch.get("activity:gardening")?._rev as string;
-    couch.seed({ _id: "activity:gardening", _rev: rev, _deleted: true });
+    expect(
+      couch.seed(
+        remoteTombstone("activity:gardening", "activity", rev, T0 + 1),
+      ),
+    ).toEqual({ ok: true });
     await store.runReplication(session());
     expect((await store.liveDocs()).map((d) => d.id)).not.toContain(
       "activity:gardening",
     );
+  });
+
+  it("a forecast model another client set, which this app does not offer, is stored but never applied to the app, and does not stop this device's own edit of that setting", async () => {
+    couch.seed(wire(forecastModel("jma_gsm", T0)));
+    const store = await open();
+    await store.runReplication(session());
+    // It is on the device as a document (the app ignores its value)...
+    expect(
+      (await store.liveDocs()).find((d) => d.id === "preference:forecastModel")
+        ?.preferenceValue,
+    ).toBe("jma_gsm");
+    // ...and this device's own pick pushes over it: the assumed master state,
+    // which holds the value this app cannot show, is let through by shape.
+    await store.upsert(forecastModel("ecmwf_ifs", T0 + 5_000));
+    await store.runReplication(session());
+    expect(couch.get("preference:forecastModel")?.preferenceValue).toBe(
+      "ecmwf_ifs",
+    );
+    expect(couch.calls.every((c) => c.status < 400)).toBe(true);
   });
 });
 
@@ -557,6 +691,55 @@ describe("conflicts (last writer wins by updatedAt, master on a tie)", () => {
     await store.runReplication(session());
     expect(couch.get("preference:theme")?.preferenceValue).toBe("system");
   });
+
+  // A tombstone carries updatedAt (the validator makes it), so a delete and an
+  // edit are ordered by their times and nothing wins merely for being a delete.
+  describe("a delete is ordered like any other revision", () => {
+    it("an activity picked again here AFTER another device removed it comes back", async () => {
+      couch.seed(wire(activity("gardening", T0)));
+      const store = await open();
+      await store.runReplication(session());
+      // Another device removes it at T0 + 1 s...
+      const rev = couch.get("activity:gardening")?._rev as string;
+      couch.seed(
+        remoteTombstone("activity:gardening", "activity", rev, T0 + 1_000),
+      );
+      // ...and this device edits its copy at T0 + 9 s (picked again).
+      await store.upsert(activity("gardening", T0 + 9_000));
+      await store.runReplication(session());
+      expect(couch.liveIds()).toContain("activity:gardening");
+      expect((await store.liveDocs()).map((d) => d.id)).toContain(
+        "activity:gardening",
+      );
+    });
+
+    it("a removal by another device that came AFTER this device's edit wins", async () => {
+      couch.seed(wire(activity("gardening", T0)));
+      const store = await open();
+      await store.runReplication(session());
+      await store.upsert(activity("gardening", T0 + 1_000));
+      const rev = couch.get("activity:gardening")?._rev as string;
+      couch.seed(
+        remoteTombstone("activity:gardening", "activity", rev, T0 + 9_000),
+      );
+      await store.runReplication(session());
+      expect(couch.liveIds()).not.toContain("activity:gardening");
+      expect((await store.liveDocs()).map((d) => d.id)).not.toContain(
+        "activity:gardening",
+      );
+    });
+
+    it("a removal here newer than another device's edit wins on the server", async () => {
+      couch.seed(wire(activity("gardening", T0)));
+      const store = await open();
+      await store.runReplication(session());
+      await store.tombstone("activity:gardening", T0 + 9_000, DEVICE);
+      const rev = couch.get("activity:gardening")?._rev as string;
+      couch.seed({ ...wire(activity("gardening", T0 + 1_000)), _rev: rev });
+      await store.runReplication(session());
+      expect(couch.liveIds()).not.toContain("activity:gardening");
+    });
+  });
 });
 
 describe("failures", () => {
@@ -588,12 +771,15 @@ describe("failures", () => {
   });
 
   it("a write the validator refuses fails the cycle instead of looping", async () => {
-    const store = await open();
-    // The document claims another person: CouchDB's rule 'ownerPersonId must be you'.
-    await store.upsert({
-      ...activity("livestock"),
-      ownerPersonId: "someone-else",
+    // A device whose clock is more than a day ahead of the server's: its
+    // updatedAt is refused ("updatedAt is too far ahead"), as are all its writes.
+    couch = new FakeCouch({
+      personId: PERSON,
+      token: TOKEN,
+      serverNowMs: () => T0 - 3 * 86_400_000,
     });
+    const store = await open();
+    await store.upsert(activity("livestock"));
     await expect(store.runReplication(session())).rejects.toBeInstanceOf(
       CouchHttpError,
     );

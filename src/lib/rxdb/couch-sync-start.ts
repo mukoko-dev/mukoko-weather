@@ -60,6 +60,7 @@ export function startCouchSync(
         people,
         pending,
         signedOut,
+        installId,
       ] = await Promise.all([
         import("./couch-sync"),
         import("./couch-session"),
@@ -67,6 +68,7 @@ export function startCouchSync(
         import("./sync-people-index"),
         import("./sync-pending"),
         import("./sync-signed-out"),
+        import("./sync-install-id"),
       ]);
       const engine = createCouchSyncEngine({
         fetchSession: () => session.fetchCouchSession(),
@@ -87,7 +89,10 @@ export function startCouchSync(
         journal: pending.syncJournal,
         openStore: (personId) => rxdb.openUserDocStore(personId),
         bridge,
-        deviceId,
+        // The id every document carries: the app's own device id when it is
+        // what the validator accepts (a lower-case UUID), else one of the
+        // sync's own.
+        deviceId: installId.documentDeviceId(deviceId),
         now: () => Date.now(),
         setTimer: (fn, ms) => window.setTimeout(fn, ms),
         clearTimer: (handle) => window.clearTimeout(handle as number),

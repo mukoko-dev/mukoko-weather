@@ -14,28 +14,29 @@
  *   - `POST /v1/couch/personal` makes the database; with `databaseExists:
  *     false` every replication request is a 404 until it has;
  *   - every write runs the pinned `validate_doc_update` function of
- *     `gateway/lib/couch_validate_personal.js` (`__fixtures__/`), with the
- *     person as `userCtx.name` and the only member of the security document;
+ *     `gateway/lib/couch_validate_personal.js` (`__fixtures__/`, see
+ *     `couch-validator-facts.ts`), with the person as `userCtx.name`, THEIR
+ *     database as `userCtx.db` (the function refuses a write to any other) and
+ *     the only member of the security document, and with this fake server's
+ *     clock as `Date.now()` (a document whose `updatedAt` is more than a day
+ *     ahead of it is refused);
  *   - revisions: a write over a live document needs its `_rev` (conflict
- *     otherwise); a tombstone keeps only its stub; `_deleted: false` is not
- *     stored, as in CouchDB.
+ *     otherwise); a tombstone keeps the fields it was written with (the
+ *     validator makes them the common ones); `_deleted: false` is not stored, as
+ *     in CouchDB.
  *
  * It is NOT a CouchDB: no views, no attachments, a single revision counter
  * per document. Nothing here proves behaviour of the live server.
  */
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { runInNewContext } from "node:vm";
-
-type Json = Record<string, unknown>;
+import { loadValidator, type Json } from "./couch-validator-facts";
 
 interface Stored {
   seq: number;
   rev: string;
   deleted: boolean;
-  /** The body without `_id`/`_rev`; null for a tombstone. */
-  body: Json | null;
+  /** The body without `_id`/`_rev`/`_deleted` (a tombstone's is its common fields). */
+  body: Json;
 }
 
 export interface RecordedCall {
@@ -57,22 +58,6 @@ const DENIED_PARAMS = new Set([
   "n",
 ]);
 const CHANGES_LIMIT_MAX = 1000;
-
-type Validator = (
-  newDoc: Json,
-  oldDoc: Json | null,
-  userCtx: { name: string | null; roles: string[] },
-  secObj: { members: { names: string[] } },
-) => void;
-
-function loadValidator(): Validator {
-  const source = readFileSync(
-    join(__dirname, "..", "__fixtures__", "couch_validate_personal.fn.txt"),
-    "utf8",
-  );
-  // The pinned fixture is one function expression (a repo file, never input).
-  return runInNewContext(`(${source})`) as Validator;
-}
 
 interface Decision {
   allowed: boolean;
@@ -177,6 +162,11 @@ export interface FakeCouchOptions {
    * Default true, so tests that do not care need not prepare it.
    */
   databaseExists?: boolean;
+  /**
+   * The server's clock, as the validator's `Date.now()` sees it. Default: the
+   * real one. Tests whose own clock is fake pass theirs (or anything).
+   */
+  serverNowMs?: () => number;
 }
 
 export class FakeCouch {
@@ -191,7 +181,7 @@ export class FakeCouch {
   private readonly docs = new Map<string, Stored>();
   private seq = 0;
   private revCounter = 0;
-  private readonly validate = loadValidator();
+  private readonly validate: ReturnType<typeof loadValidator>;
   private readonly authorize: FakeCouchOptions["authorize"];
 
   constructor(options: FakeCouchOptions) {
@@ -199,6 +189,7 @@ export class FakeCouch {
     this.token = options.token;
     this.authorize = options.authorize;
     this.databaseExists = options.databaseExists ?? true;
+    this.validate = loadValidator(options.serverNowMs);
   }
 
   /** The refusing status for a bearer, or null when it is accepted. */
@@ -216,7 +207,7 @@ export class FakeCouch {
     const s = this.docs.get(id);
     if (!s) return undefined;
     return s.deleted
-      ? { _id: id, _rev: s.rev, _deleted: true }
+      ? { _id: id, _rev: s.rev, _deleted: true, ...s.body }
       : { _id: id, _rev: s.rev, ...s.body };
   }
 
@@ -356,8 +347,25 @@ export class FakeCouch {
         return respond(201, this.bulkDocs((body as Json).docs as Json[]));
       case "":
         return respond(200, { db_name: `user_${this.personId}` });
-      default:
+      default: {
+        // `GET <id>[?rev=]`: as CouchDB, a deleted document is "not found, deleted"
+        // unless its revision is asked for, and then it is its tombstone.
+        if (decision.kind === "document" && method === "GET") {
+          const found = this.docs.get(decodeURIComponent(path));
+          const rev = params.get("rev");
+          if (!found || (found.deleted && rev !== found.rev)) {
+            return respond(404, {
+              error: "not_found",
+              reason: found ? "deleted" : "missing",
+            });
+          }
+          if (rev !== undefined && rev !== found.rev) {
+            return respond(404, { error: "not_found", reason: "missing" });
+          }
+          return respond(200, this.get(decodeURIComponent(path)));
+        }
         return respond(404, { error: "not_found" });
+      }
     }
   };
 
@@ -446,10 +454,16 @@ export class FakeCouch {
     const existing = this.docs.get(id);
     const sent = doc._rev as string | undefined;
 
-    const old =
-      existing && !existing.deleted
-        ? { _id: id, _rev: existing.rev, ...existing.body }
-        : null;
+    // `oldDoc` is the stored revision, a tombstone included (the validator does
+    // not read it: any revision must hold on its own).
+    const old = existing
+      ? {
+          _id: id,
+          _rev: existing.rev,
+          ...(existing.deleted ? { _deleted: true } : {}),
+          ...existing.body,
+        }
+      : null;
     // CouchDB: a write over a live document needs its current revision; over a
     // tombstone it may omit it.
     if (existing && !existing.deleted && sent !== existing.rev) {
@@ -478,7 +492,11 @@ export class FakeCouch {
       this.validate(
         incoming,
         old,
-        { name: this.personId, roles: [] },
+        {
+          name: this.personId,
+          db: `user_${this.personId}`,
+          roles: [],
+        },
         { members: { names: [this.personId] } },
       );
     } catch (err) {
@@ -492,14 +510,17 @@ export class FakeCouch {
     const gen = existing ? Number(existing.rev.split("-")[0]) + 1 : 1;
     const rev = `${gen}-${String(this.revCounter).padStart(32, "0")}`;
     this.seq += 1;
-    if (incoming._deleted === true) {
-      this.docs.set(id, { seq: this.seq, rev, deleted: true, body: null });
-    } else {
-      const body: Json = { ...incoming };
-      delete body._id;
-      delete body._rev;
-      this.docs.set(id, { seq: this.seq, rev, deleted: false, body });
-    }
+    const body: Json = { ...incoming };
+    delete body._id;
+    delete body._rev;
+    delete body._deleted;
+    delete body._revisions;
+    this.docs.set(id, {
+      seq: this.seq,
+      rev,
+      deleted: incoming._deleted === true,
+      body,
+    });
     return { ok: true, rev };
   }
 }

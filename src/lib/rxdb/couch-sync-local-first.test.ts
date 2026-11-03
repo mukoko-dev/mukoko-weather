@@ -43,8 +43,7 @@ const settleWith = (engine: { idle(): Promise<void> }) => () => engine.idle();
 const themeDoc = (value: string, updatedAt: string) => ({
   id: "preference:theme",
   type: "preference" as const,
-  schemaVersion: 1,
-  ownerPersonId: PERSON,
+  schemaVersion: "v3.1",
   deviceId: "99999999-2222-4333-8444-555555555555",
   createdAt: updatedAt,
   updatedAt,
@@ -137,7 +136,7 @@ describe("the local database opens at start, before any credential", () => {
     const mine = h.stores[1].written.filter((d) => d.id === "preference:theme");
     expect(mine).toHaveLength(1);
     expect(mine[0]).toMatchObject({
-      ownerPersonId: PERSON,
+      schemaVersion: "v3.1",
       preferenceValue: "light",
     });
     // Newer than their older choice, so it wins, and the app keeps it.
@@ -543,7 +542,7 @@ describe("a change written to a database chosen on a guess is not durable until 
     const mine = rightStore.written.filter((d) => d.id === "preference:theme");
     expect(mine).toHaveLength(1);
     expect(mine[0]).toMatchObject({
-      ownerPersonId: PERSON,
+      schemaVersion: "v3.1",
       preferenceValue: "light",
       updatedAt: toRfc3339(madeAt),
     });

@@ -22,6 +22,8 @@ const PERSON = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
 
 // The real engine, with its `flush` observable.
 const flushes: ReturnType<typeof vi.fn>[] = [];
+/** The device id each engine was started with (what every document carries). */
+const engineDeviceIds: string[] = [];
 vi.mock("./couch-sync", async (importOriginal) => {
   const real = await importOriginal<typeof import("./couch-sync")>();
   return {
@@ -29,6 +31,7 @@ vi.mock("./couch-sync", async (importOriginal) => {
     createCouchSyncEngine: (
       deps: Parameters<typeof real.createCouchSyncEngine>[0],
     ) => {
+      engineDeviceIds.push(deps.deviceId);
       const engine: CouchSyncEngine = real.createCouchSyncEngine(deps);
       const flush = vi.fn(engine.flush);
       engine.flush = flush as never;
@@ -156,6 +159,33 @@ describe("flag off: nothing is read, created or requested", () => {
     expect(bridge.listenerCount).toBe(0);
     // What was there is left exactly as it was.
     expect(storage.get(SYNC_PEOPLE_KEY)).toBe(JSON.stringify([PERSON]));
+  });
+});
+
+describe("flag on: the device id every document carries", () => {
+  const APP_ID = "5f0e1c2a-8b3d-4e6f-9a7b-1c2d3e4f5a6b";
+
+  it("is the app's own device id when it is a lower-case UUID (what the validator accepts)", async () => {
+    stubBrowser("true");
+    engineDeviceIds.length = 0;
+    const handle = await startCouchSync(new FakeBridge(), APP_ID);
+    await untilRequests(1);
+    expect(engineDeviceIds).toEqual([APP_ID]);
+    await handle?.stop();
+  });
+
+  it("is a UUID of the sync's own when the app's is anything else, so sync still runs", async () => {
+    stubBrowser("true");
+    engineDeviceIds.length = 0;
+    const handle = await startCouchSync(new FakeBridge(), "device");
+    await untilRequests(1);
+    expect(engineDeviceIds).toHaveLength(1);
+    expect(engineDeviceIds[0]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+    expect(engineDeviceIds[0]).not.toBe("device");
+    expect(fetchSpy).toHaveBeenCalled(); // the engine started and asked
+    await handle?.stop();
   });
 });
 

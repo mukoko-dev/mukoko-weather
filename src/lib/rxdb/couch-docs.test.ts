@@ -6,13 +6,18 @@ import { ForecastModel } from "../weather";
 import {
   ACTIVITY_ID_RE,
   COUCH_DOC_SCHEMA_VERSION,
-  FORECAST_MODEL_VALUES,
+  LOCAL_ONLY_FORECAST_MODELS,
   MAX_SYNCED_ACTIVITIES,
+  SYNCED_FORECAST_MODELS,
+  SYNCED_PREFERENCE_KEYS,
+  THEME_VALUES,
   activityDocId,
   assertPlaintextDoc,
+  isDeviceId,
   isKnownActivityId,
   isOwnedDocId,
   isWellFormedDoc,
+  ownedDocIds,
   patchFromDocs,
   pickWireFields,
   planChangeOps,
@@ -27,16 +32,23 @@ import {
   type SyncableState,
   type UserDocType,
 } from "./couch-docs";
-import { FakeCouch } from "./test-support/couch-fake-server";
+import {
+  validateDoc,
+  validatorForecastModels,
+  validatorPreferenceKeys,
+  validatorThemeValues,
+  validatorTypes,
+  type Json,
+} from "./test-support/couch-validator-facts";
 
 const PERSON = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
 const DEVICE = "11111111-2222-4333-8444-555555555555";
+/** The same shape with upper-case hex digits, which the validator refuses. */
+const UPPER_DEVICE = "ABCDEF01-2222-4333-8444-555555555555";
 const T0 = Date.parse("2026-11-02T10:00:00.000Z");
-const ctx = (nowMs = T0): DocContext => ({
-  personId: PERSON,
-  deviceId: DEVICE,
-  nowMs,
-});
+/** The CouchDB server's clock in these tests: an hour after the first write. */
+const SERVER_NOW = () => T0 + 3_600_000;
+const ctx = (nowMs = T0): DocContext => ({ deviceId: DEVICE, nowMs });
 const state = (over: Partial<SyncableState> = {}): SyncableState => ({
   theme: "system",
   selectedForecastModel: "best_match",
@@ -44,11 +56,23 @@ const state = (over: Partial<SyncableState> = {}): SyncableState => ({
   ...over,
 });
 
+/**
+ * The document as CouchDB would receive it from the replication: what the push
+ * modifier makes of it, with RxDB's `id` turned into `_id` (the plugin does
+ * that). Null when the modifier skips the row.
+ */
+function wireOf(doc: UserDocType & { _deleted?: boolean }): Json | null {
+  const wire = toPushDoc(doc);
+  if (!wire) return null;
+  const { id, ...rest } = wire;
+  return { _id: id, ...rest };
+}
+
 /** The pinned CouchDB validator is the judge of every document we make. */
-function validatorAccepts(doc: UserDocType): boolean {
-  const couch = new FakeCouch({ personId: PERSON, token: "x" });
-  const { id, ...rest } = doc;
-  return couch.seed({ _id: id, ...rest }).ok;
+function verdictOf(doc: UserDocType & { _deleted?: boolean }) {
+  const wire = wireOf(doc);
+  if (!wire) throw new Error("the push modifier skipped the document");
+  return validateDoc(wire, { personId: PERSON, serverNowMs: SERVER_NOW });
 }
 
 function upserts(ops: ReturnType<typeof planChangeOps>): UserDocType[] {
@@ -81,7 +105,22 @@ describe("ids and vocabulary", () => {
     }
   });
 
-  describe("the forecast models that sync are the web app's own", () => {
+  it("the document types and settings this client writes are ones the validator lists", () => {
+    expect(validatorTypes()).toEqual(
+      expect.arrayContaining(["preference", "activity"]),
+    );
+    expect(validatorPreferenceKeys()).toEqual(
+      expect.arrayContaining([...SYNCED_PREFERENCE_KEYS]),
+    );
+    // `homePlace` is in the validator's id pattern but is a ciphertext-only
+    // setting (it needs an envelope); it is not a plaintext key, and never ours.
+    expect(validatorPreferenceKeys()).not.toContain("homePlace");
+    expect([...THEME_VALUES].sort()).toEqual(
+      [...validatorThemeValues()].sort(),
+    );
+  });
+
+  describe("the forecast models that sync are the validator's, as far as the app offers them", () => {
     const REPO = join(__dirname, "..", "..", "..");
     const read = (...p: string[]) => readFileSync(join(REPO, ...p), "utf8");
     /** The quoted values of a Rust `const NAME: [&str; N] = [ ... ];`. */
@@ -94,14 +133,29 @@ describe("ids and vocabulary", () => {
       );
       return [...body.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
     };
+    const offeredByApp = Object.values(ForecastModel) as string[];
 
-    it("are exactly the ForecastModel enum the My Weather picker is built from", () => {
-      expect([...FORECAST_MODEL_VALUES].sort()).toEqual(
-        Object.values(ForecastModel).sort(),
+    it("are exactly the validator's enum (parsed from the pinned file) that the My Weather picker offers", () => {
+      const expected = validatorForecastModels().filter((m) =>
+        offeredByApp.includes(m),
       );
+      expect(expected.length).toBeGreaterThan(3);
+      expect([...SYNCED_FORECAST_MODELS].sort()).toEqual([...expected].sort());
     });
 
-    it("are exactly what the picker's radio group renders", () => {
+    it("the picks the validator does not list stay on the device (local only), and nothing else does", () => {
+      const notListed = offeredByApp.filter(
+        (m) => !validatorForecastModels().includes(m),
+      );
+      expect([...LOCAL_ONLY_FORECAST_MODELS].sort()).toEqual(
+        [...notListed].sort(),
+      );
+      // Today that is the Météo-France pick; a test that says so, so adding it
+      // to the data model (or removing the pick) is noticed.
+      expect(LOCAL_ONLY_FORECAST_MODELS).toEqual(["meteofrance_seamless"]);
+    });
+
+    it("synced and local-only together are exactly what the picker's radio group renders", () => {
       const modal = read("src", "components", "weather", "MyWeatherModal.tsx");
       const block = modal.slice(
         modal.indexOf("const MODEL_OPTIONS"),
@@ -111,7 +165,9 @@ describe("ids and vocabulary", () => {
         (m) => ForecastModel[m[1] as keyof typeof ForecastModel],
       );
       expect(offered.length).toBeGreaterThan(3);
-      expect([...FORECAST_MODEL_VALUES].sort()).toEqual([...offered].sort());
+      expect(
+        [...SYNCED_FORECAST_MODELS, ...LOCAL_ONLY_FORECAST_MODELS].sort(),
+      ).toEqual([...offered].sort());
     });
 
     it("are each accepted by the device-profile allowlist of the Worker, so a synced pick never makes /v1/devices answer 400", () => {
@@ -120,13 +176,28 @@ describe("ids and vocabulary", () => {
         "FORECAST_MODELS",
       );
       expect(worker.length).toBeGreaterThan(5);
-      for (const model of FORECAST_MODEL_VALUES) {
+      for (const model of SYNCED_FORECAST_MODELS) {
         expect(worker, model).toContain(model);
       }
     });
 
-    it("include the Météo-France model the picker offers (the data model's list does not)", () => {
-      expect(FORECAST_MODEL_VALUES).toContain("meteofrance_seamless");
+    it("the Worker's list (11) and the validator's (10) differ, and this is how (a follow-up, not something this client papers over)", () => {
+      const worker = rustList(
+        read("workers", "crates", "weather-core", "src", "community.rs"),
+        "FORECAST_MODELS",
+      );
+      const validator = validatorForecastModels();
+      expect(worker.filter((m) => !validator.includes(m)).sort()).toEqual([
+        "ecmwf_ifs025",
+        "ecmwf_ifs04",
+        "icon_seamless",
+        "meteofrance_seamless",
+      ]);
+      expect(validator.filter((m) => !worker.includes(m)).sort()).toEqual([
+        "cma_grapes_global",
+        "jma_gsm",
+        "ukmo_global_deterministic_10km",
+      ]);
     });
 
     it.each([
@@ -136,16 +207,17 @@ describe("ids and vocabulary", () => {
       "gem_global",
       "meteofrance_arpege_world",
     ])(
-      "%s, which another client may set, is not a value of this app",
+      "%s, which the validator lists and another client may set, is not a value of this app",
       (model) => {
-        expect(FORECAST_MODEL_VALUES as readonly string[]).not.toContain(model);
+        expect(validatorForecastModels()).toContain(model);
+        expect(SYNCED_FORECAST_MODELS as readonly string[]).not.toContain(
+          model,
+        );
       },
     );
   });
 
   it("every activity id the app ships fits the data model's id pattern", async () => {
-    const { readFileSync } = await import("node:fs");
-    const { join } = await import("node:path");
     const source = readFileSync(join(__dirname, "..", "activities.ts"), "utf8");
     const ids = [...source.matchAll(/^\s+id: "([^"]+)",\s*$/gm)].map(
       (m) => m[1],
@@ -160,56 +232,110 @@ describe("ids and vocabulary", () => {
     expect(toRfc3339(T0 + 7)).toBe("2026-11-02T10:00:00.007Z");
   });
 
+  it("the device id is a lower-case UUID, as the validator wants", () => {
+    expect(isDeviceId(DEVICE)).toBe(true);
+    for (const bad of [UPPER_DEVICE, "device-1", "", `${DEVICE}0`, 42, null]) {
+      expect(isDeviceId(bad), String(bad)).toBe(false);
+    }
+  });
+
   it("the database name rule lives in the contract module, not here", () => {
     expect(readFileSync(join(__dirname, "couch-docs.ts"), "utf8")).not.toMatch(
       /personIdFromDatabase|PERSONAL_DB_RE/,
     );
   });
+
+  it("the person's id is not in any document: the database name is the ownership", () => {
+    const code = readFileSync(join(__dirname, "couch-docs.ts"), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    expect(code).not.toMatch(/ownerPersonId|personId/);
+  });
 });
 
-describe("documents are accepted by the validator CouchDB runs", () => {
-  it("a theme change", () => {
-    const [doc] = upserts(
-      planChangeOps(state(), state({ theme: "dark" }), new Map(), ctx()),
-    );
-    expect(doc).toMatchObject({
-      id: "preference:theme",
-      type: "preference",
-      preferenceKey: "theme",
-      preferenceValue: "dark",
-      schemaVersion: COUCH_DOC_SCHEMA_VERSION,
-      ownerPersonId: PERSON,
-      deviceId: DEVICE,
-      createdAt: "2026-11-02T10:00:00.000Z",
-      updatedAt: "2026-11-02T10:00:00.000Z",
-    });
-    expect(isWellFormedDoc(doc)).toBe(true);
-    expect(validatorAccepts(doc)).toBe(true);
+describe("the pinned validator accepts every document this client writes", () => {
+  it("a theme change, whatever the value", () => {
+    for (const value of THEME_VALUES) {
+      const [doc] = upserts(
+        planChangeOps(
+          state({ theme: value === "dark" ? "light" : "dark" }),
+          state({ theme: value }),
+          new Map(),
+          ctx(),
+        ),
+      );
+      expect(doc, value).toMatchObject({
+        id: "preference:theme",
+        type: "preference",
+        preferenceKey: "theme",
+        preferenceValue: value,
+        schemaVersion: "v3.1",
+        deviceId: DEVICE,
+        createdAt: "2026-11-02T10:00:00.000Z",
+        updatedAt: "2026-11-02T10:00:00.000Z",
+      });
+      expect(isWellFormedDoc(doc), value).toBe(true);
+      expect(verdictOf(doc), value).toEqual({ ok: true });
+    }
   });
 
-  it("a forecast model change and an activity", () => {
+  it("every forecast model it syncs", () => {
+    expect(SYNCED_FORECAST_MODELS.length).toBeGreaterThan(3);
+    for (const model of SYNCED_FORECAST_MODELS) {
+      const docs = upserts(
+        planChangeOps(
+          state({ selectedForecastModel: "x" }),
+          state({ selectedForecastModel: model }),
+          new Map(),
+          ctx(),
+        ),
+      );
+      expect(
+        docs.map((d) => d.preferenceValue),
+        model,
+      ).toEqual([model]);
+      expect(verdictOf(docs[0]), model).toEqual({ ok: true });
+    }
+  });
+
+  it("every setting key the engine syncs, by the seed path as well as by a change", () => {
+    const seeded = upserts(
+      planSeedOps(
+        state({ theme: "dark", selectedForecastModel: "gfs_seamless" }),
+        new Set(),
+        ctx(),
+      ),
+    );
+    expect(seeded.map((d) => d.preferenceKey).sort()).toEqual(
+      [...SYNCED_PREFERENCE_KEYS].sort(),
+    );
+    for (const d of seeded) expect(verdictOf(d), d.id).toEqual({ ok: true });
+  });
+
+  it("every activity the app offers", () => {
+    const ids = ACTIVITIES.map((a) => a.id);
     const docs = upserts(
       planChangeOps(
         state(),
-        state({
-          selectedForecastModel: "ecmwf_ifs",
-          selectedActivities: ["crop-farming"],
-        }),
+        state({ selectedActivities: ids }),
         new Map(),
         ctx(),
       ),
     );
-    expect(docs.map((d) => d.id).sort()).toEqual([
-      "activity:crop-farming",
-      "preference:forecastModel",
-    ]);
+    expect(docs).toHaveLength(ids.length);
     for (const d of docs) {
-      expect(isWellFormedDoc(d)).toBe(true);
-      expect(validatorAccepts(d)).toBe(true);
+      expect(d.activityId).toBeDefined();
+      expect(verdictOf(d), d.id).toEqual({ ok: true });
+    }
+    // ...and the same ids by the seed path.
+    for (const d of upserts(
+      planSeedOps(state({ selectedActivities: ids }), new Set(), ctx()),
+    )) {
+      expect(verdictOf(d), d.id).toEqual({ ok: true });
     }
   });
 
-  it("the wire form of a document has no field outside the allow-list", () => {
+  it("the wire form of a document has exactly the fields of its type, and none of the old contract's", () => {
     const [doc] = upserts(
       planChangeOps(
         state(),
@@ -226,92 +352,180 @@ describe("documents are accepted by the validator CouchDB runs", () => {
         "createdAt",
         "deviceId",
         "id",
-        "ownerPersonId",
         "schemaVersion",
         "type",
         "updatedAt",
       ].sort(),
     );
+    expect(wire.schemaVersion).toBe("v3.1");
+    expect("ownerPersonId" in wire).toBe(false);
   });
 
-  it("a tombstone is the id and the deleted flag, which the validator accepts", () => {
-    expect(tombstoneWire("activity:livestock")).toEqual({
+  it("a deletion carries the common fields and nothing else, and the validator accepts it", () => {
+    const [live] = upserts(
+      planChangeOps(
+        state(),
+        state({ selectedActivities: ["livestock"] }),
+        new Map(),
+        ctx(T0),
+      ),
+    );
+    // What RxDB holds after the engine's tombstone: the live document with the
+    // time and the install of the deletion, flagged deleted.
+    const deleted = {
+      ...live,
+      updatedAt: toRfc3339(T0 + 5_000),
+      deviceId: DEVICE,
+      _deleted: true as const,
+    };
+    const wire = tombstoneWire(deleted);
+    expect(wire).toEqual({
       id: "activity:livestock",
-      _deleted: true,
-    });
-    const couch = new FakeCouch({ personId: PERSON, token: "x" });
-    expect(
-      couch.seed({
-        _id: "activity:livestock",
-        type: "activity",
-        schemaVersion: 1,
-        ownerPersonId: PERSON,
-        updatedAt: toRfc3339(T0),
-      }).ok,
-    ).toBe(true);
-    const rev = couch.get("activity:livestock")?._rev;
-    expect(
-      couch.seed({ _id: "activity:livestock", _rev: rev, _deleted: true }).ok,
-    ).toBe(true);
-  });
-
-  it("the validator refuses the data-infra tombstone and string schemaVersion (known contract delta)", () => {
-    // Documents the mismatch the PR reports: data-infra's generated schema keeps
-    // the common fields on a tombstone and writes schemaVersion as "v3.1".
-    const couch = new FakeCouch({ personId: PERSON, token: "x" });
-    couch.seed({
-      _id: "activity:livestock",
-      type: "activity",
-      schemaVersion: 1,
-      ownerPersonId: PERSON,
-      updatedAt: toRfc3339(T0),
-    });
-    const rev = couch.get("activity:livestock")?._rev;
-    const fat = couch.seed({
-      _id: "activity:livestock",
-      _rev: rev,
-      _deleted: true,
-      type: "activity",
-      updatedAt: toRfc3339(T0),
-    });
-    expect(fat.ok).toBe(false);
-    const stringVersion = couch.seed({
-      _id: "activity:gardening",
       type: "activity",
       schemaVersion: "v3.1",
-      ownerPersonId: PERSON,
-      updatedAt: toRfc3339(T0),
+      deviceId: DEVICE,
+      createdAt: toRfc3339(T0),
+      updatedAt: toRfc3339(T0 + 5_000),
+      _deleted: true,
     });
-    expect(stringVersion.ok).toBe(false);
+    // No activityId (or preferenceKey, preferenceValue): the validator refuses it.
+    expect("activityId" in (wire as object)).toBe(false);
+    expect(verdictOf(deleted)).toEqual({ ok: true });
+    // The same for a deleted setting.
+    const [pref] = upserts(
+      planChangeOps(state(), state({ theme: "dark" }), new Map(), ctx(T0)),
+    );
+    const prefWire = tombstoneWire({ ...pref, _deleted: true } as never);
+    expect(Object.keys(prefWire as object).sort()).toEqual(
+      [
+        "_deleted",
+        "createdAt",
+        "deviceId",
+        "id",
+        "schemaVersion",
+        "type",
+        "updatedAt",
+      ].sort(),
+    );
+    expect(verdictOf({ ...pref, _deleted: true })).toEqual({ ok: true });
   });
-});
 
-describe("contract delta that blocks the encrypted types (next slice)", () => {
-  it("the deployed validator refuses the camelCase types of the data model", () => {
-    // gateway couch_validate_personal.js: type must match /^[a-z][a-z0-9_.-]{0,63}$/.
-    // data-infra names four types in camelCase. Until one side moves, these
-    // cannot be written to user_<personId>; the two this slice syncs, and
-    // `interest`, are lower case and are accepted.
-    const couch = new FakeCouch({ personId: PERSON, token: "x" });
-    const write = (type: string) =>
-      couch.seed({
-        _id: `${type}:abc`,
-        type,
-        schemaVersion: 1,
-        ownerPersonId: PERSON,
+  it("a tombstone that cannot carry the common fields is not pushed", () => {
+    expect(tombstoneWire({ id: "activity:livestock" })).toBeNull();
+    const [live] = upserts(
+      planChangeOps(
+        state(),
+        state({ selectedActivities: ["livestock"] }),
+        new Map(),
+        ctx(),
+      ),
+    );
+    expect(toPushDoc({ ...live, deviceId: "not-a-uuid", _deleted: true })).toBe(
+      null,
+    );
+    expect(toPushDoc({ ...live, updatedAt: "yesterday", _deleted: true })).toBe(
+      null,
+    );
+  });
+
+  describe("and refuses the old contract's shapes, so the tests would notice a regression to them", () => {
+    const base = (): Json => ({
+      _id: "activity:livestock",
+      type: "activity",
+      schemaVersion: "v3.1",
+      deviceId: DEVICE,
+      createdAt: toRfc3339(T0),
+      updatedAt: toRfc3339(T0),
+      activityId: "livestock",
+    });
+    const verdict = (doc: Json) =>
+      validateDoc(doc, { personId: PERSON, serverNowMs: SERVER_NOW });
+
+    it("the baseline document is accepted", () => {
+      expect(verdict(base())).toEqual({ ok: true });
+    });
+
+    it("an integer schemaVersion", () => {
+      expect(verdict({ ...base(), schemaVersion: 1 }).ok).toBe(false);
+    });
+
+    it("an ownerPersonId (no field outside the type's schema)", () => {
+      expect(verdict({ ...base(), ownerPersonId: PERSON })).toMatchObject({
+        ok: false,
+      });
+    });
+
+    it("a stub tombstone (the id and the flag only)", () => {
+      expect(verdict({ _id: "activity:livestock", _deleted: true })).toEqual({
+        ok: false,
+        reason: expect.stringMatching(/unknown document type/),
+      });
+    });
+
+    it("a tombstone that still carries activityId", () => {
+      expect(
+        verdict({ ...base(), _deleted: true }).ok,
+        "activityId on a tombstone",
+      ).toBe(false);
+    });
+
+    it("a time that is not exactly YYYY-MM-DDTHH:mm:ss.SSSZ", () => {
+      for (const bad of [
+        "2026-11-02T10:00:00Z",
+        "2026-11-02T10:00:00.5Z",
+        "2026-11-02T12:00:00.000+02:00",
+        "2026-11-02T10:00:00.000000Z",
+      ]) {
+        expect(verdict({ ...base(), updatedAt: bad }).ok, bad).toBe(false);
+        expect(verdict({ ...base(), createdAt: bad }).ok, bad).toBe(false);
+      }
+    });
+
+    it("a deviceId that is not a lower-case UUID", () => {
+      for (const bad of ["device-1", UPPER_DEVICE, ""]) {
+        expect(verdict({ ...base(), deviceId: bad }).ok, bad).toBe(false);
+      }
+    });
+
+    it("a forecast model outside its enum, Météo-France's included", () => {
+      const pref = (value: string): Json => ({
+        _id: "preference:forecastModel",
+        type: "preference",
+        schemaVersion: "v3.1",
+        deviceId: DEVICE,
+        createdAt: toRfc3339(T0),
         updatedAt: toRfc3339(T0),
-      }).ok;
-    for (const refused of [
-      "savedPlace",
-      "engagementEvent",
-      "historyEntry",
-      "deviceNote",
-    ]) {
-      expect(write(refused), refused).toBe(false);
-    }
-    for (const accepted of ["activity", "preference", "interest"]) {
-      expect(write(accepted), accepted).toBe(true);
-    }
+        preferenceKey: "forecastModel",
+        preferenceValue: value,
+      });
+      expect(verdict(pref("meteofrance_seamless")).ok).toBe(false);
+      expect(verdict(pref("ecmwf_ifs")).ok).toBe(true);
+    });
+
+    it("a write into another person's database", () => {
+      expect(
+        validateDoc(base(), {
+          personId: PERSON,
+          database: "user_someone-else",
+          serverNowMs: SERVER_NOW,
+        }),
+      ).toMatchObject({ ok: false });
+    });
+
+    it("an updatedAt more than a day ahead of the server's clock", () => {
+      expect(
+        verdict({
+          ...base(),
+          updatedAt: toRfc3339(SERVER_NOW() + 25 * 3_600_000),
+        }).ok,
+      ).toBe(false);
+      expect(
+        verdict({
+          ...base(),
+          updatedAt: toRfc3339(SERVER_NOW() + 23 * 3_600_000),
+        }).ok,
+      ).toBe(true);
+    });
   });
 });
 
@@ -319,8 +533,7 @@ describe("the plaintext gate", () => {
   const base: UserDocType = {
     id: "preference:theme",
     type: "preference",
-    schemaVersion: 1,
-    ownerPersonId: PERSON,
+    schemaVersion: COUCH_DOC_SCHEMA_VERSION,
     deviceId: DEVICE,
     createdAt: toRfc3339(T0),
     updatedAt: toRfc3339(T0),
@@ -342,7 +555,7 @@ describe("the plaintext gate", () => {
     ).not.toThrow();
   });
 
-  it("refuses the locational setting, other types and bad values", () => {
+  it("refuses the locational setting, other types, bad values and anything the validator would refuse", () => {
     const refused: Partial<UserDocType>[] = [
       { id: "preference:homePlace", preferenceKey: "homePlace" as never },
       { id: "savedPlace:abc", type: "savedPlace" as never },
@@ -350,38 +563,162 @@ describe("the plaintext gate", () => {
       { id: "historyEntry:abc", type: "historyEntry" as never },
       { preferenceValue: "purple" },
       { id: "preference:language", preferenceKey: "language" as never },
+      // The app's own pick that the validator's enum does not list.
+      {
+        id: "preference:forecastModel",
+        preferenceKey: "forecastModel",
+        preferenceValue: "meteofrance_seamless",
+      },
+      // ...and a value that fits the enum but not this app's pickers.
+      {
+        id: "preference:forecastModel",
+        preferenceKey: "forecastModel",
+        preferenceValue: "jma_gsm",
+      },
+      { schemaVersion: 1 as never },
+      { schemaVersion: "v2.0" },
+      { deviceId: "device-1" },
+      { deviceId: UPPER_DEVICE },
+      { updatedAt: "2026-11-02T10:00:00Z" },
+      { createdAt: "2026-11-02T12:00:00.000+02:00" },
+      { activityId: "livestock" }, // a preference that carries an activityId
     ];
     for (const over of refused) {
       expect(() => assertPlaintextDoc({ ...base, ...over })).toThrow(
         /couch-sync/,
       );
     }
+    // An activity whose id and activityId disagree.
+    expect(() =>
+      assertPlaintextDoc({
+        ...base,
+        id: "activity:livestock",
+        type: "activity",
+        preferenceKey: undefined,
+        preferenceValue: undefined,
+        activityId: "gardening",
+      }),
+    ).toThrow(/couch-sync/);
   });
 
-  it("the push modifier throws instead of sending a refused document", () => {
-    expect(() =>
-      toPushDoc({
+  it("whatever the gate lets through, the validator accepts (the gate is not looser than it)", () => {
+    const candidates: UserDocType[] = [];
+    for (const v of THEME_VALUES) {
+      candidates.push({ ...base, preferenceValue: v });
+    }
+    for (const m of SYNCED_FORECAST_MODELS) {
+      candidates.push({
         ...base,
-        id: "preference:homePlace",
-        preferenceKey: "homePlace" as never,
-      }),
-    ).toThrow();
-    expect(toPushDoc({ ...base, _deleted: true })).toEqual({
-      id: "preference:theme",
-      _deleted: true,
+        id: "preference:forecastModel",
+        preferenceKey: "forecastModel",
+        preferenceValue: m,
+      });
+    }
+    for (const a of ACTIVITIES) {
+      candidates.push({
+        id: activityDocId(a.id),
+        type: "activity",
+        schemaVersion: COUCH_DOC_SCHEMA_VERSION,
+        deviceId: DEVICE,
+        createdAt: toRfc3339(T0),
+        updatedAt: toRfc3339(T0),
+        activityId: a.id,
+      });
+    }
+    for (const d of candidates) {
+      expect(isWellFormedDoc(d), d.id).toBe(true);
+      expect(verdictOf(d), d.id).toEqual({ ok: true });
+    }
+  });
+
+  describe("the push modifier", () => {
+    it("reduces a live document to the wire fields", () => {
+      const wire = toPushDoc({ ...base, secret: "x" } as UserDocType);
+      expect(wire).not.toBeNull();
+      expect(wire).toMatchObject({
+        id: "preference:theme",
+        preferenceKey: "theme",
+        preferenceValue: "dark",
+        schemaVersion: "v3.1",
+      });
+      expect("secret" in (wire as object)).toBe(false);
+    });
+
+    it("skips an id this client does not own, instead of sending it or throwing", () => {
+      expect(
+        toPushDoc({
+          ...base,
+          id: "preference:homePlace",
+          preferenceKey: "homePlace" as never,
+        }),
+      ).toBeNull();
+      expect(toPushDoc({ ...base, id: "savedPlace:x" })).toBeNull();
+    });
+
+    it("turns a deleted document into its tombstone", () => {
+      expect(toPushDoc({ ...base, _deleted: true })).toEqual({
+        id: "preference:theme",
+        type: "preference",
+        schemaVersion: "v3.1",
+        deviceId: DEVICE,
+        createdAt: toRfc3339(T0),
+        updatedAt: toRfc3339(T0),
+        _deleted: true,
+      });
+    });
+
+    it("lets the assumed master through by shape: a model another client set does not stop the edit of that setting", () => {
+      // The plugin applies the modifier to the assumed master state of every row
+      // too. A forecast model that only another client offers (the validator
+      // lists it, this app does not) is the server's to have written; throwing
+      // or skipping on it would wedge the push of this client's own edit.
+      const master = {
+        ...base,
+        id: "preference:forecastModel",
+        preferenceKey: "forecastModel",
+        preferenceValue: "jma_gsm",
+      } as UserDocType;
+      const wire = toPushDoc(master);
+      expect(wire).toMatchObject({ preferenceValue: "jma_gsm" });
+      expect(() => toPushDoc(master)).not.toThrow();
     });
   });
 
-  it("the pull modifier strips fields this client does not know", () => {
-    const pulled = toPullDoc({
-      ...base,
-      _deleted: false,
-      secret: "from another client",
-    } as UserDocType & { _deleted: boolean });
-    expect("secret" in pulled).toBe(false);
-    expect(toPullDoc({ id: "activity:x", _deleted: true })).toEqual({
-      id: "activity:x",
-      _deleted: true,
+  describe("the pull modifier", () => {
+    it("strips fields this client does not know", () => {
+      const pulled = toPullDoc({
+        ...base,
+        _deleted: false,
+        secret: "from another client",
+        envelope: { ciphertext: "x" },
+      } as UserDocType & { _deleted: boolean });
+      expect("secret" in pulled).toBe(false);
+      expect("envelope" in pulled).toBe(false);
+    });
+
+    it("keeps a tombstone's common fields, which its ordering against an edit needs", () => {
+      const pulled = toPullDoc({
+        ...base,
+        id: "activity:livestock",
+        type: "activity",
+        activityId: "livestock",
+        _deleted: true,
+      } as never);
+      expect(pulled).toMatchObject({
+        id: "activity:livestock",
+        type: "activity",
+        updatedAt: toRfc3339(T0),
+        deviceId: DEVICE,
+        _deleted: true,
+      });
+      expect("activityId" in pulled).toBe(false);
+    });
+
+    it("a stub tombstone (nothing else on it) still deletes", () => {
+      expect(toPullDoc({ id: "activity:x", _deleted: true })).toEqual({
+        id: "activity:x",
+        _deleted: true,
+      });
     });
   });
 });
@@ -435,6 +772,26 @@ describe("state -> documents", () => {
     expect(second.preferenceValue).toBe("light");
   });
 
+  it("writes the createdAt of an existing document in the one form the validator accepts", () => {
+    const [first] = upserts(
+      planChangeOps(state(), state({ theme: "dark" }), new Map(), ctx(T0)),
+    );
+    const [second] = upserts(
+      planChangeOps(
+        state({ theme: "dark" }),
+        state({ theme: "light" }),
+        // A document another client made, in an RFC 3339 form the validator
+        // would refuse.
+        new Map([
+          [first.id, { ...first, createdAt: "2026-11-02T12:00:00+02:00" }],
+        ]),
+        ctx(T0 + 60_000),
+      ),
+    );
+    expect(second.createdAt).toBe("2026-11-02T10:00:00.000Z");
+    expect(verdictOf(second)).toEqual({ ok: true });
+  });
+
   it("never writes a value the data model does not allow, or an unsyncable id", () => {
     const ops = planChangeOps(
       state(),
@@ -450,17 +807,51 @@ describe("state -> documents", () => {
     expect(ops).toEqual([]);
   });
 
-  it("writes the Météo-France pick the picker offers", () => {
-    const ops = upserts(
-      planChangeOps(
-        state(),
-        state({ selectedForecastModel: "meteofrance_seamless" }),
-        new Map(),
-        ctx(),
-      ),
-    );
-    expect(ops.map((d) => d.preferenceValue)).toEqual(["meteofrance_seamless"]);
-    expect(validatorAccepts(ops[0])).toBe(true);
+  describe("a forecast model the validator does not list stays on the device", () => {
+    it("the Météo-France pick is never written", () => {
+      expect(
+        planChangeOps(
+          state(),
+          state({ selectedForecastModel: "meteofrance_seamless" }),
+          new Map(),
+          ctx(),
+        ),
+      ).toEqual([]);
+    });
+
+    it("nor seeded", () => {
+      expect(
+        planSeedOps(
+          state({ selectedForecastModel: "meteofrance_seamless" }),
+          new Set(),
+          ctx(),
+        ),
+      ).toEqual([]);
+    });
+
+    it("moving to a synced pick from it writes that pick", () => {
+      const docs = upserts(
+        planChangeOps(
+          state({ selectedForecastModel: "meteofrance_seamless" }),
+          state({ selectedForecastModel: "ecmwf_ifs" }),
+          new Map(),
+          ctx(),
+        ),
+      );
+      expect(docs.map((d) => d.preferenceValue)).toEqual(["ecmwf_ifs"]);
+      expect(verdictOf(docs[0])).toEqual({ ok: true });
+    });
+
+    it("moving to it from a synced pick writes nothing: the server keeps the last synced one", () => {
+      expect(
+        planChangeOps(
+          state({ selectedForecastModel: "ecmwf_ifs" }),
+          state({ selectedForecastModel: "meteofrance_seamless" }),
+          new Map(),
+          ctx(),
+        ),
+      ).toEqual([]);
+    });
   });
 });
 
@@ -499,14 +890,23 @@ describe("seeding: defaults never win", () => {
     );
     expect(upserts(ops).map((d) => d.id)).toEqual(["activity:gardening"]);
   });
+
+  it("the ids it can have a document for are the two settings and one per activity", () => {
+    const ids = ownedDocIds();
+    expect(ids).toContain("preference:theme");
+    expect(ids).toContain("preference:forecastModel");
+    expect(ids.filter((i) => i.startsWith("activity:")).length).toBe(
+      ACTIVITIES.length,
+    );
+    for (const id of ids) expect(isOwnedDocId(id), id).toBe(true);
+  });
 });
 
 describe("documents -> state", () => {
   const doc = (over: Partial<UserDocType>): UserDocType => ({
     id: "preference:theme",
     type: "preference",
-    schemaVersion: 1,
-    ownerPersonId: PERSON,
+    schemaVersion: COUCH_DOC_SCHEMA_VERSION,
     deviceId: DEVICE,
     createdAt: toRfc3339(T0),
     updatedAt: toRfc3339(T0),
@@ -533,6 +933,44 @@ describe("documents -> state", () => {
     expect(patchFromDocs([theme("purple")], state())).toEqual({});
   });
 
+  describe("the model version", () => {
+    it("reads the same major version (a later minor adds nothing this client uses)", () => {
+      expect(
+        patchFromDocs([{ ...theme("dark"), schemaVersion: "v3.2" }], state()),
+      ).toEqual({ theme: "dark" });
+    });
+
+    it.each(["v4.0", "v2.9", "1", "3.1", "", "v3"])(
+      "does not read %j",
+      (version) => {
+        expect(
+          patchFromDocs(
+            [{ ...theme("dark"), schemaVersion: version }],
+            state(),
+          ),
+        ).toEqual({});
+      },
+    );
+
+    it("does not read the old numeric version", () => {
+      expect(
+        patchFromDocs(
+          [{ ...theme("dark"), schemaVersion: 1 as never }],
+          state(),
+        ),
+      ).toEqual({});
+    });
+
+    it("and an activity of another version is not applied either", () => {
+      expect(
+        patchFromDocs(
+          [{ ...act("livestock"), schemaVersion: "v4.0" }],
+          state(),
+        ),
+      ).toEqual({});
+    });
+  });
+
   describe("a forecast model set by another client", () => {
     const model = (value: string) =>
       doc({
@@ -556,14 +994,22 @@ describe("documents -> state", () => {
       expect(patch.selectedForecastModel).toBeUndefined();
     });
 
-    it("a model this app offers is applied, the Météo-France one too", () => {
-      expect(
-        patchFromDocs([model("meteofrance_seamless")], state())
-          .selectedForecastModel,
-      ).toBe("meteofrance_seamless");
+    it("a model this app syncs is applied", () => {
       expect(
         patchFromDocs([model("gfs_seamless")], state()).selectedForecastModel,
       ).toBe("gfs_seamless");
+    });
+
+    it("the Météo-France pick is the person's own on this device: no document replaces it, and none is applied for it", () => {
+      expect(
+        patchFromDocs(
+          [model("ecmwf_ifs")],
+          state({ selectedForecastModel: "meteofrance_seamless" }),
+        ),
+      ).toEqual({});
+      expect(patchFromDocs([model("meteofrance_seamless")], state())).toEqual(
+        {},
+      );
     });
   });
 
@@ -899,24 +1345,56 @@ describe("conflict rule (couchdb-documents.md)", () => {
     expect(resolveUserDocConflict(master, fork)).toBe(master);
   });
 
-  it("a delete from the server carries no time and wins", () => {
-    const master = { id: "activity:x", _deleted: true as const };
-    const fork = { id: "activity:x", updatedAt: toRfc3339(T0 + 99_000) };
-    expect(resolveUserDocConflict(master, fork as never)).toBe(master);
+  // A tombstone carries updatedAt like any other revision (the validator makes
+  // it carry the common fields), so a delete wins only by being later.
+  describe("a delete is ordered like any other revision", () => {
+    const remove = (ms: number) => at(ms, { _deleted: true as const });
+
+    it("a delete on the server older than an edit made here loses to it: a re-add after a remote delete wins", () => {
+      const master = remove(T0);
+      const fork = at(T0 + 99_000);
+      expect(resolveUserDocConflict(master, fork)).toBe(fork);
+    });
+
+    it("a delete on the server newer than the edit made here wins", () => {
+      const master = remove(T0 + 99_000);
+      const fork = at(T0);
+      expect(resolveUserDocConflict(master, fork)).toBe(master);
+    });
+
+    it("a delete made here newer than the server's revision wins, an older one loses", () => {
+      const master = at(T0);
+      const newerDelete = remove(T0 + 5);
+      const olderDelete = remove(T0 - 5);
+      expect(resolveUserDocConflict(master, newerDelete)).toBe(newerDelete);
+      expect(resolveUserDocConflict(master, olderDelete)).toBe(master);
+    });
+
+    it("two deletes at the same time: the server's stays", () => {
+      const master = remove(T0);
+      const fork = remove(T0);
+      expect(resolveUserDocConflict(master, fork)).toBe(master);
+    });
+
+    it("an edit and a delete at the same time: the server's revision stays, whichever it is", () => {
+      const edit = at(T0);
+      const del = remove(T0);
+      expect(resolveUserDocConflict(del, edit)).toBe(del);
+      expect(resolveUserDocConflict(edit, del)).toBe(edit);
+    });
+
+    it("a server tombstone with no readable time (nothing the validator would accept) leaves the server's revision", () => {
+      const master = { id: "activity:x", _deleted: true as const };
+      const fork = { id: "activity:x", updatedAt: toRfc3339(T0 + 99_000) };
+      expect(resolveUserDocConflict(master, fork as never)).toBe(master);
+    });
   });
 
-  it("a local delete is ordered by its own time", () => {
-    const master = at(T0);
-    const newerDelete = at(T0 + 5, { _deleted: true });
-    const olderDelete = at(T0 - 5, { _deleted: true });
-    expect(resolveUserDocConflict(master, newerDelete)).toBe(newerDelete);
-    expect(resolveUserDocConflict(master, olderDelete)).toBe(master);
-  });
-
-  // The deployed validator accepts ANY RFC 3339 time (fractional digits of any
-  // length or none, `Z` or an offset), and another client writes the forms it
-  // likes. Compared as text these order wrongly ("00.500Z" sorts before "00Z",
-  // "12:00:00+02:00" after "10:30:00Z"), so instants are compared as instants.
+  // The pinned validator accepts times in exactly one form for what a client
+  // WRITES, but another client's older revision, or a document written under an
+  // earlier rule, may use any RFC 3339 form. Compared as text these order wrongly
+  // ("00.500Z" sorts before "00Z", "12:00:00+02:00" after "10:30:00Z"), so
+  // instants are compared as instants.
   describe("times are compared as instants, not as text", () => {
     const doc = (updatedAt: unknown, who: string) =>
       ({ id: "preference:theme", updatedAt, who }) as never;

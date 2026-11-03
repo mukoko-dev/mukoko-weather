@@ -45,6 +45,7 @@
 
 import type { RxCollection, RxDatabase, RxJsonSchema, RxStorage } from "rxdb";
 import {
+  assertPlaintextDoc,
   resolveUserDocConflict,
   toPullDoc,
   toPushDoc,
@@ -135,8 +136,8 @@ export const userDocsSchema: RxJsonSchema<UserDocType> = {
   properties: {
     id: { type: "string", maxLength: 100 },
     type: { type: "string", enum: ["preference", "activity"], maxLength: 16 },
-    schemaVersion: { type: "number" },
-    ownerPersonId: { type: "string", maxLength: 128 },
+    // A string such as "v3.1" (the validator's `^v[0-9]+\.[0-9]+$`), not a number.
+    schemaVersion: { type: "string", maxLength: 16 },
     deviceId: { type: "string", maxLength: 64 },
     createdAt: { type: "string", maxLength: 32 },
     updatedAt: { type: "string", maxLength: 32 },
@@ -148,7 +149,6 @@ export const userDocsSchema: RxJsonSchema<UserDocType> = {
     "id",
     "type",
     "schemaVersion",
-    "ownerPersonId",
     "deviceId",
     "createdAt",
     "updatedAt",
@@ -193,7 +193,6 @@ function plain(doc: UserDocType): UserDocType {
     id: doc.id,
     type: doc.type,
     schemaVersion: doc.schemaVersion,
-    ownerPersonId: doc.ownerPersonId,
     deviceId: doc.deviceId,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
@@ -323,15 +322,23 @@ export async function openUserDocStore(
       },
 
       async upsert(doc) {
+        // The last gate before a document is stored to be pushed: refuses what
+        // the validator would refuse (`assertPlaintextDoc`).
+        assertPlaintextDoc(doc);
         await col.upsert(plain(doc));
       },
 
-      async tombstone(id, nowMs) {
+      async tombstone(id, nowMs, deviceId) {
         const existing = await col.findOne(id).exec();
         if (!existing) return;
-        // Stamp the deletion first, so a conflict with an edit made elsewhere
-        // is ordered by when the person actually deleted it.
-        await existing.incrementalPatch({ updatedAt: toRfc3339(nowMs) });
+        // Stamp the deletion first (when, and by which install), so a conflict
+        // with an edit made elsewhere is ordered by when the person actually
+        // deleted it, and the tombstone carries the common fields the validator
+        // requires of every document, deleted or not.
+        await existing.incrementalPatch({
+          updatedAt: toRfc3339(nowMs),
+          deviceId,
+        });
         const latest = await col.findOne(id).exec();
         if (latest) await latest.remove();
       },

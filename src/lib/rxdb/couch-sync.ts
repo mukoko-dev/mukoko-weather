@@ -99,14 +99,25 @@
  * on its own clock (`fetchFresh`). The server's clock is never compared with
  * this device's.
  *
+ * A SCHEDULED DELETION IS TERMINAL, AND TAKES NOTHING. `403
+ * account_pending_deletion` from the route does not pass by itself, so the
+ * engine stops asking for the rest of the page's life (no timer, no further
+ * request; `failureAction` "stop_keep_data"), but it removes nothing: the person
+ * is signed in and the deletion can be cancelled. Their changes keep being
+ * written to the local database.
+ *
  * FAILURES ARE SILENT AND BOUNDED. No console output, never a throw into a
  * render. 401 from the database = the credential was refused: fetch a new one
  * once, then back off. 403, 404, 429, 5xx, offline and timeouts back off 30 s,
- * doubling to 15 min (`couch-schedule.ts`). A credential with under
- * `COUCH_MIN_GRANT_LIFE_MS` left is a failure too, and two credential fetches
- * are never closer than `REFRESH_MIN_DELAY_MS`, so a short-lived grant cannot
- * make a loop. Nothing waits for ever (a credential request, opening the local
- * database, a replication each have a deadline).
+ * doubling to 15 min (`couch-schedule.ts`). EVERY trigger respects the back-off:
+ * a local write, another tab's write, the poll, a focus and the credential's
+ * renewal all wait for the back-off timer while it runs (only the browser's own
+ * "online" event ends it early), so a failing service is asked once per wait,
+ * not once per edit. A credential with under `COUCH_MIN_GRANT_LIFE_MS` left is
+ * a failure too, and two credential fetches are never closer than
+ * `REFRESH_MIN_DELAY_MS`, so a short-lived grant cannot make a loop. Nothing
+ * waits for ever (a credential request, opening the local database, a
+ * replication each have a deadline).
  *
  * STOP IS FAST, AND THE PENDING CHANGE GOES FIRST. `stop()` (pagehide, a
  * restart) signals first: the waits the cycle is in end now (they race against
@@ -131,6 +142,7 @@ import {
   type SyncedPatch,
   type UserDocType,
   activityDocId,
+  isDeviceId,
   isKnownActivityId,
   isSyncableActivityId,
   preferenceDocId,
@@ -199,8 +211,13 @@ export interface SyncStore {
   /** Ids (of the given ones) that have a document, deleted or not. */
   knownIds(ids: string[]): Promise<Set<string>>;
   upsert(doc: UserDocType): Promise<void>;
-  /** Delete a document; `nowMs` stamps the deletion so conflicts can be ordered. */
-  tombstone(id: string, nowMs: number): Promise<void>;
+  /**
+   * Delete a document. The tombstone carries the common fields the validator
+   * requires of every document: `nowMs` stamps the deletion (so a conflict with
+   * an edit made elsewhere is ordered by when the person deleted it) and
+   * `deviceId` is the install that deleted it.
+   */
+  tombstone(id: string, nowMs: number, deviceId: string): Promise<void>;
   /** One non-live pull + push. Rejects with a `CouchHttpError` on failure. */
   runReplication(session: CouchSession): Promise<void>;
   /**
@@ -316,7 +333,12 @@ export interface EngineDeps {
   /** Open the local database of one person; null when RxDB is unavailable. */
   openStore(personId: string): Promise<SyncStore | null>;
   bridge: SyncBridge;
-  /** The install id written into every document (`deviceId`). */
+  /**
+   * The install id written into every document (`deviceId`). The validator
+   * accepts a lower-case UUID and nothing else; an engine given anything else
+   * does not start (status "unavailable"), because every write would be refused
+   * and the refusals would hold up the rest of what is pushed.
+   */
   deviceId: string;
   now(): number;
   setTimer(fn: () => void, ms: number): TimerHandle;
@@ -333,6 +355,7 @@ export type EngineStatus =
   | "idle"
   | "syncing"
   | "signed_out"
+  | "account_closing"
   | "backing_off"
   | "unavailable";
 
@@ -377,6 +400,12 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
   let unavailable = false;
   /** The route said nobody is signed in: idle until the next page load. */
   let signedOut = false;
+  /**
+   * The route said the account is scheduled for deletion: idle until the next
+   * page load too, but nothing is removed and the person's changes are still
+   * written to the local database.
+   */
+  let accountClosing = false;
   let status: EngineStatus = "stopped";
   let session: Held | null = null;
   let store: SyncStore | null = null;
@@ -423,7 +452,7 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
   let epoch = 0;
   /** True once this run's cycle or the page has said stop. */
   const halted = (since: number): boolean =>
-    stopped || signedOut || since !== epoch;
+    stopped || signedOut || accountClosing || since !== epoch;
   /**
    * Rejects (with `Halt`) when stop() is called. The cycle's long waits (a
    * credential request, opening the database, a replication) race against it,
@@ -494,10 +523,13 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
     pushTimer = clear(pushTimer);
   }
 
+  /**
+   * What a document is written with: the install and the time. Nothing about
+   * the person: the database is theirs (`user_<personId>`) and the validator
+   * takes ownership from its name.
+   */
   function docContext(nowMs: number): DocContext {
-    const personId = storePerson ?? session?.personId;
-    if (!personId) throw new Error("couch-sync: no person");
-    return { personId, deviceId: deps.deviceId, nowMs };
+    return { deviceId: deps.deviceId, nowMs };
   }
 
   /** Run a write to the store, so its change events are known to be ours. */
@@ -520,7 +552,7 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
     await writing(async () => {
       for (const op of ops) {
         if (op.kind === "upsert") await target.upsert(op.doc);
-        else await target.tombstone(op.id, nowMs);
+        else await target.tombstone(op.id, nowMs, deps.deviceId);
       }
     });
   }
@@ -570,8 +602,9 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
       () => {
         refreshTimer = null;
         if (halted(run)) return;
-        // A hidden page asks when it is shown again, not on a timer.
-        if (!isVisible()) {
+        // A hidden page asks when it is shown again, not on a timer; so does a
+        // page in a back-off (the cycle the timer starts asks for what it needs).
+        if (!isVisible() || backoffTimer !== null) {
           session = null;
           return;
         }
@@ -909,7 +942,11 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
   }
 
   async function cycle(): Promise<void> {
-    if (stopped || unavailable || signedOut) return;
+    if (stopped || unavailable || signedOut || accountClosing) return;
+    // A cycle that was already queued when a failure started the back-off (an
+    // edit made while the failing cycle ran) waits for the back-off timer too.
+    // The timer, and the browser's "online" event, clear it before asking.
+    if (backoffTimer !== null) return;
     const run = epoch;
     const wake = wakeRequested;
     wakeRequested = false;
@@ -1101,6 +1138,29 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
     });
   }
 
+  /**
+   * The account is scheduled for deletion. Like a sign-out as far as asking
+   * again goes: idle until the next page load, no timer, no further request.
+   * Unlike one, nothing is removed (not the local database, not the record of
+   * unwritten changes, not the sign-out mark), the store stays open, and the
+   * person's changes are still written to it.
+   */
+  function goAccountClosing(): void {
+    accountClosing = true;
+    status = "account_closing";
+    failures = 0;
+    refetchedThisRun = false;
+    wakeRequested = false;
+    session = null;
+    cycleWaiting = false;
+    // The timers that would ask again go; the ones that write locally stay
+    // (the debounce of the person's own changes).
+    pollTimer = clear(pollTimer);
+    backoffTimer = clear(backoffTimer);
+    refreshTimer = clear(refreshTimer);
+    pushTimer = clear(pushTimer);
+  }
+
   function handleFailure(err: unknown, run: number): void {
     // A failure of a cycle the page has since stopped (a replication that was
     // abandoned, a request that came back late) is nobody's to back off on.
@@ -1126,6 +1186,10 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
       goSignedOut();
       return;
     }
+    if (action === "stop_keep_data") {
+      goAccountClosing();
+      return;
+    }
     if (action === "refetch_token_once") {
       dropCredential();
       refetchedThisRun = true;
@@ -1149,9 +1213,19 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
     );
   }
 
+  /**
+   * Ask for a cycle. While a back-off runs, NOTHING asks: the work is left
+   * pending (a wake stays marked, the local database already holds the edits)
+   * and the back-off timer runs it when it ends, so a failing service is asked
+   * once per wait, not once per edit, poll or focus. The only things that end a
+   * back-off early are the browser's "online" event (`onPageTrigger`, which
+   * clears the timer first) and stopping; a successful cycle clears the
+   * failure count, and the timer is gone by then.
+   */
   function requestSync(wake = false): void {
-    if (stopped || signedOut) return;
+    if (stopped || signedOut || accountClosing) return;
     if (wake) wakeRequested = true;
+    if (backoffTimer !== null) return;
     if (cycleWaiting) return;
     cycleWaiting = true;
     enqueue(async () => {
@@ -1236,7 +1310,7 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
    * the leader replicates it (even hidden), a visible follower applies it.
    */
   function onSharedWrite(): void {
-    if (stopped || signedOut) return;
+    if (stopped || signedOut || accountClosing) return;
     if (selfWriting > 0) return;
     if (deps.now() - selfWroteAt < SELF_WRITE_GRACE_MS) return;
     pushTimer = clear(pushTimer);
@@ -1267,7 +1341,17 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
       halting = newHalting();
       unavailable = false;
       signedOut = false;
+      accountClosing = false;
       status = "idle";
+      // Every document carries this install's id and the validator accepts a
+      // lower-case UUID only: with anything else every write would be refused,
+      // and a refused write holds up everything pushed with it. Nothing is
+      // opened, written or asked for.
+      if (!isDeviceId(deps.deviceId)) {
+        unavailable = true;
+        status = "unavailable";
+        return;
+      }
       // The baseline is taken here, not when the local database opens: a
       // setting changed before that is a change to write, not the starting
       // state. A page that left changes unwritten left a record of the state

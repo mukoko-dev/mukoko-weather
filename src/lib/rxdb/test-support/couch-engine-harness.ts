@@ -198,6 +198,8 @@ export class FakeStore implements SyncStore {
   /** Every document written, as written (for `updatedAt` assertions). */
   written: UserDocType[] = [];
   tombstones: string[] = [];
+  /** Every deletion as asked for: the id, the time stamped and the install. */
+  tombstoned: { id: string; nowMs: number; deviceId: string }[] = [];
   /** `undefined` = no leader election (a single instance, always leader). */
   leader: boolean | undefined = undefined;
   private sharedListeners = new Set<() => void>();
@@ -245,8 +247,9 @@ export class FakeStore implements SyncStore {
     this.deleted.delete(doc.id);
     this.docs.set(doc.id, { ...doc });
   }
-  async tombstone(id: string) {
+  async tombstone(id: string, nowMs: number, deviceId: string) {
     this.tombstones.push(id);
+    this.tombstoned.push({ id, nowMs, deviceId });
     this.docs.delete(id);
     this.deleted.add(id);
   }

@@ -15,6 +15,7 @@ import { getRxStorageMemory } from "rxdb/plugins/storage-memory";
 import { createCouchSyncEngine, type CouchSyncEngine } from "./couch-sync";
 import { openUserDocStore } from "./couch-rxdb";
 import { FakeCouch } from "./test-support/couch-fake-server";
+import { envelopeFor } from "./test-support/couch-validator-facts";
 import {
   Clock,
   FakeBridge,
@@ -270,10 +271,125 @@ describe("settings follow the person", () => {
 
     a.bridge.change({ selectedActivities: ["gardening"] });
     await flush(a);
-    expect(couch.get("activity:livestock")).toMatchObject({ _deleted: true });
+    // The tombstone the validator accepts: the common fields, the install that
+    // removed it, and when.
+    expect(couch.get("activity:livestock")).toMatchObject({
+      _deleted: true,
+      type: "activity",
+      schemaVersion: "v3.1",
+      deviceId: a.browser.deviceId,
+    });
+    expect(couch.get("activity:livestock")).not.toHaveProperty("activityId");
 
     await b.sync();
     expect(b.bridge.state.selectedActivities).toEqual(["gardening"]);
+    expect(a.engine.status()).toBe("idle");
+    expect(b.engine.status()).toBe("idle");
+  });
+
+  it("picking an activity again AFTER another device removed it brings it back everywhere", async () => {
+    fresh();
+    const a = device("a", { selectedActivities: ["livestock"] });
+    const b = device("b");
+    await startDevice(a);
+    await startDevice(b);
+    expect(b.bridge.state.selectedActivities).toEqual(["livestock"]);
+
+    // A removes it at +1 min; B, which has not heard, picks it again at +5 min
+    // (an edit of the same document, later than the deletion).
+    a.clock.now = START + 60_000;
+    a.bridge.change({ selectedActivities: [] });
+    await flush(a);
+    expect(couch.get("activity:livestock")).toMatchObject({ _deleted: true });
+
+    b.clock.now = START + 300_000;
+    b.bridge.change({ selectedActivities: [] });
+    await b.clock.advance(LOCAL_WRITE_DEBOUNCE_MS, b.settle);
+    b.bridge.change({ selectedActivities: ["livestock"] });
+    await flush(b);
+    await a.sync();
+
+    expect(couch.liveIds()).toContain("activity:livestock");
+    expect(a.bridge.state.selectedActivities).toEqual(["livestock"]);
+    expect(b.bridge.state.selectedActivities).toEqual(["livestock"]);
+    expect(a.engine.status()).toBe("idle");
+    expect(b.engine.status()).toBe("idle");
+  });
+
+  describe("a forecast model the data model does not list stays on the device", () => {
+    it("the Météo-France pick is never written, and another device's synced pick does not replace it", async () => {
+      fresh();
+      const a = device("a", { selectedForecastModel: "ecmwf_ifs" });
+      await startDevice(a);
+      expect(couch.get("preference:forecastModel")?.preferenceValue).toBe(
+        "ecmwf_ifs",
+      );
+
+      const b = device("b", { selectedForecastModel: "meteofrance_seamless" });
+      await startDevice(b);
+      await flush(b);
+      // B did not write its pick (the validator would refuse it, and a refused
+      // write delays everything pushed with it) and the cycle did not fail.
+      expect(couch.get("preference:forecastModel")?.preferenceValue).toBe(
+        "ecmwf_ifs",
+      );
+      expect(b.engine.status()).toBe("idle");
+      expect(
+        JSON.stringify(couch.calls.map((c) => c.body)).includes(
+          "meteofrance_seamless",
+        ),
+      ).toBe(false);
+      // ...and A's pick is a different setting's value: it does not undo B's.
+      expect(b.bridge.state.selectedForecastModel).toBe("meteofrance_seamless");
+      await b.sync();
+      expect(b.bridge.state.selectedForecastModel).toBe("meteofrance_seamless");
+    });
+
+    it("a pick made after it is synced again, and the other device follows", async () => {
+      fresh();
+      const a = device("a");
+      const b = device("b", { selectedForecastModel: "meteofrance_seamless" });
+      await startDevice(a);
+      await startDevice(b);
+      b.bridge.change({ selectedForecastModel: "gfs_seamless" });
+      await flush(b);
+      expect(couch.get("preference:forecastModel")?.preferenceValue).toBe(
+        "gfs_seamless",
+      );
+      await a.sync();
+      expect(a.bridge.state.selectedForecastModel).toBe("gfs_seamless");
+    });
+
+    it("a model another client set that this app does not offer is not applied, and this device's pick pushes over it", async () => {
+      fresh();
+      expect(
+        couch.seed({
+          _id: "preference:forecastModel",
+          type: "preference",
+          schemaVersion: "v3.1",
+          deviceId: "99999999-2222-4333-8444-555555555555",
+          createdAt: "2026-11-02T09:00:00.000Z",
+          updatedAt: "2026-11-02T09:00:00.000Z",
+          preferenceKey: "forecastModel",
+          preferenceValue: "jma_gsm",
+        }).ok,
+      ).toBe(true);
+      const a = device("a", { selectedForecastModel: "ecmwf_ifs" });
+      await startDevice(a);
+      await flush(a);
+      // The person's own pick on this device stays, and is not seeded over a
+      // document that exists (defaults, and picks that predate sync, never win).
+      expect(a.bridge.state.selectedForecastModel).toBe("ecmwf_ifs");
+      expect(a.engine.status()).toBe("idle");
+      // A later change of that pick is theirs and goes out.
+      a.clock.now = START + 600_000;
+      a.bridge.change({ selectedForecastModel: "gfs_seamless" });
+      await flush(a);
+      expect(couch.get("preference:forecastModel")?.preferenceValue).toBe(
+        "gfs_seamless",
+      );
+      expect(a.engine.status()).toBe("idle");
+    });
   });
 
   it("an edit made offline arrives when the connection returns", async () => {
@@ -527,23 +643,18 @@ describe("settings follow the person", () => {
 describe("what never leaves the device", () => {
   it("documents of other types written by another client are neither stored nor sent back", async () => {
     fresh();
-    // `interest` is a data-model type this client does not own (and one the
-    // deployed validator accepts; see the contract-delta test in couch-docs.test.ts).
+    // `interest` is a data-model type this client does not own (it is
+    // ciphertext, written by another client), and the validator accepts it.
     const foreign = "interest:0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
     expect(
       couch.seed({
         _id: foreign,
         type: "interest",
-        schemaVersion: 1,
-        ownerPersonId: PERSON,
+        schemaVersion: "v3.1",
+        deviceId: "99999999-2222-4333-8444-555555555555",
+        createdAt: "2026-11-02T09:00:00.000Z",
         updatedAt: "2026-11-02T09:00:00.000Z",
-        envelope: {
-          protected: "p",
-          aad: "a",
-          iv: "i",
-          ciphertext: "c",
-          tag: "t",
-        },
+        envelope: envelopeFor(foreign),
       }).ok,
     ).toBe(true);
     const a = device("a", { theme: "dark" });
@@ -585,22 +696,25 @@ describe("what never leaves the device", () => {
 describe("a long feed of documents this client does not own", () => {
   // Another client (the mobile app) keeps ciphertext documents in the same
   // database: interests, saved places, one event per interaction (`interest` is
-  // the type of the data model that the deployed validator accepts today; its
-  // camelCase types are refused, see the contract-delta test in
-  // couch-docs.test.ts). RxDB's pull
+  // one of the data model's types, each with an envelope the validator checks).
+  // RxDB's pull
   // stops without saving its checkpoint when a page yields no document, so if
   // the documents this client skipped were only dropped after the fact, a whole
   // page of them would keep the next cycle on the same `since` for ever and the
   // person's own settings behind them would never arrive.
   const PAGE = 200; // PULL_BATCH in couch-rxdb.ts
-  const foreign = (n: number) => ({
-    _id: `interest:0190a1b2-c3d4-7e5f-8a9b-${String(n).padStart(12, "0")}`,
-    type: "interest",
-    schemaVersion: 1,
-    ownerPersonId: PERSON,
-    updatedAt: "2026-11-02T09:00:00.000Z",
-    envelope: { protected: "p", aad: "a", iv: "i", ciphertext: "c", tag: "t" },
-  });
+  const foreign = (n: number) => {
+    const id = `interest:0190a1b2-c3d4-7e5f-8a9b-${String(n).padStart(12, "0")}`;
+    return {
+      _id: id,
+      type: "interest",
+      schemaVersion: "v3.1",
+      deviceId: "99999999-2222-4333-8444-555555555555",
+      createdAt: "2026-11-02T09:00:00.000Z",
+      updatedAt: "2026-11-02T09:00:00.000Z",
+      envelope: envelopeFor(id),
+    };
+  };
   const seedForeign = (count: number) => {
     for (let i = 0; i < count; i += 1) {
       const res = couch.seed(foreign(i));
@@ -612,8 +726,7 @@ describe("a long feed of documents this client does not own", () => {
       couch.seed({
         _id: "preference:theme",
         type: "preference",
-        schemaVersion: 1,
-        ownerPersonId: PERSON,
+        schemaVersion: "v3.1",
         deviceId: "99999999-2222-4333-8444-555555555555",
         createdAt: "2026-11-02T09:30:00.000Z",
         updatedAt: "2026-11-02T09:30:00.000Z",
@@ -625,8 +738,7 @@ describe("a long feed of documents this client does not own", () => {
       couch.seed({
         _id: "activity:livestock",
         type: "activity",
-        schemaVersion: 1,
-        ownerPersonId: PERSON,
+        schemaVersion: "v3.1",
         deviceId: "99999999-2222-4333-8444-555555555555",
         createdAt: "2026-11-02T09:30:00.000Z",
         updatedAt: "2026-11-02T09:30:00.000Z",

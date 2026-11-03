@@ -657,8 +657,7 @@ describe("only the leader tab replicates", () => {
       s.docs.set("preference:theme", {
         id: "preference:theme",
         type: "preference",
-        schemaVersion: 1,
-        ownerPersonId: PERSON,
+        schemaVersion: "v3.1",
         deviceId: "11111111-2222-4333-8444-555555555555",
         createdAt: "2026-11-02T09:00:00.000Z",
         updatedAt: "2026-11-02T09:00:00.000Z",
@@ -745,8 +744,7 @@ describe("only the leader tab replicates", () => {
     h.stores[0].docs.set("preference:theme", {
       id: "preference:theme",
       type: "preference",
-      schemaVersion: 1,
-      ownerPersonId: PERSON,
+      schemaVersion: "v3.1",
       deviceId: "11111111-2222-4333-8444-555555555555",
       createdAt: "2026-11-02T09:00:00.000Z",
       updatedAt: "2026-11-02T09:00:00.000Z",
@@ -1174,8 +1172,7 @@ describe("local changes", () => {
         await store.upsert({
           id: "preference:theme",
           type: "preference",
-          schemaVersion: 1,
-          ownerPersonId: PERSON,
+          schemaVersion: "v3.1",
           deviceId: "22222222-2222-4222-8222-222222222222",
           createdAt: "2026-11-02T09:00:00.000Z",
           updatedAt: "2026-11-02T09:00:00.000Z",
@@ -1204,8 +1201,7 @@ describe("local changes", () => {
         await store.upsert({
           id: "activity:harvest",
           type: "activity",
-          schemaVersion: 1,
-          ownerPersonId: PERSON,
+          schemaVersion: "v3.1",
           deviceId: "22222222-2222-4222-8222-222222222222",
           createdAt: "2026-11-02T09:00:00.000Z",
           updatedAt: "2026-11-02T09:00:00.000Z",
