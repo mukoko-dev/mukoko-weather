@@ -31,8 +31,8 @@
 //!   again on the next tick of the same night, gives the same key. The plan is
 //!   NOT what stops a second push: the delivery log is. A [`PlannedSend`]
 //!   only authorises an attempt to claim `dedupe_key` in the log, and a send
-//!   happens only after that claim succeeds (a 201, or a 200 that was
-//!   `updated` or `queued`).
+//!   happens only after that claim is won (a 201 `created`, or a 200 `updated` whose
+//!   status is `queued`; see [`crate::alert_delivery::read_claim`]).
 //! - *No personal data.* A target is an opaque id of `[A-Za-z0-9_-]`, which
 //!   alone keeps an endpoint URL or an email address out of a plan (pass a
 //!   hash such as `push::endpoint_id`, never the endpoint). The plan never
@@ -56,10 +56,10 @@
 //! ([`Skip::Stale`]); a night or offset that is not usable gives
 //! [`Skip::InvalidPlace`].
 //!
-//! **Not here, on purpose.** Severe-weather alerts (frost only), the
-//! delivery-log claim itself, the guard that a batch in which every send is
-//! `Expired` deactivates nothing, and every call to the Nyuchi API or a push
-//! service.
+//! **Not here, on purpose.** Severe-weather alerts (frost only), and every call
+//! to the Nyuchi API or a push service. How to read the answer to a claim, and
+//! the guard that a batch in which every send is `Expired` deactivates nothing,
+//! are in [`crate::alert_delivery`].
 //!
 //! The two bounds below are ours, untuned: no standard names them, and they
 //! should follow the Worker's subrequest budget once the tick exists.
@@ -259,7 +259,7 @@ impl FrostPlan {
     }
 }
 
-fn is_target_id(id: &str) -> bool {
+pub(crate) fn is_target_id(id: &str) -> bool {
     (1..=MAX_TARGET_ID_LEN).contains(&id.len())
         && id
             .bytes()
