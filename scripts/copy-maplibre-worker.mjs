@@ -29,119 +29,30 @@
  *     placeholder), which nothing refers to, so it is not copied.
  *
  * Every relative module the worker pulls in (followed transitively) is copied
- * beside it, with its source map when there is one. A module the worker names
- * but dist/ does not contain stops the run with a non-zero exit instead of
- * shipping a worker that cannot start.
+ * beside it, with its source map when there is one, into a version folder that
+ * is replaced on every run. A module the worker names but dist/ does not
+ * contain stops the run with a non-zero exit instead of shipping a worker that
+ * cannot start.
+ *
+ * Limit: specifiers are found by pattern in the minified file, and only string
+ * literals count (`import "./x.mjs"`, `from "./x.mjs"`, `import("./x.mjs")`).
+ * A module named at run time (`import(name)`, `new URL(name, import.meta.url)`)
+ * is not followed. The worker has never used those forms; if a release did,
+ * the installed-package check in MapLibreMap.test.ts (run on every maplibre-gl
+ * bump) is where it would show.
  *
  * Usage: node scripts/copy-maplibre-worker.mjs [--from <maplibre-gl package
  * dir>] [--out-root <dir>]. The options exist so tests can run the script on
- * small synthetic packages; the npm scripts pass none.
+ * small synthetic packages; the npm scripts pass none. The logic lives in
+ * scripts/lib/maplibre-worker.mjs; this entry always runs it.
  */
+import { dirname, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  statSync,
-} from "node:fs";
-import { createRequire } from "node:module";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-
-/** The entry point the app loads (see maplibreWorkerUrl in map-layers.ts). */
-export const WORKER_FILE = "maplibre-gl-worker.mjs";
-
-/**
- * The relative module specifiers (`./x.mjs`, `../y.mjs`) a JavaScript module
- * imports or re-exports: static `import ... from "..."`, bare
- * `import "..."`, `export ... from "..."` and `import("...")`. The worker is
- * minified, so this reads specifiers by pattern rather than parsing the file.
- * Bare package names and absolute URLs are not relative to the file and are
- * left out.
- *
- * @param {string} source
- * @returns {string[]} distinct specifiers, in order of first appearance
- */
-export function relativeImports(source) {
-  const found = new Set();
-  const patterns = [
-    /\bfrom\s*(["'`])(\.{1,2}\/[^"'`]+)\1/g,
-    /\bimport\s*(["'`])(\.{1,2}\/[^"'`]+)\1/g,
-    /\bimport\s*\(\s*(["'`])(\.{1,2}\/[^"'`]+)\1\s*\)/g,
-  ];
-  for (const pattern of patterns) {
-    for (const match of source.matchAll(pattern)) found.add(match[2]);
-  }
-  return [...found];
-}
-
-/**
- * Copies the worker and the relative modules it imports into
- * `<outRoot>/<version>/`, keeping their layout relative to dist/.
- *
- * @param {{ packageDir: string, outRoot: string }} options packageDir is the
- *   maplibre-gl package root (the folder holding package.json and dist/)
- * @returns {{ version: string, outDir: string, files: string[] }} files are
- *   the copied modules, relative to dist/, worker first
- */
-export function copyWorker({ packageDir, outRoot }) {
-  const { version } = JSON.parse(
-    readFileSync(join(packageDir, "package.json"), "utf8"),
-  );
-  const dist = join(packageDir, "dist");
-  const outDir = join(outRoot, version);
-
-  /** @type {string[]} */
-  const modules = []; // dist-relative paths, worker first
-  /** @type {{ name: string, importer: string | null }[]} */
-  const queue = [{ name: WORKER_FILE, importer: null }];
-  while (queue.length > 0) {
-    const { name, importer } = /** @type {(typeof queue)[number]} */ (
-      queue.shift()
-    );
-    if (modules.includes(name)) continue;
-    const from = join(dist, name);
-    if (!existsSync(from) || !statSync(from).isFile()) {
-      throw new Error(
-        `maplibre-gl ${version}: ${name} is missing from ${dist}` +
-          (importer ? ` but ${importer} imports it` : "") +
-          `. Without it the map worker cannot start.`,
-      );
-    }
-    modules.push(name);
-    for (const specifier of relativeImports(readFileSync(from, "utf8"))) {
-      // A URL may carry a query or fragment; the file does not.
-      const target = relative(
-        dist,
-        resolve(dirname(from), specifier.replace(/[?#].*$/, "")),
-      );
-      if (
-        target === "" ||
-        target === ".." ||
-        target.startsWith(`..${sep}`) ||
-        isAbsolute(target)
-      ) {
-        throw new Error(
-          `maplibre-gl ${version}: ${name} imports "${specifier}", which is outside dist/.`,
-        );
-      }
-      queue.push({ name: target.split(sep).join("/"), importer: name });
-    }
-  }
-
-  const files = [];
-  for (const name of modules) {
-    const to = join(outDir, name);
-    mkdirSync(dirname(to), { recursive: true });
-    copyFileSync(join(dist, name), to);
-    files.push(name);
-    // The copies keep their sourceMappingURL comments; ship the maps beside them.
-    if (existsSync(join(dist, `${name}.map`))) {
-      copyFileSync(join(dist, `${name}.map`), `${to}.map`);
-    }
-  }
-  return { version, outDir, files };
-}
+  copyWorker,
+  defaultOutRoot,
+  defaultPackageDir,
+} from "./lib/maplibre-worker.mjs";
 
 /** @param {string[]} argv */
 function parseArgs(argv) {
@@ -164,15 +75,8 @@ function parseArgs(argv) {
 function main() {
   const root = join(dirname(fileURLToPath(import.meta.url)), "..");
   const options = parseArgs(process.argv.slice(2));
-  const packageDir =
-    options.from ??
-    dirname(
-      createRequire(join(root, "package.json")).resolve(
-        "maplibre-gl/package.json",
-      ),
-    );
-  const outRoot =
-    options.outRoot ?? join(root, "public", "vendor", "maplibre-gl");
+  const packageDir = options.from ?? defaultPackageDir(root);
+  const outRoot = options.outRoot ?? defaultOutRoot(root);
 
   const { version, outDir, files } = copyWorker({ packageDir, outRoot });
   const shown = relative(root, outDir).split(sep).join("/");
@@ -181,14 +85,9 @@ function main() {
   );
 }
 
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
-) {
-  try {
-    main();
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : error);
-    process.exit(1);
-  }
+try {
+  main();
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
 }

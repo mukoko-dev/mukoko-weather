@@ -15,8 +15,9 @@ import { WEATHER_OVERLAY_ID, maplibreWorkerUrl } from "@/lib/map-layers";
 import {
   WORKER_FILE,
   copyWorker,
+  defaultOutRoot,
   relativeImports,
-} from "../../../../scripts/copy-maplibre-worker.mjs";
+} from "../../../../scripts/lib/maplibre-worker.mjs";
 
 // Node-env structural checks (no DOM renderer) — read the component source.
 const source = readFileSync(resolve(__dirname, "MapLibreMap.tsx"), "utf-8");
@@ -142,13 +143,13 @@ describe("MapLibre web worker (maplibre-gl v6)", () => {
     expect(maplibreWorkerUrl("6.12.0")).toBe(
       "/vendor/maplibre-gl/6.12.0/maplibre-gl-worker.mjs",
     );
-    const script = read("scripts/copy-maplibre-worker.mjs");
-    expect(script).toContain('"public", "vendor", "maplibre-gl"');
-    // The folder is <out root>/<version>; the file the URL names is the entry
-    // point the script starts from.
-    expect(script).toContain("join(outRoot, version)");
+    // /vendor/... is served from public/, so the folder the script fills by
+    // default (<out root>/<version>) must be exactly the path the URL names,
+    // and the file it names is the entry point the script starts from.
     expect(WORKER_FILE).toBe("maplibre-gl-worker.mjs");
-    expect(maplibreWorkerUrl("6.12.0").endsWith(`/${WORKER_FILE}`)).toBe(true);
+    expect(join(defaultOutRoot(root), "6.12.0", WORKER_FILE)).toBe(
+      join(root, "public", maplibreWorkerUrl("6.12.0")),
+    );
   });
 
   it("copies the worker before every build and dev run", () => {

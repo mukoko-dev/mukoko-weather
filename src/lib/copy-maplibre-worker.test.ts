@@ -6,16 +6,21 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "fs";
 import { tmpdir } from "os";
 import { dirname, join, resolve } from "path";
+import { maplibreWorkerUrl } from "@/lib/map-layers";
 import {
   WORKER_FILE,
   copyWorker,
+  defaultOutRoot,
+  defaultPackageDir,
   relativeImports,
-} from "../../scripts/copy-maplibre-worker.mjs";
+} from "../../scripts/lib/maplibre-worker.mjs";
 
 // scripts/copy-maplibre-worker.mjs puts maplibre-gl's web worker under
 // public/vendor/maplibre-gl/<version>/. The package has shipped two layouts
@@ -50,10 +55,14 @@ function fakePackage(version: string, dist: Record<string, string>): string {
   return packageDir;
 }
 
-function runScript(packageDir: string, outRoot: string) {
+function runScript(
+  packageDir: string,
+  outRoot: string,
+  scriptPath: string = script,
+) {
   return spawnSync(
     process.execPath,
-    [script, "--from", packageDir, "--out-root", outRoot],
+    [scriptPath, "--from", packageDir, "--out-root", outRoot],
     { encoding: "utf8" },
   );
 }
@@ -92,6 +101,16 @@ describe("relativeImports", () => {
         `export*from"./re.mjs";import"./side.mjs";const m=await import("./lazy.mjs");`,
       ),
     ).toEqual(["./re.mjs", "./side.mjs", "./lazy.mjs"]);
+  });
+
+  it("lists specifiers in the order they appear in the source", () => {
+    // Each pattern is matched separately, so the order must come from where
+    // the match sits in the file, not from which pattern found it.
+    expect(
+      relativeImports(
+        `import"./side.mjs";import{a}from"./x.mjs";import("./lazy.mjs");export*from"./re.mjs";`,
+      ),
+    ).toEqual(["./side.mjs", "./x.mjs", "./lazy.mjs", "./re.mjs"]);
   });
 
   it("lists each module once", () => {
@@ -292,5 +311,141 @@ describe("copyWorker fails loudly instead of shipping a worker that cannot start
     });
     expect(run.status).toBe(1);
     expect(run.stderr).toContain("usage:");
+  });
+});
+
+describe("copyWorker replaces the version folder instead of adding to it", () => {
+  it("removes files left by an earlier run and keeps everything outside the folder", () => {
+    const outRoot = temp();
+    const stale = join(outRoot, "6.16.0");
+    mkdirSync(join(stale, "old-chunks"), { recursive: true });
+    writeFileSync(join(stale, "maplibre-gl-shared.mjs"), "stale shared");
+    writeFileSync(join(stale, "maplibre-gl-worker.mjs"), "stale worker");
+    writeFileSync(join(stale, "old-chunks", "gone.mjs"), "stale chunk");
+    // Neighbours: another version's folder and a file beside the folders.
+    mkdirSync(join(outRoot, "6.12.0"), { recursive: true });
+    writeFileSync(join(outRoot, "6.12.0", "maplibre-gl-shared.mjs"), "keep");
+    writeFileSync(join(outRoot, "notes.txt"), "keep");
+
+    const packageDir = fakePackage("6.16.0", {
+      [WORKER_FILE]: "export default 1;",
+    });
+    copyWorker({ packageDir, outRoot });
+
+    expect(listFiles(stale)).toEqual([WORKER_FILE]);
+    expect(readFileSync(join(stale, WORKER_FILE), "utf8")).toBe(
+      "export default 1;",
+    );
+    expect(listFiles(outRoot)).toEqual([
+      "6.12.0/maplibre-gl-shared.mjs",
+      "6.16.0/maplibre-gl-worker.mjs",
+      "notes.txt",
+    ]);
+    expect(
+      readFileSync(join(outRoot, "6.12.0", "maplibre-gl-shared.mjs"), "utf8"),
+    ).toBe("keep");
+  });
+
+  it("leaves the previous copy alone when the new package is broken", () => {
+    const outRoot = temp();
+    mkdirSync(join(outRoot, "6.16.0"), { recursive: true });
+    writeFileSync(join(outRoot, "6.16.0", WORKER_FILE), "previous");
+    const packageDir = fakePackage("6.16.0", {
+      [WORKER_FILE]: `import"./gone.mjs";`,
+    });
+    expect(() => copyWorker({ packageDir, outRoot })).toThrow(/gone\.mjs/);
+    expect(readFileSync(join(outRoot, "6.16.0", WORKER_FILE), "utf8")).toBe(
+      "previous",
+    );
+  });
+
+  it.each(["", ".", "..", "../escape", "a/b", "a\\b", "/abs"])(
+    "refuses a package version that could name a folder elsewhere (%j)",
+    (version) => {
+      const outRoot = temp();
+      const marker = join(outRoot, "marker.txt");
+      writeFileSync(marker, "keep");
+      const packageDir = fakePackage(version, {
+        [WORKER_FILE]: "export default 1;",
+      });
+      expect(() => copyWorker({ packageDir, outRoot })).toThrow(/version/);
+      expect(readFileSync(marker, "utf8")).toBe("keep");
+    },
+  );
+});
+
+describe("where the npm scripts read from and write to", () => {
+  const repoRoot = resolve(__dirname, "../..");
+
+  it("reads the maplibre-gl package the repo has installed", () => {
+    expect(realpathSync(defaultPackageDir(repoRoot))).toBe(
+      realpathSync(join(repoRoot, "node_modules", "maplibre-gl")),
+    );
+  });
+
+  it("writes where the served worker URL points, under public/", () => {
+    // /vendor/maplibre-gl/<version>/<worker> is served from public/, so the
+    // folder the script fills must be exactly that path.
+    const outRoot = defaultOutRoot(repoRoot);
+    expect(join(outRoot, "6.12.0", WORKER_FILE)).toBe(
+      join(repoRoot, "public", maplibreWorkerUrl("6.12.0")),
+    );
+  });
+});
+
+describe("the command line works through a symlinked path", () => {
+  // Node sets import.meta.url from the real path but argv[1] keeps the
+  // symlink, so an entry guard comparing the two (the first version of this
+  // script had one) never ran main(): the script exited 0 having copied
+  // nothing and the build shipped without the worker. The entry now always
+  // runs, and these keep it that way.
+  const scriptsDir = resolve(__dirname, "../../scripts");
+
+  function linkedScript(kind: "directory" | "file"): string {
+    const links = temp();
+    if (kind === "directory") {
+      symlinkSync(scriptsDir, join(links, "linked-scripts"), "dir");
+      return join(links, "linked-scripts", "copy-maplibre-worker.mjs");
+    }
+    symlinkSync(script, join(links, "linked-copy.mjs"));
+    return join(links, "linked-copy.mjs");
+  }
+
+  it.each(["directory", "file"] as const)(
+    "copies the worker when the script is reached through a symlinked %s",
+    (kind) => {
+      const packageDir = fakePackage("6.16.0", {
+        [WORKER_FILE]: "export default 1;",
+        "maplibre-gl-worker.mjs.map": "{}",
+      });
+      const outRoot = temp();
+      const run = runScript(packageDir, outRoot, linkedScript(kind));
+      expect(run.stderr).toBe("");
+      expect(run.status).toBe(0);
+      expect(run.stdout).toContain("maplibre-gl 6.16.0");
+      expect(listFiles(join(outRoot, "6.16.0"))).toEqual([
+        "maplibre-gl-worker.mjs",
+        "maplibre-gl-worker.mjs.map",
+      ]);
+    },
+  );
+
+  it.each(["directory", "file"] as const)(
+    "exits 1 for a missing worker when reached through a symlinked %s",
+    (kind) => {
+      const packageDir = fakePackage("6.16.0", { "maplibre-gl.mjs": "" });
+      const outRoot = temp();
+      const run = runScript(packageDir, outRoot, linkedScript(kind));
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain("maplibre-gl-worker.mjs is missing");
+      expect(listFiles(outRoot)).toEqual([]);
+    },
+  );
+
+  it("fails the same way when no path is symlinked", () => {
+    const packageDir = fakePackage("6.16.0", { "maplibre-gl.mjs": "" });
+    const run = runScript(packageDir, temp());
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain("maplibre-gl-worker.mjs is missing");
   });
 });
