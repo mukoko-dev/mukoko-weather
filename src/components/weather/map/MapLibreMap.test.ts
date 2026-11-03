@@ -61,6 +61,24 @@ describe("classifyMapError", () => {
     ).toBe("base");
   });
 
+  it("classifies per-frame overlay sources as 'overlay'", () => {
+    expect(
+      classifyMapError(
+        { sourceId: `${WEATHER_OVERLAY_ID}@precipitationIntensity@now` },
+        WEATHER_OVERLAY_ID,
+      ),
+    ).toBe("overlay");
+  });
+
+  it("does not match a source that merely starts with the overlay id", () => {
+    expect(
+      classifyMapError(
+        { sourceId: `${WEATHER_OVERLAY_ID}-extra` },
+        WEATHER_OVERLAY_ID,
+      ),
+    ).toBe("base");
+  });
+
   it("classifies base-tile source errors as 'base'", () => {
     expect(
       classifyMapError({ sourceId: "openmaptiles" }, WEATHER_OVERLAY_ID),
@@ -114,7 +132,7 @@ describe("marker theme color (issue #97)", () => {
   });
 
   it("resolves inside restore() so theme switches recolor the marker", () => {
-    // restore() runs on load AND after each theme-driven setStyle, so the
+    // restore() runs on style.load AND after each theme-driven setStyle, so the
     // resolveColor call must live inside it — not at module/mount scope.
     const restoreBlock = source.slice(
       source.indexOf("const restore = () => {"),
@@ -265,13 +283,79 @@ describe("AQI grid overlay (Air Quality Map card)", () => {
 });
 
 describe("weather timeline + AQI bubbles (full-screen map)", () => {
-  it("takes a forecast timestamp and passes it to the overlay source", () => {
+  it("takes a forecast timestamp and builds one overlay source per frame", () => {
     expect(source).toContain("weatherTimestamp?: string;");
-    expect(source).toContain("buildWeatherOverlaySource(layer, timestamp)");
+    expect(source).toContain(
+      "map.addSource(id, buildWeatherOverlaySource(layer, ts))",
+    );
+    expect(source).toContain("overlayFrameId(layer, timestamp)");
   });
 
-  it("updates the existing overlay's tiles in place rather than rebuilding it", () => {
-    expect(source).toContain("existing.setTiles(spec.tiles)");
+  it("never blanks the overlay by swapping tile URLs in place (#266)", () => {
+    // setTiles reloads the source, which shows nothing until every new tile
+    // arrives. Frames load hidden and replace the visible one once loaded.
+    expect(source).not.toContain("setTiles(");
+    expect(source).toContain("planOverlayFrames(");
+    expect(source).toContain("swapToWantIfLoaded(");
+    expect(source).toContain("map.isSourceLoaded(id)");
+    expect(source).toContain('"raster-opacity": visible ? state.opacity : 0');
+  });
+
+  it("preloads an optional second frame and reports loaded frames", () => {
+    expect(source).toContain("weatherPrefetchTimestamp?: string | null;");
+    expect(source).toContain("weatherPrefetchTimestamp = null,");
+    expect(source).toContain(
+      "onWeatherFrameLoaded?: (timestamp: string) => void;",
+    );
+    expect(source).toContain('map.on("sourcedata"');
+  });
+
+  it("adds overlays at style.load, not after the first full render (#266)", () => {
+    // "load" waits for every base tile, sprite and glyph; "idle" for every
+    // tile of every source. Overlay requests must start with the base tiles.
+    expect(source).toContain('map.on("style.load", restore)');
+    expect(source).not.toContain('map.on("load"');
+    // No overlay (frames, AQI grid, model field) waits for a one-off "idle".
+    expect(source).not.toContain('once("idle"');
+    expect(source).toContain("styleReadyRef.current = true;");
+  });
+
+  it("applies the model-field overlay as soon as the style is ready", () => {
+    // A model timeline step is a setData; deferring it to "idle" would hold it
+    // behind every base tile still loading.
+    const fieldEffect = source.slice(
+      source.indexOf("// Switch the model-field overlay"),
+      source.indexOf("}, [fieldOverlay]);"),
+    );
+    expect(fieldEffect).toContain("if (!styleReadyRef.current) return;");
+    expect(fieldEffect).toContain("applyFieldOverlay(map, fieldOverlay);");
+    expect(fieldEffect).not.toContain("isStyleLoaded");
+  });
+
+  it("never leaves a slow frame hidden behind the previous one", () => {
+    // After FRAME_SWAP_TIMEOUT_MS the wanted frame is shown even while some
+    // tiles are loading, and "idle" settles frames that fire no sourcedata.
+    expect(source).toContain("const FRAME_SWAP_TIMEOUT_MS = 2500;");
+    expect(source).toContain(
+      "settleFrame(map, framesRef.current, overlayPropsRef.current, true);",
+    );
+    expect(source).toContain('map.on("idle", () => {');
+  });
+
+  it("keeps overlays working when a theme diff changes nothing", () => {
+    // A zero-op diff fires no "style.load"; the ready flag must not drop.
+    const themeEffect = source.slice(
+      source.indexOf("// Switch style when theme changes."),
+      source.indexOf("}, [isDark]);"),
+    );
+    expect(themeEffect).not.toContain("styleReadyRef.current = false");
+  });
+
+  it("ignores errors from the hidden preload frame and resets per step", () => {
+    expect(source).toContain(
+      "if (e.sourceId !== state.want && e.sourceId !== state.active) {",
+    );
+    expect(source).toContain("}, [weatherLayer, weatherTimestamp]);");
   });
 
   it("renders AQI bubbles as HTML markers coloured from the weather-scale classes", () => {
@@ -319,8 +403,10 @@ describe("MapLibreMap — overlay sources and attribution", () => {
   });
 
   it("rebuilds the overlay source when the layer (and so the provider) changes", () => {
-    expect(source).toContain("overlayLayerOf.get(map) === layer");
-    expect(source).toContain('"raster-opacity": weatherOverlayOpacity(layer)');
+    // Frame ids carry the layer, so a new layer is a new source set, and the
+    // frame opacity follows the layer's provider (GIBS imagery is more opaque).
+    expect(source).toContain("overlayFrameId(layer, timestamp)");
+    expect(source).toContain("state.opacity = weatherOverlayOpacity(layer);");
   });
 
   it("credits the AQ grid and model fields on their GeoJSON sources", () => {
