@@ -1,7 +1,6 @@
 "use client";
 
-import { roundCoord } from "@/lib/location-privacy";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import type {
   CurrentWeather,
@@ -16,6 +15,7 @@ import {
   wallClockMs,
 } from "@/lib/location-time";
 import { SectionHeader } from "@/components/ui/section-header";
+import { CardHitArea } from "@/components/ui/card-hit-area";
 import { LazySection } from "./LazySection";
 import { ChartErrorBoundary } from "./ChartErrorBoundary";
 import {
@@ -32,8 +32,18 @@ import {
 import { moonPhase } from "@/lib/moon";
 import { seedNowMs, useStableNow } from "@/lib/use-stable-now";
 import { useNearViewport } from "@/lib/use-near-viewport";
+import { useWorkerData } from "@/lib/use-worker-data";
 import { AQI_BAND_LABELS, aqiBand } from "@/lib/aq-grid";
 import { lastTileSpanClass } from "@/lib/dashboard-layout";
+import {
+  METRIC_TITLES,
+  moonriseLabel,
+  type MetricKind,
+} from "@/lib/metric-details";
+import { nextMoonrise } from "@/lib/moon";
+import { MetricDetailModal } from "./MetricDetailModal";
+import { AirQualityDetail } from "./AirQualityDetail";
+import { aqiScalePct } from "@/lib/air-quality-details";
 import { cn } from "@/lib/utils";
 import {
   CloudIcon,
@@ -60,6 +70,7 @@ import {
 } from "./widgets";
 import { POLLUTANT_LABELS, type AirQualityResponse } from "./AirQualityCard";
 import { AirQualityWideSkeleton } from "./SectionSkeleton";
+import { MetricValue } from "./MetricValue";
 
 interface Props {
   current: CurrentWeather;
@@ -90,64 +101,66 @@ type Mineral =
   | "tanzanite"
   | "terracotta";
 
+/**
+ * The whole border of a tile takes its mineral, at 60% (a SOLID border on all
+ * four sides, never a one-side stripe: Mzizi border rule, see globals.css
+ * "Card edge"). Static strings so Tailwind can see every class.
+ */
 const EDGE_CLASS: Record<Mineral, string> = {
-  cobalt: "bg-mineral-cobalt",
-  gold: "bg-mineral-gold",
-  copper: "bg-mineral-copper",
-  sodalite: "bg-mineral-sodalite",
-  malachite: "bg-mineral-malachite",
-  tanzanite: "bg-mineral-tanzanite",
-  terracotta: "bg-mineral-terracotta",
+  cobalt: "[&>section]:border-mineral-cobalt/60",
+  gold: "[&>section]:border-mineral-gold/60",
+  copper: "[&>section]:border-mineral-copper/60",
+  sodalite: "[&>section]:border-mineral-sodalite/60",
+  malachite: "[&>section]:border-mineral-malachite/60",
+  tanzanite: "[&>section]:border-mineral-tanzanite/60",
+  terracotta: "[&>section]:border-mineral-terracotta/60",
 };
 
-/** Wraps a card with the mineral leading edge (a 4px rule, not glass). */
-function EdgeTile({
+/**
+ * Wraps a card so its whole border takes the card's mineral and the card sits
+ * slightly raised (`shadow-md`). The card is the wrapper's `<section>` child;
+ * it fills the wrapper's height so a row of tiles lines up.
+ */
+export function EdgeTile({
   mineral,
   className,
   children,
+  metric,
+  onOpen,
+  detailLabel,
+  onOpenDetail,
 }: {
   mineral: Mineral;
   className?: string;
   children: ReactNode;
+  /** When set with `onOpen`, the whole tile opens that metric's detail. */
+  metric?: MetricKind;
+  onOpen?: (metric: MetricKind) => void;
+  /** For a tile that is not a MetricKind (air quality): its label and opener. */
+  detailLabel?: string;
+  onOpenDetail?: () => void;
 }) {
+  const open = metric && onOpen ? () => onOpen(metric) : onOpenDetail;
+  const label = metric ? `${METRIC_TITLES[metric]} details` : detailLabel;
+  const interactive = Boolean(open && label);
   return (
     <div
       className={cn(
-        "relative min-w-0 overflow-hidden rounded-[var(--radius-card)]",
+        "relative min-w-0 rounded-[var(--radius-card)] [&>section]:h-full [&>section]:shadow-md",
+        EDGE_CLASS[mineral],
+        interactive && "card-interactive",
         className,
       )}
     >
-      <span
-        aria-hidden="true"
-        className={cn(
-          "absolute inset-y-0 left-0 z-[1] w-1",
-          EDGE_CLASS[mineral],
-        )}
-      />
       {children}
+      {open && label && <CardHitArea onClick={open} aria-label={label} />}
     </div>
   );
 }
 
 // ── Pure helpers (exported for tests) ───────────────────────────────────────
 
-/**
- * Position on the AQI scale bar, 0–100. Each EPA band occupies an equal
- * sixth of the bar so the colour ramp and the band edges line up by eye.
- */
-export function aqiScalePct(aqi: number): number {
-  const v = Math.max(0, Math.min(500, aqi));
-  const edges = [0, 50, 100, 150, 200, 300, 500];
-  for (let i = 1; i < edges.length; i++) {
-    if (v <= edges[i]) {
-      const lo = edges[i - 1];
-      const hi = edges[i];
-      const within = (v - lo) / (hi - lo);
-      return ((i - 1 + within) / (edges.length - 1)) * 100;
-    }
-  }
-  return 100;
-}
+export { aqiScalePct } from "@/lib/air-quality-details";
 
 /** One-line comparison with yesterday at the same hour, or null if unknown. */
 export function aqiTrendSentence(
@@ -251,45 +264,34 @@ type NormalState =
 function useNormalHigh(
   lat: number | undefined,
   lon: number | undefined,
+  /** The page's stable clock (the payload's own time until mount). */
+  now: Date,
   offsetSeconds?: number,
   /** False until the Conditions grid is near the viewport (deferred fetch). */
   enabled = true,
-) {
-  const [state, setState] = useState<NormalState>({ status: "loading" });
-
-  useEffect(() => {
-    if (!enabled) return;
-    if (typeof lat !== "number" || typeof lon !== "number") return;
-    const controller = new AbortController();
-    const date = localIsoDate(new Date(), offsetSeconds);
-    fetch(
-      `/api/py/normals?lat=${roundCoord(lat)}&lon=${roundCoord(lon)}&date=${date}`,
-      {
-        signal: controller.signal,
-      },
-    )
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return (await res.json()) as NormalsPayload;
-      })
-      .then((json) => {
-        setState({
-          status: "ready",
-          normalHigh:
-            json.available && typeof json.normalHigh === "number"
-              ? json.normalHigh
-              : null,
-        });
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setState({ status: "ready", normalHigh: null });
-        }
-      });
-    return () => controller.abort();
-  }, [lat, lon, offsetSeconds, enabled]);
-
-  return state;
+): NormalState {
+  const hasPoint = typeof lat === "number" && typeof lon === "number";
+  // The date is part of the shared key, so a place's normal is read once a
+  // day however often the section is mounted.
+  const state = useWorkerData<NormalsPayload>(
+    "normals",
+    {
+      lat: hasPoint ? lat : undefined,
+      lon: hasPoint ? lon : undefined,
+      date: localIsoDate(now, offsetSeconds),
+    },
+    enabled && hasPoint,
+  );
+  if (state.status === "loading") return { status: "loading" };
+  if (state.status === "error") return { status: "ready", normalHigh: null };
+  const json = state.data;
+  return {
+    status: "ready",
+    normalHigh:
+      json.available && typeof json.normalHigh === "number"
+        ? json.normalHigh
+        : null,
+  };
 }
 
 type AqPayload = AirQualityResponse & {
@@ -301,33 +303,33 @@ type AqState =
   | { status: "ready"; data: AqPayload }
   | { status: "error" };
 
-function useAirQuality(lat: number | undefined, lon: number | undefined) {
-  const [state, setState] = useState<AqState>({ status: "loading" });
-
-  useEffect(() => {
-    if (typeof lat !== "number" || typeof lon !== "number") return;
-    const controller = new AbortController();
-    fetch(`/api/py/airquality?lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`, {
-      signal: controller.signal,
-    })
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return (await res.json()) as AqPayload;
-      })
-      .then((json) => setState({ status: "ready", data: json }))
-      .catch(() => {
-        if (!controller.signal.aborted) setState({ status: "error" });
-      });
-    return () => controller.abort();
-  }, [lat, lon]);
-
-  return state;
+function useAirQuality(
+  lat: number | undefined,
+  lon: number | undefined,
+): AqState {
+  const hasPoint = typeof lat === "number" && typeof lon === "number";
+  return useWorkerData<AqPayload>(
+    "air-quality",
+    { lat: hasPoint ? lat : undefined, lon: hasPoint ? lon : undefined },
+    hasPoint,
+  );
 }
 
 // ── Air quality (wide) ──────────────────────────────────────────────────────
 
-function AirQualityWide({ lat, lon }: { lat: number; lon: number }) {
+function AirQualityWide({
+  lat,
+  lon,
+  slug,
+  now,
+}: {
+  lat: number;
+  lon: number;
+  slug?: string;
+  now: Date;
+}) {
   const state = useAirQuality(lat, lon);
+  const [open, setOpen] = useState(false);
 
   if (state.status === "loading") return <AirQualityWideSkeleton />;
 
@@ -356,7 +358,12 @@ function AirQualityWide({ lat, lon }: { lat: number; lon: number }) {
   ].filter(Boolean);
 
   return (
-    <EdgeTile mineral="terracotta" className="mb-[var(--space-stack)]">
+    <EdgeTile
+      mineral="terracotta"
+      className="mb-[var(--space-stack)]"
+      detailLabel="Air quality details"
+      onOpenDetail={() => setOpen(true)}
+    >
       <section
         aria-labelledby="air-quality-heading"
         className="acacia flex min-w-0 flex-col gap-3"
@@ -370,9 +377,7 @@ function AirQualityWide({ lat, lon }: { lat: number; lon: number }) {
           </h3>
         </header>
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <p className="font-heading text-4xl font-semibold leading-none tabular-nums text-text-primary">
-            {data.aqi}
-          </p>
+          <MetricValue>{data.aqi}</MetricValue>
           <p className="giraffe">{AQI_BAND_LABELS[band]}</p>
         </div>
         <GradientScale
@@ -382,6 +387,13 @@ function AirQualityWide({ lat, lon }: { lat: number; lon: number }) {
         />
         <p className="dove leading-snug">{sentenceParts.join(" ")}</p>
       </section>
+      <AirQualityDetail
+        open={open}
+        reading={data}
+        slug={slug}
+        now={now}
+        onClose={() => setOpen(false)}
+      />
     </EdgeTile>
   );
 }
@@ -416,6 +428,7 @@ export function AtmosphericSummary({
   const normals = useNormalHigh(
     lat,
     lon,
+    now,
     data.utc_offset_seconds,
     nearViewport,
   );
@@ -441,6 +454,30 @@ export function AtmosphericSummary({
       ? temperatureAverageInsight(todayHigh, normalHigh)
       : null;
   const moonPct = Math.round(moon.illumination * 100);
+  const [openMetric, setOpenMetric] = useState<MetricKind | null>(null);
+  // The next moonrise, as the place's own clock time. Recomputed at most every
+  // ten minutes (the search is a few hundred altitude evaluations).
+  const nowBucket = Math.floor(now.getTime() / 600_000);
+  const moonrise = useMemo(() => {
+    if (typeof lat !== "number" || typeof lon !== "number") return null;
+    const at = new Date(nowBucket * 600_000);
+    const rise = nextMoonrise(at, lat, lon);
+    return moonriseLabel(
+      rise ? rise.getTime() : null,
+      at.getTime(),
+      resolveOffsetSeconds(data.utc_offset_seconds, at),
+    );
+  }, [nowBucket, lat, lon, data.utc_offset_seconds]);
+  const extras = useMemo(
+    () => ({
+      todayHigh,
+      normalHigh,
+      moonName: moon.name,
+      moonIlluminationPct: moonPct,
+      moonrise,
+    }),
+    [todayHigh, normalHigh, moon.name, moonPct, moonrise],
+  );
 
   return (
     <section ref={sectionRef} aria-labelledby="atmospheric-heading">
@@ -454,7 +491,12 @@ export function AtmosphericSummary({
       {hasCoords && (
         <LazySection label="air-quality" fallback={<AirQualityWideSkeleton />}>
           <ChartErrorBoundary name="air quality">
-            <AirQualityWide lat={lat} lon={lon} />
+            <AirQualityWide
+              lat={lat}
+              lon={lon}
+              slug={locationSlug || undefined}
+              now={now}
+            />
           </ChartErrorBoundary>
         </LazySection>
       )}
@@ -466,7 +508,7 @@ export function AtmosphericSummary({
           whose last tile spans whatever the final row has left
           (lastTileSpanClass), so no layout ends with an empty slot. */}
       <InsightGrid>
-        <EdgeTile mineral="cobalt">
+        <EdgeTile mineral="cobalt" metric="wind" onOpen={setOpenMetric}>
           <InsightCard
             headingId="insight-wind"
             icon={<WindIcon size={16} />}
@@ -481,7 +523,7 @@ export function AtmosphericSummary({
           </InsightCard>
         </EdgeTile>
 
-        <EdgeTile mineral="gold">
+        <EdgeTile mineral="gold" metric="uv" onOpen={setOpenMetric}>
           <InsightCard
             headingId="insight-uv"
             icon={<SunIcon size={16} />}
@@ -502,20 +544,22 @@ export function AtmosphericSummary({
           </InsightCard>
         </EdgeTile>
 
-        <EdgeTile mineral="copper">
+        <EdgeTile mineral="copper" metric="feels" onOpen={setOpenMetric}>
           <InsightCard
             headingId="insight-feels"
             icon={<ThermometerIcon size={16} />}
             label="Feels like"
             sentence={feels.sentence}
           >
-            <p className="font-heading text-4xl font-semibold leading-none tabular-nums text-text-primary">
-              {feels.value}°
-            </p>
+            <MetricValue>{feels.value}°</MetricValue>
           </InsightCard>
         </EdgeTile>
 
-        <EdgeTile mineral="tanzanite">
+        <EdgeTile
+          mineral="tanzanite"
+          metric="visibility"
+          onOpen={setOpenMetric}
+        >
           <InsightCard
             headingId="insight-visibility"
             icon={<EyeIcon size={16} />}
@@ -523,15 +567,20 @@ export function AtmosphericSummary({
             sentence={visibility.sentence}
           >
             <div className="flex flex-col items-center gap-1">
-              <p className="font-heading text-4xl font-semibold leading-none tabular-nums text-text-primary">
+              <MetricValue>
                 {visibility.km !== null ? `${visibility.km} km` : "—"}
-              </p>
+              </MetricValue>
               <p className="dove">{visibility.label}</p>
             </div>
           </InsightCard>
         </EdgeTile>
 
-        <EdgeTile mineral="sodalite" className="col-span-full">
+        <EdgeTile
+          mineral="sodalite"
+          className="col-span-full"
+          metric="rain"
+          onOpen={setOpenMetric}
+        >
           <InsightCard
             headingId="insight-rain"
             icon={<CloudRainIcon size={16} />}
@@ -554,7 +603,7 @@ export function AtmosphericSummary({
           </InsightCard>
         </EdgeTile>
 
-        <EdgeTile mineral="malachite">
+        <EdgeTile mineral="malachite" metric="humidity" onOpen={setOpenMetric}>
           <InsightCard
             headingId="insight-humidity"
             icon={<DropletIcon size={16} />}
@@ -562,15 +611,13 @@ export function AtmosphericSummary({
             sentence={humidity.sentence}
           >
             <div className="flex flex-col items-center gap-1">
-              <p className="font-heading text-4xl font-semibold leading-none tabular-nums text-text-primary">
-                {humidity.value}%
-              </p>
+              <MetricValue>{humidity.value}%</MetricValue>
               <p className="dove">Dew point {humidity.dewPoint}°</p>
             </div>
           </InsightCard>
         </EdgeTile>
 
-        <EdgeTile mineral="cobalt">
+        <EdgeTile mineral="cobalt" metric="pressure" onOpen={setOpenMetric}>
           <InsightCard
             headingId="insight-pressure"
             icon={<GaugeIcon size={16} />}
@@ -581,36 +628,32 @@ export function AtmosphericSummary({
           </InsightCard>
         </EdgeTile>
 
-        <EdgeTile mineral="gold">
+        <EdgeTile mineral="gold" metric="sun" onOpen={setOpenMetric}>
           <InsightCard
             headingId="insight-sun"
             icon={<SunriseIcon size={16} />}
             label="Sun"
             sentence={sun.sentence}
           >
-            <div className="flex w-full flex-col gap-1">
-              <SunArc
-                arcPct={sun.arcPct}
-                sunrise={sun.sunrise ?? "—"}
-                sunset={sun.sunset ?? "—"}
-              />
-              <p className="dove flex justify-between">
-                <span>{sun.sunrise ?? "—"}</span>
-                <span>{sun.sunset ?? "—"}</span>
-              </p>
-            </div>
+            <SunArc
+              arcPct={sun.arcPct}
+              sunrise={sun.sunrise ?? "—"}
+              sunset={sun.sunset ?? "—"}
+            />
           </InsightCard>
         </EdgeTile>
 
         <EdgeTile
           mineral="tanzanite"
           className={averages ? undefined : lastTileSpanClass(4)}
+          metric="moon"
+          onOpen={setOpenMetric}
         >
           <InsightCard
             headingId="insight-moon"
             icon={<MoonIcon size={16} />}
             label="Moon"
-            sentence={`${moon.name}, ${moonPct}% lit.`}
+            sentence={`${moon.name}, ${moonPct}% lit.${moonrise ? ` Moonrise ${moonrise}.` : ""}`}
           >
             <MoonDisc
               phase={moon.phase}
@@ -621,7 +664,12 @@ export function AtmosphericSummary({
         </EdgeTile>
 
         {averages && (
-          <EdgeTile mineral="copper" className={lastTileSpanClass(5)}>
+          <EdgeTile
+            mineral="copper"
+            className={lastTileSpanClass(5)}
+            metric="averages"
+            onOpen={setOpenMetric}
+          >
             <InsightCard
               headingId="insight-averages"
               icon={<ThermometerIcon size={16} />}
@@ -629,9 +677,7 @@ export function AtmosphericSummary({
               sentence={averages.sentence}
             >
               <div className="flex flex-col items-center gap-1">
-                <p className="font-heading text-4xl font-semibold leading-none tabular-nums text-text-primary">
-                  {todayHigh}°
-                </p>
+                <MetricValue>{todayHigh}°</MetricValue>
                 <p className="dove">
                   {normalHigh !== null
                     ? `Normal high ${Math.round(normalHigh)}°`
@@ -642,6 +688,17 @@ export function AtmosphericSummary({
           </EdgeTile>
         )}
       </InsightGrid>
+
+      <MetricDetailModal
+        kind={openMetric}
+        data={data}
+        now={now}
+        extras={extras}
+        lat={lat}
+        lon={lon}
+        slug={locationSlug || undefined}
+        onClose={() => setOpenMetric(null)}
+      />
     </section>
   );
 }

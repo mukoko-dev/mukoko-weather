@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
 import { DisplayDashboard, type DisplayLocation } from "./DisplayDashboard";
 import { getLocationFromDb, getWeatherForLocation } from "@/lib/db";
+import { readLastLocation } from "@/lib/last-location";
 import { nearestSeedLocation } from "@/lib/places";
 import { LOCATIONS } from "@/lib/locations";
 import { parseDisplayParams } from "@/lib/display";
 import type { WeatherData } from "@/lib/weather";
 
 const BASE_URL = "https://weather.mukoko.com";
-const SLUG_RE = /^[a-z0-9-]{1,80}$/;
 /** A coordinate within this distance of a shipped place borrows its name. */
 const NAME_SNAP_KM = 15;
 /** Shown when nothing else resolves, so the screen is never empty. */
@@ -110,8 +110,8 @@ async function resolveDisplayLocation(
   }
 
   // 3. The last place this browser visited.
-  const lastLocation = (await cookies()).get("lastLocation")?.value;
-  if (lastLocation && SLUG_RE.test(lastLocation)) {
+  const lastLocation = readLastLocation(await cookies());
+  if (lastLocation) {
     const found = await getLocationFromDb(lastLocation).catch(() => null);
     if (found) return fromKnown(found);
   }

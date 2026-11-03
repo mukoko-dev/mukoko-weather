@@ -1,6 +1,7 @@
 "use client";
 
 import { TimeSeriesChart, type SeriesConfig } from "./TimeSeriesChart";
+import { WX_SERIES } from "@/lib/weather-scales";
 
 interface TemperatureTrendChartProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -14,11 +15,11 @@ interface TemperatureTrendChartProps {
 }
 
 const SERIES: SeriesConfig[] = [
-  { key: "tempHigh", label: "High", color: "var(--chart-1)", fill: true },
+  { key: "tempHigh", label: "High", color: WX_SERIES.temp, fill: true },
   {
     key: "tempLow",
     label: "Low",
-    color: "var(--chart-2)",
+    color: WX_SERIES.tempLow,
     fill: true,
     dashed: true,
     opacity: 0.15,
@@ -26,13 +27,13 @@ const SERIES: SeriesConfig[] = [
   {
     key: "feelsLikeHigh",
     label: "Feels High",
-    color: "var(--chart-3)",
+    color: WX_SERIES.feels,
     dashed: true,
   },
   {
     key: "feelsLikeLow",
     label: "Feels Low",
-    color: "var(--chart-4)",
+    color: WX_SERIES.feelsLow,
     dashed: true,
   },
 ];

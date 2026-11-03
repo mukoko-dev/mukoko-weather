@@ -10,7 +10,7 @@
  * reach 2× the limit across one window boundary; that is the accepted cost
  * of a single atomic write per request.
  *
- * Like `check_rate_limit` in `api/py/_db.py` it FAILS OPEN on a DB error —
+ * Like the former Python `check_rate_limit` (deleted, #333) it FAILS OPEN on a DB error —
  * the limiter is abuse protection, and a DB outage must not take the route
  * down with it. (The Python limiter counts on one key per bucket and so
  * stays blocked until the reaper deletes the document; fixing it the same

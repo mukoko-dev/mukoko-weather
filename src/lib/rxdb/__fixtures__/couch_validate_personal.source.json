@@ -1,0 +1,18 @@
+{
+  "repo": "nyuchi/nyuchi-api",
+  "ref": "staging",
+  "path": "gateway/lib/couch_validate_personal.js",
+  "lastChangeCommit": "a665d20a1d9452fc39ba70d29f61f35762b74f48",
+  "lastChangeDate": "2026-11-02",
+  "stagingHeadWhenRead": "3ea461dfef2af2551440ed20efd6bbb3b74fb2c3",
+  "readOn": "2026-11-03",
+  "blobSha": "13807551ca1f0ac1671c72837a7611db89b7b3ad",
+  "sha256": "1128ab258c911eb890eaa7f86654fe55ae866983d74b0e0b0082351dc1a222cc",
+  "nyuchiApiPin": {
+    "file": "gateway/lib/couch_validate_personal.source.json",
+    "dataInfraCommit": "ace188646db7b5c515595d92a4e97f4a7d2996ae",
+    "sha256": "1128ab258c911eb890eaa7f86654fe55ae866983d74b0e0b0082351dc1a222cc"
+  },
+  "marker": "// ---- BEGIN VERBATIM COPY: every byte below this line is the gateway's file ----\n",
+  "note": "The fixture is this header plus the marker plus the gateway's file, byte for byte. couch-validator-pin.test.ts hashes everything after the marker and compares it with sha256 here, which is also the sha256 nyuchi-api pins for its own copy. Re-pin whenever nyuchi-api's couch_validate_personal.js changes (the curl line is in the fixture's header and in docs/couchdb-sync.md). Live behaviour is unverified: nothing here has run against a CouchDB."
+}

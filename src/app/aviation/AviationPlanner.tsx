@@ -12,6 +12,9 @@ import type {
   BriefingData,
   MetarObs,
 } from "./AviationBriefingPDF";
+import { fetchWorker } from "@/lib/weather-api";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Field } from "@/components/ui/field";
 
 function FlightCategoryBadge({ fc }: { fc: string }) {
   return (
@@ -50,7 +53,7 @@ function AirportSearch({
   value: LocationResult | null;
   onChange: (loc: LocationResult | null) => void;
 }) {
-  // Shared debounced /api/py/search hook — same debounce, AbortController
+  // Shared debounced /v1/search hook — same debounce, AbortController
   // cancellation, and error surfacing as every other quick location search
   // (issue #103). minLength 2 preserves this picker's previous behavior.
   const {
@@ -83,42 +86,44 @@ function AirportSearch({
 
   return (
     <div ref={containerRef} className="relative">
-      <label className="block text-sm font-medium text-text-secondary mb-1">
-        {label}
-      </label>
-      <div className="relative">
-        <SearchIcon
-          size={16}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none"
-          aria-hidden="true"
-        />
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setOpen(true);
-            if (!e.target.value) clear();
-          }}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder="Search city or airport name…"
-          className="crane pl-9 pr-4"
-          aria-label={label}
-          aria-expanded={open}
-          aria-autocomplete="list"
-        />
-        {loading && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary text-xs">
-            …
-          </span>
-        )}
-      </div>
+      <Field
+        label={label}
+        labelClassName="block text-sm font-medium text-text-secondary mb-1"
+      >
+        <div className="relative">
+          <SearchIcon
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none"
+            aria-hidden="true"
+          />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setOpen(true);
+              if (!e.target.value) clear();
+            }}
+            onFocus={() => setOpen(true)}
+            onBlur={() => setTimeout(() => setOpen(false), 150)}
+            placeholder="Search city or airport name…"
+            className="crane pl-9 pr-4"
+            aria-label={label}
+            aria-expanded={open}
+            aria-autocomplete="list"
+          />
+          {loading && (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary text-xs">
+              …
+            </span>
+          )}
+        </div>
+      </Field>
 
       {searchError && !value && (
-        <p className="mt-1.5 text-xs text-severity-moderate" role="alert">
-          {searchError}
-        </p>
+        <Alert variant="warning" className="mt-1.5 p-3">
+          <AlertDescription className="text-xs">{searchError}</AlertDescription>
+        </Alert>
       )}
 
       {value && (
@@ -312,15 +317,16 @@ export function AviationPlanner() {
     name: string,
     icao: string,
   ): Promise<AirportBriefing> => {
-    // `/api/py/weather` takes lat/lon ONLY — it ignores any `location`/`slug`
+    // The Worker `/v1/weather` takes lat/lon ONLY — it ignores any `location`/`slug`
     // param and defaults to Harare. Resolve the airport's own coordinates from
     // the ICAO record so each airport gets its real weather (sunrise/sunset).
     const airport = getAirportByIcao(icao);
     const [metarRes, wxRes] = await Promise.allSettled([
-      fetch(`/api/py/metar?icao=${icao}`),
+      fetchWorker("metar", `icao=${icao}`),
       airport
-        ? fetch(
-            `/api/py/weather?lat=${roundCoord(airport.lat)}&lon=${roundCoord(airport.lon)}`,
+        ? fetchWorker(
+            "weather",
+            `lat=${roundCoord(airport.lat)}&lon=${roundCoord(airport.lon)}`,
           )
         : Promise.reject(new Error(`No coordinates for ${icao}`)),
     ]);
@@ -337,7 +343,7 @@ export function AviationPlanner() {
     let sunset: string | undefined;
     if (wxRes.status === "fulfilled" && wxRes.value.ok) {
       const d = await wxRes.value.json();
-      // `/api/py/weather` returns `daily` at the TOP LEVEL (not under `weather`).
+      // `/v1/weather` returns `daily` at the TOP LEVEL (not under `weather`).
       const daily = d.daily;
       if (daily?.sunrise?.[0]) {
         // Local time at the station, not the pilot's own clock.
@@ -409,14 +415,9 @@ export function AviationPlanner() {
   };
 
   return (
-    <main
-      id="main-content"
-      className="mx-auto max-w-3xl px-4 py-6 pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-8 md:px-8"
-    >
-      <h1 className="text-2xl font-semibold text-text-primary font-heading mb-1">
-        Aviation Weather Briefing
-      </h1>
-      <p className="text-sm text-text-secondary mb-6">
+    <>
+      <h1 className="elephant">Aviation Weather Briefing</h1>
+      <p className="gazelle mb-6 mt-3">
         Pre-flight weather for pilots. Select your departure and destination to
         get METAR, TAF, and generate a PDF briefing.
       </p>
@@ -474,9 +475,9 @@ export function AviationPlanner() {
       </div>
 
       {error && (
-        <div className="alert-banner mb-6" role="alert">
-          <p className="text-sm text-severity-moderate">{error}</p>
-        </div>
+        <Alert variant="warning" className="mb-6">
+          <AlertDescription className="text-sm">{error}</AlertDescription>
+        </Alert>
       )}
 
       {/* Briefing results */}
@@ -577,6 +578,6 @@ export function AviationPlanner() {
           </p>
         </div>
       )}
-    </main>
+    </>
   );
 }

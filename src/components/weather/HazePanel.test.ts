@@ -13,12 +13,22 @@ describe("HazePanel data flow", () => {
     expect(source.startsWith('"use client"')).toBe(true);
   });
 
-  it("fetches the haze endpoint with lat/lon and aborts stale requests", () => {
+  it("reads the haze endpoint for lat/lon through the shared store", () => {
     expect(source).toContain(
-      "/api/py/haze?lat=${roundCoord(lat)}&lon=${roundCoord(lon)}",
+      'useWorkerData<HazeResponse>("haze", { lat, lon })',
     );
-    expect(source).toContain("AbortController");
-    expect(source).toContain("controller.abort()");
+    expect(source).not.toContain("/api/py/haze");
+    expect(source).not.toContain("fetchWorker(");
+  });
+
+  it("the shared hook reads from the store and never cancels the shared request", () => {
+    const hook = readFileSync(
+      resolve(process.cwd(), "src/lib/use-worker-data.ts"),
+      "utf8",
+    );
+    expect(hook).toContain("useSyncExternalStore(");
+    expect(hook).toContain("() => undefined"); // the server snapshot: loading
+    expect(hook).not.toContain("controller.abort()");
   });
 
   it("renders nothing on error, unavailable data, or when not worth showing", () => {

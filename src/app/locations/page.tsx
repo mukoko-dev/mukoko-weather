@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
+import { PageShell } from "@/components/layout/PageShell";
 import { isLocationSlug } from "@/lib/current-slug";
 import type { PresetAnchor } from "@/lib/location-presets";
 import { LocationsClient } from "./LocationsClient";
-
-const BASE_URL = "https://weather.mukoko.com";
+import { SITE_URL } from "@/lib/site";
 
 // A personal list (current location + saved places). Not a search landing
 // page, so it is kept out of the index; the canonical still names the URL.
@@ -16,7 +14,7 @@ export const metadata: Metadata = {
     "Live weather for your current location and the places you have saved.",
   robots: { index: false, follow: false },
   alternates: {
-    canonical: `${BASE_URL}/locations`,
+    canonical: `${SITE_URL}/locations`,
   },
 };
 
@@ -45,18 +43,11 @@ export default async function LocationsPage() {
       : null;
 
   return (
-    <>
-      <Header />
-      <main
-        id="main-content"
-        className="mx-auto max-w-3xl px-4 py-10 pb-[var(--mobile-nav-clearance)] sm:pb-10 sm:px-6 md:px-8"
-      >
-        <LocationsClient
-          initialCurrentSlug={initialCurrentSlug}
-          ipAnchor={ipAnchor}
-        />
-      </main>
-      <Footer />
-    </>
+    <PageShell>
+      <LocationsClient
+        initialCurrentSlug={initialCurrentSlug}
+        ipAnchor={ipAnchor}
+      />
+    </PageShell>
   );
 }

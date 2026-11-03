@@ -6,7 +6,11 @@
  */
 
 import { NextResponse } from "next/server";
-import { withAuth } from "@workos-inc/authkit-nextjs";
+import {
+  currentSession,
+  NO_STORE,
+  sameOriginJsonRefusal,
+} from "@/lib/api-route-guards";
 import {
   forgetPersonTokens,
   getPersonToken,
@@ -16,7 +20,7 @@ import { AppKeysError } from "@/lib/gateway-app-keys";
 import { checkUserRateLimit } from "@/lib/user-rate-limit";
 import { logWarn } from "@/lib/observability";
 
-export const NO_STORE = { "Cache-Control": "no-store" } as const;
+export { NO_STORE };
 
 export type AppKeysAction = "list" | "create" | "revoke";
 
@@ -70,43 +74,16 @@ export function errorResponse(
 }
 
 /**
- * CSRF guard for state-changing calls: `Content-Type: application/json`
- * (a cross-site form cannot send it without a CORS preflight, which this
- * route never answers) and an `Origin` equal to this site's own origin.
- * Same-origin only: no localhost, station-console or other first-party
- * origin, since nothing but this site's own pages manages these keys. A
- * missing or `null` Origin is refused. Returns null when the request passes.
+ * CSRF guard for state-changing calls (`sameOriginJsonRefusal` in
+ * `@/lib/api-route-guards`, shared with `/api/couch/session`):
+ * `Content-Type: application/json` and an `Origin` equal to this site's own.
+ * Returns null when the request passes.
  */
 export function rejectCrossSite(req: Request): NextResponse | null {
-  const type = (req.headers.get("content-type") ?? "")
-    .split(";")[0]
-    .trim()
-    .toLowerCase();
-  if (type !== "application/json") {
-    return errorResponse(415, "unsupported_media_type");
-  }
-  const origin = req.headers.get("origin");
-  let self: string | null = null;
-  try {
-    self = new URL(req.url).origin;
-  } catch {
-    self = null;
-  }
-  const allowed = !!origin && origin !== "null" && !!self && origin === self;
-  return allowed ? null : errorResponse(403, "forbidden_origin");
-}
-
-async function currentSession(): Promise<{
-  userId: string | null;
-  accessToken?: string;
-}> {
-  try {
-    const { user, accessToken } = await withAuth();
-    return { userId: user?.id ?? null, accessToken };
-  } catch {
-    // e.g. a path the proxy skipped (no AuthKit headers): treat as signed out.
-    return { userId: null };
-  }
+  const refusal = sameOriginJsonRefusal(req);
+  if (refusal === "unsupported_media_type") return errorResponse(415, refusal);
+  if (refusal) return errorResponse(403, refusal);
+  return null;
 }
 
 /**

@@ -1,0 +1,40 @@
+// mukoko-weather-push: the Workers-runtime half of the Web Push sender
+// (mukoko-dev/mukoko-weather#289, step c). DARK AND NOT DEPLOYED.
+//
+// What this Worker is today: WebCrypto glue (ECDH key agreement, the ES256
+// VAPID signature) and a `fetch` transport for the push POST, with ONE route,
+// GET /health. It has no scheduled handler, no cron trigger, no send route, no
+// route to alert targets, no queue, no storage and no secret.
+//
+// Deliberately absent, each with its reason:
+//   - "triggers" / "crons": nothing evaluates or sends on a schedule yet (the
+//     evaluator tick belongs to mukoko-weather-jobs, a later step).
+//   - "secrets_store_secrets": a binding to a store secret that does not exist
+//     fails the deploy (error 10182), and the VAPID key pair does not exist
+//     yet. The code never reads a secret: a caller supplies the key as a value.
+//   - "routes" and workers.dev: there is nothing to reach from outside.
+//   - "services": the Worker binds to no other Worker.
+//
+// Needs, before this can be deployed (workers/README.md, "Web Push alerts"):
+//   the VAPID key pair in the Secrets Store, the sender key, the evaluator.
+// Deploy order when it is time: before mukoko-weather-jobs. It is NOT in
+// workflows/workers-deploy.yml's order on purpose.
+//
+// The tests in crates/weather-webpush (src/tripwire.rs) read this file and
+// fail if any of the above appears here.
+{
+  "name": "mukoko-weather-push",
+  "main": "build/index.js",
+  "compatibility_date": "2026-09-15",
+  "build": { "command": "worker-build --release" },
+  "workers_dev": false,
+  "preview_urls": false,
+  "keep_vars": true,
+  // The code logs nothing: no endpoint, header, key or body is ever written.
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": { "enabled": true, "invocation_logs": true },
+    "traces": { "enabled": true },
+  },
+}

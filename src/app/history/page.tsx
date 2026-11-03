@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
+import { PageShell } from "@/components/layout/PageShell";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { requireUser } from "@/lib/auth";
 import { HistoryDashboard } from "./HistoryDashboard";
 import { SITE_URL } from "@/lib/site";
@@ -34,23 +34,12 @@ export const metadata: Metadata = {
 export default async function HistoryPage() {
   await requireUser("/history"); // redirects anon users to sign-in, returns here after
   return (
-    <>
-      <Header />
-      <main
-        id="main-content"
-        className="animate-fade-in mx-auto max-w-5xl px-4 py-8 pb-[var(--mobile-nav-clearance)] sm:pb-8 sm:px-6 md:px-8"
-      >
-        <h1 className="font-display text-3xl font-bold text-text-primary sm:text-4xl">
-          Historical Weather Data
-        </h1>
-        <p className="mt-3 text-text-secondary">
-          Explore recorded weather data worldwide. Select a location and time
-          period to view temperature trends, precipitation, and climate
-          patterns.
-        </p>
-        <HistoryDashboard />
-      </main>
-      <Footer />
-    </>
+    <PageShell width="wide">
+      <PageHeader
+        title="Historical Weather Data"
+        intro="Explore recorded weather data worldwide. Select a location and time period to view temperature trends, precipitation, and climate patterns."
+      />
+      <HistoryDashboard />
+    </PageShell>
   );
 }

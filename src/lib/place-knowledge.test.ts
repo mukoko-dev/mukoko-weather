@@ -58,13 +58,13 @@ afterEach(() => {
 describe("placeProfileUrl", () => {
   it("encodes the slug and adds rounded coordinates when given", () => {
     expect(placeProfileUrl("harare")).toBe(
-      "/api/py/locations/profile?slug=harare",
+      "https://weather-api.mukoko.com/v1/locations/profile?slug=harare",
     );
     expect(placeProfileUrl("a b", -17.83123, 31.05)).toBe(
-      "/api/py/locations/profile?slug=a+b&lat=-17.8312&lon=31.0500",
+      "https://weather-api.mukoko.com/v1/locations/profile?slug=a+b&lat=-17.8312&lon=31.0500",
     );
     expect(placeProfileUrl("nairobi-ke", -1.28, 36.81, "KE")).toBe(
-      "/api/py/locations/profile?slug=nairobi-ke&lat=-1.2800&lon=36.8100&country=KE",
+      "https://weather-api.mukoko.com/v1/locations/profile?slug=nairobi-ke&lat=-1.2800&lon=36.8100&country=KE",
     );
     // Only a two-letter code is sent.
     expect(placeProfileUrl("x", 1, 2, "Kenya")).not.toContain("country");
@@ -228,7 +228,7 @@ describe("fetchPlaceProfile", () => {
     await fetchPlaceProfile("harare", fetcher, { lat: -17.83, lon: 31.05 });
     // One argument only: no init object, so no AbortSignal rides on the shared promise.
     expect(fetcher).toHaveBeenCalledWith(
-      "/api/py/locations/profile?slug=harare&lat=-17.8300&lon=31.0500",
+      "https://weather-api.mukoko.com/v1/locations/profile?slug=harare&lat=-17.8300&lon=31.0500",
     );
   });
 
@@ -295,7 +295,8 @@ describe("PlaceKnowledgeRows wiring", () => {
 
   it("reads only the public profile endpoint, never AI", () => {
     const lib = fs.readFileSync("src/lib/place-knowledge.ts", "utf-8");
-    expect(lib).toContain("/api/py/locations/profile");
+    expect(lib).toContain("locations/profile");
+    expect(lib).not.toContain("/api/py");
     expect(lib).not.toContain("/api/ai");
   });
 });

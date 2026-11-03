@@ -1,7 +1,12 @@
 import { create } from "zustand";
-import { updatePreferences, initRxDBBridge } from "./rxdb/bridge";
-import { startReplication } from "./rxdb/replication";
+import { updatePreferences, initRxDBBridge, getDeviceId } from "./rxdb/bridge";
 import type { PreferencesDocType } from "./rxdb/schemas";
+import { getFeatureFlag } from "./feature-flags";
+// Types only: the sync code itself is imported dynamically, behind the flag.
+import type { SyncableState, SyncedPatch } from "./rxdb/couch-docs";
+import type { SyncBridge } from "./rxdb/couch-sync";
+// The one tiny, dependency-free comparison the engine uses too.
+import { sameSyncableState } from "./rxdb/sync-state";
 import { isLocationSlug } from "./current-slug";
 import { isPresetAnchor, type PresetAnchor } from "./location-presets";
 import { resolveTheme, type ThemePreference } from "./theme";
@@ -62,7 +67,7 @@ export const DEFAULT_SECTION_ORDER = [
   "communityLane",
   "atmospheric",
   "reports",
-  "activityInsights",
+  "activityInvite",
   "agriculture",
   "aiSummary",
   "aiChat",
@@ -70,6 +75,24 @@ export const DEFAULT_SECTION_ORDER = [
 ] as const;
 
 const SECTION_ORDER_KEY = "mukoko-section-order";
+
+/**
+ * The hero (`current`) is pinned first. It is painted white on the page sky
+ * and the phone header is not drawn over it, so it cannot sit below another
+ * section (white text on the light page surface, and no header). Every path
+ * that sets or restores the order goes through `pinHeroFirst`, which also
+ * migrates layouts saved before the hero was pinned.
+ */
+export const PINNED_FIRST_SECTION = "current";
+
+/** `order` with the hero moved to the front (unchanged when it has none). */
+export function pinHeroFirst(order: readonly string[]): string[] {
+  if (!order.includes(PINNED_FIRST_SECTION)) return [...order];
+  return [
+    PINNED_FIRST_SECTION,
+    ...order.filter((id) => id !== PINNED_FIRST_SECTION),
+  ];
+}
 
 const DEFAULT_SECTION_INDEX = new Map<string, number>(
   DEFAULT_SECTION_ORDER.map((id, i) => [id, i]),
@@ -87,7 +110,9 @@ const DEFAULT_SECTION_INDEX = new Map<string, number>(
  * This UNIONs the two: keep the stored ids that still exist in DEFAULT (drop the
  * rest), then splice in every missing DEFAULT id at its default position (before
  * the first existing section that follows it in the default layout). The user's
- * custom ordering of the sections they DID arrange is preserved.
+ * custom ordering of the sections they DID arrange is preserved, except that
+ * the hero is always pinned first (`pinHeroFirst`): a layout saved when the
+ * hero was draggable is migrated here.
  *
  * Exported for testing.
  */
@@ -114,7 +139,7 @@ export function mergeSectionOrder(stored: string[]): string[] {
     result.splice(insertPos, 0, id);
     seen.add(id);
   }
-  return result;
+  return pinHeroFirst(result);
 }
 
 /** Read the raw persisted section order from localStorage, or null if absent/invalid. */
@@ -388,8 +413,9 @@ export const useAppStore = create<AppState>()((set) => ({
   // `hydrateSectionOrder()`, mirroring how RxDB-backed prefs are deferred.
   sectionOrder: [...DEFAULT_SECTION_ORDER],
   setSectionOrder: (order) => {
-    saveSectionOrder(order);
-    set({ sectionOrder: order });
+    const pinned = pinHeroFirst(order);
+    saveSectionOrder(pinned);
+    set({ sectionOrder: pinned });
   },
   hydrateSectionOrder: () => {
     const stored = readStoredSectionOrder();
@@ -489,11 +515,96 @@ export function initializeDeviceSync(): void {
   })
     .then(() => {
       markStoreHydrated();
-      return startReplication();
+      startCouchSyncIfEnabled();
+      // Replication (RxDB's replication plugin and rxjs) loads after first
+      // paint and only here, never with the page's first-load JavaScript.
+      return import("./rxdb/replication").then((m) => m.startReplication());
     })
     .catch(() => {
       // RxDB init failed — store still works with defaults.
       // This handles cases like private browsing where IndexedDB may be unavailable.
       markStoreHydrated();
     });
+}
+
+// ---------------------------------------------------------------------------
+// CouchDB sync (flagged, #396) — preferences and activities only
+// ---------------------------------------------------------------------------
+
+/** The slice of state the CouchDB sync reads and writes (`couch-docs.ts`). */
+function pickSyncableState(
+  s: Pick<AppState, "theme" | "selectedForecastModel" | "selectedActivities">,
+): SyncableState {
+  return {
+    theme: s.theme,
+    selectedForecastModel: s.selectedForecastModel,
+    selectedActivities: [...s.selectedActivities],
+  };
+}
+
+function readSyncableState(): SyncableState {
+  return pickSyncableState(useAppStore.getState());
+}
+
+/**
+ * Apply what the person's other devices changed. Goes through the store's own
+ * setters, so the change is also persisted to this device's preferences
+ * (RxDB) and applied to the page (the theme attribute) exactly as if the
+ * person had made it here.
+ */
+export function applySyncedPreferences(patch: SyncedPatch): void {
+  if (
+    patch.theme !== undefined &&
+    THEME_CYCLE.includes(patch.theme as ThemePreference)
+  ) {
+    useAppStore.getState().setTheme(patch.theme as ThemePreference);
+  }
+  if (patch.selectedForecastModel !== undefined) {
+    useAppStore
+      .getState()
+      .setSelectedForecastModel(patch.selectedForecastModel);
+  }
+  if (patch.selectedActivities !== undefined) {
+    const next = [...patch.selectedActivities];
+    useAppStore.setState({ selectedActivities: next });
+    void updatePreferences({ selectedActivities: next });
+  }
+}
+
+/**
+ * Start the CouchDB sync when `FLAGS.couch_sync` is on. With the flag off
+ * (the default) this reads one flag and returns: nothing is imported, no
+ * request is made. The sync code itself loads only here, after first paint.
+ */
+function startCouchSyncIfEnabled(): void {
+  if (!getFeatureFlag("couch_sync")) return;
+  void import("./rxdb/couch-sync-start")
+    .then((m) => m.startCouchSync(createSyncBridge(), getDeviceId()))
+    .catch(() => undefined);
+}
+
+/**
+ * What the sync reads, hears about and writes (`SyncBridge`, `couch-sync.ts`).
+ * It hears about a change only when the VALUE of a synced setting differs (the
+ * preferences bridge sets a fresh array of the same activities on every
+ * emission of the preferences document, which is no change), and it is told
+ * where the change came from: `"applied"` when it happened inside the
+ * preferences bridge's `applyToStore` (the hydration, a `/v1/devices` pull,
+ * another tab), which is not an edit the person made here and must not be
+ * written to the cloud as one, `"person"` for everything else.
+ */
+export function createSyncBridge(): SyncBridge {
+  return {
+    read: readSyncableState,
+    subscribe: (listener) =>
+      useAppStore.subscribe((state, prev) => {
+        if (
+          sameSyncableState(pickSyncableState(state), pickSyncableState(prev))
+        ) {
+          return;
+        }
+        listener(_suppressRxDBWrites ? "applied" : "person");
+      }),
+    apply: applySyncedPreferences,
+  };
 }

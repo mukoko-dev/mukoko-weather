@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { loadLocation } from "./load-location";
+import { resolveLocationParam } from "@/lib/load-location";
 
 /**
  * Backstop: resolve the slug BEFORE any Suspense boundary under this segment.
@@ -19,7 +19,6 @@ export default async function LocationLayout({
   children: React.ReactNode;
   params: Promise<{ location: string }>;
 }) {
-  const { location: slug } = await params;
-  if (!(await loadLocation(slug))) notFound();
+  if (!(await resolveLocationParam(params))) notFound();
   return children;
 }

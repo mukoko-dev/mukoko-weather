@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { TimeSeriesChart, type SeriesConfig } from "./TimeSeriesChart";
+import { WX_SERIES } from "@/lib/weather-scales";
 
 interface WindSpeedChartProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -18,13 +19,13 @@ const SERIES: SeriesConfig[] = [
   {
     key: "windSpeed",
     label: "Wind Speed",
-    color: "var(--chart-1)",
+    color: WX_SERIES.wind,
     fill: true,
   },
   {
     key: "windGusts",
     label: "Wind Gusts",
-    color: "var(--chart-4)",
+    color: WX_SERIES.gust,
     dashed: true,
   },
 ];

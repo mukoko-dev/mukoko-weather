@@ -22,14 +22,29 @@ describe("Footer touch targets", () => {
   });
 
   it("credits every forecast model provider (issue #246, CC BY 4.0)", () => {
-    expect(source).toContain(
-      "Weather data: ECMWF, NOAA, DWD, ECCC, Météo-France via",
-    );
+    expect(source).toContain("Weather data: ECMWF, NOAA, DWD, ECCC");
+    // Every member of the model blend is credited (CC BY 4.0, Open-Meteo).
+    for (const provider of ["Météo-France", "UK Met Office", "CMA", "JMA"]) {
+      expect(source).toContain(provider);
+    }
     expect(source).toContain("Open-Meteo.com");
     expect(source).toContain(
       'href="https://creativecommons.org/licenses/by/4.0/"',
     );
     expect(source).toContain("insights enrichment by");
+  });
+
+  it("credits MET Norway, the failover forecast: source, licence link, and that changes were made", () => {
+    // api.met.no/doc/TermsOfService: credit the source, link the CC BY 4.0
+    // licence and indicate that changes were made.
+    expect(source).toContain("when Open-Meteo is unavailable");
+    expect(source).toContain("MET Norway");
+    expect(source).toContain("converted to our format");
+    const credit = source.slice(source.indexOf("MET Norway") - 200);
+    expect(credit.slice(0, 900)).toContain(
+      'href="https://creativecommons.org/licenses/by/4.0/"',
+    );
+    expect(linkBlock('href="https://www.met.no/en"')).toContain("dik-dik");
   });
 
   it("Tomorrow.io and Open-Meteo attribution links carry .dik-dik", () => {

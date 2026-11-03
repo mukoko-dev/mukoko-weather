@@ -44,20 +44,22 @@ describe("hazeLevelRank / HAZE_LEVEL_ORDER", () => {
 });
 
 describe("hazeSeverityClasses", () => {
-  it("uses severity tokens only", () => {
+  it("fills with official EPA band colours, text stays primary", () => {
     for (const level of HAZE_LEVEL_ORDER) {
       const c = hazeSeverityClasses(level);
+      expect(c.fill).toMatch(/^bg-wx-aqi-[1-6]$/);
+      expect(c.text).toBe("text-text-primary");
       for (const cls of [c.text, c.fill, c.soft]) {
-        expect(cls).toMatch(/(text|bg)-severity-/);
-        expect(cls).not.toMatch(/#|rgb|green|red|amber|orange/);
+        expect(cls).not.toMatch(/#|rgb|green|red|amber|orange|severity/);
       }
     }
   });
 
-  it("maps higher levels to more severe tokens", () => {
-    expect(hazeSeverityClasses("light").fill).toBe("bg-severity-moderate");
-    expect(hazeSeverityClasses("heavy").fill).toBe("bg-severity-severe");
-    expect(hazeSeverityClasses("hazardous").fill).toBe("bg-severity-extreme");
+  it("maps higher levels to higher EPA bands", () => {
+    expect(hazeSeverityClasses("none").fill).toBe("bg-wx-aqi-1");
+    expect(hazeSeverityClasses("light").fill).toBe("bg-wx-aqi-2");
+    expect(hazeSeverityClasses("heavy").fill).toBe("bg-wx-aqi-4");
+    expect(hazeSeverityClasses("hazardous").fill).toBe("bg-wx-aqi-6");
   });
 });
 

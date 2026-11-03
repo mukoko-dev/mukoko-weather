@@ -3,7 +3,7 @@
  * location slugs, never for the app's own top-level routes (issue #236).
  */
 import { beforeEach, describe, it, expect, vi } from "vitest";
-import { readdirSync, readFileSync } from "fs";
+import { readdirSync } from "fs";
 import { resolve } from "path";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -46,8 +46,12 @@ const { authkit } = await import("@workos-inc/authkit-nextjs");
 const { resetLocationGateCache } = await import("@/lib/location-gate");
 const { resetBareNameCache } = await import("@/lib/bare-name");
 const { buildSmartSlug } = await import("@/lib/smart-slug");
+const {
+  COUCH_ACCESS_TOKEN_REFRESH_BUFFER_SECONDS,
+  COUCH_MIN_ACCESS_TOKEN_LIFE_MS,
+} = await import("@/lib/couch-session-timing");
 
-/** The geocoder behind /api/py/search?mode=resolve, stubbed (#317). Every
+/** The geocoder behind /v1/search?mode=resolve, stubbed (#317). Every
  * test starts with "nothing found", so the 404 tests below are unaffected. */
 const mockResolveFetch = vi.fn(async (_url: string, _init?: RequestInit) =>
   Response.json({
@@ -110,28 +114,6 @@ describe("proxy — lastLocation cookie", () => {
 
   it("does not set lastLocation on the home page", async () => {
     expect(await lastLocationFor("/")).toBeUndefined();
-  });
-});
-
-describe("WeatherLoadingScene — KNOWN_ROUTES covers every page route", () => {
-  const sceneSource = readFileSync(
-    resolve(__dirname, "components/weather/WeatherLoadingScene.tsx"),
-    "utf-8",
-  );
-  const block = sceneSource.match(/KNOWN_ROUTES = new Set\(\[([\s\S]*?)\]\)/);
-  const listed = new Set(
-    [...(block?.[1] ?? "").matchAll(/"([a-z0-9-]+)"/g)].map((m) => m[1]),
-  );
-  const pageRoutes = topLevelRoutes.filter((route) => {
-    try {
-      return readdirSync(resolve(APP_DIR, route)).includes("page.tsx");
-    } catch {
-      return false;
-    }
-  });
-
-  it.each(pageRoutes)("lists /%s", (route) => {
-    expect(listed.has(route)).toBe(true);
   });
 });
 
@@ -411,11 +393,12 @@ describe("proxy — bare place names resolve instead of 404 (#317)", () => {
     expect(mockResolveFetch).not.toHaveBeenCalled();
   });
 
-  it("is off (a plain 404) while the Worker is not configured", async () => {
+  it("asks the production Worker when no override is configured", async () => {
     vi.stubEnv("NEXT_PUBLIC_WEATHER_API_URL", "");
-    const res = await run("/koh-samui");
-    expect(res.headers.get("x-middleware-rewrite")).toContain("not-found");
-    expect(mockResolveFetch).not.toHaveBeenCalled();
+    await run("/koh-samui");
+    expect(String(mockResolveFetch.mock.calls[0]?.[0])).toContain(
+      "https://weather-api.mukoko.com/v1/search?mode=resolve",
+    );
   });
 
   it("keeps the case redirect and the seed-alias redirect as they were", async () => {
@@ -455,5 +438,133 @@ describe("proxy — bare place names resolve instead of 404 (#317)", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("the app shell the service worker may keep (x-mukoko-shell)", () => {
+  const anonymous = () =>
+    vi.mocked(authkit).mockResolvedValueOnce({
+      headers: new Headers(),
+      session: { user: null },
+    } as never);
+
+  it("marks `/` and `/{slug}` for an anonymous visitor whose response sets no cookie", async () => {
+    anonymous();
+    const home = await proxy(new NextRequest("https://weather.mukoko.com/"));
+    expect(home.headers.get("x-mukoko-shell")).toBe("anonymous");
+
+    // The cookie already names the place, so nothing is set and the page is keepable.
+    anonymous();
+    const place = await proxy(
+      new NextRequest("https://weather.mukoko.com/harare", {
+        headers: { cookie: "lastLocation=harare" },
+      }),
+    );
+    expect(place.headers.getSetCookie()).toEqual([]);
+    expect(place.headers.get("x-mukoko-shell")).toBe("anonymous");
+  });
+
+  it("does not mark a response that sets a cookie (a new place)", async () => {
+    anonymous();
+    const res = await proxy(
+      new NextRequest("https://weather.mukoko.com/harare", {
+        headers: { cookie: "lastLocation=bulawayo" },
+      }),
+    );
+    expect(
+      res.headers
+        .getSetCookie()
+        .some((c) => c.startsWith("lastLocation=harare")),
+    ).toBe(true);
+    expect(res.headers.get("x-mukoko-shell")).toBeNull();
+  });
+
+  it("sets the lastLocation cookie only when it changes", async () => {
+    anonymous();
+    const same = await proxy(
+      new NextRequest("https://weather.mukoko.com/harare", {
+        headers: { cookie: "lastLocation=harare" },
+      }),
+    );
+    expect(same.headers.getSetCookie()).toEqual([]);
+    const fresh = await proxy(
+      new NextRequest("https://weather.mukoko.com/harare"),
+    );
+    expect(fresh.headers.getSetCookie().join("\n")).toContain(
+      "lastLocation=harare",
+    );
+  });
+
+  it("never marks a signed-in visitor's page (their name is in the HTML)", async () => {
+    vi.mocked(authkit).mockResolvedValueOnce({
+      headers: new Headers(),
+      session: { user: { id: "user_1", email: "a@example.com" } },
+    } as never);
+    const res = await proxy(new NextRequest("https://weather.mukoko.com/"));
+    expect(res.headers.get("x-mukoko-shell")).toBeNull();
+  });
+
+  it("never marks a response when the session is unknown", async () => {
+    // authkit answered without a session: not proof of anonymity.
+    const res = await proxy(new NextRequest("https://weather.mukoko.com/"));
+    expect(res.headers.get("x-mukoko-shell")).toBeNull();
+  });
+
+  it("never marks sub-routes, other routes or an unknown place", async () => {
+    for (const path of [
+      "/harare/forecast",
+      "/explore",
+      "/profile",
+      "/auth/signin",
+      "/api/ai",
+      "/zzzz-not-a-place",
+    ]) {
+      anonymous();
+      const res = await proxy(
+        new NextRequest(`https://weather.mukoko.com${path}`),
+      );
+      expect(res.headers.get("x-mukoko-shell"), path).toBeNull();
+    }
+  });
+});
+
+describe("proxy — the AuthKit refresh buffer for the CouchDB sync credential", () => {
+  it("asks AuthKit to keep the access token fresh on /api/couch/session only", async () => {
+    const mocked = vi.mocked(authkit);
+    mocked.mockClear();
+    await proxy(
+      new NextRequest("https://weather.mukoko.com/api/couch/session", {
+        method: "POST",
+      }),
+    );
+    expect(mocked).toHaveBeenCalledTimes(1);
+    expect(mocked.mock.calls[0][1]).toEqual({
+      refreshBufferSeconds: COUCH_ACCESS_TOKEN_REFRESH_BUFFER_SECONDS,
+    });
+  });
+
+  it("leaves AuthKit's own buffer alone on every other path", async () => {
+    const mocked = vi.mocked(authkit);
+    for (const path of [
+      "/",
+      "/harare",
+      "/harare/forecast",
+      "/profile",
+      "/api/ai",
+      "/api/app-keys",
+      "/api/couch",
+      "/api/couch/session/extra",
+      "/api/couch/sessions",
+    ]) {
+      mocked.mockClear();
+      await proxy(new NextRequest(`https://weather.mukoko.com${path}`));
+      expect(mocked.mock.calls[0]?.[1], path).toEqual({});
+    }
+  });
+
+  it("the buffer is above what the issuer needs, so a refresh that works always clears it", () => {
+    expect(COUCH_ACCESS_TOKEN_REFRESH_BUFFER_SECONDS * 1000).toBeGreaterThan(
+      COUCH_MIN_ACCESS_TOKEN_LIFE_MS,
+    );
   });
 });

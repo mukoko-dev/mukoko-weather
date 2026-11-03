@@ -2,7 +2,7 @@
 //! limiting binding only counts per 10 s or 60 s, and these limits are per
 //! hour. Clients are stored as a SHA-256 of their IP.
 
-use sha2::{Digest, Sha256};
+use weather_core::crypto::sha256_hex;
 use weather_edge::now_ms;
 use worker::{Env, Result};
 
@@ -12,7 +12,7 @@ const DAY_MS: u64 = 24 * HOUR_MS;
 /// Record an attempt and say whether it is within `max` an hour.
 pub async fn allow(env: &Env, ip: &str, action: &str, max: u32) -> Result<bool> {
     let db = env.d1(crate::DB)?;
-    let client = hex::encode(Sha256::digest(ip.as_bytes()));
+    let client = sha256_hex(ip);
     let now = now_ms();
     let since = now.saturating_sub(HOUR_MS) as f64;
     let count: Option<f64> = db

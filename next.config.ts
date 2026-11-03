@@ -1,22 +1,39 @@
 import type { NextConfig } from "next";
+import { randomUUID } from "node:crypto";
 import withSerwistInit from "@serwist/next";
 import {
   MISSING_ASSET_DESTINATION,
   MISSING_ASSET_SOURCE,
 } from "./src/lib/missing-asset";
+import {
+  RETIRED_API_DESTINATION,
+  RETIRED_API_ROOT,
+  RETIRED_API_SOURCE,
+} from "./src/lib/retired-api";
 
 import {
   BASELINE_HEADERS,
   CORS_POLICY,
+  CSP_REPORT_PATH,
   FRAMEABLE_PATHS,
   FRAME_HEADER,
   buildCsp,
+  couchApiConnectSrc,
 } from "./src/lib/security-headers";
 
 const withSerwist = withSerwistInit({
   swSrc: "src/app/sw.ts",
   swDest: "public/sw.js",
+  // `/offline` is a route, not an emitted asset, so it is not in the manifest
+  // unless it is added here. The worker's offline fallback needs it precached
+  // (it was never there). A new revision per build keeps it current.
+  additionalPrecacheEntries: [{ url: "/offline", revision: randomUUID() }],
   disable: process.env.NODE_ENV === "development",
+  // The default injects `window.addEventListener("online", () =>
+  // location.reload())`, which restarts the whole app (and drops the open
+  // sheet, the scroll position and the place being read) every time the
+  // browser reports it is back online. Data refreshes on its own cadence.
+  reloadOnOnline: false,
 });
 
 const nextConfig: NextConfig = {
@@ -40,6 +57,17 @@ const nextConfig: NextConfig = {
         {
           source: MISSING_ASSET_SOURCE,
           destination: MISSING_ASSET_DESTINATION,
+        },
+        // The retired Python API: a 404 problem document for any method.
+        // The station upload URL is excluded from the source itself
+        // (src/lib/retired-api.ts), so Next.js never matches it.
+        {
+          source: RETIRED_API_SOURCE,
+          destination: RETIRED_API_DESTINATION,
+        },
+        {
+          source: RETIRED_API_ROOT,
+          destination: RETIRED_API_DESTINATION,
         },
       ],
       fallback: [],
@@ -65,7 +93,9 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Content-Security-Policy-Report-Only",
-            value: buildCsp(),
+            // The table plus the Nyuchi API origin the CouchDB sync is told to
+            // replicate with (NYUCHI_API_URL), read here so the table stays data.
+            value: buildCsp(CSP_REPORT_PATH, couchApiConnectSrc(process.env)),
           },
         ],
       },
@@ -105,10 +135,11 @@ const nextConfig: NextConfig = {
           { key: "Content-Security-Policy", value: "frame-ancestors *" },
         ],
       },
-      // CORS (B06): `*` (no credentials) only on the documented public read
-      // API and the embed endpoints. Everything else under /api/py is
-      // answered by FastAPI's allowlist; /api/ai, /api/keys, /api/db-init are
-      // same-origin. Policy data: CORS_POLICY in src/lib/security-headers.ts.
+      // CORS (B06): `*` (no credentials) only on the embed endpoints (the
+      // documented public read API is the Rust API Worker, which carries the
+      // same policy). /api/ai, /api/keys, /api/db-init are same-origin; the
+      // Workers answer their own CORS. Policy data: CORS_POLICY in
+      // src/lib/security-headers.ts.
       ...CORS_POLICY.open.map((source) => ({
         source,
         headers: [...CORS_POLICY.headers],

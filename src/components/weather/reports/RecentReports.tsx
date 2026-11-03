@@ -5,8 +5,8 @@ import { useAppStore } from "@/lib/store";
 import { trackEvent } from "@/lib/analytics";
 import { CloudSunIcon, MegaphoneIcon } from "@/lib/weather-icons";
 import { getReportTypeInfo } from "@/lib/report-types";
-import { fetchJson } from "@/lib/fetch-json";
-import { Spinner } from "@/components/ui/spinner";
+import { loadReports, reportsUpvoteUrl } from "@/lib/reports-api";
+import { LoadingNotice } from "@/components/ui/loading-notice";
 import { Button } from "@/components/ui/button";
 import { formatRelative } from "@/lib/i18n";
 
@@ -47,17 +47,27 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
   useEffect(() => {
     if (!locationSlug) return;
 
-    fetchJson<{ reports?: Report[] }>(
-      `/api/py/reports?location=${locationSlug}&hours=24`,
-    )
-      .then((data) => setReports(data?.reports || []))
-      .finally(() => setLoading(false));
+    // Shared with the report lane: one call for both.
+    let alive = true;
+    loadReports<Report>(locationSlug)
+      .then((data) => {
+        if (alive) setReports(data?.reports || []);
+      })
+      .catch(() => {
+        // Supplementary: an empty list, not an error card.
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
   }, [locationSlug]);
 
   const handleUpvote = useCallback(
     async (reportId: string) => {
       try {
-        const res = await fetch("/api/py/reports/upvote", {
+        const res = await fetch(reportsUpvoteUrl(), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ reportId }),
@@ -85,13 +95,9 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
   if (!loading && reports.length === 0) {
     return (
       <section aria-labelledby="community-reports-heading">
-        {/* Calm card grammar: a quiet card with the copper (community)
-            mineral as a 4px leading-edge rule, not a full saturated fill. */}
-        <div className="acacia relative overflow-hidden">
-          <span
-            aria-hidden="true"
-            className="absolute inset-y-0 left-0 w-1 bg-mineral-copper"
-          />
+        {/* Calm card grammar: a quiet card whose whole border takes the copper
+            (community) mineral, slightly raised; never a one-side stripe. */}
+        <div className="acacia border-mineral-copper/40 shadow-md">
           <h2 id="community-reports-heading" className="giraffe">
             Community Reports
           </h2>
@@ -136,13 +142,12 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
       </div>
 
       {loading && (
-        <div className="flex items-center gap-2 py-4" role="status">
-          <Spinner className="border-mineral-copper" />
-          <span className="text-base text-text-secondary">
-            Loading reports...
-          </span>
-          <span className="sr-only">Loading community weather reports</span>
-        </div>
+        <LoadingNotice
+          className="py-4"
+          label="Loading reports..."
+          textClassName="text-base text-text-secondary"
+          spinnerClassName="border-mineral-copper"
+        />
       )}
 
       {!loading && reports.length > 0 && (

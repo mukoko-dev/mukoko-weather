@@ -10,7 +10,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
+use weather_core::crypto::sha256_hex;
 use weather_core::station::{valid_station_id, verify_ingest_key};
 use weather_edge::now_ms;
 use worker::{Env, Result};
@@ -20,7 +20,7 @@ const VERIFIED_TTL_MS: u64 = 10 * 60_000;
 const VERIFIED_MAX: usize = 5_000;
 
 thread_local! {
-    static VERIFIED: RefCell<HashMap<String, ([u8; 32], u64)>> = RefCell::new(HashMap::new());
+    static VERIFIED: RefCell<HashMap<String, (String, u64)>> = RefCell::new(HashMap::new());
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -37,8 +37,9 @@ pub struct Station {
     pub last_observation_at: Option<i64>,
 }
 
-fn digest(key: &str) -> [u8; 32] {
-    Sha256::digest(key.as_bytes()).into()
+/// The key's SHA-256, kept in place of the key for the verified cache.
+fn digest(key: &str) -> String {
+    sha256_hex(key)
 }
 
 /// The station for this id and key, or `None` for any mismatch (unknown id,

@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   preferencesSchema,
   weatherCacheSchema,
@@ -323,5 +325,32 @@ describe("replication module", () => {
     const mod = await import("./replication");
     expect(typeof mod.startReplication).toBe("function");
     expect(typeof mod.stopReplication).toBe("function");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Production init (issue #269)
+// ---------------------------------------------------------------------------
+
+describe("database init works outside RxDB dev-mode", () => {
+  const source = readFileSync(resolve(__dirname, "database.ts"), "utf-8");
+  it("never passes ignoreDuplicate (it throws DB9 in production builds)", () => {
+    expect(source).not.toMatch(/ignoreDuplicate:\s*true/);
+  });
+  it("adds the migration plugin the migrationStrategies need", () => {
+    expect(source).toContain(
+      "addRxPlugin(migration.RxDBMigrationSchemaPlugin)",
+    );
+  });
+  it("imports RxDB inside the init, never at the top (first-load JavaScript)", () => {
+    // A static import put RxDB and Dexie (about 130 KB gzipped) in the
+    // first-load JavaScript of every page.
+    expect(source).not.toMatch(/^import (?!type)[^;]*from "rxdb[^"]*";/m);
+    expect(source).toContain('import("rxdb")');
+    expect(source).toContain('import("rxdb/plugins/storage-dexie")');
+    expect(source).toContain('import("rxdb/plugins/migration-schema")');
+  });
+  it("registers the weather_places collection", () => {
+    expect(source).toContain("weather_places: { schema: weatherPlaceSchema }");
   });
 });

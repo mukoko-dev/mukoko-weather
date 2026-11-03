@@ -8,7 +8,6 @@
 //! delivery. The in-app inbox is the record.
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 /// Push services we accept subscriptions from. An endpoint is a URL the
 /// server will POST to, so an open list would make the sender an SSRF tool.
@@ -30,6 +29,12 @@ pub const MAX_PUSHES_PER_DAY: u32 = 2;
 pub const MAX_PUSHES_PER_KIND_PER_NIGHT: u32 = 1;
 /// Frost looks at the next 24 hourly values.
 pub const FROST_LOOKAHEAD_HOURS: usize = 24;
+/// An hour at or below this air temperature (C) inside the frost window is a
+/// frost hour. Shared with the station join (`station_alert`), so a forecast
+/// and an observation can never disagree about what frost is.
+pub const FROST_THRESHOLD_C: f64 = 3.0;
+/// Local hour at which the frost window opens (22:00).
+pub const NIGHT_START_HOUR: u8 = 22;
 /// Delivery log rows older than this many days are deleted.
 pub const DELIVERY_RETENTION_DAYS: u32 = 90;
 /// A person may hold this many active subscriptions (browsers or devices).
@@ -105,6 +110,16 @@ pub fn validate_endpoint(endpoint: &str) -> Result<(), PushError> {
     }
 }
 
+/// The origin (`https://host`) of an endpoint the sender may use: the VAPID
+/// `aud` claim names it (RFC 8292 section 2). The endpoint goes through
+/// [`validate_endpoint`] first, so a host outside the allow list never gets a
+/// token. A port is refused by that check (only the default is accepted), so
+/// the origin never carries one.
+pub fn endpoint_origin(endpoint: &str) -> Result<String, PushError> {
+    validate_endpoint(endpoint)?;
+    Ok(format!("https://{}", https_host(endpoint)?))
+}
+
 fn is_b64url(s: &str) -> bool {
     s.chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
@@ -139,7 +154,7 @@ pub fn validate_keys(p256dh: &str, auth: &str) -> Result<(), PushError> {
 /// The endpoint is canonicalised first (lower-case scheme and host, default
 /// port dropped) so the same subscription never hashes two ways.
 pub fn endpoint_id(endpoint: &str) -> String {
-    hex::encode(Sha256::digest(canonical_endpoint(endpoint).as_bytes()))
+    crate::crypto::sha256_hex(&canonical_endpoint(endpoint))
 }
 
 /// Lower-case the scheme and host and drop `:443`; the path and query keep
@@ -262,12 +277,22 @@ fn parse_date(time: &str) -> Option<chrono::NaiveDate> {
     chrono::NaiveDate::parse_from_str(time.get(0..10)?, "%Y-%m-%d").ok()
 }
 
+/// Whether a local hour (0..=23) is inside the frost window: 22:00 through
+/// 08:59 (the hour that starts at 08:00 is included).
+pub fn in_frost_window(hour: u8) -> bool {
+    hour >= NIGHT_START_HOUR || hour <= NIGHT_END_HOUR
+}
+
 /// The date a frost night began on: hours 00..=08 belong to the previous
 /// evening's night.
-fn night_of(time: &str) -> Option<String> {
+pub(crate) fn night_of(time: &str) -> Option<String> {
     let date = parse_date(time)?;
     let hour = parse_hour(time)?;
-    let d = if hour <= 8 { date.pred_opt()? } else { date };
+    let d = if hour <= NIGHT_END_HOUR {
+        date.pred_opt()?
+    } else {
+        date
+    };
     Some(d.format("%Y-%m-%d").to_string())
 }
 
@@ -317,7 +342,7 @@ pub fn evaluate_frost(
             return None;
         }
         let Some(hour) = parse_hour(t) else { continue };
-        if !(hour >= 22 || hour <= 8) || !temp.is_finite() || temp > 3.0 {
+        if !in_frost_window(hour) || !temp.is_finite() || temp > FROST_THRESHOLD_C {
             continue;
         }
         let n = night_of(t)?;
@@ -463,6 +488,20 @@ pub enum Outcome {
     Retry,
     /// Any other 4xx: our request was refused; do not retry.
     Failed,
+}
+
+impl Outcome {
+    /// The `AlertDeliveryStatus` value for the delivery log
+    /// (`platform.alertDeliveries.status`, nyuchi/data-infra
+    /// `schemas/model/notifications.yaml`). `skipped_quiet` and
+    /// `skipped_cap` come from [`Decision`], not from a push service.
+    pub fn delivery_status(self) -> &'static str {
+        match self {
+            Self::Accepted => "sent",
+            Self::Expired => "gone",
+            Self::Retry | Self::Failed => "failed",
+        }
+    }
 }
 
 pub fn classify_status(status: u16) -> Outcome {
@@ -854,6 +893,39 @@ mod tests {
         for word in ["guarantee", "email", "token", "endpoint"] {
             assert!(!json.contains(word));
         }
+    }
+
+    #[test]
+    fn the_origin_is_the_allowed_host_in_lower_case_and_nothing_else() {
+        assert_eq!(
+            endpoint_origin("https://FCM.googleapis.com/fcm/send/abc?x=1").as_deref(),
+            Ok("https://fcm.googleapis.com")
+        );
+        assert_eq!(
+            endpoint_origin("https://fcm.googleapis.com:443/fcm/send/abc").as_deref(),
+            Ok("https://fcm.googleapis.com")
+        );
+        // a refused endpoint never yields an origin to sign for
+        assert_eq!(
+            endpoint_origin("https://evil.example/x"),
+            Err(PushError::HostNotAllowed)
+        );
+        assert_eq!(
+            endpoint_origin("http://fcm.googleapis.com/x"),
+            Err(PushError::NotHttps)
+        );
+        assert_eq!(
+            endpoint_origin("https://fcm.googleapis.com:8443/x"),
+            Err(PushError::BadEndpoint)
+        );
+    }
+
+    #[test]
+    fn outcomes_map_onto_the_delivery_log_statuses() {
+        assert_eq!(Outcome::Accepted.delivery_status(), "sent");
+        assert_eq!(Outcome::Expired.delivery_status(), "gone");
+        assert_eq!(Outcome::Retry.delivery_status(), "failed");
+        assert_eq!(Outcome::Failed.delivery_status(), "failed");
     }
 
     #[test]

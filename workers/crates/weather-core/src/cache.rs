@@ -20,6 +20,23 @@ impl<T> Slot<T> {
     }
 }
 
+/// How long an optional upstream that just failed or timed out is left alone.
+pub const UPSTREAM_BACKOFF_SECS: u64 = 60;
+
+/// Should an optional enrichment call go out, given whether a recent failure
+/// left a back-off marker? One slow upstream must not add its timeout to
+/// every request, so while the marker stands the call is skipped.
+pub fn should_call_upstream(backoff_marker_present: bool) -> bool {
+    !backoff_marker_present
+}
+
+/// How long to keep what a call produced: an answer (even an empty one) for
+/// `answer_ttl`; a failure is never kept as an answer, only as the short
+/// back-off marker (`None` for an answer means "store it", see the caller).
+pub fn marker_ttl_on_failure() -> u64 {
+    UPSTREAM_BACKOFF_SECS
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -60,5 +77,16 @@ mod tests {
         // A body from before slots (a bare doc) is not a slot: a miss, so the
         // key is looked up again and rewritten.
         assert!(read::<Slot<LocationDoc>>("\"x\"").is_none());
+    }
+
+    #[test]
+    fn a_back_off_marker_skips_the_call() {
+        assert!(should_call_upstream(false));
+        assert!(!should_call_upstream(true));
+    }
+
+    #[test]
+    fn a_failure_backs_off_for_a_minute_not_an_hour() {
+        assert_eq!(marker_ttl_on_failure(), 60);
     }
 }

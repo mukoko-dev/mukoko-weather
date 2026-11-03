@@ -1,11 +1,49 @@
 /**
  * Typed client for the station endpoints served by the mukoko-weather
- * Python backend (the stable ingest/API layer — see api/py/_stations.py in
- * this monorepo). The console is UI only; all writes go through that API.
+ * stations Worker (`workers/stations` in this monorepo, Rust on Cloudflare;
+ * the Python backend it replaced is gone). The console is UI only; all writes
+ * go through that API.
+ *
+ * The client calls the Worker's own `/stations/*` paths. (The Worker also
+ * answers the `/api/py/stations/*` prefix the deleted Python used, because
+ * consoles in the field upload to it; this client no longer needs it.)
+ *
+ * TRANSITIONAL: the console calls the stations Worker's own host directly.
+ * Weather is to be served behind the gateway (one way in), which forwards the
+ * station routes to the Worker with the protocol unchanged; then `API_BASE`
+ * becomes the gateway's origin. `weather.mukoko.com` serves only the
+ * `/api/py/stations/*` form (a Cloudflare route to the stations Worker, once it
+ * is deployed with it), not these unprefixed paths, so a project that still
+ * sets `NEXT_PUBLIC_WEATHER_API_BASE` to `https://weather.mukoko.com` must
+ * unset it.
  */
 
 export const API_BASE =
-  process.env.NEXT_PUBLIC_WEATHER_API_BASE ?? "https://weather.mukoko.com";
+  process.env.NEXT_PUBLIC_WEATHER_API_BASE ??
+  "https://weather-ingest.nyuchi.com";
+
+/** The words to show for a refused request: the Worker's `error_description`, else the status. */
+async function refusal(res: Response, fallback: string): Promise<string> {
+  const body: unknown = await res.json().catch(() => null);
+  if (typeof body === "object" && body !== null) {
+    const text = (body as { error_description?: unknown }).error_description;
+    if (typeof text === "string" && text.trim()) return text;
+  }
+  return `${fallback} (${res.status})`;
+}
+
+/** How to point a console at the ingest endpoint, as the Worker states it at registration. */
+export interface IngestInstructions {
+  wunderground: { server: string; path: string; params: string };
+  ecowitt: { server: string; path: string; note: string };
+}
+
+export interface RegistrationResult {
+  stationId: string;
+  ingestKey: string;
+  stationType: "digital" | "manual";
+  ingest: IngestInstructions;
+}
 
 export interface RegisteredStation {
   stationId: string;
@@ -45,17 +83,13 @@ export async function registerStation(body: {
   stationType: "digital" | "manual";
   hardware?: string;
   country?: string;
-}) {
-  const res = await fetch(`${API_BASE}/api/py/stations/register`, {
+}): Promise<RegistrationResult> {
+  const res = await fetch(`${API_BASE}/stations/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok)
-    throw new Error(
-      (await res.json().catch(() => null))?.detail ??
-        `Registration failed (${res.status})`,
-    );
+  if (!res.ok) throw new Error(await refusal(res, "Registration failed"));
   return res.json();
 }
 
@@ -63,7 +97,7 @@ export async function fetchStatus(
   station: RegisteredStation,
 ): Promise<StationStatus> {
   const res = await fetch(
-    `${API_BASE}/api/py/stations/status?id=${encodeURIComponent(station.stationId)}&key=${encodeURIComponent(station.key)}`,
+    `${API_BASE}/stations/status?id=${encodeURIComponent(station.stationId)}&key=${encodeURIComponent(station.key)}`,
   );
   if (!res.ok) throw new Error(`Status failed (${res.status})`);
   return res.json();
@@ -73,7 +107,7 @@ export async function submitManualReading(
   station: RegisteredStation,
   reading: Record<string, number | string | undefined>,
 ) {
-  const res = await fetch(`${API_BASE}/api/py/stations/manual`, {
+  const res = await fetch(`${API_BASE}/stations/manual`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -82,10 +116,6 @@ export async function submitManualReading(
       ...reading,
     }),
   });
-  if (!res.ok)
-    throw new Error(
-      (await res.json().catch(() => null))?.detail ??
-        `Submit failed (${res.status})`,
-    );
+  if (!res.ok) throw new Error(await refusal(res, "Submit failed"));
   return res.json();
 }

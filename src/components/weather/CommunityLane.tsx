@@ -6,8 +6,10 @@ import {
   getActivityById,
   type Activity,
 } from "@/lib/activities";
+import { CardHitArea } from "@/components/ui/card-hit-area";
 import { fetchSuitabilityRules } from "@/lib/suitability-cache";
 import { getReportTypeInfo } from "@/lib/report-types";
+import { loadReports } from "@/lib/reports-api";
 import { useAppStore } from "@/lib/store";
 import type { WeatherData } from "@/lib/weather";
 import { weatherOffsetSeconds } from "@/lib/location-time";
@@ -40,6 +42,13 @@ export interface CommunityLaneProps {
   weather: WeatherData;
   /** Activity ids from the user's My Weather selection, in display order. */
   selectedActivities: string[];
+  /**
+   * Opens the full activity advice sheet. Called with an activity id when a
+   * lane row was tapped (the sheet scrolls to that activity) and with
+   * `undefined` for the card or the "All advice" action. `opener` is the
+   * element to return focus to when the sheet closes.
+   */
+  onOpenAdvice?: (activityId: string | undefined, opener: HTMLElement) => void;
 }
 
 /**
@@ -125,6 +134,7 @@ export function CommunityLane({
   slug,
   weather,
   selectedActivities,
+  onOpenAdvice,
 }: CommunityLaneProps) {
   const headingId = useId();
   const panelId = useId();
@@ -167,8 +177,8 @@ export function CommunityLane({
   useEffect(() => {
     if (!slug || activities.length === 0) return;
     let alive = true;
-    fetch(`/api/py/reports?location=${encodeURIComponent(slug)}&hours=24`)
-      .then((res) => (res.ok ? res.json() : { reports: [] }))
+    // Shared with the recent-reports card: one call for both.
+    loadReports<ReportLike>(slug)
       .then((data) => {
         if (alive) setReports(Array.isArray(data?.reports) ? data.reports : []);
       })
@@ -235,14 +245,37 @@ export function CommunityLane({
   }
 
   return (
-    <section aria-labelledby={headingId} className="baobab space-y-4">
-      <div className="space-y-1">
-        <h2 id={headingId} className="giraffe">
-          Community lane
-        </h2>
-        <p className="dove">
-          12 hours back and 12 ahead. Bars are taller for better hours.
-        </p>
+    <section
+      aria-labelledby={headingId}
+      className="baobab card-interactive relative space-y-4"
+    >
+      {/* The whole card opens the advice sheet; pins, the pin panel and the
+          header action sit above it (z-10) so they keep working. */}
+      {onOpenAdvice && (
+        <CardHitArea
+          aria-label="Open all activity advice"
+          onClick={(e) => onOpenAdvice(undefined, e.currentTarget)}
+        />
+      )}
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h2 id={headingId} className="giraffe">
+            Community lane
+          </h2>
+          <p className="dove">
+            12 hours back and 12 ahead. Bars are taller for better hours.
+          </p>
+        </div>
+        {onOpenAdvice && (
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            onClick={(e) => onOpenAdvice(undefined, e.currentTarget)}
+            className="impala-sm relative z-10 shrink-0"
+          >
+            All advice
+          </button>
+        )}
       </div>
 
       {/* Pins, panel and axis share the lanes' left inset so all 24 columns line up. */}
@@ -308,7 +341,7 @@ export function CommunityLane({
             id={panelId}
             role="region"
             aria-label={`Reports at ${formatLaneHour(laneCellMs(now, openGroup.index, offset), offset)}`}
-            className="acacia space-y-2"
+            className="acacia relative z-10 space-y-2"
           >
             <p className="text-base font-semibold text-text-primary">
               Reports at{" "}
@@ -385,8 +418,17 @@ export function CommunityLane({
               role="group"
               aria-labelledby={labelId}
               aria-describedby={summaryId}
-              className={`space-y-2 pl-4`}
+              className="relative space-y-2 pl-4"
             >
+              {onOpenAdvice && (
+                <CardHitArea
+                  aria-label={`${lane.activity.label}: open advice`}
+                  className="z-[2]"
+                  onClick={(e) =>
+                    onOpenAdvice(lane.activity.id, e.currentTarget)
+                  }
+                />
+              )}
               <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                 <h3
                   id={labelId}

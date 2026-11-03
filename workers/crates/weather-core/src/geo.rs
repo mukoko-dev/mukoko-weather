@@ -39,12 +39,44 @@ pub fn cache_key(lat: f64, lon: f64) -> String {
     format!("{:.2}_{:.2}", r(lat), r(lon))
 }
 
+/// The forecast Worker's KV key for a point (`wx:v2:` + [`cache_key`]). One
+/// definition, used by `mukoko-weather-forecast` to write and read the entry
+/// and by every Worker that reads it cache-only (the report snapshot).
+pub fn forecast_cache_key(lat: f64, lon: f64) -> String {
+    format!("wx:v2:{}", cache_key(lat, lon))
+}
+
 /// Whether a coordinate pair is on the globe.
 pub fn valid_coordinates(lat: f64, lon: f64) -> bool {
     lat.is_finite()
         && lon.is_finite()
         && (-90.0..=90.0).contains(&lat)
         && (-180.0..=180.0).contains(&lon)
+}
+
+/// The 0.05° (~5.6 km) grid cell of a coordinate, `cell:-17.85_31.05`: the key
+/// the Python `weather_cache_key` (still in `api/py/_weather_cache_key.py`) derives,
+/// pinned to `tests/fixtures/weather-cache-keys.json`. Built from integer cell
+/// indices (round half up), never from formatted floats.
+pub fn cell_key(lat: f64, lon: f64) -> String {
+    const PER_DEG: f64 = 20.0;
+    const LAT_MAX: i64 = 90 * 20;
+    const LON_MAX: i64 = 180 * 20;
+    let idx = |v: f64| (v * PER_DEG + 0.5).floor() as i64;
+    let fmt = |i: i64| {
+        let hundredths = i * 5;
+        let sign = if hundredths < 0 { "-" } else { "" };
+        let a = hundredths.abs();
+        format!("{sign}{}.{:02}", a / 100, a % 100)
+    };
+    let lat_i = idx(lat).clamp(-LAT_MAX, LAT_MAX);
+    let mut lon_i = idx(lon);
+    if lon_i >= LON_MAX {
+        lon_i -= 2 * LON_MAX;
+    } else if lon_i < -LON_MAX {
+        lon_i += 2 * LON_MAX;
+    }
+    format!("cell:{}_{}", fmt(lat_i), fmt(lon_i))
 }
 
 #[cfg(test)]
@@ -55,6 +87,14 @@ mod tests {
     fn harare_to_bulawayo_is_about_365_km() {
         let d = haversine_km(-17.83, 31.05, -20.15, 28.58);
         assert!((d - 365.0).abs() < 10.0, "{d}");
+    }
+
+    #[test]
+    fn the_forecast_kv_key_is_the_versioned_point_key() {
+        // The forecast Worker writes under this key and others read it cache
+        // only; changing it orphans every cached forecast.
+        assert_eq!(forecast_cache_key(-17.83, 31.05), "wx:v2:-17.83_31.05");
+        assert_eq!(forecast_cache_key(-0.001, 0.0), "wx:v2:0.00_0.00");
     }
 
     #[test]
@@ -75,5 +115,19 @@ mod tests {
         assert!(valid_coordinates(-17.8, 31.0));
         assert!(!valid_coordinates(91.0, 0.0));
         assert!(!valid_coordinates(0.0, f64::NAN));
+    }
+
+    #[test]
+    fn cell_keys_match_the_shared_vectors() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../tests/fixtures/weather-cache-keys.json"
+        ))
+        .unwrap();
+        let vectors = fixture["vectors"].as_array().unwrap();
+        assert!(vectors.len() >= 5);
+        for v in vectors {
+            let got = cell_key(v["lat"].as_f64().unwrap(), v["lon"].as_f64().unwrap());
+            assert_eq!(got, v["key"].as_str().unwrap(), "{v}");
+        }
     }
 }

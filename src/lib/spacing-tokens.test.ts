@@ -44,10 +44,6 @@ const DENSE_CARD_EXCEPTIONS: Record<string, { padding: string; why: string }> =
       padding: "p-3",
       why: "small gauge tile in a 2/4-column grid",
     },
-    "components/weather/HourlyScrollCards.tsx": {
-      padding: "p-3",
-      why: "frame of a horizontally scrolling hour strip",
-    },
   };
 
 const CARD_WITH_PADDING =
@@ -78,10 +74,11 @@ describe("cards take their padding from --space-card", () => {
 
   it("the shared error fallback uses the card padding token", () => {
     const src = readFileSync(
-      join(SRC, "components/weather/ChartErrorBoundary.tsx"),
+      join(SRC, "components/ui/inline-error.tsx"),
       "utf-8",
     );
-    expect(src).toContain("p-[var(--space-card)]");
+    // the quiet tone is a .acacia card, whose padding is --space-card
+    expect(src).toContain("acacia");
   });
 });
 

@@ -1,10 +1,12 @@
 /**
  * Official Singapore air quality (NEA via data.gov.sg) — client-side types,
- * PSI band mapping and the response guard for `/api/py/sg-air`.
+ * PSI band mapping and the response guard for `/v1/sg-air`.
  *
  * Pure logic, no React, so every rule here is unit-tested directly. The band
- * thresholds mirror `PSI_BANDS` in `api/py/_sg_air.py`; keep them in sync.
+ * thresholds mirror `PSI_BANDS` in `weather_core::sg_air`; keep them in sync.
  */
+
+import { PSI_SCALE } from "@/lib/weather-scales";
 
 export type PsiBandKey =
   | "good"
@@ -59,15 +61,16 @@ export const PSI_BAND_LABELS: Record<PsiBandKey, string> = {
 };
 
 /**
- * Severity text class per PSI band, from the global severity tokens. Written
- * out literally so Tailwind keeps every class.
+ * Fill class per PSI band, from PSI_SCALE (weather-scales.ts: NEA's band names
+ * and ranges, EPA colours where the ranges match, flagged as ours). A swatch,
+ * not text colour: the yellow band cannot be read as text on a card.
  */
-export const PSI_BAND_TEXT_CLASS: Record<PsiBandKey, string> = {
-  good: "text-severity-low",
-  moderate: "text-severity-moderate",
-  unhealthy: "text-severity-severe",
-  very_unhealthy: "text-severity-extreme",
-  hazardous: "text-severity-extreme",
+export const PSI_BAND_BG_CLASS: Record<PsiBandKey, string> = {
+  good: PSI_SCALE.bands[0].bg,
+  moderate: PSI_SCALE.bands[1].bg,
+  unhealthy: PSI_SCALE.bands[2].bg,
+  very_unhealthy: PSI_SCALE.bands[3].bg,
+  hazardous: PSI_SCALE.bands[4].bg,
 };
 
 export const SG_REGION_LABELS: Record<SgRegion, string> = {
@@ -88,19 +91,19 @@ export function psiBandKey(value: number): PsiBandKey {
 }
 
 /**
- * Label and Tailwind severity class for a PSI value. The helper the panel
+ * Label and Tailwind fill class for a PSI value. The helper the panel
  * renders from, so the colour and wording can't drift apart.
  */
 export function psiBandInfo(value: number): {
   key: PsiBandKey;
   label: string;
-  textClass: string;
+  bgClass: string;
 } {
   const key = psiBandKey(value);
   return {
     key,
     label: PSI_BAND_LABELS[key],
-    textClass: PSI_BAND_TEXT_CLASS[key],
+    bgClass: PSI_BAND_BG_CLASS[key],
   };
 }
 
@@ -110,7 +113,7 @@ export function sgRegionLabel(region: string): string {
 }
 
 /**
- * Shape guard for `/api/py/sg-air`. An unavailable response is still valid
+ * Shape guard for `/v1/sg-air`. An unavailable response is still valid
  * (it is how the endpoint reports a failed NEA read), so it is accepted and the
  * panel decides what to show.
  */

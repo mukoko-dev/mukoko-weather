@@ -781,13 +781,15 @@ describe("getWeatherForLocation — read-only SSR path (issue #101)", () => {
     expect(source).not.toContain('from "./tomorrow"');
   });
 
-  it("delegates cache misses to the canonical Python endpoint", async () => {
+  it("reads the Rust Worker for weather (no Python, no Mongo read)", async () => {
     const fs = await import("fs");
     const source = fs.readFileSync("src/lib/db.ts", "utf-8");
-    expect(source).toContain("/api/py/weather?lat=");
+    expect(source).not.toContain("internalApiTarget");
+    expect(source).not.toContain("getCachedWeather(weatherCacheKey");
+    expect(source).toContain('workerUrl(\n    "weather"');
     expect(source).toContain("x-weather-provider");
     // #245: SSR passes its slug so the cache row + history doc are keyed
-    // under the slug /api/py/history?location= reads.
+    // under the slug /v1/history?location= reads.
     expect(source).toContain("&location=${encodeURIComponent(slug)}");
     // Direct Open-Meteo remains ONLY as a read-only local-dev fallback.
     expect(source).toContain(
@@ -817,36 +819,31 @@ describe("db-init indexes for the model baseline (issue #246)", () => {
     }
   });
 
-  it("uses the same camelCase collection names as the Python writers", async () => {
+  it("the forecast Worker reads the blend overrides from the camelCase collection name", async () => {
+    // The Python writers of the budget, cache and verification collections are
+    // gone (the Worker keeps its budget in D1 and its cache in KV); only the
+    // blend-weight overrides are still read from MongoDB.
     const fs = await import("fs");
-    const py = [
-      fs.readFileSync("api/py/_enrichment.py", "utf-8"),
-      fs.readFileSync("api/py/_verification.py", "utf-8"),
-      fs.readFileSync("api/py/_model_blend.py", "utf-8"),
-    ].join("\n");
-    for (const name of [
-      "providerBudget",
-      "enrichmentCache",
-      "forecastVerification",
-      "modelBlendConfig",
-    ]) {
-      expect(py).toContain(`weather_db()["${name}"]`);
-    }
+    const rust = fs.readFileSync(
+      "workers/forecast/src/blend_config.rs",
+      "utf-8",
+    );
+    expect(rust).toContain('const COLLECTION: &str = "modelBlendConfig";');
   });
 });
 
 describe("db-init indexes for agriculture (issue #265)", () => {
-  it("TTL-indexes both agriculture caches the Python module writes", async () => {
+  it("keeps the TTL indexes of the retired agriculture caches so leftover documents expire (the farm payload and the explanation are KV in the Workers now)", async () => {
     const fs = await import("fs");
     const source = fs.readFileSync("src/lib/db.ts", "utf-8");
-    const py = fs.readFileSync("api/py/_agriculture.py", "utf-8");
     for (const name of ["agriculture_cache", "agriculture_ai"]) {
       expect(
         source.indexOf(`collection("${name}"),\n      { expiresAt: 1 }`),
         name,
       ).toBeGreaterThan(-1);
-      expect(py).toContain(`weather_db()["${name}"]`);
     }
+    // Nothing writes either collection any more.
+    expect(fs.existsSync("api/py/_agriculture.py")).toBe(false);
   });
 });
 
@@ -858,15 +855,6 @@ describe("syncAirports keeps airports fetched on demand (#302)", () => {
       _id: { $nin: ["FVRG", "FAOR"] },
       source: { $ne: DISCOVERED_AIRPORT_SOURCE },
     });
-  });
-
-  it("uses the same source tag as the Python writer", async () => {
-    const { DISCOVERED_AIRPORT_SOURCE } = await import("./db");
-    const py = readFileSync(
-      resolve(__dirname, "../../api/py/_airports.py"),
-      "utf-8",
-    );
-    expect(py).toContain(`DISCOVERED_SOURCE = "${DISCOVERED_AIRPORT_SOURCE}"`);
   });
 
   it("syncAirports deletes through the prune filter", () => {

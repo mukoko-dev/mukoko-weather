@@ -35,18 +35,23 @@ describe("EnsoOutlook — client component", () => {
     expect(source).toContain("export function EnsoOutlook");
   });
 
-  it("fetches the Python ENSO endpoint", () => {
-    expect(source).toContain('"/api/py/enso"');
+  it("fetches the Rust Worker's ENSO route, never /api/py", () => {
+    expect(source).toContain('useWorkerData<EnsoOutlookResponse>("enso", {})');
+    expect(source).not.toContain("fetchWorker(");
+    expect(source).not.toContain("/api/py/enso");
   });
 
-  it("aborts the in-flight request on unmount", () => {
-    expect(source).toContain("new AbortController()");
-    expect(source).toContain("controller.abort()");
-  });
-
-  it("ignores AbortError and post-unmount responses", () => {
-    expect(source).toContain("AbortError");
-    expect(source).toContain("if (cancelled) return;");
+  it("reads the answer from the shared store, so a component that has left cannot be updated", () => {
+    const hook = readFileSync(
+      resolve(process.cwd(), "src/lib/use-worker-data.ts"),
+      "utf8",
+    );
+    // State lives in the store (useSyncExternalStore), not in the component:
+    // there is nothing to set after an unmount, and the request is not
+    // cancelled by one.
+    expect(hook).toContain("useSyncExternalStore(");
+    expect(hook).not.toContain("setLoaded(");
+    expect(hook).not.toContain("controller.abort()");
   });
 
   it("renders nothing when the outlook is unavailable", () => {
@@ -90,8 +95,11 @@ describe("EnsoOutlook — content and attribution", () => {
   it("falls back to the NOAA CPC ONI source label from the API payload", () => {
     expect(source).toContain("source: string;");
     expect(
-      readFileSync(resolve(__dirname, "../../../api/py/_enso.py"), "utf-8"),
-    ).toContain('SOURCE_LABEL = "NOAA CPC ONI"');
+      readFileSync(
+        resolve(__dirname, "../../../workers/crates/weather-core/src/enso.rs"),
+        "utf-8",
+      ),
+    ).toContain('SOURCE_LABEL: &str = "NOAA CPC ONI"');
   });
 
   it("renders impact lines from the ensoImpact helper", () => {
@@ -127,10 +135,10 @@ describe("EnsoOutlook — styling rules", () => {
     );
   });
 
-  it("uses severity and surface tokens for phase badges", () => {
-    expect(ENSO_PHASE_CLASS["El Niño"]).toContain("bg-severity-moderate");
-    expect(ENSO_PHASE_CLASS["La Niña"]).toContain("bg-severity-cold");
-    expect(ENSO_PHASE_CLASS["El Niño"]).toContain("text-severity-fg");
+  it("colours phases warm red (El Niño) and cold blue (La Niña) from the temperature scale", () => {
+    expect(ENSO_PHASE_CLASS["El Niño"]).toContain("bg-wx-temp-9");
+    expect(ENSO_PHASE_CLASS["La Niña"]).toContain("bg-wx-temp-1");
+    expect(ENSO_PHASE_CLASS["El Niño"]).toContain("text-wx-fg-light");
   });
 
   it("uses fauna classes for the card and its text (heading class comes from SectionHeader)", () => {

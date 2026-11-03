@@ -2,11 +2,15 @@ import { describe, it, expect } from "vitest";
 import {
   arcPoint,
   barHeights,
+  blendGradient,
+  blendStops,
   clampPct,
   compassPoint,
   compassTicks,
   fractionOf,
   gradientTokens,
+  GRADIENT_BREAKS,
+  GRADIENT_PRESETS,
   illuminationFromPhase,
   moonTerminatorGeometry,
   moonTerminatorPath,
@@ -148,13 +152,93 @@ describe("value helpers", () => {
 
   it("gradientTokens resolves presets and filters unsafe names", () => {
     expect(gradientTokens("uv")).toHaveLength(5);
-    expect(gradientTokens("aqi")[0]).toBe("var(--color-severity-low)");
-    expect(
-      gradientTokens(["--color-severity-low", "url(evil)", "--mineral-gold"]),
-    ).toEqual(["var(--color-severity-low)", "var(--mineral-gold)"]);
-    expect(gradientTokens([])).toEqual(["var(--color-severity-low)"]);
+    expect(gradientTokens("aqi")).toHaveLength(6);
+    expect(gradientTokens("aqi")[0]).toBe("var(--wx-aqi-1)");
+    expect(gradientTokens("uv")[4]).toBe("var(--wx-uv-5)");
+    expect(gradientTokens(["--wx-uv-1", "url(evil)", "--wx-uv-3"])).toEqual([
+      "var(--wx-uv-1)",
+      "var(--wx-uv-3)",
+    ]);
+    expect(gradientTokens([])).toEqual(["var(--wx-uv-1)"]);
   });
 
+  it("places UV and AQI bands on the bar by their edges", () => {
+    // UV 0-14: Low 0-3, Moderate 3-6, High 6-8, Very high 8-11, Extreme 11-14.
+    [0, 21.43, 42.86, 57.14, 78.57, 100].forEach((v, i) =>
+      expect(GRADIENT_BREAKS.uv![i]).toBeCloseTo(v, 1),
+    );
+    // AQI: each EPA band an equal sixth (aqiScalePct).
+    expect(GRADIENT_BREAKS.aqi).toHaveLength(7);
+    expect(GRADIENT_BREAKS.aqi![1]).toBeCloseTo(16.67, 1);
+    for (const preset of ["uv", "aqi"] as const) {
+      expect(GRADIENT_BREAKS[preset]!.length).toBe(
+        GRADIENT_PRESETS[preset].length + 1,
+      );
+    }
+  });
+
+  it("builds the presets from the scale's own tokens, in band order", () => {
+    expect(GRADIENT_PRESETS.aqi).toEqual(
+      [1, 2, 3, 4, 5, 6].map((i) => `--wx-aqi-${i}`),
+    );
+    expect(GRADIENT_PRESETS.uv).toEqual(
+      [1, 2, 3, 4, 5].map((i) => `--wx-uv-${i}`),
+    );
+  });
+});
+
+describe("blendStops (a continuous scale blends, it is not stepped)", () => {
+  it("shows each AQI colour unmixed at the middle of its band", () => {
+    const stops = blendStops("aqi");
+    expect(stops.map((s) => s.color)).toEqual(
+      [1, 2, 3, 4, 5, 6].map((i) => `var(--wx-aqi-${i})`),
+    );
+    expect(stops.map((s) => s.pct)).toEqual([
+      8.33, 25, 41.67, 58.33, 75, 91.67,
+    ]);
+  });
+
+  it("shows each UV colour unmixed at the middle of its band (0-14)", () => {
+    const stops = blendStops("uv");
+    expect(stops.map((s) => s.color)).toEqual(
+      [1, 2, 3, 4, 5].map((i) => `var(--wx-uv-${i})`),
+    );
+    expect(stops.map((s) => s.pct)).toEqual([10.71, 32.14, 50, 67.86, 89.29]);
+  });
+
+  it("spreads a plain ramp evenly from the first colour to the last", () => {
+    expect(blendStops("temperature").map((s) => s.pct)).toEqual([
+      0, 25, 50, 75, 100,
+    ]);
+    expect(blendStops(["--wx-uv-1", "--wx-uv-3"]).map((s) => s.pct)).toEqual([
+      0, 100,
+    ]);
+    // One colour is a flat bar, still a valid gradient.
+    expect(blendStops(["--wx-uv-1"]).map((s) => s.pct)).toEqual([0, 100]);
+  });
+
+  it("never puts two stops at one position (no hard seam), in any preset", () => {
+    for (const preset of ["uv", "aqi", "temperature"] as const) {
+      const pcts = blendStops(preset).map((s) => s.pct);
+      pcts.forEach((p, i) => {
+        if (i > 0) expect(p, preset).toBeGreaterThan(pcts[i - 1]);
+        expect(p).toBeGreaterThanOrEqual(0);
+        expect(p).toBeLessThanOrEqual(100);
+      });
+    }
+  });
+
+  it("paints one linear-gradient from the tokens, no literal colour", () => {
+    expect(blendGradient("aqi")).toBe(
+      "linear-gradient(to right, var(--wx-aqi-1) 8.33%, var(--wx-aqi-2) 25%, var(--wx-aqi-3) 41.67%, var(--wx-aqi-4) 58.33%, var(--wx-aqi-5) 75%, var(--wx-aqi-6) 91.67%)",
+    );
+    for (const preset of ["uv", "aqi", "temperature"] as const) {
+      expect(blendGradient(preset)).not.toMatch(/#[0-9a-fA-F]{3,8}|rgba?\(/);
+    }
+  });
+});
+
+describe("more helpers", () => {
   it("barHeights scales to the max (or series max)", () => {
     expect(barHeights([1, 2, 4])).toEqual([25, 50, 100]);
     expect(barHeights([1, 2, 4], 8)).toEqual([12.5, 25, 50]);

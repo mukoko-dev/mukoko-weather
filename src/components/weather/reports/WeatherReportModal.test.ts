@@ -57,12 +57,26 @@ describe("3-step wizard flow", () => {
     expect(source).toContain('"confirm"');
   });
 
-  it("calls AI clarification endpoint", () => {
-    expect(source).toContain("/api/py/reports/clarify");
+  it("asks the Worker for the follow-up questions, never /api/py", () => {
+    expect(source).toContain('postWorker(\n        "reports/clarify"');
+    expect(source).toContain("CLARIFY_TIMEOUT_MS");
+    expect(source).toContain("clarifyQuestions(await res.json())");
+    expect(source).not.toContain("/api/py");
   });
 
-  it("submits report to POST /api/py/reports", () => {
-    expect(source).toContain('fetch("/api/py/reports"');
+  it("carries on without questions when the request fails", () => {
+    // Clarification is optional: a refusal or a network error still moves the
+    // wizard to the next step.
+    expect(source).toMatch(/catch \{[^}]*optional/);
+    expect(source).toMatch(
+      /finally \{\s*setLoading\(false\);\s*setStep\("clarify"\)/,
+    );
+  });
+
+  it("submits the report to the Worker's POST /v1/reports and reads its refusal", () => {
+    expect(source).toContain("fetch(reportsSubmitUrl()");
+    expect(source).toContain("reportRefusal(body,");
+    expect(source).not.toContain('fetch("/api/py/reports"');
   });
 
   it("includes reportType and severity in submission", () => {

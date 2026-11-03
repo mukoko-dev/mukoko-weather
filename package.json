@@ -14,8 +14,6 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:python": "python -m pytest tests/py/ -v",
-    "test:all": "vitest run && python -m pytest tests/py/ -v",
     "check": "vp check",
     "fmt": "vp fmt"
   },
@@ -37,7 +35,7 @@
     "lucide-react": "^1.21.0",
     "maplibre-gl": "^6.12.0",
     "mongodb": "^7.3.0",
-    "next": "16.3.8",
+    "next": "16.4.3",
     "radix-ui": "^1.6.0",
     "react": "^19.2.7",
     "react-chartjs-2": "^5.3.1",
@@ -74,6 +72,9 @@
     "browserslist": "^4.28.7",
     "@next/eslint-plugin-next": {
       "fast-glob": "npm:tinyglobby@^0.2.17"
-    }
+    },
+    "vite": "8.3.5",
+    "zod": "4.6.7",
+    "fast-uri": "3.1.9"
   }
 }

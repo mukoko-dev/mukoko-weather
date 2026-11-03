@@ -38,7 +38,7 @@ describe("DraggableSection — client component", () => {
   it("toggles only drag props/handle/styling on the reordering flag, never the element type", () => {
     // The handle button is conditionally mounted, and styling is gated on the
     // flag, but the wrapper <div> and inner children wrapper are unconditional.
-    expect(source).toContain("{reordering && (");
+    expect(source).toContain("{reordering && !pinned && (");
     expect(source).toContain('className={reordering ? "relative" : undefined}');
   });
 });

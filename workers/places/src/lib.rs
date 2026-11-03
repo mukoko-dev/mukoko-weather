@@ -1,7 +1,7 @@
 //! `mukoko-weather-places`: locations and their weather history.
 //!
-//! Ported from `api/py/_locations.py` (`/api/py/locations`, `/search`, `/geo`)
-//! and `api/py/_history.py` (`/api/py/history`), with the same parameters and
+//! Ported from `api/py/_locations.py` (Python `/locations`, `/search`, `/geo`)
+//! and `api/py/_history.py` (Python `/history`), with the same parameters and
 //! response shapes. No route and no workers.dev address: `mukoko-weather-api`
 //! reaches it through the `PLACES` service binding and serves it as
 //! `/v1/locations`, `/v1/search`, `/v1/geo` and `/v1/history`.
@@ -11,6 +11,8 @@
 //! GET /search?q= | tag= | lat=&lon= | mode=tags              [&limit=1..50&skip=]
 //! GET /geo?lat=&lon=[&autoCreate=true]
 //! GET /history?location=&days=1..365
+//! POST /devices | GET, PATCH /devices/{id}   device preference profiles (MongoDB, via the bridge)
+//! POST, GET /reports | POST /reports/upvote  community weather reports (MongoDB, via the bridge)
 //! GET /health
 //! ```
 //!
@@ -24,7 +26,11 @@
 //! yet). History is read from D1 `place_daily`, written by
 //! `mukoko-weather-jobs`.
 
+mod bridge;
 mod budget;
+mod community;
+mod history;
+mod reports;
 mod sources;
 
 use serde_json::{json, Value};
@@ -32,10 +38,9 @@ use weather_core::budget::Action;
 use weather_core::geo::valid_coordinates;
 use weather_core::locations::{self, LocationDoc};
 use weather_core::resolve::{self, Naming, PointAnswer, SpotKind};
-use weather_edge::{error, json, now_ms, query_pairs};
+use weather_edge::{error, json, query_pairs};
 use worker::{event, Context, Env, Method, Request, Response, Result};
 
-const DB: &str = "WEATHER_DB";
 const GEOCODE_LIMITER: &str = "GEOCODE_LIMITER";
 
 struct Query(Vec<(String, String)>);
@@ -58,20 +63,35 @@ impl Query {
 }
 
 #[event(fetch)]
-pub async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
+pub async fn fetch(mut req: Request, env: Env, ctx: Context) -> Result<Response> {
+    if req.path().starts_with("/devices") {
+        return community::devices(&mut req, &env).await;
+    }
+    if req.path().starts_with("/reports") {
+        return reports::reports(&mut req, &env).await;
+    }
     if req.method() != Method::Get {
         return error(405, "method_not_allowed", "Only GET is served.");
     }
     let q = Query(query_pairs(&req)?);
     match req.path().as_str() {
-        "/health" => json(
-            200,
-            &json!({"service": "mukoko-weather-places", "status": "ok"}),
-        ),
+        "/health" => {
+            weather_edge::open_meteo::init(&env).await;
+            json(
+                200,
+                &json!({
+                    "service": "mukoko-weather-places",
+                    "status": "ok",
+                    // Whether the history archive uses the paid Open-Meteo
+                    // host (a key AND OPEN_METEO_ARCHIVE_LICENSED); never the key.
+                    "open_meteo_archive": weather_edge::open_meteo::archive_is_paid(),
+                }),
+            )
+        }
         "/locations" => locations_route(&env, &q).await,
         "/search" => search_route(&req, &env, &q).await,
         "/geo" => geo_route(&req, &env, &q).await,
-        "/history" => history_route(&env, &q).await,
+        "/history" => history_route(&req, &env, &ctx, &q).await,
         _ => error(404, "not_found", "No such route."),
     }
 }
@@ -96,8 +116,14 @@ fn page<T: Clone>(items: &[T], skip: usize, limit: usize) -> Vec<T> {
 }
 
 /// A location by slug: seed, then a `{name}--{geohash}` spot (named by an
-/// earlier reverse geocode when there is one), then the Nyuchi API.
-async fn find_location(env: &Env, slug: &str) -> std::result::Result<Option<LocationDoc>, ()> {
+/// earlier reverse geocode when there is one), then the Nyuchi API, then a
+/// community place from `places.placesGeo` (through the bridge). A slug that
+/// resolves nowhere is `Ok(None)`; a source that could not answer is `Err`, and
+/// a place another source holds still wins over it.
+pub(crate) async fn find_location(
+    env: &Env,
+    slug: &str,
+) -> std::result::Result<Option<LocationDoc>, ()> {
     if let Some(l) = locations::find_seed(slug) {
         return Ok(Some(l.clone()));
     }
@@ -108,7 +134,17 @@ async fn find_location(env: &Env, slug: &str) -> std::result::Result<Option<Loca
             .filter(|l| l.slug == slug);
         return Ok(Some(named.unwrap_or(spot)));
     }
-    sources::nyuchi_place(env, slug).await
+    let nyuchi = sources::nyuchi_place(env, slug).await;
+    if let Ok(Some(l)) = nyuchi {
+        return Ok(Some(l));
+    }
+    match sources::community_place(env, slug).await {
+        Ok(Some(l)) => Ok(Some(l)),
+        // Not a community place either: the Nyuchi answer (none, or its failure) stands.
+        Ok(None) => nyuchi,
+        // The bridge could not say, so "no such place" would be a guess.
+        Err(()) => Err(()),
+    }
 }
 
 async fn locations_route(env: &Env, q: &Query) -> Result<Response> {
@@ -296,43 +332,10 @@ async fn resolve_route(req: &Request, env: &Env, q: &Query) -> Result<Response> 
     }
 }
 
-/// A spot as `/geo` answers it: the document plus what a caller needs to
-/// know. `elevationApproximate`: nothing measured the height. `named: false`
-/// only for a DEFINITIVE "nothing here" (open water, polar ice, empty desert);
-/// `namingSkipped: true` when naming was skipped (over budget, the geocoder
-/// down, or the caller asked not to spend a lookup), which says nothing about
-/// the point and must not be read as `named: false`.
-fn spot_json(spot: &LocationDoc, kind: SpotKind) -> Value {
-    let mut doc = serde_json::to_value(spot).unwrap_or(Value::Null);
-    if let Some(obj) = doc.as_object_mut() {
-        obj.insert("elevationApproximate".into(), true.into());
-        match kind {
-            SpotKind::Named => {}
-            SpotKind::NothingHere => {
-                obj.insert("named".into(), false.into());
-            }
-            SpotKind::NamingSkipped => {
-                obj.insert("namingSkipped".into(), true.into());
-            }
-        }
-    }
-    doc
-}
-
-/// The `/geo` response for a [`PointAnswer`].
+/// The `/geo` response for a [`PointAnswer`] (the body, and which flags it
+/// carries, are `weather_core::resolve::point_body`, tested natively).
 fn point_response(answer: PointAnswer) -> Result<Response> {
-    let (nearest, is_new, synthesized, slug) = match answer {
-        PointAnswer::Seed(loc) => (json!(loc), false, false, loc.slug),
-        PointAnswer::Created(loc) => (json!(loc), true, false, loc.slug),
-        PointAnswer::Spot { spot, kind } => {
-            (spot_json(&spot, kind), false, true, spot.slug.clone())
-        }
-    };
-    let mut body = json!({"nearest": nearest, "redirectTo": format!("/{slug}"), "isNew": is_new});
-    if synthesized {
-        body["synthesized"] = true.into();
-    }
-    json(200, &body)
+    json(200, &resolve::point_body(answer))
 }
 
 /// Name a point for find-only: the cached ~1 km cell, else (when allowed and
@@ -438,55 +441,14 @@ async fn geo_route(req: &Request, env: &Env, q: &Query) -> Result<Response> {
     }
 }
 
-async fn history_route(env: &Env, q: &Query) -> Result<Response> {
-    let Some(location) = q.get("location") else {
-        return error(400, "invalid_request", "Missing location parameter");
+async fn history_route(req: &Request, env: &Env, ctx: &Context, q: &Query) -> Result<Response> {
+    let params = match history::validate(&q.0) {
+        Ok(p) => p,
+        Err(resp) => return resp,
     };
-    let days = match q.int("days", 30) {
-        Ok(d) if (1..=365).contains(&d) => d,
-        _ => return error(400, "invalid_request", "days must be between 1 and 365"),
+    let found = match params.location.as_deref() {
+        Some(slug) => Some(find_location(env, slug).await),
+        None => None,
     };
-    let slug = match find_location(env, location).await {
-        Ok(Some(loc)) => loc.slug,
-        Ok(None) => return error(404, "not_found", "Unknown location"),
-        Err(()) => return error(503, "places_unavailable", "Location service unavailable"),
-    };
-
-    let since = now_ms().saturating_sub(days as u64 * 86_400_000) as f64;
-    let rows = async {
-        env.d1(DB)?
-            .prepare(
-                "SELECT slug, recorded_at, current, daily, insights FROM place_daily \
-                 WHERE slug = ?1 AND recorded_at >= ?2 ORDER BY recorded_at DESC LIMIT 400",
-            )
-            .bind(&[slug.as_str().into(), since.into()])?
-            .all()
-            .await?
-            .results::<Value>()
-    }
-    .await;
-    let Ok(rows) = rows else {
-        return error(
-            502,
-            "history_unavailable",
-            "Failed to fetch weather history",
-        );
-    };
-    let data: Vec<Value> = rows
-        .iter()
-        .map(|r| {
-            let s = |k: &str| r.get(k).and_then(Value::as_str);
-            locations::history_record(
-                &slug,
-                r.get("recorded_at").and_then(Value::as_f64).unwrap_or(0.0) as i64,
-                s("current"),
-                s("daily"),
-                s("insights"),
-            )
-        })
-        .collect();
-    cached_json(
-        &json!({"location": slug, "days": days, "records": data.len(), "data": data}),
-        600,
-    )
+    history::serve(req, env, ctx, params, found).await
 }

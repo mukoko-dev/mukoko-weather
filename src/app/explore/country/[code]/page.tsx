@@ -1,10 +1,11 @@
 import { cache } from "react";
 import type { Metadata } from "next";
-import Link from "next/link";
+import { trail } from "@/components/layout/Breadcrumb";
+import { ExploreCard } from "@/components/explore/ExploreCard";
+import { CountPill } from "@/components/explore/CountPill";
+import { SITE_URL } from "@/lib/site";
 import { notFound } from "next/navigation";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
-import { Breadcrumb } from "@/components/layout/Breadcrumb";
+import { PageShell } from "@/components/layout/PageShell";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getCountryWithStats, getProvincesWithLocationCounts } from "@/lib/db";
 import { getFlagEmoji, COUNTRIES } from "@/lib/countries";
@@ -34,7 +35,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: `${flag} ${name} Weather | mukoko weather`,
     description: `Browse weather forecasts across provinces and cities in ${name}.`,
     alternates: {
-      canonical: `https://weather.mukoko.com/explore/country/${code.toLowerCase()}`,
+      canonical: `${SITE_URL}/explore/country/${code.toLowerCase()}`,
     },
   };
 }
@@ -59,67 +60,47 @@ export default async function CountryDetailPage({ params }: Props) {
   const flag = getFlagEmoji(upperCode);
 
   return (
-    <>
-      <Header />
-
-      <Breadcrumb
-        items={[
-          { label: "Home", href: "/" },
-          { label: "Explore", href: "/explore" },
-          { label: "Countries", href: "/explore/country" },
-          { label: country.name },
-        ]}
-      />
-
-      <main
-        id="main-content"
-        className="mx-auto max-w-5xl overflow-x-clip px-4 py-8 pb-[var(--mobile-nav-clearance)] sm:px-6 sm:pb-8 md:px-8"
-      >
-        <div className="flex items-center gap-3">
-          <span className="text-4xl" aria-hidden="true">
-            {flag}
-          </span>
-          <div>
-            <h1 className="text-2xl font-bold text-text-primary font-heading sm:text-3xl">
-              {country.name}
-            </h1>
-            <p className="text-base text-text-secondary">
-              {country.region} &bull; {country.locationCount} location
-              {country.locationCount !== 1 ? "s" : ""}
-            </p>
-          </div>
+    <PageShell
+      width="wide"
+      breadcrumb={trail(
+        { label: "Explore", href: "/explore" },
+        { label: "Countries", href: "/explore/country" },
+        { label: country.name },
+      )}
+    >
+      <div className="flex items-center gap-3">
+        <span className="text-4xl" aria-hidden="true">
+          {flag}
+        </span>
+        <div>
+          <h1 className="elephant">{country.name}</h1>
+          <p className="text-base text-text-secondary">
+            {country.region} &bull; {country.locationCount} location
+            {country.locationCount !== 1 ? "s" : ""}
+          </p>
         </div>
+      </div>
 
-        {provinces.filter((p) => p.locationCount > 0).length === 0 ? (
-          <EmptyState className="mt-8">
-            No locations available here yet.
-          </EmptyState>
-        ) : (
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {provinces.map((province) => {
-              if (province.locationCount === 0) return null;
-              return (
-                <Link
-                  key={province.slug}
-                  href={`/explore/country/${code.toLowerCase()}/${province.slug}`}
-                  className="group card-interactive rounded-[var(--radius-card)] bg-surface-card p-5 shadow-sm"
-                >
-                  <div className="flex items-start justify-between">
-                    <h2 className="giraffe group-hover:text-primary transition-colors">
-                      {province.name}
-                    </h2>
-                    <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-base font-medium text-primary shrink-0 ml-2">
-                      {province.locationCount}
-                    </span>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </main>
-
-      <Footer />
-    </>
+      {provinces.filter((p) => p.locationCount > 0).length === 0 ? (
+        <EmptyState className="mt-8">
+          No locations available here yet.
+        </EmptyState>
+      ) : (
+        <div className="herd-grid mt-8">
+          {provinces.map((province) => {
+            if (province.locationCount === 0) return null;
+            return (
+              <ExploreCard
+                key={province.slug}
+                href={`/explore/country/${code.toLowerCase()}/${province.slug}`}
+                as="h2"
+                title={province.name}
+                badge={<CountPill>{province.locationCount}</CountPill>}
+              />
+            );
+          })}
+        </div>
+      )}
+    </PageShell>
   );
 }

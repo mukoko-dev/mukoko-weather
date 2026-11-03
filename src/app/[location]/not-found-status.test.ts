@@ -67,26 +67,46 @@ describe("[location] layout — real 404 for unknown slugs", () => {
     await expect(render("some-place--ksy4dd7")).resolves.toBe("page");
   });
 
-  it("treats a resolver error as not found instead of crashing the route", async () => {
+  it("a resolver error never crashes the route: a shipped slug still renders (#414)", async () => {
     mockGetLocationFromDb.mockRejectedValue(new Error("mongo down"));
-    await expect(render("harare")).rejects.toBe(NOT_FOUND);
+    await expect(render("harare")).resolves.toBe("page");
+    await expect(render("nairobi-ke")).resolves.toBe("page");
+  });
+
+  it("a resolver error for a slug nobody ships is a real 404, not a crash", async () => {
+    mockGetLocationFromDb.mockRejectedValue(new Error("mongo down"));
+    await expect(render("zzzz-not-a-place")).rejects.toBe(NOT_FOUND);
+  });
+
+  it("a shipped slug renders even when the resolver says it is not found", async () => {
+    mockGetLocationFromDb.mockResolvedValue(null);
+    await expect(render("harare")).resolves.toBe("page");
   });
 
   it("checks the slug before rendering children, outside loading.tsx", () => {
     const layout = read("[location]/layout.tsx");
-    expect(layout).toMatch(/await loadLocation\(slug\)/);
+    expect(layout).toMatch(/resolveLocationParam\(params\)/);
     expect(layout).toMatch(/notFound\(\)/);
     expect(layout).not.toMatch(/<Suspense/);
   });
 });
 
 describe("shared per-request location loader", () => {
-  it("is the one loadLocation the layout and page both import", () => {
+  it("is the one loadLocation the layout and page both reach, via resolveLocationParam", () => {
     expect(read("[location]/layout.tsx")).toMatch(
-      /import \{ loadLocation \} from "\.\/load-location"/,
+      /import \{ resolveLocationParam \} from "@\/lib\/load-location"/,
     );
     const page = read("[location]/page.tsx");
-    expect(page).toMatch(/import \{ loadLocation \} from "\.\/load-location"/);
+    expect(page).toMatch(
+      /import \{ resolveLocationParam \} from "@\/lib\/load-location"/,
+    );
+    const shared = readFileSync(
+      resolve(appDir, "../lib/load-location.ts"),
+      "utf-8",
+    );
+    expect(shared).toMatch(
+      /import \{ loadLocation \} from "@\/app\/\[location\]\/load-location"/,
+    );
     // A second local cache() wrapper would not dedupe with the layout's.
     expect(page).not.toMatch(/const loadLocation = cache/);
   });
@@ -95,7 +115,7 @@ describe("shared per-request location loader", () => {
     for (const sub of ["atmosphere", "forecast", "map"]) {
       const src = read(`[location]/${sub}/page.tsx`);
       expect(src).toMatch(
-        /import \{ loadLocation \} from "\.\.\/load-location"/,
+        /import \{ resolveLocationParam \} from "@\/lib\/load-location"/,
       );
       expect(src).not.toMatch(/getLocationFromDb/);
     }
@@ -113,21 +133,23 @@ describe("no root loading boundary", () => {
     expect(existsSync(resolve(appDir, "loading.tsx"))).toBe(false);
   });
 
-  it("keeps the home page's loading scene inside its own Suspense", () => {
+  it("keeps the home page's loading skeleton inside its own Suspense", () => {
     const home = read("page.tsx");
-    expect(home).toMatch(/<Suspense fallback=\{<WeatherLoadingScene \/>\}>/);
+    expect(home).toMatch(/<Suspense fallback=\{<LocationSkeleton \/>\}>/);
     expect(home).toMatch(/<HomeContent \/>/);
   });
 });
 
 describe("not-found UI", () => {
-  it("root and [location] boundaries render the same LocationNotFound view", () => {
-    for (const file of ["not-found.tsx", "[location]/not-found.tsx"]) {
-      expect(read(file)).toMatch(
-        /import \{ LocationNotFound \} from "@\/components\/layout\/LocationNotFound"/,
-      );
-      expect(read(file)).toMatch(/export default LocationNotFound/);
-    }
+  it("the root boundary renders the LocationNotFound view, and [location] adds no second copy", () => {
+    expect(read("not-found.tsx")).toMatch(
+      /import \{ LocationNotFound \} from "@\/components\/layout\/LocationNotFound"/,
+    );
+    expect(read("not-found.tsx")).toMatch(/export default LocationNotFound/);
+    // A segment boundary would serialise the whole 404 view a second time into
+    // every place page's HTML (about 4 KB); the root one catches the same
+    // notFound() calls, and renders the same view.
+    expect(existsSync(resolve(appDir, "[location]/not-found.tsx"))).toBe(false);
   });
 
   it("keeps the existing copy and city suggestions", () => {

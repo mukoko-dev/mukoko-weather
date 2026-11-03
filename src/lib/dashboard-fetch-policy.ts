@@ -16,7 +16,7 @@ import type { MinutelyData, ModelForecast, WeatherData } from "@/lib/weather";
 export const MODEL_EXTRAS_ROOT_MARGIN = "1200px";
 
 /**
- * Whether to fetch /api/py/weather?models=… now.
+ * Whether to fetch /v1/weather?models=… now.
  *
  * - A picked forecast model (anything but the default blend) becomes the
  *   baseline for the whole page, so it is fetched at once.
@@ -34,12 +34,18 @@ export function shouldFetchModelExtras(
 /** Longest wait (ms) for an idle moment before the extras fetch starts. */
 export const MODEL_EXTRAS_IDLE_TIMEOUT_MS = 2500;
 
-/** What one /api/py/weather?models=… response contributes to the page. */
+/** What one /v1/weather?models=… response contributes to the page. */
 export interface ModelExtras {
   /** The place + model this was fetched for (modelExtrasKey). */
   key: string;
   /** The picked model's forecast, or null for the default blend. */
   baseline: WeatherData | null;
+  /**
+   * The live forecast the Worker answered with (never the seasonal
+   * estimate). When the server render could only send the seasonal estimate,
+   * this is what replaces it and clears the banner (#414).
+   */
+  live: WeatherData | null;
   minutely: MinutelyData | null;
   series: ModelForecast[];
   time: string[];
@@ -56,7 +62,14 @@ export function modelExtrasKey(
 
 /** Nothing loaded yet for `key`: the seed is the baseline, no extras. */
 export function emptyModelExtras(key: string): ModelExtras {
-  return { key, baseline: null, minutely: null, series: [], time: [] };
+  return {
+    key,
+    baseline: null,
+    live: null,
+    minutely: null,
+    series: [],
+    time: [],
+  };
 }
 
 /** Package a response for the place + model it was fetched for. */
@@ -64,10 +77,12 @@ export function modelExtrasFromResponse(
   key: string,
   data: Pick<WeatherData, "minutely" | "models" | "models_time">,
   baseline: WeatherData | null,
+  live: WeatherData | null = null,
 ): ModelExtras {
   return {
     key,
     baseline,
+    live,
     minutely: data.minutely ?? null,
     series: data.models ?? [],
     time: data.models_time ?? [],
@@ -85,4 +100,35 @@ export function selectModelExtras(
   key: string,
 ): ModelExtras {
   return loaded.key === key ? loaded : emptyModelExtras(key);
+}
+
+/**
+ * Which forecast the dashboard shows, and whether it is the seasonal
+ * estimate (#414).
+ *
+ * - A model the visitor picked and the Worker served is the baseline.
+ * - Otherwise, when the server could only send the seasonal estimate, the
+ *   first live forecast a later fetch brings replaces it, and the banner goes
+ *   away with it: the banner follows the data on screen, never "no baseline".
+ * - Otherwise the server's own payload.
+ *
+ * `override` is the payload that replaced the seed (frost, hero and charts are
+ * derived from it), or null while the seed is still on screen.
+ */
+export function resolveDisplayedWeather(
+  seed: WeatherData,
+  seedUsingFallback: boolean,
+  extras: ModelExtras,
+): {
+  weather: WeatherData;
+  override: WeatherData | null;
+  usingFallback: boolean;
+} {
+  const override =
+    extras.baseline ?? (seedUsingFallback ? extras.live : null) ?? null;
+  return {
+    weather: override ?? seed,
+    override,
+    usingFallback: override ? false : seedUsingFallback,
+  };
 }

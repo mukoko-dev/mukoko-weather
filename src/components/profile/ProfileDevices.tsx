@@ -27,6 +27,10 @@ import {
 } from "@/lib/device-display";
 import type { SignedInDevice } from "@/lib/device-sessions";
 import { Spinner } from "@/components/ui/spinner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { fetchJsonOrThrow } from "@/lib/fetch-json";
+import { ProfileGroup } from "@/components/profile/ProfileGroup";
 
 type Load =
   | { status: "loading" }
@@ -52,9 +56,10 @@ export function ProfileDevices() {
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch("/api/devices", { credentials: "same-origin" });
-      if (!res.ok) throw new Error("bad status");
-      const body = (await res.json()) as { devices?: SignedInDevice[] };
+      const body = await fetchJsonOrThrow<{ devices?: SignedInDevice[] }>(
+        "/api/devices",
+        { init: { credentials: "same-origin" } },
+      );
       setLoad({ status: "ready", devices: body.devices ?? [] });
     } catch {
       setLoad({ status: "error" });
@@ -87,11 +92,7 @@ export function ProfileDevices() {
   }
 
   return (
-    <section aria-labelledby="profile-devices" className="guineafowl">
-      <h2 id="profile-devices" className="guineafowl-heading">
-        Devices
-      </h2>
-
+    <ProfileGroup id="profile-devices" title="Devices">
       {load.status === "loading" && (
         <div
           role="status"
@@ -104,9 +105,11 @@ export function ProfileDevices() {
       )}
 
       {load.status === "error" && (
-        <p role="alert" className="px-4 py-4 text-sm text-text-secondary">
-          Your devices are not available right now. Try again shortly.
-        </p>
+        <Alert variant="severe" className="m-4">
+          <AlertDescription>
+            Your devices are not available right now. Try again shortly.
+          </AlertDescription>
+        </Alert>
       )}
 
       {load.status === "ready" && load.devices.length === 0 && (
@@ -143,9 +146,9 @@ export function ProfileDevices() {
                   <span className="block truncate font-medium text-text-primary">
                     {d.label}
                     {d.current && (
-                      <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                      <Badge className="ml-2 rounded-full px-2 text-xs">
                         This device{standalone ? " · app" : ""}
-                      </span>
+                      </Badge>
                     )}
                   </span>
                   <span className="text-xs text-text-secondary">
@@ -204,10 +207,10 @@ export function ProfileDevices() {
       )}
 
       {problem && (
-        <p role="alert" className="px-4 pb-4 text-sm text-severity-moderate">
-          {problem}
-        </p>
+        <Alert variant="warning" className="mx-4 mb-4">
+          <AlertDescription>{problem}</AlertDescription>
+        </Alert>
       )}
-    </section>
+    </ProfileGroup>
   );
 }

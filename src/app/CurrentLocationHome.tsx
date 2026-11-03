@@ -1,11 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import type { WeatherLocation } from "@/lib/locations";
-import type { WeatherData, FrostAlert, Season } from "@/lib/weather";
-import { checkFrostRisk, getDefaultSeason } from "@/lib/weather";
-import { fetchHomeWeather } from "@/lib/home-weather";
 import {
   CURRENT_LOCATION_EVENT,
   writeLastLocationCookie,
@@ -21,33 +17,42 @@ import {
   recordPermission,
 } from "@/lib/device-state";
 import { useDeviceHeartbeat } from "@/lib/use-device-heartbeat";
-import { countryDisplayName, reconcileCountry } from "@/lib/location-country";
-import { reconcileElevation } from "@/lib/location-elevation";
 import { trackEvent } from "@/lib/analytics";
-import { SearchIcon, NavigationIcon } from "@/lib/weather-icons";
-import { Spinner } from "@/components/ui/spinner";
 import { LocationPromptCard } from "@/components/weather/LocationPromptCard";
-import { WeatherDashboard } from "./[location]/WeatherDashboard";
+import { PlaceView, usePlaceStage } from "@/components/weather/PlaceStage";
+import { LocationSkeleton } from "@/components/weather/LocationSkeleton";
+import { defaultHomeLocation } from "@/lib/default-home-place";
 import type { AISummaryUser } from "@/components/weather/AISummary";
+import { seedOfPayload, type PlaceSeed } from "@/lib/place-controller";
+import {
+  catalogueLocation,
+  resolvePlaceSeed,
+  seedFor,
+} from "@/lib/place-resolve";
+import { recallPlace } from "@/lib/rxdb/weather-places";
+import { readStorage, writeStorage } from "@/lib/safe-storage";
+import {
+  LAST_HOME_PLACE_KEY,
+  readLastLocationFromCookieString,
+} from "@/lib/last-location";
 
 /**
- * Everything WeatherDashboard needs for one location — the server seeds this
- * from the lastLocation cookie / IP geo, and the client swaps it in place
- * when GPS resolves somewhere else. The page URL never changes.
+ * The place `/` starts on — the server seeds this from the lastLocation
+ * cookie / IP geo (a place and its season, never weather), and the client
+ * swaps it in place when GPS resolves somewhere else. The page URL never
+ * changes for that swap.
  */
-export interface HomeWeatherPayload {
-  location: WeatherLocation;
-  weather: WeatherData;
-  usingFallback: boolean;
-  frostAlert: FrostAlert | null;
-  season: Season;
-  countryName: string;
-}
+export type HomeSeed = PlaceSeed;
+
+// The slug last shown at `/` (kept in src/lib/last-location.ts, which the
+// offline page reads too): a visit with nothing seeded by the server paints
+// that place from the device (issue #269).
+export { LAST_HOME_PLACE_KEY };
 
 interface Props {
-  /** Server-seeded content (cookie-resolved or IP-geo location) — null when
+  /** Server-seeded place (cookie-resolved or IP-geo location) — null when
    *  the server had nothing to go on (true first visit, blocked cookies). */
-  initial: HomeWeatherPayload | null;
+  initial: HomeSeed | null;
   user: AISummaryUser | null;
 }
 
@@ -64,10 +69,6 @@ const GPS_MAX_AGE_MS = 300000;
 // visitor's actual spot isn't in the catalog yet — create it on demand so
 // "MY LOCATION" never labels a place several kilometres away.
 const FAR_NEAREST_KM = 3;
-
-function countryNameFor(code?: string): string {
-  return countryDisplayName(code);
-}
 
 /** Why the last attempt didn't land, in words a visitor can act on. */
 type PromptMessage = "denied" | "no-location" | "no-weather" | null;
@@ -96,9 +97,13 @@ const PROMPT_COPY: Record<Exclude<PromptMessage, null>, string> = {
  *   browsed locations; they are untouched by this flow.
  */
 export function CurrentLocationHome({ initial, user }: Props) {
-  const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
   const openMyWeather = useAppStore((s) => s.openMyWeather);
-  const [view, setView] = useState<HomeWeatherPayload | null>(initial);
+  // The place stage owns what is on screen: the server's place, then the copy
+  // stored on the device, then the visitor's own weather request. A GPS swap
+  // and a switch to a saved place are both "show this place" on the stage.
+  const stage = usePlaceStage(initial, true);
+  const { controller } = stage;
+  const { seed: shownSeed, view, isHome: onHomePlace } = stage.state;
   const [gpsState, setGpsState] = useState<GpsState>("idle");
   // True once GPS has confirmed (or produced) the location on screen — drives
   // the MY LOCATION eyebrow. Server-seeded content starts unconfirmed.
@@ -111,35 +116,84 @@ export function CurrentLocationHome({ initial, user }: Props) {
   // Signed-in devices report themselves to the account (hourly, quietly).
   useDeviceHeartbeat(Boolean(user));
 
-  // Build the full dashboard payload for a GPS-resolved location. Weather
-  // goes through our own API (same chain as the server render) — see
-  // fetchHomeWeather. Throws when no weather could be loaded at all.
-  async function swapTo(found: WeatherLocation, previousSlug?: string) {
-    const { weather, usingFallback } = await fetchHomeWeather(
-      found.lat,
-      found.lon,
-    );
-    // Fill a missing country from the forecast's time zone (any place on Earth).
-    const location = reconcileElevation(
-      reconcileCountry(found, weather.timezone),
-      weather.elevation,
-    );
-    setView({
-      location,
-      weather,
-      usingFallback,
-      frostAlert: checkFrostRisk(weather.hourly, weather.utc_offset_seconds),
-      season: getDefaultSeason(new Date(), location.lat),
-      countryName: countryNameFor(location.country),
-    });
+  // Remember which place `/` shows, for the next visit's device paint.
+  const shownHomeSlug = onHomePlace ? view?.location.slug : undefined;
+  useEffect(() => {
+    if (shownHomeSlug) writeStorage(LAST_HOME_PLACE_KEY, shownHomeSlug);
+  }, [shownHomeSlug]);
+
+  // Nothing seeded by the server (it ran past its deadline, or failed): paint
+  // the last place shown here from the device. The stage refreshes it in the
+  // background and swaps the fresh forecast in. With nothing on the device
+  // either, show Harare (or the remembered shipped place): the home page is
+  // never a chooser. Both are the stage's place, so a failed request shows
+  // the retry notice, never made-up numbers.
+  useEffect(() => {
+    if (initial) return;
+    let cancelled = false;
+    void (async () => {
+      const slug = readStorage(LAST_HOME_PLACE_KEY);
+      const stored = slug ? await recallPlace(slug) : null;
+      if (cancelled) return;
+      if (stored) {
+        await controller.showHome(seedOfPayload(stored.payload));
+        return;
+      }
+      const remembered = slug ? catalogueLocation(slug) : null;
+      await controller.showHome(seedFor(remembered ?? defaultHomeLocation()));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [initial, controller]);
+
+  // A copy of this page kept by the service worker was seeded from the
+  // lastLocation cookie as it was when the copy was stored. If the visitor
+  // has been to other places since, the cookie is newer: show that place, as
+  // a fresh server render would have. (Equal to the seed on a fresh render,
+  // so this does nothing there.) Never overrides a GPS result that landed
+  // first.
+  useEffect(() => {
+    if (!initial) return;
+    const slug = readLastLocationFromCookieString(document.cookie);
+    if (!slug || slug === initial.location.slug) return;
+    let cancelled = false;
+    void (async () => {
+      const stored = await recallPlace(slug);
+      const seed = stored
+        ? seedOfPayload(stored.payload)
+        : await resolvePlaceSeed(slug);
+      if (cancelled || !seed) return;
+      if (controller.homeSeed()?.location.slug !== initial.location.slug) {
+        return;
+      }
+      await controller.showHome(seed);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [initial, controller]);
+
+  /** The place `/` shows right now (My Location), if the stage has one. */
+  const homeSlug = () => controller.homeSeed()?.location.slug;
+
+  // Show a GPS-resolved location as My Location. The stage paints the stored
+  // copy at once and the visitor's own weather request fills the rest, so
+  // this resolves when the place is on screen, not when the forecast lands.
+  // `focus`: the visitor asked for it, so it also leaves another place.
+  async function swapTo(
+    found: WeatherLocation,
+    previousSlug: string | undefined,
+    focus: boolean,
+  ) {
+    await controller.showHome(seedFor(found), { focus });
     setGpsConfirmed(true);
-    setSelectedLocation(location.slug);
     // Refresh the cookie so the NEXT server render seeds this location.
-    writeLastLocationCookie(location.slug);
-    if (previousSlug && previousSlug !== location.slug) {
+    writeLastLocationCookie(found.slug);
+    if (previousSlug && previousSlug !== found.slug) {
       trackEvent("location_changed", {
         from: previousSlug,
-        to: location.slug,
+        to: found.slug,
         method: "geolocation",
       });
     }
@@ -191,7 +245,7 @@ export function CurrentLocationHome({ initial, user }: Props) {
       const usable =
         (precise.status === "success" || precise.status === "created") &&
         precise.location;
-      if (!usable && view) {
+      if (!usable && homeSlug()) {
         // Couldn't pin down the exact spot: keep what's on screen rather
         // than relabel a place kilometres away as MY LOCATION.
         return "no-location";
@@ -200,12 +254,12 @@ export function CurrentLocationHome({ initial, user }: Props) {
       resolved = chooseResolved(result, precise);
     }
 
-    if (resolved.slug === view?.location.slug) {
+    if (resolved.slug === homeSlug()) {
       setGpsConfirmed(true);
       return null;
     }
     try {
-      await swapTo(resolved, view?.location.slug);
+      await swapTo(resolved, homeSlug(), !opts.silent);
     } catch {
       return "no-weather";
     }
@@ -252,7 +306,7 @@ export function CurrentLocationHome({ initial, user }: Props) {
       if (disposed) return;
       setGpsState("idle");
       // A silent refresh that fails stays silent when weather is on screen.
-      if (problem && !view) setMessage(problem);
+      if (problem && !homeSlug()) setMessage(problem);
       setPromptReady(true);
     })();
 
@@ -268,22 +322,22 @@ export function CurrentLocationHome({ initial, user }: Props) {
     const onLocated = (event: Event) => {
       const location = (event as CustomEvent<WeatherLocation>).detail;
       if (!location?.slug) return;
-      if (location.slug === view?.location.slug) {
+      if (location.slug === homeSlug() && onHomePlace) {
         setGpsConfirmed(true);
         return;
       }
       setGpsState("detecting");
-      swapTo(location, view?.location.slug)
+      swapTo(location, homeSlug(), true)
         .then(() => setMessage(null))
         .catch(() => setMessage("no-weather"))
         .finally(() => setGpsState("idle"));
     };
     window.addEventListener(CURRENT_LOCATION_EVENT, onLocated);
     return () => window.removeEventListener(CURRENT_LOCATION_EVENT, onLocated);
-    // swapTo/view are read fresh on each event via the closure re-created
-    // when `view` changes.
+    // swapTo reads the stage fresh on each event via the closure re-created
+    // when the place on screen changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view]);
+  }, [shownSeed, onHomePlace]);
 
   // Explicit "Use my location" — the only path that can show the prompt.
   const handleGps = async () => {
@@ -310,25 +364,14 @@ export function CurrentLocationHome({ initial, user }: Props) {
     recordPermission("geolocation", "dismissed");
   };
 
-  // ── Current-location dashboard (server-seeded or GPS-swapped) ────────────
-  if (view) {
-    const showCard = promptReady && !gpsConfirmed && !dismissed;
+  // ── Current-location page (server-seeded or GPS-swapped) ─────────────────
+  if (shownSeed) {
+    const showCard = promptReady && !gpsConfirmed && !dismissed && onHomePlace;
     return (
-      <>
-        <WeatherDashboard
-          key={view.location.slug}
-          weather={view.weather}
-          location={view.location}
-          usingFallback={view.usingFallback}
-          frostAlert={view.frostAlert}
-          season={view.season}
-          countryName={view.countryName}
-          user={user}
-          isCurrentLocation={gpsConfirmed}
-        />
+      <PlaceView stage={stage} user={user} isCurrentLocation={gpsConfirmed}>
         {showCard && (
           <LocationPromptCard
-            placeName={view.location.name}
+            placeName={shownSeed.location.name}
             busy={gpsState === "detecting"}
             message={message ? PROMPT_COPY[message] : null}
             onUseLocation={handleGps}
@@ -336,71 +379,13 @@ export function CurrentLocationHome({ initial, user }: Props) {
             onSearch={() => openMyWeather()}
           />
         )}
-      </>
+      </PlaceView>
     );
   }
 
-  // ── Nothing to show — city chooser ────────────────────────────────────────
-  return (
-    <main
-      id="main-content"
-      className="flex min-h-[calc(100dvh-4rem)] flex-col items-center justify-center px-4 py-12"
-      aria-label="Location selection"
-    >
-      <div className="w-full max-w-sm space-y-8 text-center">
-        <section
-          aria-label="Find your location"
-          className="animate-fade-in space-y-6"
-        >
-          <div>
-            <h1 className="text-2xl font-semibold text-text-primary">
-              Find your weather
-            </h1>
-            <p className="mt-2 text-sm text-text-secondary">
-              Use your device location or search for any city worldwide.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-3">
-            <button
-              type="button"
-              onClick={handleGps}
-              disabled={gpsState === "detecting"}
-              aria-busy={gpsState === "detecting"}
-              className="kudu press-scale"
-            >
-              {gpsState === "detecting" ? (
-                <Spinner className="h-4 w-4 border-current border-t-transparent" />
-              ) : (
-                <NavigationIcon size={15} aria-hidden="true" />
-              )}
-              {gpsState === "detecting"
-                ? "Finding your location…"
-                : "Use my current location"}
-            </button>
-            <button
-              type="button"
-              onClick={() => openMyWeather()}
-              className="impala press-scale"
-            >
-              <SearchIcon size={15} aria-hidden="true" />
-              Search for a city
-            </button>
-            <Link
-              href="/explore"
-              className="dove underline-offset-4 hover:underline"
-            >
-              Browse all locations
-            </Link>
-          </div>
-
-          {message && (
-            <p className="text-sm text-severity-moderate" role="alert">
-              {PROMPT_COPY[message]}
-            </p>
-          )}
-        </section>
-      </div>
-    </main>
-  );
+  // ── Nothing seeded yet — the home page's own skeleton, never a chooser ────
+  // The server could not seed a place in time and the device holds none: Harare
+  // is loading from the Worker (see the effect above). Search and browse stay
+  // one tap away in My Weather and on the Locations list.
+  return <LocationSkeleton />;
 }

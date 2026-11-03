@@ -1,6 +1,4 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
-import { resolve } from "path";
 import {
   wmoToInsightHazards,
   checkFrostRisk,
@@ -329,9 +327,16 @@ describe("uvLevel", () => {
     expect(uvLevel(15).label).toBe("Extreme");
   });
 
-  it("all levels have a color class", () => {
+  it("classifies the raw value, without rounding (upper bounds inclusive at 2, 5, 7, 10)", () => {
+    expect(uvLevel(2).label).toBe("Low");
+    expect(uvLevel(2.4).label).toBe("Moderate");
+    expect(uvLevel(5.5).label).toBe("High");
+    expect(uvLevel(10.4).label).toBe("Extreme");
+  });
+
+  it("all levels have a WHO swatch class", () => {
     for (const idx of [0, 3, 6, 8, 11]) {
-      expect(uvLevel(idx).color).toMatch(/^text-/);
+      expect(uvLevel(idx).swatch).toMatch(/^bg-wx-uv-/);
     }
   });
 });
@@ -715,22 +720,5 @@ describe("windDirection points option", () => {
     expect(eight(270)).toBe("W");
     expect(eight(315)).toBe("NW");
     expect(eight(360)).toBe("N");
-  });
-});
-
-describe("WMO label parity with api/py/_wmo.py", () => {
-  it("WMO_LABELS matches weatherCodeToInfo for every shipped code", () => {
-    const py = readFileSync(
-      resolve(__dirname, "../../api/py/_wmo.py"),
-      "utf-8",
-    );
-    const pairs = [...py.matchAll(/^\s+(\d+): "([^"]+)",$/gm)].map((m) => [
-      Number(m[1]),
-      m[2],
-    ]);
-    expect(pairs.length).toBeGreaterThan(20);
-    for (const [code, label] of pairs) {
-      expect(weatherCodeToInfo(code as number).label).toBe(label);
-    }
   });
 });

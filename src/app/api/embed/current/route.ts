@@ -7,17 +7,17 @@
  *   (none)             — derive location from the request IP via Vercel's
  *                        `x-vercel-ip-latitude` / `x-vercel-ip-longitude` headers
  *
- * This route is a thin public shaper: it reads IP-geo headers, calls the
- * EXISTING internal `/api/py/geo` (name lookup) and `/api/py/weather`
- * (weather by lat/lon) endpoints, and returns a compact embed-friendly JSON
- * payload (current conditions + up to 7 daily entries for the forecast cards).
+ * This route is a thin public shaper: it reads IP-geo headers, calls the Rust
+ * weather Worker (`weather-api.mukoko.com`): `/v1/locations` and `/v1/geo`
+ * (name lookup) and `/v1/weather` (weather by lat/lon), and returns a compact
+ * embed-friendly JSON payload (current conditions + up to 7 daily entries for
+ * the forecast cards).
  *
  * It is a PUBLIC embed endpoint: permissive CORS, resilient fallbacks, and
  * cache-control tuned so IP-derived responses are never shared-cached.
  */
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { SITE_URL } from "@/lib/site";
 import {
   DEFAULT_SITE,
   shapeEmbedResponse,
@@ -26,21 +26,14 @@ import {
   type WeatherResponse,
 } from "./shape";
 import { fetchJson } from "@/lib/fetch-json";
+import { workerUrl } from "@/lib/weather-api";
+import { LOCATION_SLUG_RE } from "@/lib/location-gate";
 
 export const runtime = "edge";
 
 // Harare — used as a last-resort default when no location can be derived.
 const DEFAULT_LAT = -17.83;
 const DEFAULT_LON = 31.05;
-
-// Trusted base URL for internal API calls. A FIXED value — never derived from
-// the incoming request (`req.url`/Host is attacker-controllable, which would
-// make the internal fetches an SSRF sink). In production this is the canonical
-// public domain (reachable from the Edge runtime; VERCEL_URL is a per-deploy
-// host that isn't reliably reachable here). Falls back to localhost in dev.
-const INTERNAL_BASE =
-  process.env.NEXT_PUBLIC_APP_URL ??
-  (process.env.NODE_ENV === "production" ? SITE_URL : "http://localhost:3000");
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -75,16 +68,16 @@ export async function GET(req: NextRequest): Promise<Response> {
     lat = qsLat;
     lon = qsLon;
     source = "coords";
-  } else if (slug && /^[a-z0-9-]{1,80}$/.test(slug)) {
-    // 2. Known location slug — resolve to coordinates via internal locations API.
-    // `/api/py/locations?slug=` returns a `{ location: {…} }` WRAPPER (not the
+  } else if (slug && LOCATION_SLUG_RE.test(slug)) {
+    // 2. Known location slug — resolve to coordinates via the Worker's locations API.
+    // `/v1/locations?slug=` returns a `{ location: {…} }` WRAPPER (not the
     // bare doc), so unwrap it — reading `loc.lat` directly yields undefined → NaN
     // → a silent Harare fallback for every non-Harare embed.
     const loc = await fetchJson<
       | Record<string, unknown>
       | Record<string, unknown>[]
       | { location?: Record<string, unknown> }
-    >(`${INTERNAL_BASE}/api/py/locations?slug=${encodeURIComponent(slug)}`);
+    >(workerUrl("locations", `slug=${encodeURIComponent(slug)}`));
     const doc = Array.isArray(loc)
       ? loc[0]
       : ((loc as { location?: Record<string, unknown> } | null)?.location ??
@@ -125,13 +118,13 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   // Fetch weather (resilient — the internal route never fails, but guard anyway).
   const weather = await fetchJson<WeatherResponse>(
-    `${INTERNAL_BASE}/api/py/weather?lat=${lat}&lon=${lon}`,
+    workerUrl("weather", `lat=${lat}&lon=${lon}`),
   );
 
   // Resolve a display name if we don't already have one (coords / ip paths).
   if (!meta) {
     const geo = await fetchJson<{ nearest?: Record<string, unknown> }>(
-      `${INTERNAL_BASE}/api/py/geo?lat=${lat}&lon=${lon}`,
+      workerUrl("geo", `lat=${lat}&lon=${lon}`),
     );
     const near = geo?.nearest;
     meta = {

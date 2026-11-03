@@ -21,6 +21,7 @@ import {
   moonPhase,
 } from "./derived-insights";
 import { openMeteoForecastUrl, openMeteoHeaders } from "./open-meteo-endpoint";
+import { UV_SCALE, uvBand } from "./weather-scales";
 
 export interface CurrentWeather {
   /** Observation time (Open-Meteo `current.time`, location wall clock). */
@@ -75,6 +76,8 @@ export interface DailyWeather {
   precipitation_probability_max: number[];
   wind_speed_10m_max: number[];
   wind_gusts_10m_max: number[];
+  /** Dominant wind direction (degrees); stored history days carry it. */
+  wind_direction_10m_dominant?: (number | null)[];
   /** FAO reference evapotranspiration (mm/day) — TS direct path only. */
   et0_fao_evapotranspiration?: (number | null)[];
 }
@@ -85,7 +88,7 @@ export interface WeatherData {
   daily: DailyWeather;
   current_units: Record<string, string>;
   /**
-   * Activity-specific insights. `/api/py/weather` always derives them from the
+   * Activity-specific insights. `/v1/weather` always derives them from the
    * model baseline (issue #246) and merges Tomorrow.io enrichment on top when
    * its budget allows; the TS direct-Open-Meteo path uses
    * `synthesizeOpenMeteoInsights`.
@@ -101,7 +104,7 @@ export interface WeatherData {
   models_time?: string[];
   /**
    * The LOCATION's UTC offset in seconds (Open-Meteo `utc_offset_seconds`).
-   * `/api/py/weather` always sets it (provider value, else a longitude
+   * `/v1/weather` always sets it (provider value, else a longitude
    * estimate). Every "current hour" and hour label must read the forecast in
    * this offset — see `src/lib/location-time.ts` — never the viewer's clock.
    */
@@ -128,7 +131,7 @@ export interface WeatherData {
  *
  * `best_match` is the stored default preference and now means the server's
  * Africa-weighted multi-model BLEND (ECMWF IFS + AIFS heaviest, then GFS,
- * ICON, GEM, ARPEGE — `api/py/_model_blend.py`). Picking any other model
+ * ICON, GEM, ARPEGE — `weather_core::blend`). Picking any other model
  * makes that single model the baseline.
  */
 export enum ForecastModel {
@@ -249,7 +252,7 @@ export function wmoToInsightHazards(code: number): {
 /**
  * Derive the full WeatherInsights set from model data — no Tomorrow.io.
  *
- * Mirror of `derive_insights` in `api/py/_insights.py` (issue #246): wind,
+ * Mirror of `derive_insights` in `weather_core::insights` (issue #246): wind,
  * visibility (metres → km, the unit the suitability thresholds use), dew
  * point (model value or Magnus), heat index, UV, precipitation type, a
  * thunderstorm proxy (WMO codes + CAPE/lifted index over the next 6 h,
@@ -696,12 +699,18 @@ export function windDirection(
   return COMPASS_16[Math.round(degrees / 22.5) % 16];
 }
 
-export function uvLevel(index: number): { label: string; color: string } {
-  if (index <= 2) return { label: "Low", color: "text-success" };
-  if (index <= 5) return { label: "Moderate", color: "text-warmth" };
-  if (index <= 7) return { label: "High", color: "text-accent" };
-  if (index <= 10) return { label: "Very High", color: "text-earth" };
-  return { label: "Extreme", color: "text-primary" };
+/**
+ * WHO Global Solar UV Index category for an index (reported as a whole number:
+ * 0-2 Low, 3-5 Moderate, 6-7 High, 8-10 Very High, 11+ Extreme). `swatch` is
+ * the WHO colour as a static fill class (weather-scales.ts); colour never
+ * stands alone, so callers print the label too.
+ */
+export function uvLevel(index: number): { label: string; swatch: string } {
+  const band = uvBand(index) ?? UV_SCALE.bands[0];
+  return {
+    label: band.name === "Very high" ? "Very High" : band.name,
+    swatch: band.bg,
+  };
 }
 
 /**

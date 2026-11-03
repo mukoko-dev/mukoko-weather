@@ -235,8 +235,9 @@ Rules:
     active: true,
     order: 6,
   },
-  // Agriculture (issue #265). The deterministic farm data is computed in
-  // api/py/_agriculture.py; these prompts only ask the model to explain it.
+  // Agriculture (issue #265). The deterministic farm data comes from the
+  // forecast Worker's /agriculture; these prompts only ask the model to
+  // explain it.
   {
     promptKey: "system:agriculture_snapshot",
     description:

@@ -1,11 +1,11 @@
-import { loadLocation } from "../load-location";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { checkFrostRisk, createFallbackWeather } from "@/lib/weather";
-import { getWeatherForLocation, getSeasonForDate } from "@/lib/db";
-import { safeJsonLd } from "@/lib/json-ld";
+import { resolveLocationParam } from "@/lib/load-location";
+import { loadLocationPayload } from "@/lib/location-payload";
+import { breadcrumbJsonLd } from "@/lib/json-ld";
+import { buildPageMetadata } from "@/lib/metadata";
+import { JsonLd } from "@/components/layout/JsonLd";
 import { AtmosphereDashboard } from "./AtmosphereDashboard";
-import { SITE_URL } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata({
@@ -13,16 +13,13 @@ export async function generateMetadata({
 }: {
   params: Promise<{ location: string }>;
 }): Promise<Metadata> {
-  const { location: slug } = await params;
-  const loc = await loadLocation(slug);
-  if (!loc) return { title: "Location not found" };
+  const loc = await resolveLocationParam(params);
+  if (!loc) return buildPageMetadata({ notFound: true });
 
-  const title = `${loc.name} Atmospheric Conditions — Humidity, Wind, UV & Pressure`;
-  const description = `24-hour atmospheric trends for ${loc.name}, ${loc.province}. Detailed charts for humidity, cloud cover, wind speed, barometric pressure, and UV index from mukoko weather.`;
-
-  return {
-    title,
-    description,
+  return buildPageMetadata({
+    title: `${loc.name} Atmospheric Conditions — Humidity, Wind, UV & Pressure`,
+    description: `24-hour atmospheric trends for ${loc.name}, ${loc.province}. Detailed charts for humidity, cloud cover, wind speed, barometric pressure, and UV index from mukoko weather.`,
+    path: `/${loc.slug}/atmosphere`,
     keywords: [
       `${loc.name} humidity`,
       `${loc.name} wind speed`,
@@ -33,18 +30,11 @@ export async function generateMetadata({
       "weather intelligence",
       "mukoko weather",
     ],
-    alternates: {
-      canonical: `${SITE_URL}/${loc.slug}/atmosphere`,
-    },
-    openGraph: {
+    og: {
       title: `${loc.name} Atmosphere | mukoko weather`,
       description: `24-hour atmospheric trends for ${loc.name}, ${loc.province} — humidity, wind, pressure, UV index.`,
-      url: `${SITE_URL}/${loc.slug}/atmosphere`,
-      type: "website",
-      locale: "en",
-      siteName: "mukoko weather",
     },
-  };
+  });
 }
 
 export default async function AtmospherePage({
@@ -52,71 +42,20 @@ export default async function AtmospherePage({
 }: {
   params: Promise<{ location: string }>;
 }) {
-  const { location: slug } = await params;
-  const location = await loadLocation(slug);
+  const location = await resolveLocationParam(params);
   if (!location) notFound();
 
-  let weather;
-  let weatherSource: string;
-  try {
-    const result = await getWeatherForLocation(
-      location.slug,
-      location.lat,
-      location.lon,
-      location.elevation,
-    );
-    weather = result.data;
-    weatherSource = result.source;
-  } catch {
-    weather = createFallbackWeather(
-      location.lat,
-      location.lon,
-      location.elevation,
-    );
-    weatherSource = "fallback";
-  }
+  const { weather, usingFallback, frostAlert, season } =
+    await loadLocationPayload(location);
 
-  const usingFallback = weatherSource === "fallback";
-  const frostAlert = usingFallback
-    ? null
-    : checkFrostRisk(weather.hourly, weather.utc_offset_seconds);
-  const season = await getSeasonForDate(
-    new Date(),
-    location.country ?? "",
-    location.lat ?? 0,
-  );
-
-  const breadcrumbSchema = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      {
-        "@type": "ListItem",
-        position: 1,
-        name: "mukoko weather",
-        item: SITE_URL,
-      },
-      {
-        "@type": "ListItem",
-        position: 2,
-        name: `${location.name} Weather`,
-        item: `${SITE_URL}/${location.slug}`,
-      },
-      {
-        "@type": "ListItem",
-        position: 3,
-        name: "Atmosphere",
-        item: `${SITE_URL}/${location.slug}/atmosphere`,
-      },
-    ],
-  };
+  const breadcrumbSchema = breadcrumbJsonLd([
+    { name: `${location.name} Weather`, path: `/${location.slug}` },
+    { name: "Atmosphere", path: `/${location.slug}/atmosphere` },
+  ]);
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: safeJsonLd([breadcrumbSchema]) }}
-      />
+      <JsonLd data={[breadcrumbSchema]} />
       <AtmosphereDashboard
         weather={weather}
         location={location}

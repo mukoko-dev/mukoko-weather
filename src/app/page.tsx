@@ -1,42 +1,24 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
-import {
-  CurrentLocationHome,
-  type HomeWeatherPayload,
-} from "./CurrentLocationHome";
-import {
-  getLocationFromDb,
-  getWeatherForLocation,
-  getCountryByCode,
-  getSeasonForDate,
-} from "@/lib/db";
+import { CurrentLocationHome } from "./CurrentLocationHome";
+import { getLocationFromDb, getCountryByCode } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { checkFrostRisk, createFallbackWeather } from "@/lib/weather";
+import { readLastLocation } from "@/lib/last-location";
+import { seasonWithinBudget } from "@/lib/place-seed-server";
+import type { PlaceSeed } from "@/lib/place-controller";
 import type { WeatherLocation } from "@/lib/locations";
 import { ipFallbackLocation } from "@/lib/home-location";
-import { countryDisplayName, reconcileCountry } from "@/lib/location-country";
-import { reconcileElevation } from "@/lib/location-elevation";
+import { defaultHomeLocation } from "@/lib/default-home-place";
+import { countryDisplayName } from "@/lib/location-country";
 import { SITE_URL } from "@/lib/site";
 import { fetchPlaces } from "@/lib/weather-api";
 import { usableIpGeo } from "@/lib/location-choice";
-import { WeatherLoadingScene } from "@/components/weather/WeatherLoadingScene";
+import { LocationSkeleton } from "@/components/weather/LocationSkeleton";
 
-// Stable base for the server-to-self geo lookup. The per-deployment Vercel
-// hostname env var points at a protected preview origin that 401s the self-fetch
-// (Deployment Protection) — the failure is swallowed and onboarding silently
-// degrades. Prefer the production hostname (like the embed route's fixed base) so
-// the lookup targets a stable, publicly reachable origin; fall back to localhost
-// only in development.
-const APP_URL =
-  process.env.NEXT_PUBLIC_APP_URL ??
-  (process.env.NODE_ENV === "production" ? SITE_URL : "http://localhost:3000");
-
-// Bound the server-to-self geo fetch so a hung or protected upstream can't stall
-// the home render — the onboarding chooser is a fine fallback.
+// Bound the Worker geo fetch so a hung or protected upstream can't stall
+// the home render — Harare, a shipped seed, is the fallback.
 const GEO_FETCH_TIMEOUT_MS = 2500;
-
-const SLUG_RE = /^[a-z0-9-]{1,80}$/;
 
 /**
  * The home page IS the current-location weather page (the Apple Weather
@@ -45,7 +27,7 @@ const SLUG_RE = /^[a-z0-9-]{1,80}$/;
 export const metadata: Metadata = {
   title: "My Location Weather — Live Forecast & Conditions",
   description:
-    "Live weather for your current location — real-time conditions, hourly and 7-day forecasts, frost alerts, and AI-powered insights from mukoko weather.",
+    "Live weather for your current location — real-time conditions, hourly and 7-day forecasts, frost alerts, and local insights from mukoko weather.",
   alternates: {
     canonical: `${SITE_URL}/`,
   },
@@ -58,12 +40,14 @@ export const dynamic = "force-dynamic";
  * stays silent (no slug); explicit `/{slug}` URLs remain the shareable/SEO
  * surface for saved and browsed locations.
  *
- * Server side seeds the dashboard with the best location it can know without
- * device GPS (which only exists in the browser):
- * 1. lastLocation cookie that resolves to a real location → full
- *    server-rendered dashboard for it, instantly.
+ * Server side seeds the page with the best location it can know without
+ * device GPS (which only exists in the browser). It sends the shell and the
+ * place, never weather:
+ * 1. lastLocation cookie that resolves to a real location → that place.
  * 2. Else IP geo (Vercel's x-vercel-ip-latitude/longitude headers, find-only).
- * 3. Else nothing — the client shows the GPS/city chooser.
+ * 3. Else Harare, a shipped seed that renders without any lookup. Never a page
+ *    for choosing cities (#414): search and browse are one tap away in My
+ *    Weather and on the Locations list.
  *
  * CurrentLocationHome then refreshes via GPS on mount and swaps the dashboard
  * IN PLACE when the visitor is somewhere else — no redirect exists for a
@@ -75,26 +59,75 @@ export default function Home() {
   // Suspense, so the 200 shell was flushed before any page could call
   // notFound() or send a redirect status: unknown slugs answered 200
   // "Location not found" and /profile a 200 meta-refresh (#237). Scoping the
-  // boundary to `/` keeps the home loading scene and lets every other route
+  // boundary to `/` keeps the home loading skeleton and lets every other route
   // send its real status.
   return (
-    <Suspense fallback={<WeatherLoadingScene />}>
+    <Suspense fallback={<LocationSkeleton />}>
       <HomeContent />
     </Suspense>
   );
 }
 
+/**
+ * Longest the server render may spend resolving the seeded location. Past it
+ * the page streams the client home (which paints the last place from the
+ * device, else shows Harare) instead of holding the first paint: an installed
+ * iOS app sat on its loading screen for 30 s behind a slow upstream.
+ */
+const HOME_SEED_DEADLINE_MS = 3_500;
+
+const SEED_DEADLINE = Symbol("seed-deadline");
+
+/** `work`, or SEED_DEADLINE once `ms` has passed. */
+function withinDeadline<T>(
+  work: Promise<T>,
+  ms: number,
+): Promise<T | typeof SEED_DEADLINE> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve(SEED_DEADLINE), ms);
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 async function HomeContent() {
+  const built = await withinDeadline(buildHome(), HOME_SEED_DEADLINE_MS);
+  if (built !== SEED_DEADLINE) return built;
+  const user = await withinDeadline(
+    getCurrentUser().catch(() => null),
+    500,
+  );
+  return (
+    <CurrentLocationHome
+      initial={null}
+      user={
+        user && user !== SEED_DEADLINE
+          ? { id: user.id, email: user.email ?? null }
+          : null
+      }
+    />
+  );
+}
+
+async function buildHome() {
   // Only trust a cookie whose slug both looks valid AND actually resolves to
   // a real location. A stale cookie pointing at a deleted/never-existent slug
   // would otherwise strand the visitor on a broken page every time — falling
   // through to fresh detection breaks that loop.
   const cookieStore = await cookies();
-  const lastLocation = cookieStore.get("lastLocation")?.value;
+  const lastLocation = readLastLocation(cookieStore);
 
   let detectedLocation: WeatherLocation | null = null;
 
-  if (lastLocation && SLUG_RE.test(lastLocation)) {
+  if (lastLocation) {
     const resolved = await getLocationFromDb(lastLocation).catch(() => null);
     if (resolved) detectedLocation = resolved;
     // Unresolvable cookie — ignore it and continue to IP-geo detection below.
@@ -126,9 +159,6 @@ async function HomeContent() {
           // names an IP position better anyway.
           `lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}&autoCreate=false&noName=1`,
           { cache: "no-store", signal: controller.signal },
-          process.env,
-          fetch,
-          APP_URL,
         );
         if (res.ok) {
           const data = await res.json();
@@ -140,7 +170,7 @@ async function HomeContent() {
         }
       } catch {
         // Geo lookup unavailable or timed out — the seed fallback below, then
-        // the client chooser, take over.
+        // Harare, take over.
       } finally {
         clearTimeout(timeout);
       }
@@ -161,15 +191,15 @@ async function HomeContent() {
     }
   }
 
+  // Nothing resolved (no cookie, no usable IP position): Harare, a shipped
+  // seed. It renders without any lookup, so the home page is never a chooser.
+  // The GPS refresh and the location card in CurrentLocationHome are unchanged.
+  if (!detectedLocation) detectedLocation = defaultHomeLocation();
+
   const currentUser = await getCurrentUser().catch(() => null);
   const aiUser = currentUser
     ? { id: currentUser.id, email: currentUser.email ?? null }
     : null;
-
-  // No server-side location at all — the client GPS/city-chooser takes over.
-  if (!detectedLocation) {
-    return <CurrentLocationHome initial={null} user={aiUser} />;
-  }
 
   // Strip MongoDB _id (ObjectId with .toJSON()) before crossing to the client.
   const { _id: _removed, ...seededLocation } =
@@ -177,48 +207,20 @@ async function HomeContent() {
       _id?: unknown;
     };
 
-  // Same double-caught weather fetch as the /{slug} page — the home shell
-  // ALWAYS renders, worst case with seasonal estimates.
-  let weather;
-  let weatherSource: string;
-  try {
-    const result = await getWeatherForLocation(
-      seededLocation.slug,
-      seededLocation.lat,
-      seededLocation.lon,
-      seededLocation.elevation,
-    );
-    weather = result.data;
-    weatherSource = result.source;
-  } catch {
-    weather = createFallbackWeather(
-      seededLocation.lat,
-      seededLocation.lon,
-      seededLocation.elevation,
-    );
-    weatherSource = "fallback";
-  }
-  const usingFallback = weatherSource === "fallback";
-  const location = reconcileElevation(
-    reconcileCountry(seededLocation, weather.timezone),
-    weather.elevation,
-  );
-
+  // The place and its season, no weather: this page never calls the weather
+  // Worker or Open-Meteo (issue #414). The visitor's own browser fetches the
+  // forecast, painted over the copy stored on the device.
+  const location = seededLocation;
   const countryCode = (location.country ?? "").toUpperCase();
   const [countryDoc, season] = await Promise.all([
     countryCode
       ? getCountryByCode(countryCode).catch(() => null)
       : Promise.resolve(null),
-    getSeasonForDate(new Date(), location.country ?? "", location.lat ?? 0),
+    seasonWithinBudget(countryCode, location.lat ?? 0),
   ]);
 
-  const initial: HomeWeatherPayload = {
+  const initial: PlaceSeed = {
     location,
-    weather,
-    usingFallback,
-    frostAlert: usingFallback
-      ? null
-      : checkFrostRisk(weather.hourly, weather.utc_offset_seconds),
     season,
     countryName: countryDoc?.name ?? countryDisplayName(countryCode),
   };

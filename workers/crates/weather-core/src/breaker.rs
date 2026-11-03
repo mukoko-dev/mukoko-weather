@@ -36,6 +36,44 @@ pub const OPEN_METEO: Config = Config {
     window_ms: 5 * 60_000,
 };
 
+/// NASA POWER (history): the Python backend's `nasa_power_breaker`, 3
+/// failures in 5 min open it for 2 min. Only 5xx, 429, transport errors and
+/// timeouts count.
+pub const NASA_POWER: Config = DEFAULT;
+/// ISRIC SoilGrids: 3 failures in 10 min open it for 15 min.
+pub const SOILGRIDS: Config = Config {
+    failure_threshold: 3,
+    cooldown_ms: 15 * 60_000,
+    window_ms: 10 * 60_000,
+};
+
+/// The Python default for every other provider (NOAA CPC, NEA data.gov.sg,
+/// the Aviation Weather Center): 3 failures in 5 min open it for 2 min.
+pub const DEFAULT: Config = Config {
+    failure_threshold: 3,
+    cooldown_ms: 2 * 60_000,
+    window_ms: 5 * 60_000,
+};
+
+/// MET Norway Locationforecast (the failover forecast, `met_no`): 3 failures
+/// in 5 min open it for 5 min. A 429 or 403 opens it at once
+/// ([`Breaker::trip`]): MET Norway's terms say to stop traffic immediately when
+/// it throttles, and a service with no SLA gets a longer rest than the default.
+pub const MET_NO: Config = Config {
+    failure_threshold: 3,
+    cooldown_ms: 5 * 60_000,
+    window_ms: 5 * 60_000,
+};
+
+/// The external station feeds (WIS2, SAAOPA): 3 failures in 30 min open it for
+/// 30 min. The feeds are polled every 10 to 60 minutes, so the default's
+/// 2-minute cooldown would never hold a poll back.
+pub const EXTERNAL_FEED: Config = Config {
+    failure_threshold: 3,
+    cooldown_ms: 30 * 60_000,
+    window_ms: 30 * 60_000,
+};
+
 #[derive(Debug, Clone)]
 pub struct Breaker {
     config: Config,
@@ -79,6 +117,15 @@ impl Breaker {
 
     pub fn record_success(&mut self) {
         self.state = State::Closed;
+        self.failures.clear();
+    }
+
+    /// Open the circuit now, whatever the failure count: for a provider that
+    /// told us to stop (HTTP 429, or a 403 for a blocked client). It rests for
+    /// the full cooldown, then one trial call goes through as usual.
+    pub fn trip(&mut self, now_ms: u64) {
+        self.state = State::Open;
+        self.opened_at = now_ms;
         self.failures.clear();
     }
 
@@ -128,6 +175,32 @@ mod tests {
         assert!(b.allow(200_000));
         b.record_failure(200_000);
         assert!(!b.allow(200_001));
+    }
+
+    #[test]
+    fn a_trip_opens_at_once_and_rests_for_the_cooldown() {
+        let mut b = Breaker::new(MET_NO);
+        assert!(b.allow(0));
+        // One throttle answer is enough: no count to reach.
+        b.trip(1_000);
+        assert_eq!(b.state(1_001), State::Open);
+        assert!(!b.allow(1_001));
+        assert!(!b.allow(1_000 + 5 * 60_000 - 1));
+        // After the 5-minute cooldown one trial call goes through.
+        assert!(b.allow(1_000 + 5 * 60_000));
+        b.record_success();
+        assert_eq!(b.state(400_000), State::Closed);
+    }
+
+    #[test]
+    fn a_trip_forgets_earlier_failures_and_a_failed_trial_reopens() {
+        let mut b = Breaker::new(MET_NO);
+        b.record_failure(0);
+        b.record_failure(1);
+        b.trip(2);
+        assert!(b.allow(2 + 5 * 60_000));
+        b.record_failure(2 + 5 * 60_000);
+        assert!(!b.allow(2 + 5 * 60_000 + 1));
     }
 
     #[test]

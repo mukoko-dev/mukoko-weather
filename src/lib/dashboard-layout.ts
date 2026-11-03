@@ -39,20 +39,23 @@ export function fillLastRowSpan(count: number, cols: number): number {
 /** Span → class for the 2-column (mobile) Conditions grid. */
 const BASE_SPAN_CLASS: Record<number, string> = {
   1: "",
-  2: "col-span-2 [&>section]:aspect-auto",
+  2: "col-span-2",
 };
 
-/** Span → class for the 4-column (lg) Conditions grid. */
-const LG_SPAN_CLASS: Record<number, string> = {
-  1: "lg:col-span-1 lg:[&>section]:aspect-square",
-  2: "lg:col-span-2 lg:[&>section]:aspect-auto",
-  3: "lg:col-span-3 lg:[&>section]:aspect-auto",
-  4: "lg:col-span-4 lg:[&>section]:aspect-auto",
+/**
+ * Span → class for the 4-column Conditions grid. The grid is a container
+ * query (`InsightGrid`), so these use `@3xl:`, not the viewport's `lg:`.
+ */
+const WIDE_SPAN_CLASS: Record<number, string> = {
+  1: "@3xl:col-span-1",
+  2: "@3xl:col-span-2",
+  3: "@3xl:col-span-3",
+  4: "@3xl:col-span-4",
 };
 
 /**
  * Classes for the last tile of a run of `count` square tiles in the
- * Conditions grid (2 columns on mobile, 4 on lg), so neither layout ends
+ * Conditions grid (2 columns, 4 when the column is wide enough), so neither layout ends
  * with an empty slot. A spanned tile drops its square aspect so it keeps
  * the row's natural height instead of doubling it.
  */
@@ -61,6 +64,6 @@ export function lastTileSpanClass(count: number): string {
   const lgSpan = fillLastRowSpan(count, 4);
   // Only emit lg classes when the lg layout needs something different from
   // the base: a base-spanned tile that fits one lg cell must be reset.
-  const lg = lgSpan > 1 || base ? (LG_SPAN_CLASS[lgSpan] ?? "") : "";
+  const lg = lgSpan > 1 || base ? (WIDE_SPAN_CLASS[lgSpan] ?? "") : "";
   return [base, lg].filter(Boolean).join(" ");
 }

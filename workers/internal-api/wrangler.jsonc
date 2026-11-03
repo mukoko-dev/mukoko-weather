@@ -5,10 +5,14 @@
 //                             (Secrets Store: MUKOKO_WEATHER_SERVICE_API_KEY)
 // and proxies GET /v1/weather/forecast to /internal/forecast here.
 //
-// The app's Python backend (Vercel) holds the same key and calls
-// POST /internal/ai/chat/completions here for every model call; it is
+// The app's /api/ai proxy (Vercel) holds the same key and calls
+// POST /internal/ai/summary, /followup and /agriculture here; they are
 // forwarded over AI_SERVICE to mukoko-weather-ai (Workers AI through the
 // shamwari AI Gateway). Vercel holds no Cloudflare AI token.
+// POST /internal/ai/chat/completions (an OpenAI-style passthrough) was the
+// deleted Python backend's way to a model; nothing in this repository calls it
+// any more and it goes in a follow-up once its other possible callers are ruled
+// out (#333).
 //
 // Names only, never values:
 //   secrets: WEATHER_SERVICE_API_KEY, from the Secrets Store (below)
@@ -46,7 +50,7 @@
   ],
   "services": [
     { "binding": "FORECAST", "service": "mukoko-weather-forecast" },
-    // The Python backend's model calls (/internal/ai/chat/completions).
+    // The signed-in app's model calls (/internal/ai/*).
     { "binding": "AI_SERVICE", "service": "mukoko-weather-ai" },
   ],
 }
