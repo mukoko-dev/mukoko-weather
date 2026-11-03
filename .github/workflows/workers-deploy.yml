@@ -1,10 +1,31 @@
-# Deploys the Rust Workers in workers/ by hand only: Actions → Workers deploy
-# → Run workflow. Nothing here runs on push.
+# Deploys the Rust Workers in workers/ to production.
 #
-# Production deploys main only. The run must be dispatched on main (the guard
-# job fails otherwise) and deploys exactly the commit it was dispatched on
-# (github.sha). There is no ref input: a caller-chosen ref would check out
-# unreviewed code in a job that holds the Cloudflare secrets.
+# Two ways in:
+#
+#   - A push to main that touches workers/** (or this file) deploys ALL
+#     Workers, in the binding order below, after the workers.yml gate passes.
+#     This is the release path: staging reaches main through the merge queue
+#     and the Workers go out with it. No repository variable gates it.
+#   - Actions → Workers deploy → Run workflow (workflow_dispatch) still
+#     exists, for redeploying one Worker or all of them.
+#
+# Staging has no automatic Worker deploy. Staging is preview builds: the
+# Workers are checked by the workers.yml builds on every PR and push, and a
+# Worker that enables preview URLs can be tried on a Cloudflare preview
+# version (none does today). Production deploys only from main.
+#
+# Production deploys main only. The run must be on main (the guard job fails
+# otherwise) and deploys exactly the commit it ran on (github.sha). There is
+# no ref input: a caller-chosen ref would check out unreviewed code in a job
+# that holds the Cloudflare secrets.
+#
+# On a push there are no `inputs`, so every use of an input below defaults
+# explicitly: the Worker to `all`, the environment to the constant
+# `production`. A full deploy (all) never starts unless the gate passed.
+#
+# A missing Cloudflare secret fails the run loudly (first step of the deploy
+# job); it is never skipped. A Worker that fails to deploy stops the run at
+# that Worker, and the run summary lists what already went out.
 #
 # Deploy order follows the service bindings, so every Worker that others bind
 # to is live before them:
@@ -28,8 +49,9 @@
 #
 # The wrangler configs define no `env.*` blocks, so `production` is the only
 # environment: each Worker deploys from its top-level config. If a config
-# gains an env block, add it to the `environment` options and the deploy step
-# passes `--env` for it.
+# gains an env block, the deploy step passes `--env "$DEPLOY_ENV"` for it;
+# DEPLOY_ENV is the constant `production` (a push has no inputs), so wire it
+# to the dispatch input at that point.
 #
 # Uses the repository secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID,
 # passed to wrangler as env. The Workers' runtime secrets live in the
@@ -41,10 +63,15 @@
 name: Workers deploy
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "workers/**"
+      - ".github/workflows/workers-deploy.yml"
   workflow_dispatch:
     inputs:
       worker:
-        description: Which Worker to deploy (all = every Worker, in binding order)
+        description: Which Worker to deploy (all = every Worker, in binding order). A push to main always deploys all.
         required: true
         type: choice
         default: all
@@ -61,7 +88,7 @@ on:
           - jobs
           - public-api
       environment:
-        description: Where to deploy
+        description: Where to deploy (production is the only environment; a push to main always deploys production)
         required: true
         type: choice
         default: production
@@ -70,14 +97,18 @@ on:
 permissions:
   contents: read
 
+# One constant group: a deploy never runs beside another and is never
+# cancelled in flight. GitHub keeps only the newest waiting run, so a push
+# superseded by a later push is cancelled before it starts (the later run
+# builds the later commit, all Workers).
 concurrency:
-  group: workers-deploy-${{ inputs.environment }}
+  group: workers-deploy-production
   cancel-in-progress: false
 
 jobs:
-  # Fail before anything else unless the run was dispatched on main.
+  # Fail before anything else unless the run is on main.
   guard:
-    name: Dispatched on main
+    name: Runs on main
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -86,34 +117,39 @@ jobs:
           REF: ${{ github.ref }}
         run: |
           if [ "$REF" != "refs/heads/main" ]; then
-            echo "::error::Workers deploy runs from main only (dispatched on $REF)"
+            echo "::error::Workers deploy runs from main only (ran on $REF)"
             exit 1
           fi
 
   # The same fmt / clippy / test / build gate as push and PR runs, before a
-  # full deploy.
+  # full deploy. `inputs.worker` is empty on a push, which is a full deploy.
   gate:
     name: Gate (workers.yml)
     needs: guard
-    if: inputs.worker == 'all'
+    if: ${{ (inputs.worker || 'all') == 'all' }}
     uses: ./.github/workflows/workers.yml
 
   deploy:
-    name: Deploy ${{ inputs.worker }} (${{ inputs.environment }})
+    name: Deploy ${{ inputs.worker || 'all' }} (production)
     needs: [guard, gate]
-    # Run when the guard passed and the gate passed, or was skipped for a
-    # single-Worker deploy.
-    if: ${{ !cancelled() && needs.guard.result == 'success' && (needs.gate.result == 'success' || needs.gate.result == 'skipped') }}
+    # Run when the guard passed and the gate passed. The gate is skipped only
+    # for a single-Worker dispatch: a skipped gate on a full deploy (all, and
+    # every push) never deploys.
+    if: >-
+      !cancelled() &&
+      needs.guard.result == 'success' &&
+      (needs.gate.result == 'success' ||
+      (needs.gate.result == 'skipped' && (inputs.worker || 'all') != 'all'))
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    environment: workers-${{ inputs.environment }}
+    environment: workers-production
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       WRANGLER_VERSION: 4.138.0
       WORKER_BUILD_VERSION: 0.8.7
-      WORKER: ${{ inputs.worker }}
-      DEPLOY_ENV: ${{ inputs.environment }}
+      WORKER: ${{ inputs.worker || 'all' }}
+      DEPLOY_ENV: production
     defaults:
       run:
         shell: bash
@@ -178,7 +214,7 @@ jobs:
           {
             echo "## Workers deploy ($DEPLOY_ENV)"
             echo
-            echo "Ref: \`$(git rev-parse HEAD)\`, wrangler $WRANGLER_VERSION"
+            echo "Ref: \`$(git rev-parse HEAD)\`, wrangler $WRANGLER_VERSION, trigger: $GITHUB_EVENT_NAME"
             echo
             echo "| Worker | Script | Deploy | Smoke check |"
             echo "| ------ | ------ | ------ | ----------- |"
