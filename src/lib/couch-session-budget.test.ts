@@ -6,6 +6,8 @@
  * turned sync on. No network, no database: the counter store and the clock are
  * injected.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 // `app-keys/shared` (read only for its limits) imports AuthKit, which needs
@@ -18,8 +20,13 @@ import {
   COUCH_SYNC_BUDGET_ACTION,
   GATEWAY_COOLDOWN_MAX_SECONDS,
   GATEWAY_TOKEN_LIMIT_PER_MINUTE,
+  RENEWAL_PERIOD_SECONDS,
+  SUPPORTED_VISIBLE_TABS,
+  SUSTAINED_EXCHANGES_PER_MINUTE,
   createSyncBudget,
 } from "./couch-session-budget";
+import { COUCH_SYNC_MAX_SECONDS } from "./couch-session-issuer";
+import { REFRESH_LEAD_MS } from "./rxdb/couch-schedule";
 import { APP_KEYS_LIMITS } from "@/app/api/app-keys/shared";
 
 /** An in-memory `weather.rate_limits`: one counter per key. */
@@ -211,5 +218,59 @@ describe("when the counter cannot be read", () => {
     expect(await budget.spend()).toEqual({ allowed: true });
     budget.noteGatewayRateLimit(10);
     expect((await budget.spend()).allowed).toBe(false);
+  });
+});
+
+// One number, derived once. The docs and CONTRIBUTING.md quote how many visible
+// tabs the budget carries; a hand-typed "roughly 120" outlived the arithmetic
+// that gives 72, so the quotes are checked against the constants.
+describe("how many tabs the budget carries is derived in one place", () => {
+  const REPO = join(__dirname, "..", "..");
+  const read = (...p: string[]) => readFileSync(join(REPO, ...p), "utf8");
+
+  it("is the sustained rate times the renewal period: 18 a minute, one renewal per tab every 4 minutes", () => {
+    expect(SUSTAINED_EXCHANGES_PER_MINUTE).toBe(18);
+    expect(RENEWAL_PERIOD_SECONDS).toBe(240);
+    expect(SUPPORTED_VISIBLE_TABS).toBe(72);
+    // ...and the sustained rate is the constant's, not a copy of it.
+    expect(SUSTAINED_EXCHANGES_PER_MINUTE).toBe(
+      (COUCH_SYNC_BUDGET[0] * 60) / COUCH_SYNC_BUDGET[1],
+    );
+  });
+
+  it("the renewal period is the grant's life less the page's renewal lead (the two constants it stands for)", () => {
+    expect(RENEWAL_PERIOD_SECONDS).toBe(
+      COUCH_SYNC_MAX_SECONDS - REFRESH_LEAD_MS / 1000,
+    );
+  });
+
+  it("leaves room for /api/app-keys under the gateway's ceiling, sustained", () => {
+    expect(SUSTAINED_EXCHANGES_PER_MINUTE).toBeLessThan(
+      GATEWAY_TOKEN_LIMIT_PER_MINUTE,
+    );
+  });
+
+  it.each([
+    ["docs/couchdb-sync.md", ["docs", "couchdb-sync.md"]],
+    ["CONTRIBUTING.md", ["CONTRIBUTING.md"]],
+  ])(
+    "%s quotes the same number as the constant, and no other",
+    (_name, path) => {
+      const text = read(...path);
+      const quoted = [
+        ...text.matchAll(/roughly (\d+) (?:visible )?(?:syncing )?tabs/gi),
+      ].map((m) => Number(m[1]));
+      expect(quoted.length).toBeGreaterThan(0);
+      for (const n of quoted) expect(n).toBe(SUPPORTED_VISIBLE_TABS);
+      // No other figure for the same thing survives anywhere in the file.
+      expect(text).not.toMatch(/\b120 tabs\b/);
+      expect(text).not.toMatch(/roughly 120\b/);
+    },
+  );
+
+  it("the two documents agree with each other on the arithmetic they show", () => {
+    const docs = read("docs", "couchdb-sync.md");
+    expect(docs).toContain(`${SUSTAINED_EXCHANGES_PER_MINUTE} a minute`);
+    expect(docs).toMatch(/every four minutes/);
   });
 });

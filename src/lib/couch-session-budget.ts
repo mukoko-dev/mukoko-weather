@@ -55,6 +55,31 @@ export const GATEWAY_TOKEN_LIMIT_PER_MINUTE = 30;
 /** [max exchanges, window seconds]: see "the arithmetic" above. */
 export const COUCH_SYNC_BUDGET = [6, 20] as const;
 
+/** What the budget lets through in a minute, sustained: 6 every 20 s is 18. */
+export const SUSTAINED_EXCHANGES_PER_MINUTE =
+  (COUCH_SYNC_BUDGET[0] * 60) / COUCH_SYNC_BUDGET[1];
+
+/**
+ * How often one syncing tab asks for a credential: the grant lives five minutes
+ * (`COUCH_SYNC_MAX_SECONDS` in the issuer) and the page renews it a minute
+ * before it ends (`REFRESH_LEAD_MS` in `rxdb/couch-schedule.ts`), so every four
+ * minutes. (Pinned to both by `couch-session-budget.test.ts`: this file may not
+ * import the page's modules.) Only a browser's LEADER tab asks, and only while
+ * visible.
+ */
+export const RENEWAL_PERIOD_SECONDS = 240;
+
+/**
+ * How many visible, syncing tabs (one leader per browser) the budget carries at
+ * once: 18 exchanges a minute at one renewal per tab every four minutes is 72.
+ * THE ONE PLACE this number is derived. `docs/couchdb-sync.md` and
+ * `CONTRIBUTING.md` quote it and a test fails when either says another number;
+ * beyond it the page backs off (429) and nothing breaks.
+ */
+export const SUPPORTED_VISIBLE_TABS = Math.floor(
+  (SUSTAINED_EXCHANGES_PER_MINUTE * RENEWAL_PERIOD_SECONDS) / 60,
+);
+
 /** The counter's action and id: one counter for the whole site. */
 export const COUCH_SYNC_BUDGET_ACTION = "couch-session-global";
 const COUCH_SYNC_BUDGET_ID = "all";
