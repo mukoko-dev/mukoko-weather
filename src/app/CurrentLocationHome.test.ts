@@ -195,7 +195,9 @@ describe("page.tsx — server seeding", () => {
 
   it("seeds the cookie-resolved place (a place and its season, no weather)", () => {
     expect(pageSource).toContain("PlaceSeed");
-    expect(pageSource).toContain("seasonWithinBudget(");
+    // The season is the prebuilt table, never a database read (issue #452).
+    expect(pageSource).toContain("localSeason(");
+    expect(pageSource).not.toContain("seasonWithinBudget(");
     expect(pageSource).toContain("<CurrentLocationHome initial={initial}");
     expect(pageSource).not.toContain("loadLocationWeather");
     expect(pageSource).not.toContain("getWeatherForLocation");
