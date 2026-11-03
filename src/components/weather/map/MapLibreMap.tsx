@@ -804,18 +804,18 @@ export function MapLibreMap({
     }
   }, [aqiOverlay]);
 
-  // Switch the model-field overlay when the field or step changes.
+  // Switch the model-field overlay when the field or step changes. Like the
+  // AQI grid: before "style.load", restore() applies the latest field from its
+  // ref; waiting for "idle" here would mean waiting for every base tile.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (!map.isStyleLoaded()) {
-      const apply = () => applyFieldOverlay(map, fieldOverlay);
-      map.once("idle", apply);
-      return () => {
-        map.off("idle", apply);
-      };
+    if (!styleReadyRef.current) return;
+    try {
+      applyFieldOverlay(map, fieldOverlay);
+    } catch {
+      // Style being replaced; restore() applies the latest field.
     }
-    applyFieldOverlay(map, fieldOverlay);
   }, [fieldOverlay]);
 
   return (

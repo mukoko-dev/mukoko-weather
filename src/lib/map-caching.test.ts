@@ -6,10 +6,15 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
+import { weatherOverlayTileUrl } from "./map-layers";
 
 const root = resolve(__dirname, "../..");
 const sw = readFileSync(resolve(root, "src/app/sw.ts"), "utf-8");
 const nextConfig = readFileSync(resolve(root, "next.config.ts"), "utf-8");
+const tilesWorker = readFileSync(
+  resolve(root, "workers/tiles/src/lib.rs"),
+  "utf-8",
+);
 
 describe("service worker map-tile caching", () => {
   it("never stores the proxy's transparent fallback tiles", () => {
@@ -33,6 +38,35 @@ describe("service worker map-tile caching", () => {
   it("keeps a 'now' tile at most an hour", () => {
     const nowBlock = sw.slice(sw.indexOf('cacheName: "map-tiles-now"'));
     expect(nowBlock).toContain("maxAgeSeconds: 60 * 60");
+  });
+
+  it("matches the tiles Worker's path, not the retired Python route", () => {
+    // Both tile rules must target /v1/map-tiles: /api/py/map-tiles is gone, so
+    // a rule on it would match nothing and every tile would skip the cache.
+    expect(sw.split('url.pathname.startsWith("/v1/map-tiles")').length - 1).toBe(
+      2,
+    );
+    expect(sw).not.toContain("/api/py/");
+    // The URL the map builds is the one the rules match.
+    expect(weatherOverlayTileUrl("temperature", "now")).toContain(
+      "/v1/map-tiles?",
+    );
+  });
+
+  it("can read the fallback markers because the Worker exposes them cross-origin", () => {
+    // The tiles Worker is on its own origin, so a CORS response hides every
+    // header that is not listed in Access-Control-Expose-Headers. Without
+    // X-Map-Tile and X-Cache in that list `headers.has("X-Map-Tile")` is always
+    // false and the transparent fallback would be cached for hours.
+    const expose = tilesWorker.match(
+      /cors::apply\(\s*resp,\s*cors\.as_deref\(\),\s*Some\("([^"]*)"\)/,
+    );
+    expect(expose).not.toBeNull();
+    const exposed = (expose?.[1] ?? "").split(",").map((h) => h.trim());
+    expect(exposed).toContain("X-Map-Tile");
+    expect(exposed).toContain("X-Cache");
+    expect(tilesWorker).toContain('set("X-Map-Tile", "empty")');
+    expect(tilesWorker).toContain('set("X-Cache", "STALE")');
   });
 });
 

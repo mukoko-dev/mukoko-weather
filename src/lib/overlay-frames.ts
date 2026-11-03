@@ -14,10 +14,10 @@
  */
 import { WEATHER_OVERLAY_ID } from "@/lib/map-layers";
 
-/** Paint opacity of the visible overlay frame. */
-export const OVERLAY_OPACITY = 0.6;
-
-/** Source and layer id for one frame. */
+/**
+ * Source and layer id for one frame. The opacity of the visible frame is not
+ * decided here: it follows the layer's provider (`weatherOverlayOpacity`).
+ */
 export function overlayFrameId(layer: string, timestamp: string): string {
   return `${WEATHER_OVERLAY_ID}@${layer}@${timestamp}`;
 }

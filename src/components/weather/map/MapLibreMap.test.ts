@@ -315,10 +315,21 @@ describe("weather timeline + AQI bubbles (full-screen map)", () => {
     // tile of every source. Overlay requests must start with the base tiles.
     expect(source).toContain('map.on("style.load", restore)');
     expect(source).not.toContain('map.on("load"');
-    // The only idle wait left is the model-field overlay's (not the frames').
-    expect(source.split('once("idle"').length - 1).toBe(1);
-    expect(source).toContain('map.once("idle", apply)');
+    // No overlay (frames, AQI grid, model field) waits for a one-off "idle".
+    expect(source).not.toContain('once("idle"');
     expect(source).toContain("styleReadyRef.current = true;");
+  });
+
+  it("applies the model-field overlay as soon as the style is ready", () => {
+    // A model timeline step is a setData; deferring it to "idle" would hold it
+    // behind every base tile still loading.
+    const fieldEffect = source.slice(
+      source.indexOf("// Switch the model-field overlay"),
+      source.indexOf("}, [fieldOverlay]);"),
+    );
+    expect(fieldEffect).toContain("if (!styleReadyRef.current) return;");
+    expect(fieldEffect).toContain("applyFieldOverlay(map, fieldOverlay);");
+    expect(fieldEffect).not.toContain("isStyleLoaded");
   });
 
   it("never leaves a slow frame hidden behind the previous one", () => {
