@@ -155,9 +155,10 @@ export const WEATHER_OVERLAY_MAX_ZOOM = 12;
  * its worker as a separate ES module and, by default, looks for it next to
  * the bundled chunk, where webpack never puts it, so the worker fails to load
  * and every map renders blank. scripts/copy-maplibre-worker.mjs copies the
- * worker (and the shared module it imports) into a per-version folder before
- * every build/dev run; MapLibreMap passes `maplibreWorkerUrl(getVersion())` to
- * setWorkerUrl() before creating a map. Keying the path by version keeps an
+ * worker, and any module the worker imports (6.12 splits it from a shared
+ * module; 6.13 and later ship it self-contained), into a per-version folder
+ * before every build/dev run; MapLibreMap passes `maplibreWorkerUrl(getVersion())`
+ * to setWorkerUrl() before creating a map. Keying the path by version keeps an
  * old tab's bundle paired with its own worker across deploys.
  */
 export function maplibreWorkerUrl(version: string): string {
