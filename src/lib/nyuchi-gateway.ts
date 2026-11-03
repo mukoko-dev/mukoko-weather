@@ -20,6 +20,11 @@
  * There is deliberately no shared service token that can act for a person.
  */
 
+import { parseBareOrigin } from "./bare-origin";
+
+/** The Nyuchi API's production origin: what `NYUCHI_API_URL` is set to. */
+export const NYUCHI_API_DEFAULT_ORIGIN = "https://api.nyuchi.com";
+
 /** One request to the gateway; the path is absolute (`/v1/...`). */
 export type GatewayTransport = (request: Request) => Promise<Response>;
 
@@ -36,7 +41,6 @@ export interface GatewayConfig {
 
 /** Placeholder origin for a service binding (the host is ignored). */
 const BINDING_ORIGIN = "https://nyuchi-api.internal";
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const KEY_RE = /^(nyk_[A-Za-z0-9_-]{8,128})\.(nys_[A-Za-z0-9_-]{8,256})$/;
 export const GATEWAY_TIMEOUT_MS = 8_000;
 
@@ -50,21 +54,8 @@ function assertServer(): void {
 
 /** A bare https origin (http only for localhost), else null. */
 export function gatewayOrigin(env: Env = process.env): string | null {
-  const raw = env.NYUCHI_API_URL?.trim();
-  if (!raw) return null;
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    return null;
-  }
-  const local = LOCAL_HOSTS.has(url.hostname);
-  if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) {
-    return null;
-  }
-  if (url.username || url.password || url.search || url.hash) return null;
-  if (url.pathname !== "/" && url.pathname !== "") return null;
-  return url.origin;
+  // The rule is `parseBareOrigin`'s, shared with the browser's sync client.
+  return parseBareOrigin(env.NYUCHI_API_URL?.trim());
 }
 
 /** The key pair, or null when unset or malformed (never echoed). */

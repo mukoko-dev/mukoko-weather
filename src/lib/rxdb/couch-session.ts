@@ -22,6 +22,7 @@
  * `POST /v1/couch/personal`, which accepts the grant for its own subject only).
  */
 
+import { parseBareOrigin } from "../bare-origin";
 import { COUCH_REQUEST_TIMEOUT_MS, CouchHttpError } from "./couch-fetch";
 import { personIdFromDatabase } from "./couch-docs";
 
@@ -47,24 +48,14 @@ export class CouchSessionError extends Error {
 
 export const SESSION_ROUTE = "/api/couch/session";
 const CODE_RE = /^[a-z_]{1,48}$/;
-const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-/** A bare https origin (http only for localhost), else null. */
+/**
+ * A bare https origin (http only for localhost), else null: the same rule the
+ * server applied to `NYUCHI_API_URL` before handing it over, from the one
+ * dependency-free module both import (`lib/bare-origin.ts`).
+ */
 export function parseApiOrigin(raw: unknown): string | null {
-  if (typeof raw !== "string") return null;
-  let url: URL;
-  try {
-    url = new URL(raw);
-  } catch {
-    return null;
-  }
-  const local = LOCAL_HOSTS.has(url.hostname);
-  if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) {
-    return null;
-  }
-  if (url.username || url.password || url.search || url.hash) return null;
-  if (url.pathname !== "/" && url.pathname !== "") return null;
-  return url.origin;
+  return parseBareOrigin(raw);
 }
 
 /** Validate a route answer into a session, or throw `CouchSessionError`. */

@@ -7,6 +7,8 @@
  * CLAUDE.md (Security headers).
  */
 
+import { parseBareOrigin } from "./bare-origin";
+
 /** Where report-only violations are sent (same-origin, see api/csp-report). */
 export const CSP_REPORT_PATH = "/api/csp-report";
 
@@ -80,8 +82,38 @@ export const CSP_DIRECTIVES: Record<string, string[]> = {
   "manifest-src": ["'self'"],
 };
 
-export function buildCsp(reportPath: string = CSP_REPORT_PATH): string {
-  const parts = Object.entries(CSP_DIRECTIVES).map(
+/**
+ * The Nyuchi API origin the CouchDB sync replicates with, from the environment
+ * the CALLER passes (`next.config.ts` hands over the process's variables; this
+ * module reads none, so the table stays pure data): the value `NYUCHI_API_URL`
+ * has, by the same rule `/api/couch/session` applies before it hands the
+ * origin to the page. Empty when the variable is unset or unusable (the route
+ * answers 503 then). The default entry in `connect-src` above is the
+ * production origin; this keeps the CSP matching the host the page is actually
+ * told about when the variable points somewhere else (a staging gateway).
+ */
+export function couchApiConnectSrc(
+  env: Readonly<Record<string, string | undefined>>,
+): string[] {
+  const origin = parseBareOrigin(env.NYUCHI_API_URL?.trim());
+  return origin ? [origin] : [];
+}
+
+/**
+ * The policy string. `extraConnectSrc` adds hosts to `connect-src` only (and
+ * never twice); everything else is the table.
+ */
+export function buildCsp(
+  reportPath: string = CSP_REPORT_PATH,
+  extraConnectSrc: readonly string[] = [],
+): string {
+  const directives: Record<string, string[]> = {
+    ...CSP_DIRECTIVES,
+    "connect-src": [
+      ...new Set([...CSP_DIRECTIVES["connect-src"], ...extraConnectSrc]),
+    ],
+  };
+  const parts = Object.entries(directives).map(
     ([k, v]) => `${k} ${v.join(" ")}`,
   );
   parts.push(`report-uri ${reportPath}`);
