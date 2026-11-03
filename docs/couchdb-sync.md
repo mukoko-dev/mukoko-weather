@@ -37,20 +37,21 @@ offline first (RxDB on the device).
   `localStorage` through `safe-storage`, `src/lib/rxdb/sync-people-index.ts`,
   written before the database exists), and `purgeUserDocStores` closes and
   removes every recorded database but the signed-in person's: when
-  `/api/couch/session` answers 401 (nobody is signed in, including the first
-  request of an anonymous visitor on a browser an earlier sign-in used), and
-  once per run for the person who is signed in (a different person being issued
-  removes the previous person's). A database that cannot be removed (IndexedDB
-  blocked or missing, another tab holding it past 5 s) stays recorded and is
-  tried again at the next run; nothing throws into the page. With the flag off
-  none of this runs and nothing is read or created. If the flag is turned off
-  after having been on, a database that was left behind stays until the flag is
-  on again and someone signs out or in; clearing site data removes it too. A
-  transient 401 (the AuthKit session failing to refresh for a moment) also
-  clears the local mirror: the settings are still in the app's own preferences
-  and on the server, and the next signed-in page load pulls them again, but a
-  change made while offline that had not been written to a document yet would
-  then lose to the server's value.
+  `/api/couch/session` answers `401 signed_out` (nobody is signed in, including
+  the first request of an anonymous visitor on a browser an earlier sign-in
+  used), and once per run for the person who is signed in (a different person
+  being issued removes the previous person's). Only that certain sign-out
+  removes anything: a 401 without the `signed_out` code, a refresh that failed
+  for a moment, a refused exchange and every 5xx leave the database and the
+  record of unwritten changes where they are. A database that cannot be removed
+  (IndexedDB blocked or missing, another tab holding it past 5 s) stays recorded
+  and is tried again at the next run; nothing throws into the page. A browser
+  that has had more than eight people's databases recorded forgets the oldest
+  record without removing the database (nothing in a normal use gets there).
+  With the flag off none of this runs and nothing is read or created. If the
+  flag is turned off after having been on, a database that was left behind
+  stays until the flag is on again and someone signs out or in; clearing site
+  data removes it too.
 - **One tab replicates.** Every tab of the browser opens the same IndexedDB
   database (`multiInstance: true`) and RxDB elects one leader tab; the
   replication waits for leadership (`waitForLeadership: true`, as
@@ -73,10 +74,33 @@ offline first (RxDB on the device).
   store that reports its leadership.
 - **Cycles, not a stream.** The gateway refuses continuous and event-source
   feeds, so replication is `live: false`: each cycle is one pull
-  (`_changes?feed=normal`) and one push (`_all_docs` POST, `_bulk_docs`), then
-  it cancels itself. A cycle starts on a 60 s timer while the page is visible,
-  on focus or becoming visible (15 s cooldown), on `online`, and after a local
-  write (written after 750 ms, pushed after 2 s).
+  (`POST _changes?feed=normal&filter=_doc_ids`, see the next bullet) and one push
+  (`_all_docs` POST, `_bulk_docs`), then it cancels itself. A cycle starts on a
+  60 s timer while the page is visible, on focus or becoming visible (15 s
+  cooldown), on `online`, and after a local write (written after 750 ms, pushed
+  after 2 s).
+- **The pull asks for this client's documents only.** Other clients keep
+  documents in the same database (the mobile app's ciphertext interests, saved
+  places, one event per interaction). RxDB's pull stops WITHOUT saving its
+  checkpoint when a page has no documents, and counts a page with fewer
+  documents than its batch (200) as the end of the feed; rows dropped after the
+  server sent them would therefore leave the next cycle on the same position for
+  ever when a whole page was another client's, and end every cycle after a
+  single page when a few of each page were ours: the person's own settings
+  behind a long run of foreign documents would never arrive. So
+  `src/lib/rxdb/couch-fetch.ts` sends the plugin's `GET _changes` as
+  `POST _changes?filter=_doc_ids` with `{doc_ids: [...]}`, the two settings and
+  one `activity:<id>` per activity the app offers (`ownedDocIds()`, 57 ids,
+  fixed, whatever the database holds). The gateway allows both
+  (`couch_proxy_policy.py`: `filter` `_doc_ids`, a `doc_ids` body on
+  `POST _changes`), `limit` stays at the plugin's 200 (the gateway's cap is
+  1000), and a filtered feed still ends at the end of the database, so the
+  checkpoint moves. Rows that are not ours are still dropped on the way in; if a
+  server ever ignored the filter and a whole page came back foreign, that is a
+  `502` (a failure the engine backs off on), not an empty feed that would stall
+  silently. **Not verified against the live CouchDB**: that `POST _changes` with
+  `filter=_doc_ids`, `include_docs` and `seq_interval` behaves as the fake in
+  the tests (and as CouchDB's documentation says it does).
 - **Defaults never win.** A device that did not change a setting writes nothing
   for it, and seeding after the first pull fills only ids that have no document
   at all. Conflicts: last writer wins by `updatedAt`, the revision CouchDB chose
@@ -122,6 +146,20 @@ offline first (RxDB on the device).
   first three; a remote add is appended, a remote remove drops that id, and the
   order of the documents (oldest first, then by id) is used only for ids the
   device does not hold yet.
+- **A missing document is not a removal.** An activity is dropped from the
+  device only when the local database holds its TOMBSTONE (another device
+  deleted it and the deletion was pulled). No document at all means this device
+  has not seen it yet (a follower tab whose leader has not seeded, a first
+  cycle, a database just created or wiped), and the activities a person chose
+  before sync existed have no document until the leader's first cycle seeds
+  them: reading "no document" as "removed" erased them on a follower tab.
+- **Times are compared as instants.** The deployed validator accepts any
+  RFC 3339 time (fractional digits of any length or none, `Z` or an offset), so
+  another client's form decides nothing: conflicts (`updatedAt`) and the order
+  of new activities (`createdAt`) are compared as instants, precision to the
+  millisecond, and a time that cannot be read leaves the server's revision (a
+  conflict) or sorts last (the order). Times this client writes are UTC with
+  three fractional digits.
 - **Only what this app offers is applied.** The forecast models that sync are
   the web app's own (`ForecastModel` in `weather.ts`, the My Weather picker; all
   are in the Worker's device-profile allowlist), not the data model's wider list:
@@ -133,21 +171,36 @@ offline first (RxDB on the device).
   client are applied only if the app knows the id (`src/lib/activities.ts`, equal
   to the Worker's allowlist) and only up to 30, the device profile's limit,
   after the ones the person already holds; nothing they hold is dropped to make
-  room. An unknown activity document is left in the local database and never
-  applied.
-- **Failures are silent and bounded.** 401 from the session route means nobody
-  is signed in: the engine goes idle until the next page load, with no failure
-  count, no timer and no second request (see "Own database" for what it removes).
-  401 from the database means fetch a new credential once, then back off; 403,
-  404, 429, 5xx, offline and timeouts back off 30 s doubling to 15 min and the
-  app stays local-only (`src/lib/rxdb/couch-sync.ts`, `couch-schedule.ts`). A
-  credential with under 75 s left when it arrives is a failure too, and two
-  credential fetches are never closer than 5 s (`src/lib/couch-session-timing.ts`),
-  so a short-lived grant cannot make a loop.
-- **Teardown.** `pagehide` stops the engine (timers, listeners, the credential
-  and the open database go; a change still inside the debounce is written
-  first, best effort); a page restored from the back/forward cache starts it
-  again. A hidden page writes its pending change at once (`visibilitychange`).
+  room. A document for an activity the app does not know is never requested
+  (the pull lists the ids this client owns), so it neither reaches the device
+  nor is applied.
+- **Failures are silent and bounded.** A 401 from the session route that says
+  `signed_out` means nobody is signed in: the engine goes idle until the next
+  page load, with no failure count, no timer and no second request (see "Own
+  database" for what it removes). A 401 WITHOUT that code, like every other
+  status from the route, is a failure to retry: it removes nothing. 401 from the
+  database means fetch a new credential once, then back off; 403, 404, 429, 5xx,
+  offline and timeouts back off 30 s doubling to 15 min and the app stays
+  local-only (`src/lib/rxdb/couch-sync.ts`, `couch-schedule.ts`). A credential
+  with under 75 s left when it arrives is a failure too, and two credential
+  fetches are never closer than 5 s (`src/lib/couch-session-timing.ts`), so a
+  short-lived grant cannot make a loop. Nothing waits for ever: the credential
+  request ends at 25 s, opening the local database at 10 s (a database that
+  opens later is closed again), a replication at 60 s, and each request of one at
+  25 s. A replication that fails after its pull still applies what it pulled, so
+  a push that keeps failing does not keep the person's other devices' changes off
+  this one.
+- **Teardown.** `pagehide` stops the engine: it first abandons what the cycle
+  is waiting on (the replication and its requests, a credential request, the
+  opening of the database), then writes the pending change, then closes
+  the database; the cycle ends at its next step and does not seed, apply or
+  replicate again. The pending change goes through its own lock, never behind the
+  cycle, so it is not held up by a replication that can last a minute (the write
+  debounce and `flush()` likewise); the record in web storage already holds it
+  and stays if the write fails. A page restored from the back/forward cache
+  starts again, and a cycle of the earlier run that is still ending does not run
+  beside the new one. A hidden page writes its pending change at once
+  (`visibilitychange`).
 - **Document shape follows the validator that runs in CouchDB, not the
   generated schema.** nyuchi-api `gateway/lib/couch_validate_personal.js` (pinned
   in `src/lib/rxdb/__fixtures__/`, executed by the tests) requires an integer
@@ -220,29 +273,36 @@ token or the key.
   anything. The same 503 is what the page sees until the owner steps below are
   done. **No new secret and no new environment variable.**
 - **401 means signed out, and only that.** The page answers a 401 from the
-  session route by removing its local copy of the person's settings, so the
-  route gives 401 only when nobody is signed in (`401 unauthorized`, ahead of the
-  configuration check and the limiter) or the gateway itself refuses the
-  person's WorkOS token. A person who IS signed in whose access token is missing or has ended
-  (AuthKit's refresh failing for a moment, WorkOS answering 5xx) is
-  `503 couch_unavailable`: the page keeps its local database and retries after
-  the back-off. The gateway's own refusal of the subject token is still
-  `401 reauth_required` (it is the same mapping `/api/app-keys` has); that one
-  can in principle also come from an expired token the gateway saw before this
-  server did, which is not changed here. The route checks that sync is set up
+  session route by removing its local copy of the person's settings and its
+  record of unwritten changes, which may hold the only copy of a change made
+  offline. So the route gives exactly one 401, when nobody is signed in, with
+  the body `{"error": "signed_out"}` (`SIGNED_OUT_CODE`,
+  `src/lib/couch-session-contract.ts`; ahead of the configuration check and the
+  limiter), and the page treats ONLY a 401 carrying that code as signed out. Whatever
+  the WorkOS token or the gateway say about a person who IS signed in is a
+  retry-later `503 couch_unavailable`: an access token that is missing or has
+  ended (AuthKit's refresh failing for a moment, WorkOS answering 5xx), and the
+  gateway refusing the exchange (`invalid_grant`: a revoked or skewed token, a
+  WorkOS client mismatch, an operator misconfiguration). A session that really
+  ended is the no-user 401, which comes first and never reaches the gateway. (The
+  exchange error mapping of `/api/app-keys`, a different route with different
+  stakes, is unchanged.) The route checks that sync is set up
   here (`NYUCHI_API_URL`, the app's key, `WORKOS_CLIENT_ID`) before it spends
   the person's hourly allowance, so an unconfigured site answers 503 without a
   Mongo write. The route's address is defined once, in
   `src/lib/couch-session-timing.ts` (`COUCH_SESSION_PATH`), which the page's
   client and the proxy import; a test pins it to the folder the route lives in
-  and to there being no second spelling.
-- **Errors.** A session that ended is `401 reauth_required`; a scheduled
+  and to there being no second spelling. The database name rule and the
+  signed-out code live in `couch-session-contract.ts`, which imports nothing,
+  so the server's issuer and route do not import the sync engine's modules.
+- **Errors.** Nobody signed in is `401 signed_out`; a scheduled
   deletion is `403 account_pending_deletion` (the only wire difference from an
   ended session is the gateway's sentence, so the match is a convenience: if the
-  text changes the person is told to sign in again, which is safe); `429` keeps
+  text changes the person gets a retry-later 503, which is safe); `429` keeps
   the gateway's `Retry-After`; everything else (the client not on the allow-list,
-  an unconfigured key, a 5xx, a timeout, an unreadable answer, no linked person)
-  is `503 couch_unavailable`, which the page backs off on.
+  an unconfigured key, a refused exchange, a 5xx, a timeout, an unreadable
+  answer, no linked person) is `503 couch_unavailable`, which the page backs off
+  on.
 - **The WorkOS token must have life left.** The grant never outlives the
   access token, and the page renews it a minute before it ends. A grant made
   from a token with a minute left would be due on arrival, and the page would
@@ -354,6 +414,16 @@ Also not verified, because the test storage cannot show it:
 - **IndexedDB being blocked or missing** (private windows, some webviews). The
   sync is skipped silently and the index still records the person; the browser
   paths were simulated, not run.
+- **`POST _changes?filter=_doc_ids` on the real CouchDB and gateway**, and that
+  abandoning a replication (`AbortController` on its requests, RxDB's own
+  cancel) leaves RxDB's replication state clean in a real browser. The fake
+  CouchDB ports the gateway's policy and CouchDB's documented behaviour of the
+  filter (including a `last_seq` that moves to the end of the feed when nothing
+  matched), not the server.
+- **The activities and models other clients write.** The mobile app's own
+  documents are only simulated (`interest` documents the deployed validator
+  accepts); whether it writes the activity and forecast-model documents of this
+  client's types with the shapes assumed here has not been seen.
 
 ## Next slice
 
