@@ -23,6 +23,10 @@ const ALLOWED_SUFFIXES: &[&str] = &[
     ".notify.windows.com",
 ];
 
+/// The alert kind of a frost alert: in the dedupe key, the delivery log, the
+/// payload and the push `Topic`.
+pub const KIND_FROST: &str = "frost";
+
 /// At most this many pushes to one person in one local day.
 pub const MAX_PUSHES_PER_DAY: u32 = 2;
 /// At most this many of one kind to one person in one local night.
@@ -421,13 +425,23 @@ pub struct DecisionInput<'a> {
 /// after 08:00 on a later local date, and, for non-severe frost, any time on
 /// a later local date at all (a moderate alert held by quiet hours must not
 /// arrive at 06:00 the next morning). Severe frost still under way before
-/// 08:00 is sent.
+/// 09:00 on the morning right after its night is sent; on any later date it is
+/// stale, whatever the hour.
 pub fn decide(i: &DecisionInput) -> Decision {
     if !i.prefs.frost || !i.prefs.places.iter().any(|p| p == i.slug) {
         return Decision::NotWanted;
     }
-    if i.local_date > i.night && (i.local_hour > NIGHT_END_HOUR || i.risk != Risk::Severe) {
-        return Decision::Stale;
+    if i.local_date > i.night {
+        // Past the night's own date. The one thing still sent is severe frost
+        // under way before 09:00 on the morning right after its night: not a
+        // later morning, which would be about a night two days gone.
+        let morning_after = chrono::NaiveDate::parse_from_str(i.night, "%Y-%m-%d")
+            .ok()
+            .and_then(|d| d.succ_opt())
+            .is_some_and(|d| d.format("%Y-%m-%d").to_string() == i.local_date);
+        if !(i.risk == Risk::Severe && morning_after && i.local_hour <= NIGHT_END_HOUR) {
+            return Decision::Stale;
+        }
     }
     if i.already_sent_this_night {
         return Decision::Duplicate;
@@ -467,7 +481,7 @@ pub fn frost_payload(place_name: &str, slug: &str, a: &FrostAlert) -> Payload {
     };
     Payload {
         v: 1,
-        kind: "frost",
+        kind: KIND_FROST,
         slug: slug.to_string(),
         night: a.night.clone(),
         title: format!("Frost alert for {place_name}"),
@@ -501,11 +515,12 @@ impl Urgency {
     }
 }
 
-/// The longest `TTL` we ask for, 24 hours. A frost alert is about one night
-/// (22:00 to 08:59 is 11 hours), so nothing here needs longer; the bound only
-/// keeps an alert for a night more than a day away from asking a push service
-/// to keep it for days.
-pub const MAX_PUSH_TTL_SECONDS: u32 = 86_400;
+/// The longest `TTL` we ask for: 36 hours. The forecast looks 24 hours ahead
+/// ([`FROST_LOOKAHEAD_HOURS`]) and a frost night runs another 11 (22:00 to
+/// 08:59), so no alert [`evaluate_frost`] can raise lives longer than this; the
+/// bound only keeps a malformed night far in the future from asking a push
+/// service to hold a message for days.
+pub const MAX_PUSH_TTL_SECONDS: u32 = 36 * 3600;
 
 /// The length of a `Topic` (RFC 8030 section 5.4): at most 32 characters of
 /// the URL-safe base64 alphabet.
@@ -526,6 +541,15 @@ pub struct PushOptions {
     pub topic: String,
 }
 
+/// Why no push options could be built.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OptionsError {
+    /// The alert's night is already over: nothing is left to say "tonight" about.
+    NightOver,
+    /// The night is not a date, or the offset is not a time zone.
+    Invalid,
+}
+
 /// How urgent a frost alert is. Severe frost (0 C or below) is a safety matter
 /// for crops and bypasses quiet hours, so it is the only one that asks to wake
 /// a sleeping device; moderate and high frost are `normal`, which a device may
@@ -537,62 +561,76 @@ pub fn frost_urgency(risk: Risk) -> Urgency {
     }
 }
 
-/// A `Topic` for one alert: its kind and the first characters of the SHA-256 of
-/// its dedupe key, in lower-case hex (inside the URL-safe base64 alphabet), 32
-/// characters in all. It is derived from the key, never from the place or the
-/// person, so it reveals neither, and one key always gives the same topic.
-pub fn topic_for(kind: &str, dedupe_key: &str) -> String {
-    let prefix = format!("{kind}-");
-    let room = MAX_TOPIC_LEN.saturating_sub(prefix.len());
-    let digest = crate::crypto::sha256_hex(dedupe_key);
-    format!("{prefix}{}", &digest[..room.min(digest.len())])
+/// A `Topic` for one alert: its kind and the night it is about, such as
+/// `frost-2026-07-10` (16 characters). A new alert for the same night replaces
+/// one the push service still holds for that subscription; the next night's is
+/// a different message. It carries **no place, cell or person**, and no hash of
+/// one: the cell grid is public, so a hash of it would let the push service
+/// read the place back by trying every cell. (A person is sent at most one
+/// frost alert a night, so the night alone separates the messages.)
+///
+/// `None` when the result would not be a valid `Topic`: longer than
+/// [`MAX_TOPIC_LEN`] or outside `[A-Za-z0-9_-]`.
+pub fn topic_for(kind: &str, night: &str) -> Option<String> {
+    let topic = format!("{kind}-{night}");
+    let valid = !kind.is_empty()
+        && topic.len() <= MAX_TOPIC_LEN
+        && topic
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+    valid.then_some(topic)
 }
 
-/// The instant a frost alert stops being useful, as a UTC unix timestamp: 09:00
-/// local on the morning after the night it names (the frost window includes the
-/// hour that starts at 08:00). `None` for a night that is not a date or an
-/// offset outside -12 to +14 hours.
-fn night_end_unix(night: &str, utc_offset_seconds: i32) -> Option<i64> {
+/// The instant a frost alert stops being useful, as a UTC unix timestamp, where
+/// [`decide`] stops sending it. Severe frost still under way is sent until
+/// 09:00 local on the morning after its night (the frost window includes the
+/// hour that starts at 08:00); moderate and high frost are dropped as stale
+/// from midnight, because their copy says "tonight". `None` for a night that
+/// is not a date or an offset outside -12 to +14 hours.
+fn night_end_unix(night: &str, risk: Risk, utc_offset_seconds: i32) -> Option<i64> {
     if !(-12 * 3600..=14 * 3600).contains(&utc_offset_seconds) {
         return None;
     }
     let morning = chrono::NaiveDate::parse_from_str(night, "%Y-%m-%d")
         .ok()?
         .succ_opt()?;
-    let end_local = morning.and_hms_opt(u32::from(NIGHT_END_HOUR) + 1, 0, 0)?;
+    let end_hour = match risk {
+        Risk::Severe => u32::from(NIGHT_END_HOUR) + 1,
+        Risk::Moderate | Risk::High => 0,
+    };
+    let end_local = morning.and_hms_opt(end_hour, 0, 0)?;
     Some(end_local.and_utc().timestamp() - i64::from(utc_offset_seconds))
 }
 
 /// The push options for one frost alert, planned at `now` for a place whose
 /// clock is `utc_offset_seconds` from UTC.
 ///
-/// **TTL.** The message expires with its night: the seconds from `now` to
-/// 09:00 local on the morning after, at most [`MAX_PUSH_TTL_SECONDS`]. An alert
-/// that arrives after its night would say "tonight" about a night that is
-/// over, so the push service is told to drop it.
+/// **TTL.** The message expires where [`decide`] would stop sending it: 09:00
+/// local on the morning after for severe frost, midnight for moderate and high
+/// frost, at most [`MAX_PUSH_TTL_SECONDS`]. A push held by a phone that is off
+/// or out of coverage is then dropped instead of arriving after its night,
+/// saying "tonight" about a night that is over.
 ///
-/// `None` when the night is already over (no time left to live), the night or
-/// offset is malformed, or the dedupe key is empty. A caller treats `None` as
-/// "send nothing": a push without these options is never built.
+/// An error means nothing is built, and a caller sends nothing: a push without
+/// these options is never made.
 pub fn frost_push_options(
     alert: &FrostAlert,
-    dedupe_key: &str,
     now: chrono::DateTime<chrono::Utc>,
     utc_offset_seconds: i32,
-) -> Option<PushOptions> {
-    if dedupe_key.is_empty() {
-        return None;
-    }
-    let left = night_end_unix(&alert.night, utc_offset_seconds)? - now.timestamp();
+) -> Result<PushOptions, OptionsError> {
+    let end = night_end_unix(&alert.night, alert.risk, utc_offset_seconds)
+        .ok_or(OptionsError::Invalid)?;
+    let topic = topic_for(KIND_FROST, &alert.night).ok_or(OptionsError::Invalid)?;
+    let left = end - now.timestamp();
     if left <= 0 {
-        return None;
+        return Err(OptionsError::NightOver);
     }
-    Some(PushOptions {
+    Ok(PushOptions {
         ttl_seconds: u32::try_from(left)
             .unwrap_or(MAX_PUSH_TTL_SECONDS)
             .min(MAX_PUSH_TTL_SECONDS),
         urgency: frost_urgency(alert.risk),
-        topic: topic_for("frost", dedupe_key),
+        topic,
     })
 }
 
@@ -1062,6 +1100,50 @@ mod tests {
         assert_eq!(classify_status(400), Outcome::Failed);
         assert_eq!(classify_status(413), Outcome::Failed);
     }
+    #[test]
+    fn severe_frost_is_only_sent_through_the_morning_right_after_its_night() {
+        let prefs = AlertPrefs {
+            frost: true,
+            quiet_start: 22,
+            quiet_end: 6,
+            places: vec!["harare".into()],
+        };
+        let at = |date: &str, hour: u8| {
+            decide(&DecisionInput {
+                prefs: &prefs,
+                slug: "harare",
+                risk: Risk::Severe,
+                local_hour: hour,
+                local_date: date,
+                night: "2026-07-10",
+                already_sent_this_night: false,
+                sent_today: 0,
+                sent_kind_tonight: 0,
+            })
+        };
+        // the night itself, and the small hours of the morning after
+        assert_eq!(at("2026-07-10", 23), Decision::Send);
+        assert_eq!(at("2026-07-11", 2), Decision::Send);
+        assert_eq!(at("2026-07-11", 8), Decision::Send);
+        // after dawn on the morning after, and every hour of any later day
+        assert_eq!(at("2026-07-11", 9), Decision::Stale);
+        assert_eq!(at("2026-07-12", 2), Decision::Stale);
+        assert_eq!(at("2026-08-01", 3), Decision::Stale);
+        // a month boundary: the 31st's night ends on the 1st
+        let month = decide(&DecisionInput {
+            prefs: &prefs,
+            slug: "harare",
+            risk: Risk::Severe,
+            local_hour: 3,
+            local_date: "2026-08-01",
+            night: "2026-07-31",
+            already_sent_this_night: false,
+            sent_today: 0,
+            sent_kind_tonight: 0,
+        });
+        assert_eq!(month, Decision::Send);
+    }
+
     fn utc(s: &str) -> chrono::DateTime<chrono::Utc> {
         chrono::DateTime::parse_from_rfc3339(s)
             .unwrap()
@@ -1078,10 +1160,9 @@ mod tests {
         }
     }
 
-    const KEY_JUL10: &str = "cell:-17.85_31.05:frost:2026-07-10";
-
     #[test]
     fn urgency_is_spelled_as_rfc_8030_spells_it() {
+        // the type models the whole header; frost only uses two of its values
         assert_eq!(Urgency::VeryLow.as_str(), "very-low");
         assert_eq!(Urgency::Low.as_str(), "low");
         assert_eq!(Urgency::Normal.as_str(), "normal");
@@ -1101,39 +1182,39 @@ mod tests {
     }
 
     #[test]
-    fn the_topic_is_the_kind_and_a_hash_of_the_key_and_fits_rfc_8030() {
-        // sha256("cell:-17.85_31.05:frost:2026-07-10"), worked out outside
-        // the code: 6e60291b482856a333062897b95e70cd...
-        let t = topic_for("frost", KEY_JUL10);
-        assert_eq!(t, "frost-6e60291b482856a333062897b9");
-        assert_eq!(t.len(), MAX_TOPIC_LEN);
-        // the same key, the same topic; the next night, another
-        assert_eq!(t, topic_for("frost", KEY_JUL10));
-        assert_ne!(t, topic_for("frost", "cell:-17.85_31.05:frost:2026-07-11"));
-        // never the place, the cell or the person
-        assert!(!t.contains("17.85") && !t.contains("cell"));
-        // every character is in the URL-safe base64 alphabet, for any kind
-        for kind in ["frost", "severe", "a", "heat-wave"] {
-            let t = topic_for(kind, "any key at all");
-            assert!(t.len() <= MAX_TOPIC_LEN, "{t}");
-            assert!(
-                t.bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'),
-                "{t}"
-            );
-        }
+    fn the_topic_is_the_kind_and_the_night_and_names_no_place_or_person() {
+        let t = topic_for(KIND_FROST, "2026-07-10").unwrap();
+        assert_eq!(t, "frost-2026-07-10");
+        assert!(t.len() <= MAX_TOPIC_LEN);
+        // the next night is another message
+        assert_ne!(t, topic_for(KIND_FROST, "2026-07-11").unwrap());
+        // nothing in it comes from a place, a cell or a person; the options
+        // for two places on one night share it, so it tells a push service
+        // nothing about where either device is
+        let a = frost_push_options(
+            &frost_on("2026-07-10", Risk::Severe),
+            utc("2026-07-10T17:30:00Z"),
+            7200,
+        )
+        .unwrap();
+        assert_eq!(a.topic, t);
+        // only the URL-safe base64 alphabet and at most 32 characters, else none
+        assert_eq!(topic_for("frost", "2026-07-10 22:00"), None);
+        assert_eq!(topic_for("frost", "x/y"), None);
+        assert_eq!(topic_for("frost", &"9".repeat(40)), None);
+        assert_eq!(topic_for("", "2026-07-10"), None);
     }
 
     #[test]
-    fn a_frost_push_lives_until_9am_local_the_morning_after() {
+    fn a_severe_frost_push_lives_until_9am_local_the_morning_after() {
         let a = frost_on("2026-07-10", Risk::Severe);
         // Harare, UTC+2. The night ends 2026-07-11 09:00 local = 07:00Z.
-        let at = |now: &str| frost_push_options(&a, KEY_JUL10, utc(now), 7200);
+        let at = |now: &str| frost_push_options(&a, utc(now), 7200);
         // 19:30 local: 13.5 hours
         let evening = at("2026-07-10T17:30:00Z").unwrap();
         assert_eq!(evening.ttl_seconds, 48_600);
         assert_eq!(evening.urgency, Urgency::High);
-        assert_eq!(evening.topic, "frost-6e60291b482856a333062897b9");
+        assert_eq!(evening.topic, "frost-2026-07-10");
         // 03:00 local: 6 hours
         assert_eq!(at("2026-07-11T01:00:00Z").unwrap().ttl_seconds, 21_600);
         // 08:30 local: half an hour
@@ -1141,45 +1222,134 @@ mod tests {
         // 08:59:59 local: one second
         assert_eq!(at("2026-07-11T06:59:59Z").unwrap().ttl_seconds, 1);
         // 09:00 local and after: the night is over, nothing is built
-        assert_eq!(at("2026-07-11T07:00:00Z"), None);
-        assert_eq!(at("2026-07-12T00:00:00Z"), None);
+        assert_eq!(at("2026-07-11T07:00:00Z"), Err(OptionsError::NightOver));
+        assert_eq!(at("2026-07-12T00:00:00Z"), Err(OptionsError::NightOver));
+    }
+
+    #[test]
+    fn a_moderate_or_high_frost_push_lives_until_midnight_where_decide_stops_sending() {
+        for risk in [Risk::Moderate, Risk::High] {
+            let a = frost_on("2026-07-10", risk);
+            // Harare, UTC+2: the push is useful until 00:00 local on the 11th
+            // (22:00Z on the 10th), not until the morning.
+            let at = |now: &str| frost_push_options(&a, utc(now), 7200);
+            // 21:30 local: 2.5 hours
+            let o = at("2026-07-10T19:30:00Z").unwrap();
+            assert_eq!(o.ttl_seconds, 9_000, "{risk:?}");
+            assert_eq!(o.urgency, Urgency::Normal);
+            // 23:50 local: ten minutes, so a phone that is off at 23:50 never
+            // shows "frost tonight" at breakfast
+            assert_eq!(at("2026-07-10T21:50:00Z").unwrap().ttl_seconds, 600);
+            // midnight local and after
+            assert_eq!(at("2026-07-10T22:00:00Z"), Err(OptionsError::NightOver));
+            assert_eq!(at("2026-07-11T01:00:00Z"), Err(OptionsError::NightOver));
+        }
+    }
+
+    /// The TTL ends where `decide` stops sending: for every risk, at every ten
+    /// minutes across two days, options exist exactly when the alert is not
+    /// `Stale`. One boundary, two functions, no way to disagree.
+    #[test]
+    fn a_push_has_options_exactly_while_decide_would_still_send_it() {
+        let prefs = AlertPrefs {
+            frost: true,
+            quiet_start: 0,
+            quiet_end: 0,
+            places: vec!["harare".into()],
+        };
+        let offset = 7200;
+        for risk in [Risk::Moderate, Risk::High, Risk::Severe] {
+            let alert = frost_on("2026-07-10", risk);
+            let mut now = utc("2026-07-10T04:00:00Z");
+            let stop = utc("2026-07-12T04:00:00Z");
+            let mut checked = 0;
+            while now < stop {
+                let local = now + chrono::Duration::seconds(i64::from(offset));
+                let date = local.format("%Y-%m-%d").to_string();
+                let hour = local.format("%H").to_string().parse::<u8>().unwrap();
+                let decision = decide(&DecisionInput {
+                    prefs: &prefs,
+                    slug: "harare",
+                    risk,
+                    local_hour: hour,
+                    local_date: &date,
+                    night: &alert.night,
+                    already_sent_this_night: false,
+                    sent_today: 0,
+                    sent_kind_tonight: 0,
+                });
+                let options = frost_push_options(&alert, now, offset);
+                assert_eq!(
+                    options.is_ok(),
+                    decision != Decision::Stale,
+                    "{risk:?} at {now}: {decision:?} vs {options:?}"
+                );
+                if let Ok(o) = &options {
+                    assert!(o.ttl_seconds >= 1 && o.ttl_seconds <= MAX_PUSH_TTL_SECONDS);
+                }
+                now += chrono::Duration::minutes(10);
+                checked += 1;
+            }
+            assert_eq!(checked, 288);
+        }
     }
 
     #[test]
     fn the_offset_moves_the_end_of_the_night_both_ways() {
-        // UTC-5: the night of 2026-01-10 ends 2026-01-11 09:00 local = 14:00Z.
+        // UTC-5: the night of 2026-01-10 ends, for high frost, at 2026-01-11
+        // 00:00 local = 05:00Z.
         let a = frost_on("2026-01-10", Risk::High);
-        let o = frost_push_options(&a, "k", utc("2026-01-11T01:00:00Z"), -5 * 3600).unwrap();
-        assert_eq!(o.ttl_seconds, 13 * 3600);
-        assert_eq!(o.urgency, Urgency::Normal);
-        // UTC+14: ends 2026-01-11 09:00 local = 2026-01-10 19:00Z.
-        let o = frost_push_options(&a, "k", utc("2026-01-10T10:00:00Z"), 14 * 3600).unwrap();
-        assert_eq!(o.ttl_seconds, 9 * 3600);
+        let o = frost_push_options(&a, utc("2026-01-11T01:00:00Z"), -5 * 3600).unwrap();
+        assert_eq!(o.ttl_seconds, 4 * 3600);
+        // UTC+14: midnight local on the 11th is 10:00Z on the 10th.
+        let o = frost_push_options(&a, utc("2026-01-10T04:00:00Z"), 14 * 3600).unwrap();
+        assert_eq!(o.ttl_seconds, 6 * 3600);
+        // severe frost in the same zone runs on to 09:00 local
+        let s = frost_on("2026-01-10", Risk::Severe);
+        let o = frost_push_options(&s, utc("2026-01-10T04:00:00Z"), 14 * 3600).unwrap();
+        assert_eq!(o.ttl_seconds, 15 * 3600);
     }
 
     #[test]
-    fn a_night_far_ahead_is_capped_at_a_day() {
-        // 49 hours to the end of that night
-        let a = frost_on("2026-07-12", Risk::Moderate);
-        let o = frost_push_options(&a, "k", utc("2026-07-10T08:00:00Z"), 0).unwrap();
+    fn no_alert_the_forecast_can_raise_reaches_the_ttl_cap() {
+        // The longest case: 08:00 local, severe frost from 22:00 tonight to
+        // 08:59 tomorrow (the lookahead reaches 24 hours): 25 hours to 09:00.
+        let a = frost_on("2026-07-10", Risk::Severe);
+        let o = frost_push_options(&a, utc("2026-07-10T06:00:00Z"), 7200).unwrap();
+        assert_eq!(o.ttl_seconds, 25 * 3600);
+        assert!(o.ttl_seconds < MAX_PUSH_TTL_SECONDS);
+        // a night days away is capped, not held for days
+        let far = frost_on("2026-07-14", Risk::Severe);
+        let o = frost_push_options(&far, utc("2026-07-10T08:00:00Z"), 0).unwrap();
         assert_eq!(o.ttl_seconds, MAX_PUSH_TTL_SECONDS);
     }
 
     #[test]
-    fn push_options_fail_closed_on_bad_input() {
+    fn push_options_fail_closed_and_say_why() {
         let now = utc("2026-07-10T17:30:00Z");
         let a = frost_on("2026-07-10", Risk::Severe);
-        assert!(frost_push_options(&a, KEY_JUL10, now, 7200).is_some());
-        // an empty key would give every alert one topic
-        assert_eq!(frost_push_options(&a, "", now, 7200), None);
+        assert!(frost_push_options(&a, now, 7200).is_ok());
         // an offset outside -12h..=+14h is not a time zone
-        assert_eq!(frost_push_options(&a, KEY_JUL10, now, 15 * 3600), None);
-        assert_eq!(frost_push_options(&a, KEY_JUL10, now, -13 * 3600), None);
+        for offset in [15 * 3600, -13 * 3600] {
+            assert_eq!(
+                frost_push_options(&a, now, offset),
+                Err(OptionsError::Invalid)
+            );
+        }
         // a night that is not a date
         for bad in ["", "tomorrow", "2026-13-01", "2026-07-10T22:00"] {
             let mut b = a.clone();
             b.night = bad.to_string();
-            assert_eq!(frost_push_options(&b, KEY_JUL10, now, 7200), None, "{bad}");
+            assert_eq!(
+                frost_push_options(&b, now, 7200),
+                Err(OptionsError::Invalid),
+                "{bad}"
+            );
         }
+        // a night that has ended is a normal morning, told apart from a bug
+        assert_eq!(
+            frost_push_options(&a, utc("2026-07-12T00:00:00Z"), 7200),
+            Err(OptionsError::NightOver)
+        );
     }
 }
