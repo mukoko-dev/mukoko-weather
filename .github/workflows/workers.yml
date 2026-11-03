@@ -131,7 +131,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        worker: [ai, forecast, internal-api, places, public-api, stations, aviation, jobs, tiles]
+        worker: [ai, forecast, internal-api, places, public-api, push, stations, aviation, jobs, tiles]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

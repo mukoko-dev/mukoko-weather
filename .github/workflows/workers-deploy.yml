@@ -17,6 +17,11 @@
 #   4. public-api                                    (binds to forecast,
 #                                                     aviation, places, ai)
 #
+# `push` (mukoko-weather-push, #289) is built by workers.yml but deliberately
+# NOT listed here or in the choices: not yet, it needs the VAPID key pair in
+# the Secrets Store and the evaluator (workers/README.md, "Web Push alerts").
+# When it is switched on it deploys before `jobs`.
+#
 # mongo-bridge is TypeScript (workers/mongo-bridge): the deploy installs its
 # dependencies with npm ci, and wrangler bundles it. It needs the Secrets
 # Store secret MUKOKO_MONGODB_RW_URI to exist first.
