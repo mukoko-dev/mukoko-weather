@@ -8,6 +8,7 @@ import {
   DISPLAY_REFRESH_MS,
   currentHourIndex,
   displayUrl,
+  emptyRetryDelayMs,
   isAirQuality,
   isDisplayWeather,
   nextHourIndexes,
@@ -169,6 +170,39 @@ describe("refresh cadence", () => {
     expect(DISPLAY_REFRESH_MS.airQuality).toBeLessThan(
       DISPLAY_REFRESH_MS.reload,
     );
+  });
+});
+
+describe("the first read of an empty panel", () => {
+  it("is asked again after about 2 s, 5 s, 15 s, 30 s, then every minute", () => {
+    expect([0, 1, 2, 3, 4, 5, 20].map(emptyRetryDelayMs)).toEqual([
+      2_000, 5_000, 15_000, 30_000, 60_000, 60_000, 60_000,
+    ]);
+  });
+
+  it("never waits longer than the shortest refresh interval, so a retry is never a slower poll", () => {
+    for (const failures of [0, 1, 2, 3, 4, 50]) {
+      expect(emptyRetryDelayMs(failures)).toBeLessThan(
+        DISPLAY_REFRESH_MS.weather,
+      );
+    }
+  });
+
+  it("copes with a nonsense count", () => {
+    expect(emptyRetryDelayMs(-3)).toBe(2_000);
+    expect(emptyRetryDelayMs(Number.NaN)).toBe(60_000);
+  });
+
+  it("is what usePolledJson uses while there is no data, and stops once there is", () => {
+    const hook = readFileSync(
+      join(__dirname, "use-display-runtime.ts"),
+      "utf8",
+    );
+    expect(hook).toContain("emptyRetryDelayMs(failures)");
+    expect(hook).toMatch(/if \(!hasData\) \{[\s\S]*?emptyRetryDelayMs/);
+    expect(hook).toContain("hasData = true;");
+    // The retry timer is cleared on unmount and before every read.
+    expect(hook.match(/window\.clearTimeout\(retryTimer\)/g)?.length).toBe(2);
   });
 });
 
