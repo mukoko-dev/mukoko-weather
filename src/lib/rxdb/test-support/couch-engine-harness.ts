@@ -6,8 +6,10 @@
 
 import type {
   ChangeJournal,
+  ChangeOrigin,
   EngineDeps,
   JournalRecord,
+  SignedOutMarker,
   SyncBridge,
   SyncStore,
   Trigger,
@@ -64,7 +66,7 @@ export class Clock {
 export class FakeBridge implements SyncBridge {
   state: SyncableState;
   applied: SyncedPatch[] = [];
-  private listeners = new Set<() => void>();
+  private listeners = new Set<(origin?: ChangeOrigin) => void>();
   constructor(initial: Partial<SyncableState> = {}) {
     this.state = {
       theme: "system",
@@ -77,19 +79,31 @@ export class FakeBridge implements SyncBridge {
     ...this.state,
     selectedActivities: [...this.state.selectedActivities],
   });
-  subscribe = (listener: () => void): (() => void) => {
+  subscribe = (listener: (origin?: ChangeOrigin) => void): (() => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   };
   /** A change the person makes in the app. */
   change(patch: Partial<SyncableState>): void {
     this.state = { ...this.state, ...patch };
-    for (const l of [...this.listeners]) l();
+    for (const l of [...this.listeners]) l("person");
+  }
+  /**
+   * A change that is NOT the person's edit here: a value the app's own
+   * preferences store applied (a `/v1/devices` pull, another tab).
+   */
+  changeFromElsewhere(patch: Partial<SyncableState>): void {
+    this.state = { ...this.state, ...patch };
+    for (const l of [...this.listeners]) l("applied");
+  }
+  /** The store notifies although nothing differs (a fresh array of the same ids). */
+  noise(): void {
+    for (const l of [...this.listeners]) l("person");
   }
   apply = (patch: SyncedPatch): void => {
     this.applied.push(patch);
     this.state = { ...this.state, ...patch };
-    for (const l of [...this.listeners]) l();
+    for (const l of [...this.listeners]) l("person");
   };
   get listenerCount(): number {
     return this.listeners.size;
@@ -132,18 +146,45 @@ export class MemoryJournal implements ChangeJournal {
   }
 }
 
+/**
+ * The mark the first "nobody is signed in" answer leaves, in memory. What
+ * `sync-signed-out.ts` keeps in web storage in the browser: it survives an
+ * engine (a page load) because a test hands the same object to the next one.
+ */
+export class MemorySignedOutMarker implements SignedOutMarker {
+  at: number | null = null;
+  writes = 0;
+  clears = 0;
+  read(): number | null {
+    return this.at;
+  }
+  write(atMs: number): void {
+    this.writes += 1;
+    this.at = atMs;
+  }
+  clear(): void {
+    this.clears += 1;
+    this.at = null;
+  }
+}
+
+/**
+ * A credential as the route's answer parses: a lifetime from issue, never a
+ * time of day. (`now` is accepted and ignored: older tests pass the clock.)
+ */
 export function session(
   over: Partial<CouchSession> & { ttlMs?: number; now?: number } = {},
 ): CouchSession {
-  const personId = over.personId ?? PERSON;
+  const { ttlMs, now: _now, ...fields } = over;
+  void _now;
+  const personId = fields.personId ?? PERSON;
   return {
-    token: over.token ?? "credential-for-tests-0123456789",
-    expiresAtMs:
-      over.expiresAtMs ?? (over.now ?? START) + (over.ttlMs ?? GRANT_TTL_MS),
+    token: "credential-for-tests-0123456789",
+    expiresInMs: ttlMs ?? GRANT_TTL_MS,
     database: `user_${personId}`,
     personId,
     databaseUrl: `https://api.test/v1/couch/db/user_${personId}/`,
-    ...over,
+    ...fields,
   };
 }
 
@@ -231,6 +272,8 @@ export interface Harness {
   ensured: CouchSession[];
   /** The `keep` argument of every `purgeStores` call, in order. */
   purged: (string | null)[];
+  /** The mark the first "nobody is signed in" answer leaves. */
+  marker: MemorySignedOutMarker;
 }
 
 export function harness(
@@ -250,8 +293,11 @@ export function harness(
     recorded?: string | null;
     /** Where changes not yet written to documents are kept between page loads. */
     journal?: ChangeJournal;
+    /** Where the first "signed out" answer is remembered between page loads. */
+    marker?: MemorySignedOutMarker;
   } = {},
 ): Harness {
+  const marker = options.marker ?? new MemorySignedOutMarker();
   const clock = new Clock();
   const bridge = new FakeBridge(options.bridge);
   const stores: FakeStore[] = [];
@@ -299,6 +345,7 @@ export function harness(
       ? { recordedPerson: () => options.recorded ?? null }
       : {}),
     ...(options.journal ? { journal: options.journal } : {}),
+    signedOutMarker: marker,
   };
   return {
     clock,
@@ -310,5 +357,6 @@ export function harness(
     sessions,
     ensured,
     purged,
+    marker,
   };
 }

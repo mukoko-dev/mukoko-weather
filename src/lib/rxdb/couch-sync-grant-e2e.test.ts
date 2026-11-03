@@ -163,7 +163,7 @@ function world(
       });
       return parseSessionBody({
         token: credential.token,
-        expiresAt: new Date(credential.expiresAtMs).toISOString(),
+        expiresIn: credential.expiresInSeconds,
         database: credential.database,
         apiOrigin: "https://api.test",
       });

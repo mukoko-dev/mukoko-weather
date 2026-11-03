@@ -4,6 +4,9 @@ import type { PreferencesDocType } from "./rxdb/schemas";
 import { getFeatureFlag } from "./feature-flags";
 // Types only: the sync code itself is imported dynamically, behind the flag.
 import type { SyncableState, SyncedPatch } from "./rxdb/couch-docs";
+import type { SyncBridge } from "./rxdb/couch-sync";
+// The one tiny, dependency-free comparison the engine uses too.
+import { sameSyncableState } from "./rxdb/sync-state";
 import { isLocationSlug } from "./current-slug";
 import { isPresetAnchor, type PresetAnchor } from "./location-presets";
 import { resolveTheme, type ThemePreference } from "./theme";
@@ -529,13 +532,18 @@ export function initializeDeviceSync(): void {
 // ---------------------------------------------------------------------------
 
 /** The slice of state the CouchDB sync reads and writes (`couch-docs.ts`). */
-function readSyncableState(): SyncableState {
-  const s = useAppStore.getState();
+function pickSyncableState(
+  s: Pick<AppState, "theme" | "selectedForecastModel" | "selectedActivities">,
+): SyncableState {
   return {
     theme: s.theme,
     selectedForecastModel: s.selectedForecastModel,
     selectedActivities: [...s.selectedActivities],
   };
+}
+
+function readSyncableState(): SyncableState {
+  return pickSyncableState(useAppStore.getState());
 }
 
 /**
@@ -571,24 +579,32 @@ export function applySyncedPreferences(patch: SyncedPatch): void {
 function startCouchSyncIfEnabled(): void {
   if (!getFeatureFlag("couch_sync")) return;
   void import("./rxdb/couch-sync-start")
-    .then((m) =>
-      m.startCouchSync(
-        {
-          read: readSyncableState,
-          subscribe: (listener) =>
-            useAppStore.subscribe((state, prev) => {
-              if (
-                state.theme !== prev.theme ||
-                state.selectedForecastModel !== prev.selectedForecastModel ||
-                state.selectedActivities !== prev.selectedActivities
-              ) {
-                listener();
-              }
-            }),
-          apply: applySyncedPreferences,
-        },
-        getDeviceId(),
-      ),
-    )
+    .then((m) => m.startCouchSync(createSyncBridge(), getDeviceId()))
     .catch(() => undefined);
+}
+
+/**
+ * What the sync reads, hears about and writes (`SyncBridge`, `couch-sync.ts`).
+ * It hears about a change only when the VALUE of a synced setting differs (the
+ * preferences bridge sets a fresh array of the same activities on every
+ * emission of the preferences document, which is no change), and it is told
+ * where the change came from: `"applied"` when it happened inside the
+ * preferences bridge's `applyToStore` (the hydration, a `/v1/devices` pull,
+ * another tab), which is not an edit the person made here and must not be
+ * written to the cloud as one, `"person"` for everything else.
+ */
+export function createSyncBridge(): SyncBridge {
+  return {
+    read: readSyncableState,
+    subscribe: (listener) =>
+      useAppStore.subscribe((state, prev) => {
+        if (
+          sameSyncableState(pickSyncableState(state), pickSyncableState(prev))
+        ) {
+          return;
+        }
+        listener(_suppressRxDBWrites ? "applied" : "person");
+      }),
+    apply: applySyncedPreferences,
+  };
 }

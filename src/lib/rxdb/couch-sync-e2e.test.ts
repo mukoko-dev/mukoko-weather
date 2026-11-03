@@ -95,7 +95,7 @@ function device(
     journal: b.journal,
     fetchSession: async (): Promise<CouchSession> => ({
       token: TOKEN,
-      expiresAtMs: clock.now + GRANT_TTL_MS,
+      expiresInMs: GRANT_TTL_MS,
       database: `user_${PERSON}`,
       personId: PERSON,
       databaseUrl: `https://api.test/v1/couch/db/user_${PERSON}/`,
@@ -384,9 +384,11 @@ describe("settings follow the person", () => {
       await startDevice(page2);
       b.bridge.change({ theme: "light" });
       await b.clock.advance(LOCAL_WRITE_DEBOUNCE_MS, page2.settle);
-      // Written to the person's database on the device, offline: nothing is
-      // left only in the record.
-      expect(b.journal.record).toBeNull();
+      // Written to the database this browser holds, offline, but that database
+      // was chosen on a guess (the one person it holds one for) and no
+      // credential has said it is this person's: the record stays, with the
+      // time the change was made, until one does.
+      expect(b.journal.record).toMatchObject({ at: madeAt });
       await page2.engine.stop(); // closed offline
 
       // Page three: still offline, then the connection returns.
@@ -404,6 +406,8 @@ describe("settings follow the person", () => {
         updatedAt: toRfc3339(madeAt),
       });
       expect(b.bridge.state.theme).toBe("light");
+      // A credential has named the person: the change is durable, the record goes.
+      expect(b.journal.record).toBeNull();
       await a.sync();
       expect(a.bridge.state.theme).toBe("light");
     });

@@ -48,7 +48,11 @@
  * A CHANGE IS NEVER ONLY IN MEMORY. The moment the person changes a synced
  * setting the engine records, synchronously, the state they started from and
  * when (`ChangeJournal`, kept in web storage by `sync-pending.ts`); the record
- * is cleared once the change is in a document. A page that closes inside the
+ * is cleared once the change is in a document of a database a credential has
+ * said is the person's. The database opened at start is only a guess (the one
+ * person this browser holds one for), so a write to it is NOT durable yet: the
+ * time of the change and the record stay until a credential confirms it, and a
+ * wrong guess loses neither (`settleRecord`). A page that closes inside the
  * debounce, or before any local database exists (a person's first session), or
  * while the credential keeps failing, leaves the record behind, and the next
  * page's engine starts its comparison from it instead of from the state it
@@ -57,7 +61,10 @@
  * page saw no difference, pulled the older server value and reverted the
  * person's choice. `stop()` (pagehide) and `flush()` (the page was hidden)
  * also write at once. What the engine applies from the server is not a change
- * of the person's and is never recorded.
+ * of the person's and is never recorded; nor is a value the app's own
+ * preferences store applied (`ChangeOrigin` "applied": the hydration, a
+ * `/v1/devices` pull, another tab), which becomes the baseline instead
+ * (`adoptApplied`). Only a difference in VALUE is a change at all.
  *
  * ONE TAB REPLICATES. The local database is shared by every tab of the browser
  * (RxDB multi-instance) and only the leader tab replicates (`SyncStore.isLeader`),
@@ -70,17 +77,27 @@
  * replicates when another tab wrote into the shared database, so a visible
  * follower's change is never stranded.
  *
- * SIGNED OUT IS NOT A FAILURE, AND ONLY A CERTAIN SIGN-OUT WIPES ANYTHING. A
- * 401 from the credential route that carries `SIGNED_OUT_CODE` means nobody is
- * signed in: the engine goes idle until the next page load. No failure count,
- * no timer, no retry, no second request, whatever the page does. It closes and
- * removes the local sync database (`purgeStores`), which held the previous
- * person's settings, and the record of unwritten changes; a different person
- * issued later gets a database of their own and the previous person's is
- * removed. A 401 WITHOUT the code, and every other status, is an ordinary
- * failure: the local database may hold the only copy of a change made offline.
- * Likewise an activity is dropped on a remote removal only when its tombstone
- * is in the local database, never because a document is missing.
+ * SIGNED OUT IS NOT A FAILURE, AND NOTHING IS WIPED ON A DOUBT. A 401 from the
+ * credential route that carries `SIGNED_OUT_CODE` means nobody is signed in:
+ * the engine goes idle until the next page load. No failure count, no timer, no
+ * retry, no second request, whatever the page does. The FIRST such answer only
+ * closes the local database and leaves a mark (one time, `SignedOutMarker`):
+ * removing the previous person's local database and the record of unwritten
+ * changes cannot be undone, and one answer is an inference (AuthKit can lose a
+ * session for a reason that is not a sign-out). The SECOND, on a later page
+ * load at least `SIGNED_OUT_CONFIRM_MS` after the first, removes them
+ * (`purgeStores`); any session that is issued removes the mark. A different
+ * person issued later gets a database of their own and the previous person's is
+ * removed at once: a signed credential names them, which is certain. A 401
+ * WITHOUT the code, and every other status, is an ordinary failure: the local
+ * database may hold the only copy of a change made offline. Likewise an activity
+ * is dropped on a remote removal only when its tombstone is in a database a
+ * credential has said is the person's, never because a document is missing.
+ *
+ * THE CREDENTIAL'S LIFE IS COUNTED HERE. The route sends a duration, not a time
+ * of day; the engine ends the credential that long after it SENT the request,
+ * on its own clock (`fetchFresh`). The server's clock is never compared with
+ * this device's.
  *
  * FAILURES ARE SILENT AND BOUNDED. No console output, never a throw into a
  * render. 401 from the database = the credential was refused: fetch a new one
@@ -132,6 +149,7 @@ import {
 import { CouchHttpError } from "./couch-fetch";
 import { CouchSessionError, type CouchSession } from "./couch-session";
 import { COUCH_MIN_GRANT_LIFE_MS } from "../couch-session-timing";
+import { cloneSyncableState, sameSyncableState } from "./sync-state";
 
 /** Events from the store this soon after the engine's own write are its own. */
 const SELF_WRITE_GRACE_MS = 500;
@@ -142,6 +160,13 @@ const SELF_WRITE_GRACE_MS = 500;
  * later cycle with it.
  */
 export const OPEN_STORE_TIMEOUT_MS = 10_000;
+
+/**
+ * A credential as the engine holds it: what the route sent plus WHEN IT ENDS ON
+ * THIS DEVICE'S CLOCK (the moment the request was sent plus the lifetime the
+ * server named). The server's clock is never compared with this one.
+ */
+type Held = CouchSession & { expiresAtMs: number };
 
 /** Thrown inside a cycle that the page has since stopped (or restarted past). */
 class Halt extends Error {
@@ -188,12 +213,43 @@ export interface SyncStore {
   close(): Promise<void>;
 }
 
+/**
+ * Where a change of the app's synced settings came from. `"person"` is an edit
+ * made here (and the default when the bridge does not say). `"applied"` is a
+ * value that arrived from the app's own preferences store (the hydration, a
+ * `/v1/devices` pull, another tab): the person did not make it HERE, so it is
+ * never written to the cloud as their edit, with a new time.
+ */
+export type ChangeOrigin = "person" | "applied";
+
 /** The app's state: read it, hear about changes, apply a remote patch. */
 export interface SyncBridge {
   read(): SyncableState;
-  subscribe(listener: () => void): () => void;
+  /**
+   * The listener hears about a change in the VALUE of a synced setting (not a
+   * fresh array of the same members) and where it came from.
+   */
+  subscribe(listener: (origin?: ChangeOrigin) => void): () => void;
   apply(patch: SyncedPatch): void;
 }
+
+/**
+ * The first "nobody is signed in" answer, remembered across page loads (one
+ * time, nothing else): see `sync-signed-out.ts`. Synchronous; may throw
+ * (blocked storage), which the engine treats as "no mark".
+ */
+export interface SignedOutMarker {
+  read(): number | null;
+  write(atMs: number): void;
+  clear(): void;
+}
+
+/**
+ * How long after the first "nobody is signed in" answer a later one counts as
+ * the second. Within it, the same blip (a reload, two tabs racing for one
+ * refresh token) is still one observation.
+ */
+export const SIGNED_OUT_CONFIRM_MS = 60_000;
 
 /**
  * What was true before the person's changes that are not written to documents
@@ -251,6 +307,12 @@ export interface EngineDeps {
   recordedPerson?(): string | null;
   /** Where changes not yet written to documents are kept. Optional. */
   journal?: ChangeJournal;
+  /**
+   * Where the first "nobody is signed in" answer is remembered. Without it
+   * nothing is ever removed on a 401: removing a person's local copy needs the
+   * answer twice, on two page loads, and there is nowhere to remember the first.
+   */
+  signedOutMarker?: SignedOutMarker;
   /** Open the local database of one person; null when RxDB is unavailable. */
   openStore(personId: string): Promise<SyncStore | null>;
   bridge: SyncBridge;
@@ -294,18 +356,8 @@ export interface CouchSyncEngine {
 // The engine
 // ---------------------------------------------------------------------------
 
-function sameState(a: SyncableState, b: SyncableState): boolean {
-  return (
-    a.theme === b.theme &&
-    a.selectedForecastModel === b.selectedForecastModel &&
-    a.selectedActivities.length === b.selectedActivities.length &&
-    a.selectedActivities.every((id, i) => id === b.selectedActivities[i])
-  );
-}
-
-function cloneState(s: SyncableState): SyncableState {
-  return { ...s, selectedActivities: [...s.selectedActivities] };
-}
+const sameState = sameSyncableState;
+const cloneState = cloneSyncableState;
 
 function candidateIds(state: SyncableState): string[] {
   return [
@@ -326,7 +378,7 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
   /** The route said nobody is signed in: idle until the next page load. */
   let signedOut = false;
   let status: EngineStatus = "stopped";
-  let session: CouchSession | null = null;
+  let session: Held | null = null;
   let store: SyncStore | null = null;
   let storePerson: string | null = null;
   let seededPerson: string | null = null;
@@ -351,6 +403,8 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
   let tentative = false;
   /** The engine is applying the server's values to the app; not a person's edit. */
   let applyingRemote = false;
+  /** This run has already taken the "signed out" mark away (a session was issued). */
+  let markerCleared = false;
   let failures = 0;
   let refetchedThisRun = false;
   let lastRunAt = Number.NEGATIVE_INFINITY;
@@ -486,12 +540,22 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
    * with under `COUCH_MIN_GRANT_LIFE_MS` left it is due for renewal on arrival
    * and would loop, so it is a failure like any other and backs off.
    */
-  async function fetchFresh(): Promise<CouchSession> {
+  async function fetchFresh(): Promise<Held> {
+    // The server says how long the credential lives from when it issued it. It
+    // ends, here, that long after the request was SENT (the answer was issued
+    // at some point between, so this is never later than the truth): by this
+    // device's clock alone. A time of day on the server's clock would be wrong
+    // by however far the two clocks differ, and the credential is five minutes.
+    const sentAt = deps.now();
     const fresh = await abortable(deps.fetchSession());
-    if (!(fresh.expiresAtMs - deps.now() >= COUCH_MIN_GRANT_LIFE_MS)) {
+    const expiresAtMs = sentAt + fresh.expiresInMs;
+    // The route knows who is signed in: whatever "nobody" it said before was a
+    // blip (even if the credential is then too short to use).
+    noteSignedIn();
+    if (!(expiresAtMs - deps.now() >= COUCH_MIN_GRANT_LIFE_MS)) {
       throw new CouchSessionError(503, "credential_too_short");
     }
-    return fresh;
+    return { ...fresh, expiresAtMs };
   }
 
   function dropCredential(): void {
@@ -499,7 +563,7 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
     refreshTimer = clear(refreshTimer);
   }
 
-  function scheduleRefresh(s: CouchSession): void {
+  function scheduleRefresh(s: Held): void {
     const run = epoch;
     refreshTimer = clear(refreshTimer);
     refreshTimer = deps.setTimer(
@@ -532,7 +596,7 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
     );
   }
 
-  async function ensureSession(run: number): Promise<CouchSession> {
+  async function ensureSession(run: number): Promise<Held> {
     if (
       session &&
       isTokenUsable(session.expiresAtMs, deps.now(), REFRESH_LEAD_MS)
@@ -654,11 +718,50 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
   function recordChange(): void {
     if (!deps.journal || !lastWritten || changedAt === null) return;
     try {
-      deps.journal.write({ base: cloneState(lastWritten), at: changedAt });
+      // The state the record starts from is the last one that is DURABLE for
+      // the person: in the database a credential has confirmed is theirs. While
+      // the open database is only a guess (`tentative`), what was written to it
+      // does not count, so the record keeps the state the page started from.
+      deps.journal.write({ base: cloneState(durableBase()), at: changedAt });
       journalOwned = true;
     } catch {
       // Best effort.
     }
+  }
+
+  /**
+   * The state the person's unwritten changes are measured from: what is in the
+   * database that is certainly theirs. `lastWritten` once a credential has
+   * named the person; until then, the state this page started from, because the
+   * database written to was chosen on a guess (`recordedPerson`).
+   */
+  function durableBase(): SyncableState {
+    return tentative && startBaseline
+      ? startBaseline
+      : (lastWritten as SyncableState);
+  }
+
+  /**
+   * After a write (or a read that found nothing to write): the person's
+   * changes are settled, and the time and the record of them can go, only when
+   * they are durable, i.e. in a database a credential has confirmed. A change
+   * written to a guessed database keeps its record and its time, so a wrong
+   * guess (another person's database) loses neither: the right database gets
+   * the change, stamped with when the person made it, and a page that closes
+   * before any credential still finds the record.
+   */
+  function settleRecord(current: SyncableState): void {
+    if (
+      tentative &&
+      startBaseline &&
+      changedAt !== null &&
+      !sameState(current, startBaseline)
+    ) {
+      recordChange();
+      return;
+    }
+    changedAt = null;
+    clearRecord();
   }
 
   function clearRecord(): void {
@@ -691,8 +794,7 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
     const base = lastWritten;
     const next = cloneState(deps.bridge.read());
     if (sameState(next, base)) {
-      changedAt = null;
-      clearRecord();
+      settleRecord(next);
       return false;
     }
     const at = changedAt ?? deps.now();
@@ -700,9 +802,9 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
     const ops = planChangeOps(base, next, live, docContext(at));
     await applyOps(db, ops, at);
     lastWritten = next;
-    if (sameState(cloneState(deps.bridge.read()), next)) {
-      changedAt = null;
-      clearRecord();
+    const after = cloneState(deps.bridge.read());
+    if (sameState(after, next)) {
+      settleRecord(next);
     } else {
       // The person changed something again while this was being written: that
       // one is pending, from the state just written.
@@ -755,9 +857,15 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
       .filter(isKnownActivityId)
       .map(activityDocId);
     const live = new Set(docs.map((d) => d.id));
-    const deleted = new Set(
-      [...(await db.knownIds(held))].filter((id) => !live.has(id)),
-    );
+    // A removal is read only from a database a credential has said is this
+    // person's. A follower tab opens "the one person this browser holds a
+    // database for", a guess; after a sign-out and another person's sign-in a
+    // tombstone there is the PREVIOUS person's and says nothing about what this
+    // person chose. (The leader tab, which has a credential, applies the
+    // removal, and the tabs share the app's preferences.)
+    const deleted = tentative
+      ? new Set<string>()
+      : new Set([...(await db.knownIds(held))].filter((id) => !live.has(id)));
     const patch = patchFromDocs(docs, before, deleted);
     if (Object.keys(patch).length === 0) return wrote;
     // A change made while the documents were read wins: the next cycle sees it.
@@ -788,7 +896,7 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
     }
   }
 
-  async function replicate(db: SyncStore, s: CouchSession): Promise<void> {
+  async function replicate(db: SyncStore, s: Held): Promise<void> {
     await writing(() => abortable(db.runReplication(s)));
   }
 
@@ -859,7 +967,10 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
         status = "unavailable";
         return;
       }
-      tentative = false; // a credential has said whose database this is
+      // A credential has said whose database this is, so what is written to it
+      // from here on is durable (and the next flush settles what was written
+      // while it was only a guess: `settleRecord`).
+      tentative = false;
       if (!(await isLeaderOf(db))) {
         if (halted(run)) return;
         await followOnly(run);
@@ -909,9 +1020,57 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
   }
 
   /**
-   * Nobody is signed in. Idle until the next page load: nothing is counted,
-   * nothing is scheduled and nothing asks again. The local database held the
-   * previous person's settings, so it is closed and removed.
+   * Has "nobody is signed in" now been heard twice, on two page loads? The
+   * first time it is written down (the time) and nothing is removed: one answer
+   * is an inference, and what it would remove cannot be got back. The second
+   * time counts when it is at least `SIGNED_OUT_CONFIRM_MS` after the first
+   * (a reload or a second tab a moment later is the same observation, and the
+   * mark keeps its first time). A mark from the future (a clock that moved
+   * back) is not a first sight; it is made again from now. With nowhere to keep
+   * the mark there is no second sight: nothing is ever removed.
+   */
+  function signedOutHeardTwice(): boolean {
+    const marker = deps.signedOutMarker;
+    if (!marker) return false;
+    let first: number | null = null;
+    try {
+      first = marker.read();
+    } catch {
+      first = null;
+    }
+    const now = deps.now();
+    if (first !== null && first <= now) {
+      return now - first >= SIGNED_OUT_CONFIRM_MS;
+    }
+    try {
+      marker.write(now);
+    } catch {
+      // No mark: it will be the first sight again next time.
+    }
+    return false;
+  }
+
+  /** A session was issued: whatever "signed out" was heard before was a blip. */
+  function noteSignedIn(): void {
+    if (markerCleared) return;
+    markerCleared = true;
+    try {
+      deps.signedOutMarker?.clear();
+    } catch {
+      // Best effort.
+    }
+  }
+
+  /**
+   * The route said nobody is signed in. Idle until the next page load either
+   * way: nothing is counted, nothing is scheduled and nothing asks again.
+   *
+   * The FIRST time (see `signedOutHeardTwice`) the local database is only
+   * closed, and the record of unwritten changes stays: if this was a blip, the
+   * next page picks both up where they were. The SECOND time the database held
+   * the previous person's settings and is removed, and the record goes too: a
+   * change nobody can write for a person who is not signed in is not left for
+   * whoever signs in next on this browser.
    */
   function goSignedOut(): void {
     signedOut = true;
@@ -921,14 +1080,24 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
     wakeRequested = false;
     session = null;
     clearAllTimers();
-    // A change nobody can write for a person who is not signed in is not left
-    // for whoever signs in next on this browser.
+    if (!signedOutHeardTwice()) {
+      enqueue(async () => {
+        await closeStore();
+        purgedFor = null;
+      });
+      return;
+    }
     journalOwned = true;
     clearRecord();
     enqueue(async () => {
       await closeStore();
       purgedFor = null;
       await purge(null);
+      try {
+        deps.signedOutMarker?.clear();
+      } catch {
+        // Best effort.
+      }
     });
   }
 
@@ -1002,9 +1171,43 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
     }, PUSH_DEBOUNCE_MS);
   }
 
-  function onLocalChange(): void {
+  /**
+   * A value arrived from the app's own preferences store (the hydration, a
+   * `/v1/devices` pull, another tab): not an edit the person made here. It
+   * becomes the baseline, so it is neither written to the cloud as their edit
+   * (with a new time that could beat a newer value from another device, or, for
+   * a pull of a profile with no activities, as the removal of every activity)
+   * nor reverted. The documents stay the truth: with a document for a setting,
+   * the next apply brings the app back to it. Not while the person has a change
+   * of their own that is not written yet: the two cannot be told apart in one
+   * diff, so that change keeps its record and its time and the applied value
+   * rides along with it.
+   */
+  async function adoptApplied(): Promise<void> {
+    await locked(async () => {
+      if (stopped || signedOut || changedAt !== null || !lastWritten) return;
+      lastWritten = cloneState(deps.bridge.read());
+      if (tentative && startBaseline) startBaseline = cloneState(lastWritten);
+    });
+  }
+
+  function onLocalChange(origin: ChangeOrigin = "person"): void {
     // What the engine itself applied from the server is not the person's edit.
     if (stopped || signedOut || applyingRemote) return;
+    if (origin === "applied") {
+      void track(adoptApplied().catch(() => undefined));
+      return;
+    }
+    // Only a real difference is a change: the bridge can notify although the
+    // settings are the same (a fresh array of the same activities). With
+    // nothing pending, that is no edit: no time, no record, no timer.
+    if (
+      changedAt === null &&
+      lastWritten &&
+      sameState(deps.bridge.read(), lastWritten)
+    ) {
+      return;
+    }
     changedAt = deps.now();
     // At once and synchronously, before the debounce: a page that closes in
     // the next 750 ms still leaves the change behind.
@@ -1083,6 +1286,7 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
       journalOwned = saved !== null;
       tentative = false;
       applyingRemote = false;
+      markerCleared = false;
       unsubBridge = deps.bridge.subscribe(onLocalChange);
       unsubTrigger = deps.onTrigger?.(onPageTrigger) ?? null;
       enqueue(openLocal);

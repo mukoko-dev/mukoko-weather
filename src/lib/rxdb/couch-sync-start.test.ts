@@ -14,6 +14,8 @@ import { _resetCouchSyncStart, startCouchSync } from "./couch-sync-start";
 import type { CouchSyncEngine } from "./couch-sync";
 import { SYNC_PEOPLE_KEY, recordedSyncPeople } from "./sync-people-index";
 import { SYNC_PENDING_KEY } from "./sync-pending";
+import { SYNC_SIGNED_OUT_KEY } from "./sync-signed-out";
+import { SIGNED_OUT_CODE } from "../couch-session-contract";
 import { FakeBridge } from "./test-support/couch-engine-harness";
 
 const PERSON = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
@@ -214,9 +216,42 @@ describe("flag on: signed out", () => {
     await handle?.stop();
   });
 
-  it("a person recorded by an earlier sign-in whose database cannot be removed (IndexedDB blocked or missing) never throws and stays recorded", async () => {
+  /** The route says what it says when nobody is signed in. */
+  const routeSaysSignedOut = () =>
+    fetchSpy.mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ error: SIGNED_OUT_CODE }), {
+          status: 401,
+        }),
+    );
+
+  it("the first 401 only leaves a mark (one time, nothing else) and removes nothing, even for a person who is recorded", async () => {
     stubBrowser("true");
+    routeSaysSignedOut();
+    // (Another person than the next test's: RxDB refuses a second database of
+    // one name in a process, and a blocked IndexedDB leaves the first one
+    // registered.)
+    const recorded = "0190ffff-0000-7000-8000-00000000abcd";
+    storage.set(SYNC_PEOPLE_KEY, JSON.stringify([recorded]));
+    const before = Date.now();
+    const handle = await startCouchSync(new FakeBridge(), "device");
+    await untilRequests(1);
+    await settle();
+    const mark = storage.get(SYNC_SIGNED_OUT_KEY);
+    expect(mark).toMatch(/^\d+$/);
+    expect(Number(mark)).toBeGreaterThanOrEqual(before);
+    expect(recordedSyncPeople()).toEqual([recorded]);
+    // The recorded person's database was not touched by a removal.
+    expect(indexedDbCalls).not.toContain("deleteDatabase");
+    await handle?.stop();
+  });
+
+  it("a person recorded by an earlier sign-in whose database cannot be removed (IndexedDB blocked or missing), the second time nobody is signed in, never throws and stays recorded", async () => {
+    stubBrowser("true");
+    routeSaysSignedOut();
     storage.set(SYNC_PEOPLE_KEY, JSON.stringify([PERSON]));
+    // The first answer was heard two minutes ago.
+    storage.set(SYNC_SIGNED_OUT_KEY, String(Date.now() - 120_000));
     const handle = await startCouchSync(new FakeBridge(), "device");
     await untilRequests(1);
     // Removing loads RxDB's Dexie storage first: give it a moment.

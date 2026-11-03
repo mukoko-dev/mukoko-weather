@@ -164,7 +164,7 @@ describe("the local database opens at start, before any credential", () => {
 });
 
 describe("a change is never only in memory", () => {
-  it("is recorded the moment it is made, and the record is cleared once it is written", async () => {
+  it("is recorded the moment it is made, and the record is cleared once it is in the database a credential has confirmed", async () => {
     const journal = new MemoryJournal();
     const h = harness({ recorded: PERSON, journal });
     h.flags.online = false;
@@ -180,6 +180,13 @@ describe("a change is never only in memory", () => {
 
     await h.clock.advance(LOCAL_WRITE_DEBOUNCE_MS, settleWith(engine));
     expect(h.stores[0].written).toHaveLength(1);
+    // Written, but to the database of "the person this browser holds one for":
+    // nobody has said it is this person's, so the record is not cleared yet.
+    expect(journal.record).not.toBeNull();
+
+    h.flags.online = true;
+    h.triggers.forEach((t) => t("online"));
+    await engine.idle();
     expect(journal.record).toBeNull();
   });
 
@@ -423,8 +430,8 @@ describe("a missing document is not a removal", () => {
   });
 
   it("a deletion that was pulled (a tombstone in the database) does remove it, and only that one", async () => {
+    // The leader's cycle: the credential has said whose database this is.
     const store = new FakeStore();
-    store.leader = false;
     store.deleted.add("activity:gardening");
     const h = harness({
       recorded: PERSON,
@@ -433,6 +440,326 @@ describe("a missing document is not a removal", () => {
     });
     await begin(h);
     expect(h.bridge.state.selectedActivities).toEqual(["livestock"]);
+  });
+
+  it("but a tombstone in a database nobody has confirmed is the person's yet is not read as their removal: a follower (no credential) removes nothing", async () => {
+    // The follower opened the database of "the one person this browser holds
+    // one for", a GUESS: after a sign-out and another person's sign-in it is
+    // the previous person's. A deletion found there says nothing about what
+    // THIS person chose. (The leader tab, which does have a credential,
+    // applies the removal, and the tabs share the app's preferences.)
+    const store = new FakeStore();
+    store.leader = false;
+    store.deleted.add("activity:gardening");
+    const h = harness({
+      recorded: PERSON,
+      makeStore: () => store,
+      bridge: { selectedActivities: ["livestock", "gardening"] },
+    });
+    const engine = await begin(h);
+    await h.clock.advance(POLL_INTERVAL_MS * 2, settleWith(engine));
+    expect(h.bridge.state.selectedActivities).toEqual([
+      "livestock",
+      "gardening",
+    ]);
+    expect(h.bridge.applied).toEqual([]);
+  });
+
+  it("while a value that is there (a live document) still reaches a follower", async () => {
+    const store = new FakeStore();
+    store.leader = false;
+    store.docs.set(
+      "preference:theme",
+      themeDoc("dark", "2026-11-02T09:00:00.000Z"),
+    );
+    const h = harness({ recorded: PERSON, makeStore: () => store });
+    await begin(h);
+    expect(h.bridge.state.theme).toBe("dark");
+  });
+});
+
+describe("a change written to a database chosen on a guess is not durable until a credential says whose it is", () => {
+  // `recordedPerson` is a guess: the one person this browser holds a database
+  // for. If it was the wrong person (sign-out, another person signs in), the
+  // change written to it is in the wrong person's database, and the engine
+  // starts again from the baseline for the right one. Until a credential names
+  // the person, neither the time of the change nor the record of it may go.
+  const OTHER = "0190ffff-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
+
+  const wrongGuess = (journal: MemoryJournal) =>
+    harness({
+      recorded: OTHER,
+      journal,
+      session: async (_n, now) => session({ now }), // names PERSON
+    });
+
+  it("the guess was wrong: the record stays through the write to the wrong database, and the right database gets the change with the ORIGINAL time", async () => {
+    const journal = new MemoryJournal();
+    const h = wrongGuess(journal);
+    h.flags.online = false;
+    const engine = await begin(h);
+
+    const madeAt = h.clock.now;
+    h.bridge.change({ theme: "light" });
+    await h.clock.advance(LOCAL_WRITE_DEBOUNCE_MS, settleWith(engine));
+    expect(h.stores[0].written).toHaveLength(1); // written to the guess
+    // NOT durable: the record is still there, with the state before the
+    // change and the time it was made.
+    expect(journal.record).toMatchObject({
+      at: madeAt,
+      base: { theme: "system" },
+    });
+
+    // A long time offline: the time of the change must not move.
+    await h.clock.advance(10 * 60_000, settleWith(engine));
+    expect(journal.record).toMatchObject({ at: madeAt });
+
+    h.flags.online = true;
+    h.triggers.forEach((t) => t("online"));
+    await engine.idle();
+    expect(h.stores[0].closed).toBe(true);
+    const mine = h.stores[1].written.filter((d) => d.id === "preference:theme");
+    expect(mine).toHaveLength(1);
+    expect(mine[0].updatedAt).toBe(toRfc3339(madeAt));
+    // The right database has it: now the record goes.
+    expect(journal.record).toBeNull();
+  });
+
+  it("the page closes after the write to the wrong database and before any credential: the next page still has the change and its time", async () => {
+    const journal = new MemoryJournal();
+    const h = wrongGuess(journal);
+    h.flags.online = false;
+    const first = await begin(h);
+    const madeAt = h.clock.now;
+    h.bridge.change({ theme: "light" });
+    await h.clock.advance(LOCAL_WRITE_DEBOUNCE_MS, settleWith(first));
+    await first.stop(); // pagehide: the only copy of the time is the record
+    expect(journal.record).toMatchObject({ at: madeAt });
+
+    h.clock.now += 2 * 60_000;
+    h.flags.online = true;
+    await begin(h); // a new page: the same app state, the same device
+    const rightStore = h.stores.at(-1) as FakeStore;
+    const mine = rightStore.written.filter((d) => d.id === "preference:theme");
+    expect(mine).toHaveLength(1);
+    expect(mine[0]).toMatchObject({
+      ownerPersonId: PERSON,
+      preferenceValue: "light",
+      updatedAt: toRfc3339(madeAt),
+    });
+    expect(journal.record).toBeNull();
+  });
+
+  it("the guess was right: the change is in the database the moment the debounce ends, the record stays until a credential confirms it, and then goes", async () => {
+    const journal = new MemoryJournal();
+    const h = harness({ recorded: PERSON, journal });
+    h.flags.online = false;
+    const engine = await begin(h);
+    const madeAt = h.clock.now;
+    h.bridge.change({ theme: "light" });
+    await h.clock.advance(LOCAL_WRITE_DEBOUNCE_MS, settleWith(engine));
+    expect(h.stores[0].written).toHaveLength(1);
+    expect(journal.record).not.toBeNull(); // offline: nobody has said whose it is
+
+    h.flags.online = true;
+    h.triggers.forEach((t) => t("online"));
+    await engine.idle();
+    // Same database, now confirmed: it was never written twice.
+    expect(h.stores).toHaveLength(1);
+    expect(
+      h.stores[0].written.filter((d) => d.id === "preference:theme"),
+    ).toHaveLength(1);
+    expect(h.stores[0].written[0].updatedAt).toBe(toRfc3339(madeAt));
+    expect(journal.record).toBeNull();
+  });
+
+  it("offline for the whole page, then reloaded: the next page rewrites the same change with the same time, and clears it once confirmed", async () => {
+    const journal = new MemoryJournal();
+    const store = new FakeStore();
+    const h = harness({ recorded: PERSON, journal, makeStore: () => store });
+    h.flags.online = false;
+    const first = await begin(h);
+    const madeAt = h.clock.now;
+    h.bridge.change({ theme: "light" });
+    await h.clock.advance(LOCAL_WRITE_DEBOUNCE_MS, settleWith(first));
+    await first.stop();
+
+    h.clock.now += 60_000;
+    h.flags.online = true;
+    await begin(h);
+    const themeWrites = store.written.filter(
+      (d) => d.id === "preference:theme",
+    );
+    expect(themeWrites.length).toBeGreaterThanOrEqual(1);
+    for (const d of themeWrites) expect(d.updatedAt).toBe(toRfc3339(madeAt));
+    expect(journal.record).toBeNull();
+  });
+
+  it("a second change before any credential keeps the state the FIRST one started from, and the latest time", async () => {
+    const journal = new MemoryJournal();
+    const h = harness({ recorded: PERSON, journal });
+    h.flags.online = false;
+    const engine = await begin(h);
+    h.bridge.change({ theme: "light" });
+    await h.clock.advance(LOCAL_WRITE_DEBOUNCE_MS, settleWith(engine));
+    await h.clock.advance(5_000, settleWith(engine));
+    const secondAt = h.clock.now;
+    h.bridge.change({ selectedForecastModel: "icon_global" });
+    await h.clock.advance(LOCAL_WRITE_DEBOUNCE_MS, settleWith(engine));
+    expect(journal.record).toMatchObject({
+      at: secondAt,
+      base: { theme: "system", selectedForecastModel: "best_match" },
+    });
+  });
+
+  it("a person who puts everything back as it was has nothing pending: the record goes", async () => {
+    const journal = new MemoryJournal();
+    const h = harness({ recorded: PERSON, journal });
+    h.flags.online = false;
+    const engine = await begin(h);
+    h.bridge.change({ theme: "light" });
+    await h.clock.advance(LOCAL_WRITE_DEBOUNCE_MS, settleWith(engine));
+    expect(journal.record).not.toBeNull();
+    h.bridge.change({ theme: "system" });
+    await h.clock.advance(LOCAL_WRITE_DEBOUNCE_MS, settleWith(engine));
+    expect(journal.record).toBeNull();
+  });
+
+  it("a database the credential opened (nothing was guessed) is durable at once, as before", async () => {
+    const journal = new MemoryJournal();
+    const h = harness({ recorded: null, journal });
+    const engine = await begin(h);
+    h.bridge.change({ theme: "light" });
+    expect(journal.record).not.toBeNull();
+    await h.clock.advance(LOCAL_WRITE_DEBOUNCE_MS, settleWith(engine));
+    expect(journal.record).toBeNull();
+  });
+});
+
+describe("only a real change by the person is a change", () => {
+  it("a notification with nothing different (a fresh array of the same activities) records nothing, stamps nothing and writes nothing", async () => {
+    const journal = new MemoryJournal();
+    const h = harness({
+      recorded: null,
+      journal,
+      bridge: { selectedActivities: ["livestock", "gardening"] },
+    });
+    const engine = await begin(h);
+    const writes = journal.writes;
+    const docs = h.stores[0].written.length;
+    for (let i = 0; i < 5; i++) {
+      h.clock.now += 1_000;
+      h.bridge.noise();
+    }
+    await h.clock.advance(LOCAL_WRITE_DEBOUNCE_MS * 4, settleWith(engine));
+    expect(journal.writes).toBe(writes);
+    expect(journal.record).toBeNull();
+    expect(h.stores[0].written).toHaveLength(docs);
+  });
+
+  it("a place switch right after a value arrived from the device profile does not turn that value into the person's edit, stamped now, over a newer value in the cloud", async () => {
+    const store = new FakeStore();
+    const h = harness({ recorded: null, makeStore: () => store });
+    const engine = await begin(h);
+    // Another device set "light" half a minute from now; it is in the database.
+    store.docs.set(
+      "preference:theme",
+      themeDoc("light", toRfc3339(h.clock.now + 30_000)),
+    );
+    h.clock.now += 60_000;
+    // The device-profile pull says "dark", and the preferences document is
+    // emitted again for the place switch that follows.
+    h.bridge.changeFromElsewhere({ theme: "dark" });
+    await engine.idle();
+    h.bridge.noise();
+    await h.clock.advance(LOCAL_WRITE_DEBOUNCE_MS * 2, settleWith(engine));
+    expect(
+      store.written.filter(
+        (d) => d.id === "preference:theme" && d.preferenceValue === "dark",
+      ),
+    ).toEqual([]);
+    // The documents are the truth: the cloud's value is what the app ends with.
+    await h.clock.advance(POLL_INTERVAL_MS, settleWith(engine));
+    expect(h.bridge.state.theme).toBe("light");
+  });
+
+  describe("a value applied from the app's own preferences store (a /v1/devices pull, another tab)", () => {
+    it("is not the person's edit: nothing is recorded or written for it, and it is not stamped with now", async () => {
+      const journal = new MemoryJournal();
+      const h = harness({
+        recorded: null,
+        journal,
+        bridge: { selectedActivities: ["livestock", "gardening"] },
+      });
+      const engine = await begin(h);
+      const docs = h.stores[0].written.length;
+      const writes = journal.writes;
+
+      // The device-profile pull, for a profile with no activities.
+      h.bridge.changeFromElsewhere({ selectedActivities: [] });
+      await h.clock.advance(LOCAL_WRITE_DEBOUNCE_MS * 3, settleWith(engine));
+      expect(journal.writes).toBe(writes);
+      expect(journal.record).toBeNull();
+      expect(h.stores[0].tombstones).toEqual([]); // no removal is pushed
+      expect(h.stores[0].written).toHaveLength(docs);
+    });
+
+    it("the cloud's activities are not erased by it: the documents still say what they said, and come back", async () => {
+      const h = harness({
+        recorded: null,
+        bridge: { selectedActivities: ["livestock", "gardening"] },
+      });
+      const engine = await begin(h);
+      h.bridge.changeFromElsewhere({ selectedActivities: [] });
+      await h.clock.advance(POLL_INTERVAL_MS, settleWith(engine));
+      expect(h.stores[0].tombstones).toEqual([]);
+      expect([...h.stores[0].docs.keys()].sort()).toEqual([
+        "activity:gardening",
+        "activity:livestock",
+      ]);
+      // The documents are the truth: the app has its activities again.
+      expect(h.bridge.state.selectedActivities.sort()).toEqual([
+        "gardening",
+        "livestock",
+      ]);
+    });
+
+    it("a later edit by the person is the person's, and is a difference from what was applied, not from what they started with", async () => {
+      const h = harness({
+        recorded: null,
+        bridge: { selectedActivities: ["livestock"] },
+      });
+      const engine = await begin(h);
+      h.bridge.changeFromElsewhere({ theme: "dark" });
+      await h.clock.advance(5_000, settleWith(engine));
+      const editedAt = h.clock.now;
+      h.bridge.change({ selectedActivities: ["livestock", "gardening"] });
+      await h.clock.advance(LOCAL_WRITE_DEBOUNCE_MS, settleWith(engine));
+      const garden = h.stores[0].written.find(
+        (d) => d.id === "activity:gardening",
+      );
+      expect(garden?.updatedAt).toBe(toRfc3339(editedAt));
+      // The applied theme was not turned into the person's edit by that write.
+      expect(
+        h.stores[0].written.filter((d) => d.id === "preference:theme"),
+      ).toEqual([]);
+    });
+
+    it("while the person's own change is still unwritten, an applied one does not take its place", async () => {
+      const journal = new MemoryJournal();
+      const h = harness({ recorded: null, journal });
+      const engine = await begin(h);
+      const madeAt = h.clock.now;
+      h.bridge.change({ theme: "light" });
+      h.clock.now += 100;
+      h.bridge.changeFromElsewhere({ selectedForecastModel: "icon_global" });
+      expect(journal.record).toMatchObject({ at: madeAt });
+      await h.clock.advance(LOCAL_WRITE_DEBOUNCE_MS, settleWith(engine));
+      const theme = h.stores[0].written.find(
+        (d) => d.id === "preference:theme",
+      );
+      expect(theme?.updatedAt).toBe(toRfc3339(madeAt));
+    });
   });
 });
 

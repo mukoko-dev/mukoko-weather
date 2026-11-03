@@ -431,7 +431,14 @@ describe("a short-lived credential never makes a hot loop", () => {
 });
 
 describe("the local database belongs to the person who signed in", () => {
-  it("a 401 from the route closes this person's database and removes every local sync database", async () => {
+  // (That ONE such answer removes nothing, and what the second one does, is
+  // `couch-sync-signed-out.test.ts`. The tests here start from a page that has
+  // already heard it once, a minute or more ago.)
+  const heardOnce = (h: Harness) => {
+    h.marker.at = h.clock.now - 2 * 60_000;
+  };
+
+  it("a 401 from the route that has been heard before closes this person's database and removes every local sync database", async () => {
     let signedOut = false;
     const h = harness({
       session: async (_n, now) => {
@@ -442,6 +449,7 @@ describe("the local database belongs to the person who signed in", () => {
     const engine = await started(h);
     h.purged.length = 0;
     signedOut = true;
+    heardOnce(h);
     await h.clock.advance(GRANT_TTL_MS, settleWith(engine));
     expect(engine.status()).toBe("signed_out");
     expect(h.stores[0].closed).toBe(true);
@@ -454,12 +462,13 @@ describe("the local database belongs to the person who signed in", () => {
     await engine.stop();
   });
 
-  it("an anonymous visitor's first and only request also clears what an earlier sign-in left", async () => {
+  it("an anonymous visitor's request, the second time it is heard, also clears what an earlier sign-in left", async () => {
     const h = harness({
       session: async () => {
         throw new CouchSessionError(401, SIGNED_OUT_CODE);
       },
     });
+    heardOnce(h);
     const engine = createCouchSyncEngine(h.deps);
     await engine.start();
     await engine.idle();
@@ -511,6 +520,7 @@ describe("the local database belongs to the person who signed in", () => {
         throw new Error("IndexedDB is blocked");
       },
     });
+    heardOnce(signedOut);
     const e2 = createCouchSyncEngine(signedOut.deps);
     await e2.start();
     await e2.idle();
@@ -579,7 +589,7 @@ describe("the local database belongs to the person who signed in", () => {
       },
     );
 
-    it("a 401 with the code does: the database is removed and the record is cleared", async () => {
+    it("a 401 with the code, heard before, does: the database is removed and the record is cleared", async () => {
       const journal = new MemoryJournal();
       let signedOut = false;
       const h = harness({
@@ -593,6 +603,7 @@ describe("the local database belongs to the person who signed in", () => {
       h.flags.online = true;
       const engine = await started(h);
       signedOut = true;
+      heardOnce(h);
       h.bridge.change({ theme: "dark" });
       expect(journal.record).not.toBeNull();
       await h.clock.advance(GRANT_TTL_MS, settleWith(engine));

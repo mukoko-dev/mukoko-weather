@@ -53,20 +53,29 @@ export function startCouchSync(
 
   starting = (async () => {
     try {
-      const [{ createCouchSyncEngine }, session, rxdb, people, pending] =
-        await Promise.all([
-          import("./couch-sync"),
-          import("./couch-session"),
-          import("./couch-rxdb"),
-          import("./sync-people-index"),
-          import("./sync-pending"),
-        ]);
+      const [
+        { createCouchSyncEngine },
+        session,
+        rxdb,
+        people,
+        pending,
+        signedOut,
+      ] = await Promise.all([
+        import("./couch-sync"),
+        import("./couch-session"),
+        import("./couch-rxdb"),
+        import("./sync-people-index"),
+        import("./sync-pending"),
+        import("./sync-signed-out"),
+      ]);
       const engine = createCouchSyncEngine({
         fetchSession: () => session.fetchCouchSession(),
         ensureDatabase: (s) => session.ensurePersonalDatabase(s),
-        // Sign-out (401) and a different person remove the local database of
-        // anyone but the signed-in person; see `couch-rxdb.ts`.
+        // A "signed out" heard twice (two page loads) and a different person
+        // remove the local database of anyone but the signed-in person; see
+        // `couch-rxdb.ts`. A single "signed out" only leaves a mark.
         purgeStores: (keep) => rxdb.purgeUserDocStores(keep),
+        signedOutMarker: signedOut.signedOutMarker,
         // The one person this browser holds a database for, so it opens at
         // start with no network and no credential. Several is a browser nobody
         // can guess for: then it waits for the credential.
