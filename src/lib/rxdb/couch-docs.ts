@@ -301,10 +301,6 @@ export function toPullDoc<T extends { id: string; _deleted?: boolean }>(
 // Documents -> state
 // ---------------------------------------------------------------------------
 
-function sameList(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((v, i) => v === b[i]);
-}
-
 /**
  * What the live documents say about the app's state, as a patch against
  * `current`: only the fields that differ, so applying it is a no-op when the
@@ -312,10 +308,11 @@ function sameList(a: readonly string[], b: readonly string[]): boolean {
  *
  *   theme, forecast model  from their document, when it exists and holds a
  *                          value the data model allows
- *   activities             the documents' ids (oldest first, then by id),
- *                          plus the local ids this client could not have
- *                          synced (an id outside the id pattern), which are
- *                          never dropped by a sync
+ *   activities             the local list in the person's own order, minus
+ *                          the ids another device removed, plus the ids the
+ *                          device does not hold yet (oldest first, then by
+ *                          id); an id this client could not have synced (one
+ *                          outside the id pattern) is never dropped
  */
 export function patchFromDocs(
   docs: readonly UserDocType[],
@@ -345,19 +342,27 @@ export function patchFromDocs(
         (a.id < b.id ? -1 : 1),
     )
     .map((d) => d.activityId as string);
-  const unsyncable = current.selectedActivities.filter(
-    (id) => !isSyncableActivityId(id),
-  );
-  const next = [...fromDocs, ...unsyncable];
-  if (!sameList(next, current.selectedActivities)) {
-    // Same members in another order is not a change worth applying.
-    const sameMembers =
-      next.length === current.selectedActivities.length &&
-      [...next].sort().join("\n") ===
-        [...current.selectedActivities].sort().join("\n");
-    if (!sameMembers) patch.selectedActivities = next;
+  const wanted = new Set(fromDocs);
+  const held = new Set(current.selectedActivities);
+  // The person's own order is theirs: it decides which three activities the
+  // AI advice is about. Keep what the device holds where it is (dropping the
+  // ids another device removed; an id this client cannot sync is never
+  // dropped), then append the ids it does not hold yet, oldest first.
+  const next = [
+    ...current.selectedActivities.filter(
+      (id) => !isSyncableActivityId(id) || wanted.has(id),
+    ),
+    ...fromDocs.filter((id) => !held.has(id)),
+  ];
+  // Same members is not a change worth applying, whatever the order.
+  if (!sameMembers(next, current.selectedActivities)) {
+    patch.selectedActivities = next;
   }
   return patch;
+}
+
+function sameMembers(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && [...a].sort().join("\n") === [...b].sort().join("\n");
 }
 
 // ---------------------------------------------------------------------------

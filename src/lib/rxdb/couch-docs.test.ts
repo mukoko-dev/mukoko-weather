@@ -503,6 +503,94 @@ describe("documents -> state", () => {
     ).toEqual({});
   });
 
+  describe("the person's own order is kept (the AI keeps only the first three)", () => {
+    const ids = ["livestock", "gardening", "crop-farming", "soccer", "braai"];
+    // The documents were created in a different order than the person chose here.
+    const docsFor = (list: string[]) =>
+      list.map((id, i) => act(id, T0 + (list.length - i) * 1000));
+
+    it("a remote add is appended after the activities the device already holds", () => {
+      const current = ["livestock", "gardening", "crop-farming"];
+      const patch = patchFromDocs(
+        docsFor([...current, "soccer"]),
+        state({ selectedActivities: current }),
+      );
+      expect(patch.selectedActivities).toEqual([...current, "soccer"]);
+    });
+
+    it("a remote remove drops that id and leaves the others in place", () => {
+      const patch = patchFromDocs(
+        docsFor(["livestock", "crop-farming", "soccer"]),
+        state({ selectedActivities: ids.slice(0, 4) }),
+      );
+      expect(patch.selectedActivities).toEqual([
+        "livestock",
+        "crop-farming",
+        "soccer",
+      ]);
+    });
+
+    it("an add and a remove together keep the local order of what stays", () => {
+      const patch = patchFromDocs(
+        docsFor(["crop-farming", "livestock", "braai"]),
+        state({ selectedActivities: ["livestock", "gardening", "crop-farming"] }),
+      );
+      expect(patch.selectedActivities).toEqual([
+        "livestock",
+        "crop-farming",
+        "braai",
+      ]);
+    });
+
+    it("ids the device does not hold come in oldest first, and ties by id", () => {
+      const patch = patchFromDocs(
+        [
+          act("zulu", T0 + 1000),
+          act("alpha", T0 + 1000),
+          act("mike", T0 + 1000),
+          act("early", T0),
+        ],
+        state({ selectedActivities: ["livestock"] }),
+      );
+      // "livestock" has no document: another device removed it.
+      expect(patch.selectedActivities).toEqual([
+        "early",
+        "alpha",
+        "mike",
+        "zulu",
+      ]);
+    });
+
+    it("new ids go after the local ones and unsyncable ids keep their place", () => {
+      const patch = patchFromDocs(
+        docsFor(["livestock", "soccer"]),
+        state({ selectedActivities: ["Legacy_Id", "livestock", "Other_Legacy"] }),
+      );
+      expect(patch.selectedActivities).toEqual([
+        "Legacy_Id",
+        "livestock",
+        "Other_Legacy",
+        "soccer",
+      ]);
+    });
+
+    it("a fresh device takes the order the documents were made in", () => {
+      const patch = patchFromDocs(
+        [act("b-second", T0 + 2000), act("a-first", T0 + 1000)],
+        state(),
+      );
+      expect(patch.selectedActivities).toEqual(["a-first", "b-second"]);
+    });
+
+    it("the same members in any order is never a patch", () => {
+      for (const order of [ids, [...ids].reverse(), [ids[2], ids[0], ...ids.slice(3), ids[1]]]) {
+        expect(
+          patchFromDocs(docsFor(ids), state({ selectedActivities: order })),
+        ).toEqual({});
+      }
+    });
+  });
+
   it("documents of other ids are ignored", () => {
     expect(
       patchFromDocs(
