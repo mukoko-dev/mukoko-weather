@@ -144,6 +144,9 @@ fn percent_decoded(s: &str) -> String {
         let escaped = (b[i] == b'%')
             .then(|| s.get(i + 1..i + 3))
             .flatten()
+            // Two hex digits and nothing else: `from_str_radix` also takes a
+            // leading `+`, which a server reads as literal text.
+            .filter(|h| h.bytes().all(|c| c.is_ascii_hexdigit()))
             .and_then(|h| u8::from_str_radix(h, 16).ok());
         match escaped {
             Some(byte) => {
@@ -323,6 +326,19 @@ pub async fn with_deadline<T>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `from_str_radix` accepts a leading sign, so `%+a` must not be taken for
+    /// an escape: a server reads it as the literal text `%+a`, and the secret
+    /// check has to read the same name the server does.
+    #[test]
+    fn percent_decoding_needs_two_hex_digits() {
+        assert_eq!(percent_decoded("%+a"), "%+a");
+        assert_eq!(percent_decoded("%-1"), "%-1");
+        assert_eq!(percent_decoded("a%2"), "a%2");
+        assert_eq!(percent_decoded("%zz"), "%zz");
+        assert_eq!(percent_decoded("%6B%65y"), "key");
+        assert_eq!(percent_decoded("%6b"), "k");
+    }
     use crate::breaker::{self, Breaker};
     use crate::external_fetch::{
         wis2_url, FeedSwitches, Fetcher, HttpResponse, Transport, SAAOPA_STATIONS_URL,
