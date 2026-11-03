@@ -15,6 +15,7 @@ import {
   planEviction,
   rebaseWeather,
   serialisePayload,
+  servedStaleAgeMs,
   slimPayload,
   updatedAgoLabel,
 } from "./device-weather";
@@ -371,5 +372,26 @@ describe("isQuotaError", () => {
     ).toBe(true);
     expect(isQuotaError(new Error("network down"))).toBe(false);
     expect(isQuotaError(null)).toBe(false);
+  });
+});
+
+describe("servedStaleAgeMs", () => {
+  it("reads the age the Worker reports for a stored row it served stale", () => {
+    expect(
+      servedStaleAgeMs({ baseline: { stale: true, ageSeconds: 36_000 } }),
+    ).toBe(36_000_000);
+  });
+
+  it("is null for a live answer, a missing or odd age, or no baseline", () => {
+    expect(servedStaleAgeMs({ baseline: { blend: true } })).toBeNull();
+    expect(
+      servedStaleAgeMs({ baseline: { stale: false, ageSeconds: 5 } }),
+    ).toBeNull();
+    expect(servedStaleAgeMs({ baseline: { stale: true } })).toBeNull();
+    expect(
+      servedStaleAgeMs({ baseline: { stale: true, ageSeconds: -1 } }),
+    ).toBeNull();
+    expect(servedStaleAgeMs({})).toBeNull();
+    expect(servedStaleAgeMs(null)).toBeNull();
   });
 });

@@ -4,7 +4,7 @@
 //! workers.dev address: the API Workers reach it through service bindings.
 //!
 //! ```text
-//! GET /weather?lat=&lon=[&model=m][&models=a,b][&extras=1][&refresh=1][&priority=1]   full WeatherData (the app's shape)
+//! GET /weather?lat=&lon=[&model=m][&models=a,b][&extras=1][&refresh=1][&priority=1][&failover=0]   full WeatherData (the app's shape)
 //! GET /daily?location=|lat=&lon=[&days=1..7]       the daily forecast contract
 //! GET /air-quality?lat=&lon=                       the EPA AQI (Open-Meteo air quality)
 //! GET /agriculture?lat=&lon=[&location=][&country=][&crops=]  farm windows, rain, soil, water balance, frost and heat risk
@@ -23,7 +23,9 @@
 //! Provider chain (ported from `api/py/_weather.py`, issue #246): KV cache
 //! (`wx:v2:`, 15 min), then the Open-Meteo Africa-weighted blend of nine global
 //! models (served only when at least FOUR members return data), then Open-Meteo
-//! `best_match`, marked as not a blend. `model=<id>` (the user's
+//! `best_match`, marked as not a blend; when Open-Meteo gave nothing (a 429 to
+//! our shared egress, an open breaker) MET Norway Locationforecast answers
+//! instead (`X-Weather-Provider: met-no`, `met_no.rs`, #434). `model=<id>` (the user's
 //! `selectedForecastModel`) makes that one model the baseline instead
 //! (`X-Weather-Provider: open-meteo:<id>`, its own KV row, `best_match`
 //! filling the variables it does not publish); with no data for it here the
@@ -35,7 +37,7 @@
 //! the seasonal estimate (the app) add it themselves.
 //!
 //! Response headers of `/weather`: `X-Cache`, `X-Weather-Provider`
-//! (`open-meteo:blend` | `open-meteo:best_match`), `X-Weather-Blend` (region
+//! (`open-meteo:blend` | `open-meteo:best_match` | `met-no`), `X-Weather-Blend` (region
 //! and weights, a blend only), `X-Enrichment` (`tomorrow` | `skipped-budget` |
 //! `skipped-error` | `none`), `X-Current-Source`, `X-Fetched-At`. The payload
 //! carries `baseline` (`blend: true|false`, and why it is not a blend).
@@ -53,6 +55,7 @@ mod enrich;
 mod enso;
 mod haze;
 mod limit;
+mod met_no;
 mod model_grid;
 mod normals;
 mod places;
@@ -71,6 +74,9 @@ pub async fn fetch(req: Request, env: Env, ctx: Context) -> Result<Response> {
     if req.method() != Method::Get {
         return error(405, "method_not_allowed", "Only GET is served.");
     }
+    // The paid Open-Meteo plan, when there is one: every Open-Meteo call this
+    // request makes goes through get_with_timeout, which applies it.
+    weather_edge::open_meteo::init(&env).await;
     match req.path().as_str() {
         "/weather" => weather(&req, &env, &ctx).await,
         "/daily" => daily(&req, &env, &ctx).await,
@@ -122,6 +128,12 @@ async fn health(req: &Request, env: &Env) -> Result<Response> {
                 "cache": env.kv(chain::CACHE_BINDING).is_ok(),
                 "stations_db": env.d1(stations::DB_BINDING).is_ok(),
                 "tomorrow": tomorrow,
+                // Whether a paid Open-Meteo plan is in use (never the key):
+                // `open_meteo_commercial` = a key is held (forecast and air
+                // quality use the customer hosts); `open_meteo_archive` = the
+                // archive calls do too (a key AND OPEN_METEO_ARCHIVE_LICENSED).
+                "open_meteo_commercial": weather_edge::open_meteo::is_paid(),
+                "open_meteo_archive": weather_edge::open_meteo::archive_is_paid(),
                 "nyuchi_api": nyuchi_api,
                 "mongo": mongo.is_some(),
             },
@@ -154,7 +166,9 @@ async fn weather(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
     // The caller's own model (`selectedForecastModel`); `best_match`, an
     // empty value and anything unknown mean the Africa-weighted blend.
     let model = weather_core::blend::sanitize_baseline_model(get("model"));
-    let Some(mut got) = chain::forecast(env, ctx, lat, lon, refresh, model).await else {
+    // `failover=0` (the jobs Worker recording a day) keeps MET Norway out of it.
+    let failover = get("failover") != Some("0");
+    let Some(mut got) = chain::forecast(env, ctx, lat, lon, refresh, model, failover).await else {
         return error(
             503,
             "providers_unavailable",
@@ -168,7 +182,10 @@ async fn weather(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
     let enrichment = enrich::apply(env, ctx, &mut got.data, lat, lon, priority).await;
     let station = stations::overlay(env, &mut got.data, lat, lon).await;
 
-    if get("extras") == Some("1") {
+    // The comparison series come from Open-Meteo, the provider that just
+    // refused us: a MET Norway answer does not ask it for more, and is never
+    // mixed with its models.
+    if get("extras") == Some("1") && got.provider != weather_core::met_no::PROVIDER {
         let requested: Vec<&str> = get("models")
             .map(|m| m.split(',').filter(|s| !s.trim().is_empty()).collect())
             .unwrap_or_default();
@@ -182,10 +199,19 @@ async fn weather(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
         let offset = got.data["utc_offset_seconds"].as_i64().unwrap_or(0);
         got.data["minutely"] = blend::fresh_minutely(&m, offset, now());
     }
+    // A stored forecast served only because no provider answered: show the
+    // place's current hour and say how old the row is.
+    if got.stale {
+        let offset = got.data["utc_offset_seconds"].as_i64().unwrap_or(0);
+        // An unreadable `fetched_at` is the oldest row, never a fresh one.
+        let age =
+            blend::age_seconds(&got.fetched_at, now()).unwrap_or(blend::STALE_TTL_SECONDS as i64);
+        blend::mark_stale(&mut got.data, age, offset, now());
+    }
 
     let resp = json(200, &got.data)?;
     let h = resp.headers();
-    h.set("X-Cache", if got.cache_hit { "HIT" } else { "MISS" })?;
+    h.set("X-Cache", got.cache_status())?;
     h.set("X-Weather-Provider", &got.provider)?;
     if let Some(b) = &got.blend {
         h.set("X-Weather-Blend", b)?;
@@ -291,7 +317,7 @@ async fn daily(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
             }
         },
     };
-    let Some(got) = chain::forecast(env, ctx, place.lat, place.lon, false, None).await else {
+    let Some(got) = chain::forecast(env, ctx, place.lat, place.lon, false, None, true).await else {
         return error(
             503,
             "providers_unavailable",
@@ -306,7 +332,6 @@ async fn daily(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
         usize::from(query.days),
     );
     let resp = json(200, &body)?;
-    resp.headers()
-        .set("X-Cache", if got.cache_hit { "HIT" } else { "MISS" })?;
+    resp.headers().set("X-Cache", got.cache_status())?;
     Ok(resp)
 }

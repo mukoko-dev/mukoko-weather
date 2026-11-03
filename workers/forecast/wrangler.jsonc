@@ -6,8 +6,16 @@
 //   secrets: TOMORROW_API_KEY, NYUCHI_API_KEY (internal key; places read),
 //            from the Secrets Store as MUKOKO_WEATHER_TOMORROW_API_KEY and
 //            MUKOKO_WEATHER_NYUCHI_API_KEY (below; each one store secret
-//            shared with the other Workers that need it)
+//            shared with the other Workers that need it); OPEN_METEO_API_KEY
+//            (optional: the paid Open-Meteo plan), the store secret
+//            OPEN_METEO_API_KEY bound as MUKOKO_WEATHER_OPEN_METEO_API_KEY
 //   vars:    NYUCHI_API_URL
+//   optional var, NOT declared here (keep_vars keeps one set in the
+//   dashboard; see workers/README.md "Open-Meteo paid plan"):
+//            OPEN_METEO_ARCHIVE_LICENSED=1 once the plan includes the
+//            historical weather API (Professional and up). Without it the
+//            archive calls (climate normals, the place profile) stay on the
+//            free archive host even with the key.
 // OWNER: replace the placeholder ids below with the created resources'
 // ids (workers/README.md, "Owner steps").
 {
@@ -44,6 +52,15 @@
       "binding": "MUKOKO_WEATHER_NYUCHI_API_KEY",
       "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
       "secret_name": "MUKOKO_WEATHER_NYUCHI_API_KEY",
+    },
+    {
+      // The paid Open-Meteo plan's key. The store secret is named
+      // OPEN_METEO_API_KEY (created that way by the owner); only the binding
+      // carries the app prefix. Without a key every call stays on the free
+      // hosts.
+      "binding": "MUKOKO_WEATHER_OPEN_METEO_API_KEY",
+      "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
+      "secret_name": "OPEN_METEO_API_KEY",
     },
   ],
   "vars": { "NYUCHI_API_URL": "https://api.nyuchi.com" },

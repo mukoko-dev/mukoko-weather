@@ -42,6 +42,14 @@ function stubWorker(answer: (url: string) => Response | Promise<Response>) {
 const notFound = () =>
   new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
 
+// Every test starts with a Worker that knows no place, so none of them can reach
+// the live network: a slug the store does not hold is asked of the Worker with a
+// 2 s timeout, and in strict mode a timeout is a failed lookup, not "unknown".
+// A test that needs another answer calls `stubWorker` again.
+beforeEach(() => {
+  stubWorker(notFound);
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });

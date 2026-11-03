@@ -9,6 +9,9 @@
 //!   ES256 JWT in an `Authorization: vapid` header).
 //! - [`request`]: RFC 8030 request assembly (`TTL`, `Urgency`, the encrypted
 //!   body) and the injected [`request::Transport`] that actually POSTs it.
+//! - [`runtime`]: the rules the Workers-runtime half of the sender
+//!   (`workers/push`: WebCrypto and `fetch`) must honour, as pure code, so that
+//!   half stays thin glue.
 //!
 //! The crate is pure. It holds no key, reads no clock, draws no random number,
 //! does no elliptic-curve arithmetic and opens no connection. The runtime
@@ -34,7 +37,11 @@ use base64::engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig};
 
 pub mod encrypt;
 pub mod request;
+pub mod runtime;
 pub mod vapid;
+
+#[cfg(test)]
+mod tripwire;
 
 /// base64url as the Web Push specs use it (RFC 4648 section 5): no padding
 /// when encoding. Decoding tolerates `=` padding and non-canonical trailing
