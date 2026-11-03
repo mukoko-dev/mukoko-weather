@@ -14,7 +14,7 @@ import { FloatingStack } from "@/components/ui/floating-stack";
 import { LocationSkeleton } from "@/components/weather/LocationSkeleton";
 import { PlaceLoadNotice } from "@/components/weather/PlaceLoadNotice";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
-import type { AISummaryUser } from "@/components/weather/AISummary";
+import { useAiUser } from "@/lib/use-ai-user";
 import { fetchHomeWeather } from "@/lib/home-weather";
 import { workerData } from "@/lib/worker-data";
 import {
@@ -179,17 +179,18 @@ export function usePlaceStage(
  */
 export function PlaceView({
   stage,
-  user,
   isCurrentLocation = false,
   children,
 }: {
   stage: PlaceStageApi;
-  user: AISummaryUser | null;
   isCurrentLocation?: boolean;
   /** Extra UI that belongs to the page (the home page's location card). */
   children?: ReactNode;
 }) {
   const { state, retry } = stage;
+  // Read in the browser from AuthKit's provider, not handed down by a server
+  // render that had to wait for the session (issue #452).
+  const user = useAiUser();
   const { seed, view, device } = state;
   if (!seed) return null;
 
@@ -258,13 +259,7 @@ export function PlaceView({
 }
 
 /** A place page (`/[location]`): the stage with nothing around it. */
-export function PlaceStage({
-  seed,
-  user,
-}: {
-  seed: PlaceSeed;
-  user: AISummaryUser | null;
-}) {
+export function PlaceStage({ seed }: { seed: PlaceSeed }) {
   const stage = usePlaceStage(seed, false);
-  return <PlaceView stage={stage} user={user} />;
+  return <PlaceView stage={stage} />;
 }
