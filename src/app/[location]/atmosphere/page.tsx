@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { resolveLocationParam } from "@/lib/load-location";
-import { loadLocationPayload } from "@/lib/location-payload";
+import { seasonWithinBudget } from "@/lib/place-seed-server";
 import { breadcrumbJsonLd } from "@/lib/json-ld";
 import { buildPageMetadata } from "@/lib/metadata";
 import { JsonLd } from "@/components/layout/JsonLd";
@@ -37,16 +37,31 @@ export async function generateMetadata({
   });
 }
 
+/**
+ * The atmosphere page: the shell, the place and its structured data. It makes
+ * NO weather call (issue #452, the rule of #414): the forecast is fetched by
+ * the visitor's own browser and painted over the copy stored on the device,
+ * so the first byte never waits on the Worker or Open-Meteo.
+ *
+ * The only data it still waits for is the place (the lookup the layout shares)
+ * and the season, which has an 800 ms budget and then falls back to the
+ * hemisphere's default.
+ */
 export default async function AtmospherePage({
   params,
 }: {
   params: Promise<{ location: string }>;
 }) {
-  const location = await resolveLocationParam(params);
-  if (!location) notFound();
-
-  const { weather, usingFallback, frostAlert, season } =
-    await loadLocationPayload(location);
+  const rawLocation = await resolveLocationParam(params);
+  if (!rawLocation) notFound();
+  // Strip the store's _id before the place crosses to the client component.
+  const { _id: _removed, ...location } = rawLocation as typeof rawLocation & {
+    _id?: unknown;
+  };
+  const season = await seasonWithinBudget(
+    (location.country ?? "").toUpperCase(),
+    location.lat ?? 0,
+  );
 
   const breadcrumbSchema = breadcrumbJsonLd([
     { name: `${location.name} Weather`, path: `/${location.slug}` },
@@ -57,10 +72,8 @@ export default async function AtmospherePage({
     <>
       <JsonLd data={[breadcrumbSchema]} />
       <AtmosphereDashboard
-        weather={weather}
+        key={location.slug}
         location={location}
-        usingFallback={usingFallback}
-        frostAlert={frostAlert}
         season={season}
       />
     </>
