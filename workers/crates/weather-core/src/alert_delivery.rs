@@ -15,9 +15,11 @@
 //!   claimed again. Send.
 //! - Anything else holds no claim. `200 unchanged` is a repeat, or another tick
 //!   that won the claim first or already finished the alert. A `409` is a lost
-//!   race the API asks to be retried. A `429`, a `5xx` or no answer at all is
-//!   the API being unavailable; the plan is made again on the next tick, with
-//!   the same key. A `401`, `403`, `413` or `422` is our request refused,
+//!   race the API asks to be retried. A `408`, `429`, a `5xx` or no answer at
+//!   all is the API (or the path to it) being unavailable; the plan is made
+//!   again on the next tick, with the same key. A `408` is treated as no
+//!   answer: if the row was in fact created before the timeout, the next tick
+//!   finds it `queued` and holds (see the known limit below). A `401`, `403`, `413` or `422` is our request refused,
 //!   which retrying will not fix.
 //!
 //! The reader is strict on purpose: a `2xx` whose body is missing, unreadable
@@ -28,19 +30,37 @@
 //! **2. What a batch may deactivate ([`plan_deactivations`]).** A push service
 //! says `404` or `410` when a subscription is gone, and `403` when it was made
 //! with another VAPID key ([`crate::push::classify_status`] calls all three
-//! [`Outcome::Expired`]). A wrong or rotated sender key, or a clock far off,
-//! makes the push service answer `403` to *every* send, which is an operator
-//! problem and not a thousand people who left. So a batch in which every send
-//! came back `Expired` deactivates nothing (and says how many it held back).
-//! The guard applies from [`GUARD_MIN_BATCH`] sends: with one or two, "all of
-//! them" says nothing, and a lone gone subscription must still be switched off.
+//! [`Outcome::Expired`]). A wrong or rotated sender key, a wrong audience for
+//! one service, or a clock far off, makes a push service answer `403` to
+//! *every* send it gets, which is an operator problem and not a thousand people
+//! who left. So the guard looks at each push service on its own (the origin
+//! each result carries): if a service was sent at least [`GUARD_MIN_BATCH`]
+//! distinct subscriptions and refused every one as `Expired`, none of that
+//! service's is deactivated and the count is reported. Another service
+//! accepting does not turn the guard off for a service that refused everything.
+//! Below the minimum, "all of them" says nothing, and a lone gone subscription
+//! must still be switched off. (A mixed batch that a service answers partly
+//! with `403` is believed: after a key rotation the old subscriptions get `403`
+//! for ever while new ones work, and those really are lost.)
 //!
 //! What is deactivated is an explicit list and never "all": at most
 //! [`MAX_DEACTIVATIONS_PER_CALL`] per call (the Nyuchi API's own limit), a
 //! subscription named once however often it appears, ids that fail the opaque
 //! id check dropped and counted, never echoed.
 //!
+//! **Known limit: at most once.** The log is the only thing that stops a second
+//! push, and a `queued` row is not re-claimable: a retryable failure moves the
+//! row to `failed`, which can be claimed again, but a sender that dies *between*
+//! winning the claim and logging an outcome leaves the row `queued`. Every later
+//! tick reads `200 unchanged` and holds, so that person misses that night's
+//! alert. This is the trade the contract makes (a lost alert is repaired by
+//! nothing; a duplicate push cannot be taken back), and it needs the Nyuchi API
+//! to re-lease a `queued` row that has been held too long before it can be
+//! closed. Tracked on #289; nothing here can fix it.
+//!
 //! The two bounds below are ours, untuned: no standard names them.
+
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::alert_plan::is_target_id;
 use crate::push::Outcome;
@@ -117,6 +137,10 @@ pub fn read_claim(a: &ClaimAnswer) -> Claim {
 pub struct SendResult<'a> {
     pub person_id: &'a str,
     pub subscription_id: &'a str,
+    /// The push service it was sent to (`push::endpoint_origin` of the
+    /// subscription's endpoint, an allow-listed host). Only used to group the
+    /// batch for the guard; never copied into a plan.
+    pub origin: &'a str,
     pub outcome: Outcome,
 }
 
@@ -152,47 +176,65 @@ impl DeactivationPlan {
 /// Decide which subscriptions a batch of push results switches off.
 ///
 /// Only [`Outcome::Expired`] results are candidates; `Retry` and `Failed` never
-/// switch anything off. If the batch has at least [`GUARD_MIN_BATCH`] sends and
-/// every one was `Expired`, nothing is deactivated and the distinct candidates
-/// are counted in [`DeactivationPlan::held_back`]. The answer does not depend
-/// on the order of `results`.
+/// switch anything off. Per push service (the `origin` of each result): if it
+/// was sent at least [`GUARD_MIN_BATCH`] distinct subscriptions and refused
+/// every one as `Expired`, none of its subscriptions is deactivated and the
+/// distinct candidates are counted in [`DeactivationPlan::held_back`]. The
+/// answer does not depend on the order of `results`.
 pub fn plan_deactivations(results: &[SendResult]) -> DeactivationPlan {
-    let mut invalid = 0usize;
-    let mut expired: Vec<Deactivation> = Vec::new();
+    let mut by_origin: BTreeMap<&str, Vec<&SendResult>> = BTreeMap::new();
     for r in results {
-        if !(is_target_id(r.person_id) && is_target_id(r.subscription_id)) {
-            invalid += 1;
-            continue;
-        }
-        if r.outcome == Outcome::Expired {
-            expired.push(Deactivation {
-                person_id: r.person_id.to_string(),
-                subscription_id: r.subscription_id.to_string(),
-            });
-        }
-    }
-    expired.sort();
-    expired.dedup();
-
-    // The guard counts every send in the batch, valid or not: a malformed id
-    // does not make a refusal of everything look like something else.
-    let every_send_expired =
-        results.len() >= GUARD_MIN_BATCH && results.iter().all(|r| r.outcome == Outcome::Expired);
-    if every_send_expired {
-        return DeactivationPlan {
-            calls: Vec::new(),
-            held_back: expired.len(),
-            invalid,
-        };
+        by_origin.entry(r.origin).or_default().push(r);
     }
 
-    let calls = expired
+    let mut invalid = 0usize;
+    let mut candidates: BTreeSet<Deactivation> = BTreeSet::new();
+    let mut held: BTreeSet<Deactivation> = BTreeSet::new();
+    for rows in by_origin.values() {
+        // Distinct subscriptions with usable ids, and the rows whose ids are
+        // not (each one a send of its own: it cannot be told apart from another).
+        let mut pairs: BTreeSet<(&str, &str)> = BTreeSet::new();
+        let mut unusable_rows = 0usize;
+        let mut expired: BTreeSet<Deactivation> = BTreeSet::new();
+        for r in rows {
+            let usable = is_target_id(r.person_id) && is_target_id(r.subscription_id);
+            if usable {
+                pairs.insert((r.person_id, r.subscription_id));
+            } else {
+                unusable_rows += 1;
+            }
+            if r.outcome == Outcome::Expired {
+                if usable {
+                    expired.insert(Deactivation {
+                        person_id: r.person_id.to_string(),
+                        subscription_id: r.subscription_id.to_string(),
+                    });
+                } else {
+                    // Only an id that had to be used is worth counting.
+                    invalid += 1;
+                }
+            }
+        }
+        let sends = pairs.len() + unusable_rows;
+        let refused_everything = rows.iter().all(|r| r.outcome == Outcome::Expired);
+        if sends >= GUARD_MIN_BATCH && refused_everything {
+            held.extend(expired);
+        } else {
+            candidates.extend(expired);
+        }
+    }
+    // A subscription reported under two services and believed under one is
+    // believed: it is not also "held back".
+    held.retain(|d| !candidates.contains(d));
+
+    let list: Vec<Deactivation> = candidates.into_iter().collect();
+    let calls = list
         .chunks(MAX_DEACTIVATIONS_PER_CALL)
         .map(<[Deactivation]>::to_vec)
         .collect();
     DeactivationPlan {
         calls,
-        held_back: 0,
+        held_back: held.len(),
         invalid,
     }
 }
@@ -324,12 +366,25 @@ mod tests {
         assert_eq!(sorted.len(), codes.len());
     }
 
-    fn res<'a>(person: &'a str, sub: &'a str, outcome: Outcome) -> SendResult<'a> {
+    const FCM: &str = "fcm.googleapis.com";
+    const MOZILLA: &str = "updates.push.services.mozilla.com";
+
+    fn res_at<'a>(
+        origin: &'a str,
+        person: &'a str,
+        sub: &'a str,
+        outcome: Outcome,
+    ) -> SendResult<'a> {
         SendResult {
             person_id: person,
             subscription_id: sub,
+            origin,
             outcome,
         }
+    }
+
+    fn res<'a>(person: &'a str, sub: &'a str, outcome: Outcome) -> SendResult<'a> {
+        res_at(FCM, person, sub, outcome)
     }
 
     fn pair(person: &str, sub: &str) -> Deactivation {
@@ -500,5 +555,73 @@ mod tests {
     #[test]
     fn an_empty_batch_deactivates_nothing() {
         assert_eq!(plan_deactivations(&[]), DeactivationPlan::default());
+    }
+    #[test]
+    fn a_service_that_refused_everything_is_not_believed_whatever_another_accepted() {
+        // The audience is wrong for one push service: it answers 403 to all it
+        // is sent, while another accepts the same key. The first service's
+        // subscribers must not be switched off because the second one worked.
+        let accepted: Vec<String> = (0..5).map(|i| format!("a{i}")).collect();
+        let mut results = vec![
+            res_at(MOZILLA, "p1", "s1", Outcome::Expired),
+            res_at(MOZILLA, "p2", "s2", Outcome::Expired),
+            res_at(MOZILLA, "p3", "s3", Outcome::Expired),
+        ];
+        for sub in &accepted {
+            results.push(res_at(FCM, "q", sub, Outcome::Accepted));
+        }
+        let plan = plan_deactivations(&results);
+        assert!(plan.calls.is_empty());
+        assert_eq!(plan.held_back, 3);
+
+        // One service accepting some of its own sends is a different story:
+        // after a key rotation the old subscriptions are refused for ever and
+        // the new ones work, and those old ones are lost.
+        results.push(res_at(MOZILLA, "p4", "s4", Outcome::Accepted));
+        let plan = plan_deactivations(&results);
+        assert_eq!(plan.total(), 3);
+        assert_eq!(plan.held_back, 0);
+    }
+
+    #[test]
+    fn each_service_is_judged_on_its_own() {
+        let plan = plan_deactivations(&[
+            // refused everything: held back
+            res_at(MOZILLA, "p1", "s1", Outcome::Expired),
+            res_at(MOZILLA, "p2", "s2", Outcome::Expired),
+            res_at(MOZILLA, "p3", "s3", Outcome::Expired),
+            // believed: it also sent an accepted one
+            res_at(FCM, "p4", "s4", Outcome::Expired),
+            res_at(FCM, "p5", "s5", Outcome::Expired),
+            res_at(FCM, "p6", "s6", Outcome::Expired),
+            res_at(FCM, "p7", "s7", Outcome::Accepted),
+        ]);
+        assert_eq!(
+            plan.calls,
+            vec![vec![pair("p4", "s4"), pair("p5", "s5"), pair("p6", "s6")]]
+        );
+        assert_eq!(plan.held_back, 3);
+    }
+
+    #[test]
+    fn one_subscription_reported_three_times_is_one_send() {
+        // A retry loop or a fan-out bug must not look like a wrong key.
+        let plan = plan_deactivations(&[
+            res("p1", "s1", Outcome::Expired),
+            res("p1", "s1", Outcome::Expired),
+            res("p1", "s1", Outcome::Expired),
+        ]);
+        assert_eq!(plan.calls, vec![vec![pair("p1", "s1")]]);
+        assert_eq!(plan.held_back, 0);
+    }
+
+    #[test]
+    fn only_an_id_that_had_to_be_used_is_counted_invalid() {
+        let plan = plan_deactivations(&[
+            res("bad id", "s1", Outcome::Accepted),
+            res("p2", "also bad", Outcome::Retry),
+            res("p3", "s3", Outcome::Failed),
+        ]);
+        assert_eq!(plan, DeactivationPlan::default());
     }
 }

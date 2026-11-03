@@ -31,8 +31,8 @@
 //!   again on the next tick of the same night, gives the same key. The plan is
 //!   NOT what stops a second push: the delivery log is. A [`PlannedSend`]
 //!   only authorises an attempt to claim `dedupe_key` in the log, and a send
-//!   happens only after that claim succeeds (a 201, or a 200 that was
-//!   `updated` or `queued`).
+//!   happens only after that claim is won (a 201 `created`, or a 200 `updated` whose
+//!   status is `queued`; see [`crate::alert_delivery::read_claim`]).
 //! - *No personal data.* A target is an opaque id of `[A-Za-z0-9_-]`, which
 //!   alone keeps an endpoint URL or an email address out of a plan (pass a
 //!   hash such as `push::endpoint_id`, never the endpoint). The plan never
