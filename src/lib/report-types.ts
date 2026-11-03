@@ -28,8 +28,10 @@ export interface ReportTypeInfo {
  * wizard) and RecentReports (the report feed), so the two surfaces of this
  * feature can't silently drift from each other again (previously each kept
  * its own id->label->icon map, hand-synced on every change). Must stay in
- * sync with the backend allowlist in api/py/_reports.py — REPORT_TYPES there
- * is the validation source of truth; this is the display source of truth.
+ * sync with the backend allowlist — REPORT_TYPES in
+ * workers/crates/weather-core/src/community.rs is the validation source of
+ * truth (report-types.test.ts compares the two); this is the display source of
+ * truth.
  */
 export const REPORT_TYPES: ReportTypeInfo[] = [
   { id: "light-rain", label: "Light Rain", icon: CloudDrizzleIcon },

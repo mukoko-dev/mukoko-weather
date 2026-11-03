@@ -330,20 +330,25 @@ describe("WeatherDashboard — mobile nav clearance and touch targets", () => {
   });
 
   it("inline breadcrumb Home link carries the .dik-dik touch-target class", () => {
-    const homeIdx = source.indexOf("href={BASE_URL}");
+    // A client-side Link to "/", never an <a href="https://…"> (a full reload).
+    const homeIdx = source.indexOf('<Link\n            href="/"');
     expect(homeIdx).toBeGreaterThan(-1);
     expect(source.slice(homeIdx, homeIdx + 200)).toContain("dik-dik");
+    expect(source).not.toContain("href={BASE_URL}");
   });
 });
 
 describe("globals.css — touch-target and nav-clearance tokens", () => {
   const css = readFileSync(resolve(__dirname, "../globals.css"), "utf-8");
 
-  it("defines the mobile nav clearance token from the nav inset and height", () => {
+  it("defines the mobile nav clearance token from the lift, the safe area and the one bar", () => {
     expect(css).toContain("--mobile-nav-clearance:");
     expect(css).toContain("env(safe-area-inset-bottom");
     expect(css).toContain("--mobile-nav-inset:");
-    expect(css).toContain("--mobile-nav-height:");
+    expect(css).toContain("--mobile-nav-bar-height:");
+    // The pager pill above the bar is gone, and with it its height and gap.
+    expect(css).not.toContain("--mobile-nav-height:");
+    expect(css).not.toContain("--mobile-nav-gap:");
   });
 
   it("defines .dik-dik to reach the touch-target minimum on coarse pointers only", () => {
@@ -384,13 +389,19 @@ describe("WeatherDashboard — redesign wiring", () => {
 
 describe("selected forecast model is the baseline (issue #246)", () => {
   it("fetches through our API, not Open-Meteo directly", () => {
-    expect(source).toContain("fetchModelWeather(");
+    const hook = readFileSync(
+      resolve(__dirname, "../../lib/use-live-weather.ts"),
+      "utf-8",
+    );
+    expect(hook).toContain("loadModelWeather(");
+    expect(source).toContain("useLiveWeather(");
     expect(source).not.toMatch(/\bfetchWeather\(location\.lat/);
   });
 
   it("derives the frost banner and fallback flag from the baseline on screen", () => {
-    expect(source).toContain("checkFrostRisk(modelBaseline.hourly");
-    expect(source).toContain("modelBaseline ? false : seedUsingFallback");
+    expect(source).toContain("checkFrostRisk(");
+    expect(source).toContain("displayed.override.hourly");
+    expect(source).toContain("const usingFallback = displayed.usingFallback;");
   });
 });
 

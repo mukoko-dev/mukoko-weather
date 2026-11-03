@@ -11,7 +11,7 @@
 //! answer can say whether the air is better or worse than at this hour
 //! yesterday ([`us_aqi_same_hour_pair`], [`trend`]). Both are pinned to the
 //! Python by `tests/fixtures/air-quality-trend.json`, whose `expected` values
-//! the real functions produced (`scripts/gen_weather_core_fixtures.py`).
+//! real functions produced before they were removed (frozen oracle data, #333).
 
 use chrono::{Duration, NaiveDate, NaiveDateTime};
 use serde_json::{json, Map, Value};
@@ -196,7 +196,7 @@ pub fn pollutants_from_open_meteo(raw: &Value) -> Vec<(&'static str, Option<f64>
         .collect()
 }
 
-/// The response body the app reads (`/api/py/airquality`), less `source`
+/// The response body the app reads (Python `/airquality`), less `source`
 /// and `fetchedAt`, which the Worker adds.
 pub fn payload(pollutants: &[(&str, Option<f64>)]) -> Value {
     let mut out = compute(pollutants);

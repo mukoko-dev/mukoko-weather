@@ -242,9 +242,10 @@ describe("the Averages detail calls only the Worker", () => {
   const hook = read("src/lib/use-climate-averages.ts");
   const view = read("src/components/weather/AveragesDetail.tsx");
 
-  it("uses fetchWorker, never /api/py", () => {
+  it("reads the Worker through the shared store, never /api/py", () => {
     expect(hook).toContain('"normals/monthly"');
-    expect(hook).toContain("fetchWorker(");
+    expect(hook).toContain("workerData");
+    expect(hook).not.toContain("fetchWorker(");
     expect(hook).not.toContain("/api/py");
     expect(read("src/lib/weather-api.ts")).toContain('| "normals/monthly"');
   });

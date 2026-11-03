@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { CloudOff } from "lucide-react";
+import { OfflineShell } from "./OfflineShell";
 
 export const metadata: Metadata = {
   title: "Offline — mukoko weather",
@@ -9,33 +8,12 @@ export const metadata: Metadata = {
   alternates: { canonical: "https://weather.mukoko.com/offline" },
 };
 
+/**
+ * The service worker's offline shell. It is precached at install (fetched
+ * without cookies, so it holds no visitor's name) and shown for any page the
+ * worker cannot get and has no copy of. Everything it shows comes from the
+ * device: see OfflineShell.
+ */
 export default function OfflinePage() {
-  return (
-    <main
-      id="main-content"
-      className="flex min-h-[60vh] flex-col items-center justify-center px-4 text-center"
-    >
-      <div className="mx-auto max-w-md space-y-6">
-        <CloudOff
-          className="mx-auto h-16 w-16 text-text-tertiary"
-          aria-hidden="true"
-        />
-        <h1 className="text-2xl font-bold text-text-primary">
-          You&apos;re offline
-        </h1>
-        <p className="text-text-secondary">
-          mukoko weather needs an internet connection to fetch the latest data.
-          Previously viewed locations may still be available from cache.
-        </p>
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-          <Link href="/" className="kudu text-base">
-            Try again
-          </Link>
-        </div>
-        <p className="text-xs text-text-tertiary">
-          Tip: Save your favourite locations for offline access
-        </p>
-      </div>
-    </main>
-  );
+  return <OfflineShell />;
 }

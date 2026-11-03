@@ -127,27 +127,22 @@
   /* Touch & Interaction — 56px optimal (Material Design 3 recommended) */
   --touch-target-min: 48px;
 
-  /* Mobile bottom nav geometry — the FLOATING bar, copied from mukoko-news's
-     island (src/components/layout/bottom-nav.tsx there): inset 1rem from both
-     screen edges, lifted --mobile-nav-inset (0.75rem) above the bottom edge
-     plus the safe area, max-w-md, pill (rounded-full), 0.5px token border,
-     shadow-lg, backdrop-blur-xl, 4rem tall. The location pager is its own
-     small floating pill one touch target tall, --mobile-nav-gap above the bar.
-     --mobile-nav-height is bar + gap + pager pill WITHOUT the lift or the
-     safe area; --mobile-nav-clearance is the space page content must leave at
-     the bottom so nothing sits under the nav (lift and safe area included).
-     Floating controls above the nav (e.g. reorder "Done") use it too.
-     Header.test.ts keeps these in step with the component. */
+  /* Mobile bottom nav geometry — ONE floating bar (option B, owner
+     2026-11-02): inset 1rem from both screen edges, lifted --mobile-nav-inset
+     (0.75rem) above the bottom edge plus the safe area, max-w-md, pill
+     (rounded-full), 0.5px token border, shadow-lg, backdrop-blur-xl, 4rem
+     tall. Map and Locations are pinned at its ends and the places lane
+     (My Location first, then the saved places) scrolls between them; there is
+     no second pill above it. --mobile-nav-clearance is the space page content
+     must leave at the bottom so nothing sits under the nav (bar, lift and safe
+     area, plus a 0.5rem breath). Floating controls above the nav (e.g.
+     reorder "Done") use it too. Header.test.ts keeps these in step with the
+     component. */
   --mobile-nav-inset: 0.75rem;
   --mobile-nav-bar-height: 4rem;
-  --mobile-nav-gap: 0.5rem;
-  --mobile-nav-height: calc(
-    var(--mobile-nav-bar-height) + var(--mobile-nav-gap) +
-      var(--touch-target-min)
-  );
   --mobile-nav-clearance: calc(
     env(safe-area-inset-bottom, 0px) + var(--mobile-nav-inset) +
-      var(--mobile-nav-height) + 0.5rem
+      var(--mobile-nav-bar-height) + 0.5rem
   );
 
   /* Mzizi border rule: a solid border on ALL four sides, 0.5px at rest and
@@ -257,12 +252,8 @@
   --chart-6: #283593; /* Sodalite — ECMWF AIFS series */
   --chart-7: #8a4b2a; /* Copper, deepened to stay apart from terracotta — Apple Weather series */
 
-  /* Temperature bar gradient — warm spectrum */
-  --color-temp-cold: #0047ab;
-  --color-temp-cool: #00897b;
-  --color-temp-mild: #f9a825;
-  --color-temp-warm: #ef6c00;
-  --color-temp-hot: #c62828;
+  /* Temperature range bar: the track behind each day's blended pill (the pill
+     itself is the --wx-temp-* scale, see DailyForecast) */
   --color-temp-bar-track: rgba(0, 0, 0, 0.06);
 
   /* Rain probability — text + chart fill. #0277bd keeps >= 4.5:1 on the
@@ -362,6 +353,16 @@
   --size-insight-square-min: 10.5rem;
   --size-insight-dial-max: 14rem;
   --size-insight-moon-max: 9rem;
+
+  /* Weather scale bars (GradientScale: the AQI card, the UV tile, the air
+     quality sheet). Fixed sizes: a scale is a thin bar with a small marker on
+     a phone and on a 1280px desktop alike, never a share of the card's width
+     (the old SVG scaled its whole viewBox with the card, so a wide card drew a
+     48px track and an 85px marker). On a wide card the bar stops at the max
+     width and sits left, under the number. Same in light and dark. */
+  --wx-scale-track-height: 0.75rem;
+  --wx-scale-marker-size: 1.25rem;
+  --wx-scale-max-width: 24rem;
 
   /* Moon disc — lit limb and shadowed disc (metric-card MoonDisc) */
   --color-moon-lit: #f3ecd6;
@@ -486,12 +487,7 @@
   --chart-6: #3d5afe; /* Sodalite light */
   --chart-7: #ff8a65; /* Copper light */
 
-  /* Temperature bar gradient — dark mode warm spectrum */
-  --color-temp-cold: #42a5f5;
-  --color-temp-cool: #26a69a;
-  --color-temp-mild: #fdd835;
-  --color-temp-warm: #ff9800;
-  --color-temp-hot: #ef5350;
+  /* Temperature range bar track (dark) */
   --color-temp-bar-track: rgba(255, 255, 255, 0.08);
 
   /* Rain probability */
@@ -672,11 +668,6 @@
   --color-frost-severe-bg: var(--color-frost-severe-bg);
   --color-frost-high-bg: var(--color-frost-high-bg);
   --color-frost-moderate-bg: var(--color-frost-moderate-bg);
-  --color-temp-cold: var(--color-temp-cold);
-  --color-temp-cool: var(--color-temp-cool);
-  --color-temp-mild: var(--color-temp-mild);
-  --color-temp-warm: var(--color-temp-warm);
-  --color-temp-hot: var(--color-temp-hot);
   --color-temp-bar-track: var(--color-temp-bar-track);
   --color-rain: var(--color-rain);
   --color-severity-low: var(--color-severity-low);
@@ -1703,6 +1694,60 @@ body {
     @apply border-primary bg-primary/10;
   }
 
+  /* .lark — a place chip in the phone bottom bar's lane (src/components/
+     layout/PlaceLane.tsx): a link, one touch target tall, full pill with a
+     solid hairline border on every side (never a one-sided stripe). The
+     current page's chip (`aria-current`) takes the cobalt container fill and
+     the 1px active border; the rest sit on the muted surface. Label is the
+     --text-nav-label token, truncated, so a long name never crowds the lane. */
+  .lark {
+    @apply relative flex min-h-[var(--touch-target-min)] items-center
+           justify-center gap-1.5 rounded-full border-border bg-muted px-3
+           text-[length:var(--text-nav-label)] font-medium whitespace-nowrap
+           text-foreground transition-colors;
+    border-style: solid;
+    border-width: var(--border-width-rest);
+    /* Never wider than the lane it sits in (the scroller is the container),
+       so on a small phone one chip always fits whole, name truncated, instead
+       of being clipped at the lane's edges. */
+    max-width: min(10rem, calc(100cqw - 0.5rem));
+  }
+  .lark:is([aria-current]:not([aria-current="false"])) {
+    @apply border-on-container-cobalt/25 bg-container-cobalt
+           text-on-container-cobalt;
+    border-width: var(--border-width-active);
+    /* The thicker border comes out of the padding, so the chip keeps its
+       outer width and a place switch does not nudge the row. */
+    padding-inline: calc(
+      0.75rem - (var(--border-width-active) - var(--border-width-rest)) / 2
+    );
+  }
+
+  /* .sanderling — the places lane's sideways scroller. Its edges fade by an
+     alpha-only mask (any theme, no colour) while more chips lie that way:
+     PlaceLane sets data-fade-start once it has scrolled and data-fade-end
+     while chips lie past the end. No scroll-snap: PlaceLane
+     centres the current chip itself (laneScrollLeft), and a second
+     positioning rule would compete with it (a design call, not measured). */
+  .sanderling {
+    container-type: inline-size;
+    --lane-fade-start: 0px;
+    --lane-fade-end: 0px;
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      black var(--lane-fade-start),
+      black calc(100% - var(--lane-fade-end)),
+      transparent
+    );
+  }
+  .sanderling[data-fade-start="true"] {
+    --lane-fade-start: 1.25rem;
+  }
+  .sanderling[data-fade-end="true"] {
+    --lane-fade-end: 2rem;
+  }
+
   /* .chameleon — skeleton placeholder (changes/loads, blends with background) */
   /* Inset stat tile inside a card (label + value), e.g. haze and agriculture. */
   .meerkat {
@@ -1824,6 +1869,16 @@ body {
   outline: var(--focus-ring-width, 3px) solid var(--focus-ring);
   outline-offset: var(--focus-ring-offset, 2px);
   border-radius: var(--radius-button);
+}
+
+/* .lark (a place chip in the bottom bar's lane) — unlayered like the fauna
+   rules above, so the global :focus-visible radius of 4px does not square the
+   pill on keyboard focus. The ring is inset: the lane's scroller clips
+   anything drawn outside it. */
+.lark:focus-visible {
+  outline: var(--focus-ring-width, 3px) solid var(--focus-ring);
+  outline-offset: -3px;
+  border-radius: 9999px;
 }
 
 /* .bee sits on the bg-primary header action pill. The cobalt ring is the same

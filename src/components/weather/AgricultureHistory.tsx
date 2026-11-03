@@ -6,7 +6,6 @@ import {
   historyFetchOptions,
   readHistoryAnswer,
 } from "@/lib/history-api";
-import { roundCoord } from "@/lib/location-privacy";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatGrid } from "./StatGrid";
 import { useEffect, useState } from "react";
@@ -17,7 +16,7 @@ import {
   summarizeHistory,
   type HistorySummary,
 } from "@/lib/agriculture";
-import { fetchWorker } from "@/lib/weather-api";
+import { workerData } from "@/lib/worker-data";
 
 /**
  * The past 30 days against climate normals: recorded rain and mean
@@ -77,16 +76,15 @@ export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
 
   useEffect(() => {
     let live = true;
-    fetchWorker(
-      "history",
-      `location=${encodeURIComponent(slug)}&days=30`,
-      {},
-      historyFetchOptions(30),
-    )
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return readHistoryAnswer(await res.json());
-      })
+    // Shared read; "Try again" (`attempt` > 0) reads again past a remembered
+    // failure.
+    workerData
+      .json<unknown>(
+        "history",
+        { location: slug, days: 30 },
+        { ...historyFetchOptions(30), force: attempt > 0 },
+      )
+      .then((json) => readHistoryAnswer(json))
       .then((answer) => {
         if (live) {
           setHistory({
@@ -110,11 +108,12 @@ export function AgricultureHistory({ slug, lat, lon, modelRain30dMm }: Props) {
     // of it. Sequential on purpose: the first call builds the cell's table
     // (cached afterwards), the second reads it.
     const getNormals = async (date: string): Promise<Normals> => {
-      const res = await fetchWorker(
+      const res = await workerData.read<Normals>(
         "normals",
-        `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}&date=${date}`,
+        { lat, lon, date },
+        { force: attempt > 0 },
       );
-      return res.ok ? ((await res.json()) as Normals) : { available: false };
+      return res.ok && res.data ? res.data : { available: false };
     };
     (async () => {
       const end = await getNormals(isoDaysAgo(0));

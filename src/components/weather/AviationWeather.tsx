@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getFlightCategoryClass } from "@/lib/flight-category-styles";
-import { fetchWorker } from "@/lib/weather-api";
+import { workerData } from "@/lib/worker-data";
 
 interface CloudLayer {
   cover: string;
@@ -244,17 +244,13 @@ export function AviationWeather({ slug, lat, lon }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    // Shared reads: the nearest-airport search is keyed by the 0.05 degree
+    // cell and a picked station by its ICAO code, so remounting the section
+    // (LazySection) or revisiting a place costs no second call.
     (pickedIcao
-      ? fetchWorker("metar", `icao=${encodeURIComponent(pickedIcao)}`)
-      : fetchWorker(
-          "aviation/nearest-metar",
-          `lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lon))}`,
-        )
+      ? workerData.json<StationResponse>("metar", { icao: pickedIcao })
+      : workerData.json<NearestResponse>("aviation/nearest-metar", { lat, lon })
     )
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
       .then((d: NearestResponse | StationResponse) => {
         if (cancelled) return;
         if (pickedIcao) {

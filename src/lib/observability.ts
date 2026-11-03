@@ -104,7 +104,7 @@ const URL_USERINFO = /(\/\/)[^/\s:@"']+:[^/\s@"']+@/g;
 /**
  * Mask credentials that error text can carry: secret query values and URL
  * userinfo (e.g. a connection string in a driver error). Mirrors the
- * Python `RedactSecretsFilter` in api/py/_logging.py.
+ * former Python `RedactSecretsFilter` (deleted with the backend, #333).
  */
 export function redactSecrets(text: string): string {
   return text
@@ -177,7 +177,12 @@ export function reportErrorToAnalytics(
  * Tracks which providers are failing and how often.
  */
 export function reportProviderFailure(
-  provider: "tomorrow-io" | "open-meteo" | "mongodb" | "ai-gateway",
+  provider:
+    | "tomorrow-io"
+    | "open-meteo"
+    | "mongodb"
+    | "ai-gateway"
+    | "weather-api",
   errorType: string,
   location?: string,
 ) {

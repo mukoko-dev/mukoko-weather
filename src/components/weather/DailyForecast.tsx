@@ -1,5 +1,7 @@
 import { WeatherIcon } from "@/lib/weather-icons";
 import { weatherCodeToInfo, uvLevel, type DailyWeather } from "@/lib/weather";
+import { TEMP_ANCHORS } from "@/lib/weather-scales";
+import { blendGradientCss, trackWindow, valueStops } from "@/lib/scale-blend";
 import { DailyChart } from "./DailyChart";
 
 interface Props {
@@ -13,9 +15,19 @@ export function tempPercent(temp: number, absMin: number, absMax: number) {
   return ((temp - absMin) / range) * 100;
 }
 
-/** Get the warm gradient color for a temperature position (0-100%) */
-export function tempBarGradient(lowPct: number, highPct: number) {
-  return `linear-gradient(to right, var(--color-temp-cool) ${lowPct}%, var(--color-temp-mild) ${(lowPct + highPct) / 2}%, var(--color-temp-warm) ${highPct}%)`;
+/**
+ * The temperature gradient of the whole week's track (absMin at the left end,
+ * absMax at the right end). It BLENDS through the temperature scale
+ * (weather-scales.ts, `--wx-temp-*`, cold blue to hot red) with each colour
+ * unmixed at the middle of its band, so a given temperature has the same colour
+ * on every row of the week; each day's pill is a window onto this one gradient
+ * (see `trackWindow`), not a gradient of its own.
+ */
+export function tempTrackGradient(absMin: number, absMax: number) {
+  const span = Math.max(absMax - absMin, 1);
+  return blendGradientCss(
+    valueStops(TEMP_ANCHORS, (t) => ((t - absMin) / span) * 100),
+  );
 }
 
 export function DailyForecast({ daily }: Props) {
@@ -24,6 +36,7 @@ export function DailyForecast({ daily }: Props) {
   const allLows = daily.temperature_2m_min.map(Math.round);
   const absMin = Math.min(...allLows);
   const absMax = Math.max(...allHighs);
+  const trackGradient = tempTrackGradient(absMin, absMax);
 
   return (
     <section aria-labelledby="daily-forecast-heading">
@@ -58,6 +71,7 @@ export function DailyForecast({ daily }: Props) {
 
             const lowPct = tempPercent(low, absMin, absMax);
             const highPct = tempPercent(high, absMin, absMax);
+            const win = trackWindow(lowPct, highPct, 4);
             const rainPct = daily.precipitation_probability_max[i];
             const precipMm = daily.precipitation_sum[i];
             const windMax = Math.round(daily.wind_speed_10m_max[i]);
@@ -106,19 +120,25 @@ export function DailyForecast({ daily }: Props) {
                     {low}°
                   </span>
 
-                  {/* Temperature range bar */}
+                  {/* Temperature range bar: the week's track, with this day's
+                      low-to-high pill as a window onto its blended gradient */}
                   <div
-                    className="relative mx-1 h-2 flex-1 overflow-hidden rounded-full bg-temp-bar-track"
+                    className="relative mx-1 h-2 flex-1 rounded-full bg-temp-bar-track"
                     aria-hidden="true"
                   >
                     <div
-                      className="absolute top-0 h-full rounded-full"
-                      style={{
-                        left: `${lowPct}%`,
-                        width: `${Math.max(highPct - lowPct, 4)}%`,
-                        background: tempBarGradient(lowPct, highPct),
-                      }}
-                    />
+                      className="absolute inset-y-0 overflow-hidden rounded-full ring-1 ring-wx-outline"
+                      style={{ left: `${win.left}%`, width: `${win.width}%` }}
+                    >
+                      <div
+                        className="absolute inset-y-0"
+                        style={{
+                          left: `${win.innerLeft}%`,
+                          width: `${win.innerWidth}%`,
+                          backgroundImage: trackGradient,
+                        }}
+                      />
+                    </div>
                   </div>
 
                   {/* High temp */}
@@ -138,13 +158,18 @@ export function DailyForecast({ daily }: Props) {
                   {precipMm > 0 && <span>{precipMm.toFixed(1)} mm</span>}
                   <span>Wind {windMax} km/h</span>
                   {gustMax > windMax && <span>Gusts {gustMax}</span>}
-                  <span className="inline-flex items-center gap-1">
-                    <span
-                      aria-hidden="true"
-                      className={`size-2.5 rounded-full ring-1 ring-wx-outline ${uvInfo.swatch}`}
-                    />
-                    UV {uvMax} {uvInfo.label}
-                  </span>
+                  {/* A provider can have no UV maximum for a day (the
+                      failover forecast has none past its hourly steps): say
+                      nothing rather than "UV  Low". */}
+                  {uvMax != null && (
+                    <span className="inline-flex items-center gap-1">
+                      <span
+                        aria-hidden="true"
+                        className={`size-2.5 rounded-full ring-1 ring-wx-outline ${uvInfo.swatch}`}
+                      />
+                      UV {uvMax} {uvInfo.label}
+                    </span>
+                  )}
                 </div>
               </div>
             );

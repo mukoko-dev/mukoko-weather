@@ -1,11 +1,9 @@
 "use client";
 
-import { roundCoord } from "@/lib/location-privacy";
-import { useState, useEffect, useRef } from "react";
+import { useWorkerData } from "@/lib/use-worker-data";
 import { MetricCard, type GaugeConfig } from "./MetricCard";
 import { AQI_SCALE, aqiScaleBand } from "@/lib/weather-scales";
 import { CloudIcon } from "@/lib/weather-icons";
-import { fetchWorker } from "@/lib/weather-api";
 
 /**
  * Air Quality Index (AQI) gauge card.
@@ -100,54 +98,9 @@ export function formatPollutant(value: number | null | undefined): string {
   return `${value.toFixed(1)} µg/m³`;
 }
 
-type AQState =
-  | { status: "loading" }
-  | { status: "ready"; data: AirQualityResponse }
-  | { status: "error" };
-
 export function AirQualityCard({ lat, lon }: Props) {
-  // Single state object — avoids the React-compiler "cascading renders"
-  // warning that fires when setLoading + setError are called back-to-back
-  // at the top of an effect.
-  const [state, setState] = useState<AQState>({ status: "loading" });
-  const abortRef = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    let cancelled = false;
-
-    fetchWorker(
-      "air-quality",
-      `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`,
-      {
-        signal: controller.signal,
-      },
-    )
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json() as Promise<AirQualityResponse>;
-      })
-      .then((json) => {
-        if (cancelled) return;
-        setState({ status: "ready", data: json });
-      })
-      .catch((err: unknown) => {
-        if (
-          cancelled ||
-          (err as { name?: string } | null)?.name === "AbortError"
-        )
-          return;
-        setState({ status: "error" });
-      });
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [lat, lon]);
+  // Shared read (one `/v1/air-quality` per 0.05 degree cell).
+  const state = useWorkerData<AirQualityResponse>("air-quality", { lat, lon });
 
   if (state.status === "loading") {
     return (

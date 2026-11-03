@@ -9,6 +9,11 @@ import {
 import { isBareNameCandidate, resolveBareName } from "@/lib/bare-name";
 import { resolveLocationSlug } from "@/lib/places";
 import { isFeatureEnabled } from "@/lib/feature-flags";
+import { SHELL_ANONYMOUS, SHELL_HEADER } from "@/lib/sw-navigation";
+import {
+  COUCH_ACCESS_TOKEN_REFRESH_BUFFER_SECONDS,
+  COUCH_SESSION_PATH,
+} from "@/lib/couch-session-timing";
 // Constants only: the cookie name is read by the home page and display (last-location.ts).
 import {
   LAST_LOCATION_COOKIE,
@@ -18,6 +23,18 @@ import {
 /** The gate needs DB errors to throw, not to read as "not found". */
 const strictResolve = (slug: string) =>
   resolveLocationSlug(slug, { strict: true });
+
+/**
+ * AuthKit options per path. Only the CouchDB sync's credential route asks for
+ * more: the WorkOS access token it exchanges must have life left, because the
+ * credential it yields never outlives that token (`couch-session-timing.ts`).
+ * Every other path keeps AuthKit's own refresh buffer.
+ */
+function authkitOptionsFor(pathname: string) {
+  return pathname === COUCH_SESSION_PATH
+    ? { refreshBufferSeconds: COUCH_ACCESS_TOKEN_REFRESH_BUFFER_SECONDS }
+    : {};
+}
 
 /**
  * Top-level routes that are NOT location slugs. Every directory under
@@ -77,8 +94,8 @@ export default async function proxy(
   // The location gate (below) doesn't depend on the session, so its lookup
   // runs alongside the refresh instead of after it.
   const path = classifyLocationPath(pathname, KNOWN_ROUTES);
-  const [{ headers }, renderable] = await Promise.all([
-    authkit(request),
+  const [{ headers, session }, renderable] = await Promise.all([
+    authkit(request, authkitOptionsFor(pathname)),
     path.kind === "slug"
       ? isRenderableLocation(path.slug, strictResolve, {
           // A lookup that outlives the timeout keeps running after the
@@ -162,7 +179,17 @@ export default async function proxy(
   // Deliberately still set for a slug the gate just 404'd: whether a 404 slug
   // may overwrite the cookie is an open owner decision (#238).
   const slug = pathname.slice(1).split("/")[0];
-  if (slug && LOCATION_SLUG_RE.test(slug) && !KNOWN_ROUTES.has(slug)) {
+  // Only when it changes: a repeat visit to the same place sets no cookie, so
+  // its response can be kept by the service worker (a response that sets a
+  // cookie never is) and the cookie is not re-sent for nothing.
+  const cookieChanged =
+    request.cookies.get(LAST_LOCATION_COOKIE)?.value !== slug;
+  if (
+    slug &&
+    cookieChanged &&
+    LOCATION_SLUG_RE.test(slug) &&
+    !KNOWN_ROUTES.has(slug)
+  ) {
     // `response.cookies` was built before AuthKit's Set-Cookie headers were
     // applied, and setting through it rewrites the whole header from its own
     // copy, dropping a refreshed session cookie. So set it (Next's cookie
@@ -177,6 +204,25 @@ export default async function proxy(
     for (const cookie of authkitCookies) {
       if (!kept.has(cookie)) response.headers.append("set-cookie", cookie);
     }
+  }
+
+  // ── The app shell the service worker may keep (src/lib/sw-navigation.ts) ──
+  // A service worker cannot see a session cookie or a Set-Cookie header, so
+  // the server says it: this page is `/` or `/{slug}` exactly, nobody is
+  // signed in, and the response sets no cookie. A signed-in visitor's page
+  // (their name is in the HTML) is never marked, so it is never stored.
+  const isPlacePage =
+    pathname === "/" ||
+    (path.kind === "slug" && pathname.split("/").filter(Boolean).length === 1);
+  if (
+    isPlacePage &&
+    !unknownLocation &&
+    // Strict: an answer without a session is "unknown", never "anonymous".
+    session !== undefined &&
+    !session.user &&
+    response.headers.getSetCookie().length === 0
+  ) {
+    response.headers.set(SHELL_HEADER, SHELL_ANONYMOUS);
   }
 
   return response;

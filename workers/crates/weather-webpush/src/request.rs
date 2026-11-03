@@ -192,16 +192,82 @@ pub async fn build<K: KeyAgreement, S: Es256Signer>(
 pub enum TransportError {
     Timeout,
     Network,
+    /// The transport would not send the request (see
+    /// `runtime::check_request`): nothing left the Worker. A request built by
+    /// [`build`] passes that check, so this means the request was altered or a
+    /// rule changed; it is not retried.
+    Refused,
+}
+
+impl TransportError {
+    /// A stable machine-readable code for logs.
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::Timeout => "push_timeout",
+            Self::Network => "push_network",
+            Self::Refused => "push_refused",
+        }
+    }
+}
+
+/// The longest `Retry-After` hint kept, in seconds: a push service asking for
+/// more than a day is asking for longer than an alert is worth.
+pub const MAX_RETRY_AFTER_SECS: u32 = 24 * 60 * 60;
+
+/// Whether the push service's `Retry-After` is looked at for this status: a
+/// 429 or a 5xx only (RFC 8030 section 5.2 and RFC 9110 section 10.2.3 use it
+/// to say when to try again). On any other status the header is not read at
+/// all, whatever it says.
+pub fn reads_retry_after(status: u16) -> bool {
+    status == 429 || (500..=599).contains(&status)
+}
+
+/// The `Retry-After` delay in whole seconds, from a header value. Only the
+/// delta-seconds form is read (digits, nothing else, at most ten of them); an
+/// HTTP-date, a sign, a fraction, an empty or an absurd value is no hint
+/// (`None`: the caller falls back to its own schedule). A value above
+/// [`MAX_RETRY_AFTER_SECS`] is cut to it.
+pub fn retry_after_secs(status: u16, header: Option<&str>) -> Option<u32> {
+    if !reads_retry_after(status) {
+        return None;
+    }
+    let value = header?.trim();
+    if value.is_empty() || value.len() > 10 || !value.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let secs: u64 = value.parse().ok()?;
+    u32::try_from(secs.min(u64::from(MAX_RETRY_AFTER_SECS))).ok()
+}
+
+/// What the push service said, and nothing it sent in a body: the status and,
+/// for a 429 or a 5xx, the `Retry-After` hint ([`retry_after_secs`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PushResponse {
+    pub status: u16,
+    pub retry_after_secs: Option<u32>,
 }
 
 /// What a runtime supplies: one POST, under the limits of its
-/// [`PushRequest`]. In a Worker this wraps `fetch`, whose future is not
-/// `Send`, which is why the trait is not either. An implementation must not
-/// follow redirects (a push endpoint that redirects is not one we chose) and
-/// returns the status only.
+/// [`PushRequest`]. In a Worker this wraps `fetch`
+/// (`workers/push`, whose rules are the pure `runtime` module), whose future
+/// is not `Send`, which is why the trait is not either. An implementation must
+/// not follow redirects (a push endpoint that redirects is not one we chose),
+/// must never read or keep the response body, and returns the status (and the
+/// `Retry-After` hint, if it can read headers) only.
 #[allow(async_fn_in_trait)]
 pub trait Transport {
+    /// The status of the push service's answer.
     async fn post(&self, req: &PushRequest) -> Result<u16, TransportError>;
+
+    /// The status and the `Retry-After` hint. A transport that reads headers
+    /// overrides this; the default has the status only, so an implementation
+    /// of [`Transport::post`] alone keeps working.
+    async fn post_with_hint(&self, req: &PushRequest) -> Result<PushResponse, TransportError> {
+        self.post(req).await.map(|status| PushResponse {
+            status,
+            retry_after_secs: None,
+        })
+    }
 }
 
 /// What came of one send.
@@ -212,19 +278,34 @@ pub struct Delivery {
     /// (`platform.alertDeliveries.providerCode`); `None` for a timeout or a
     /// network error.
     pub provider_code: Option<u16>,
+    /// How long the push service asked us to wait, in seconds, when it
+    /// answered 429 or 5xx with a `Retry-After` ([`retry_after_secs`]). The
+    /// caller decides whether a later tick honours it.
+    pub retry_after_secs: Option<u32>,
 }
 
 /// Send a built request. A transport failure is a retry on a later tick, the
-/// same as a 5xx.
+/// same as a 5xx; a request the transport refused is not retried.
 pub async fn deliver<T: Transport>(transport: &T, req: &PushRequest) -> Delivery {
-    match transport.post(req).await {
-        Ok(status) => Delivery {
-            outcome: push::classify_status(status),
-            provider_code: Some(status),
+    match transport.post_with_hint(req).await {
+        Ok(answer) => Delivery {
+            outcome: push::classify_status(answer.status),
+            provider_code: Some(answer.status),
+            // Whatever a transport hands back, the hint only counts where the
+            // rules read it.
+            retry_after_secs: answer
+                .retry_after_secs
+                .filter(|_| reads_retry_after(answer.status)),
         },
         Err(TransportError::Timeout | TransportError::Network) => Delivery {
             outcome: Outcome::Retry,
             provider_code: None,
+            retry_after_secs: None,
+        },
+        Err(TransportError::Refused) => Delivery {
+            outcome: Outcome::Failed,
+            provider_code: None,
+            retry_after_secs: None,
         },
     }
 }
@@ -246,10 +327,8 @@ pub async fn send<T: Transport, K: KeyAgreement, S: Es256Signer>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::encrypt::tests::{
-        block_on, fixed, Fake as FakeKeys, AS_PUBLIC, AUTH_SECRET, ECDH_SECRET, SALT, UA_PUBLIC,
-    };
-    use crate::encrypt::{Agreement, HEADER_LEN};
+    use crate::encrypt::tests::{block_on, fixed, other_agreement, rfc, Fake as FakeKeys};
+    use crate::encrypt::{expand, HEADER_LEN};
     use crate::vapid::tests::Fake as FakeSigner;
     use crate::B64URL;
     use base64::Engine;
@@ -298,8 +377,8 @@ mod tests {
     fn sub() -> Subscription<'static> {
         Subscription {
             endpoint: ENDPOINT,
-            p256dh: UA_PUBLIC,
-            auth: AUTH_SECRET,
+            p256dh: &rfc().ua_public,
+            auth: &rfc().auth,
         }
     }
 
@@ -311,7 +390,7 @@ mod tests {
     }
 
     fn salt() -> [u8; 16] {
-        fixed(SALT)
+        fixed(&rfc().salt)
     }
 
     fn identity(signer: &FakeSigner) -> Identity<'_, FakeSigner> {
@@ -527,10 +606,143 @@ mod tests {
                 d,
                 Delivery {
                     outcome: Outcome::Retry,
-                    provider_code: None
+                    provider_code: None,
+                    retry_after_secs: None,
                 }
             );
         }
+    }
+
+    #[test]
+    fn a_refused_request_is_not_retried_and_has_no_code() {
+        let t = Fake::new(Err(TransportError::Refused));
+        let d = block_on(deliver(&t, &built()));
+        assert_eq!(
+            d,
+            Delivery {
+                outcome: Outcome::Failed,
+                provider_code: None,
+                retry_after_secs: None,
+            }
+        );
+        assert_eq!(d.outcome.delivery_status(), "failed");
+    }
+
+    #[test]
+    fn transport_error_codes_are_stable_and_say_nothing_about_the_request() {
+        assert_eq!(TransportError::Timeout.code(), "push_timeout");
+        assert_eq!(TransportError::Network.code(), "push_network");
+        assert_eq!(TransportError::Refused.code(), "push_refused");
+    }
+
+    #[test]
+    fn retry_after_is_read_for_429_and_5xx_only() {
+        for status in [429, 500, 502, 503, 504, 599] {
+            assert!(reads_retry_after(status), "{status}");
+            assert_eq!(retry_after_secs(status, Some("120")), Some(120), "{status}");
+        }
+        for status in [
+            0, 100, 200, 201, 204, 301, 302, 400, 403, 404, 410, 413, 499, 600,
+        ] {
+            assert!(!reads_retry_after(status), "{status}");
+            assert_eq!(
+                retry_after_secs(status, Some("120")),
+                None,
+                "a {status} is not asked for a hint, whatever it sends"
+            );
+        }
+    }
+
+    #[test]
+    fn retry_after_is_whole_seconds_or_no_hint() {
+        assert_eq!(retry_after_secs(429, None), None);
+        assert_eq!(retry_after_secs(429, Some("0")), Some(0));
+        assert_eq!(retry_after_secs(429, Some(" 30 ")), Some(30));
+        assert_eq!(retry_after_secs(503, Some("0000000030")), Some(30));
+        for bad in [
+            "",
+            " ",
+            "-1",
+            "+5",
+            "1.5",
+            "1e3",
+            "0x10",
+            "30s",
+            "Wed, 21 Oct 2026 07:28:00 GMT",
+            "99999999999",
+            "١٢٣",
+        ] {
+            assert_eq!(retry_after_secs(429, Some(bad)), None, "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn retry_after_is_cut_to_a_day() {
+        assert_eq!(
+            retry_after_secs(429, Some("86400")),
+            Some(MAX_RETRY_AFTER_SECS)
+        );
+        assert_eq!(
+            retry_after_secs(429, Some("86401")),
+            Some(MAX_RETRY_AFTER_SECS)
+        );
+        assert_eq!(
+            retry_after_secs(503, Some("4294967295")),
+            Some(MAX_RETRY_AFTER_SECS)
+        );
+        assert_eq!(
+            retry_after_secs(503, Some("9999999999")),
+            Some(MAX_RETRY_AFTER_SECS)
+        );
+    }
+
+    /// A transport that reads headers: answers with a status and a hint.
+    struct Hinting(PushResponse);
+
+    impl Transport for Hinting {
+        async fn post(&self, _req: &PushRequest) -> Result<u16, TransportError> {
+            Ok(self.0.status)
+        }
+        async fn post_with_hint(&self, _req: &PushRequest) -> Result<PushResponse, TransportError> {
+            Ok(self.0)
+        }
+    }
+
+    #[test]
+    fn a_hint_from_the_transport_reaches_the_delivery() {
+        let t = Hinting(PushResponse {
+            status: 429,
+            retry_after_secs: Some(90),
+        });
+        let d = block_on(deliver(&t, &built()));
+        assert_eq!(d.outcome, Outcome::Retry);
+        assert_eq!(d.provider_code, Some(429));
+        assert_eq!(d.retry_after_secs, Some(90));
+    }
+
+    #[test]
+    fn a_hint_on_a_status_that_does_not_read_one_is_dropped() {
+        // Even a transport that hands one back for a 201 or a 410 cannot make
+        // the caller wait: the rules read it for 429 and 5xx only.
+        for status in [201, 400, 404, 410] {
+            let t = Hinting(PushResponse {
+                status,
+                retry_after_secs: Some(90),
+            });
+            let d = block_on(deliver(&t, &built()));
+            assert_eq!(d.retry_after_secs, None, "{status}");
+        }
+    }
+
+    #[test]
+    fn a_transport_that_only_posts_still_works_and_gives_no_hint() {
+        // `Fake` implements `post` alone: the default `post_with_hint` has the
+        // status and no hint.
+        let t = Fake::new(Ok(503));
+        let d = block_on(deliver(&t, &built()));
+        assert_eq!(d.outcome, Outcome::Retry);
+        assert_eq!(d.provider_code, Some(503));
+        assert_eq!(d.retry_after_secs, None);
     }
 
     #[test]
@@ -579,8 +791,21 @@ mod tests {
     fn nothing_that_prints_carries_the_capability() {
         let r = built();
         let shown = format!("{r:?} {:?}", sub());
-        for secret in [ENDPOINT, "dQw4w9", UA_PUBLIC, AUTH_SECRET, "vapid t="] {
-            assert!(!shown.contains(secret), "{secret}");
+        // In order: 0 the endpoint, 1 the endpoint's token, 2 the browser's
+        // public key, 3 its auth value, 4 the VAPID header's start.
+        let values = [
+            ENDPOINT,
+            "dQw4w9",
+            rfc().ua_public.as_str(),
+            rfc().auth.as_str(),
+            "vapid t=",
+        ];
+        // A failure names the position in the list, never the value itself.
+        for (position, value) in values.iter().enumerate() {
+            assert!(
+                !shown.contains(*value),
+                "value {position} of the list was printed"
+            );
         }
         assert!(shown.contains(&push::endpoint_id(ENDPOINT)));
     }
@@ -596,27 +821,25 @@ mod tests {
         use hkdf::Hkdf;
         use sha2::Sha256;
 
+        let rfc = rfc();
         let r = built();
         let salt: [u8; 16] = r.body[..16].try_into().unwrap();
         let as_public = &r.body[21..HEADER_LEN];
-        assert_eq!(B64URL.encode(as_public), AS_PUBLIC);
+        assert_eq!(B64URL.encode(as_public), rfc.as_public);
         let mut key_info = b"WebPush: info\0".to_vec();
-        key_info.extend_from_slice(&B64URL.decode(UA_PUBLIC).unwrap());
+        key_info.extend_from_slice(&B64URL.decode(&rfc.ua_public).unwrap());
         key_info.extend_from_slice(as_public);
-        let mut ikm = [0u8; 32];
-        Hkdf::<Sha256>::new(
-            Some(&B64URL.decode(AUTH_SECRET).unwrap()),
-            &B64URL.decode(ECDH_SECRET).unwrap(),
+        let ikm: [u8; 32] = expand(
+            &Hkdf::<Sha256>::new(
+                Some(&B64URL.decode(&rfc.auth).unwrap()),
+                &B64URL.decode(&rfc.ecdh).unwrap(),
+            ),
+            &key_info,
         )
-        .expand(&key_info, &mut ikm)
         .unwrap();
         let prk = Hkdf::<Sha256>::new(Some(&salt), &ikm);
-        let mut cek = [0u8; 16];
-        let mut nonce = [0u8; 12];
-        prk.expand(b"Content-Encoding: aes128gcm\0", &mut cek)
-            .unwrap();
-        prk.expand(b"Content-Encoding: nonce\0", &mut nonce)
-            .unwrap();
+        let cek: [u8; 16] = expand(&prk, b"Content-Encoding: aes128gcm\0").unwrap();
+        let nonce: [u8; 12] = expand(&prk, b"Content-Encoding: nonce\0").unwrap();
         let record = Aes128Gcm::new_from_slice(&cek)
             .unwrap()
             .decrypt(
@@ -636,13 +859,9 @@ mod tests {
         assert_eq!(json["url"], "/harare");
         assert_eq!(json["title"], "Frost alert for Harare");
         // and a different ECDH secret (a different browser) cannot read it
-        let other = Agreement {
-            shared_secret: [1u8; 32],
-            ..crate::encrypt::tests::rfc_agreement()
-        };
         let signer = FakeSigner::new();
         let keys = FakeKeys {
-            answer: Ok(other),
+            answer: Ok(other_agreement()),
             ..FakeKeys::rfc()
         };
         let r2 = build_with(&sub(), &identity(&signer), &opts(), &keys).unwrap();

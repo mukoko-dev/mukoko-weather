@@ -97,8 +97,14 @@ describe("where Apple's credit appears", () => {
     const block = src.slice(src.lastIndexOf("{modelBaseline &&", at), at + 120);
     expect(block).toContain("{modelBaseline &&");
     // Nothing at all (not even the wrapper) for the blend or an Open-Meteo model.
-    expect(block).toContain("isExternalForecastModel(model)");
+    expect(block).toContain("modelIsExternal");
     expect(block).toContain('use="baseline"');
+    // `modelIsExternal` is `isExternalForecastModel(model)`, computed right
+    // after the model (a call placed later made the React Compiler skip the
+    // component: eslint "preserve-manual-memoization").
+    expect(src).toContain(
+      "const modelIsExternal = isExternalForecastModel(model);",
+    );
   });
 
   it("the footer credits Apple only while the model is offered", () => {
@@ -116,13 +122,14 @@ describe("retention: Apple data is kept 15 minutes, nowhere longer", () => {
   it("the 2-hour weather-hint cache never takes an external model's values", () => {
     const src = read("src/app/[location]/WeatherDashboard.tsx");
     expect(src).toContain(
-      "modelBaseline && isExternalForecastModel(model) ? seedWeather : weather",
+      "modelBaseline && modelIsExternal ? seedWeather.current : weather.current",
     );
     const effect = src.slice(src.indexOf("cacheWeatherHint(location.slug"));
     const call = effect.slice(0, effect.indexOf("]);"));
-    expect(call).toContain("hintWeather.current.weather_code");
-    // Not the displayed baseline, which may be Apple's.
-    expect(call).not.toMatch(/[^t]weather\.current/);
+    expect(call).toContain("weatherCode: hintWeatherCode");
+    expect(call).toContain("temperature: hintTemperature");
+    // Not the displayed baseline, which may be Apple's: only the hint values.
+    expect(call).not.toMatch(/weather\.current/i);
   });
 
   it("the device store keeps the server seed, never a picked model's baseline", () => {

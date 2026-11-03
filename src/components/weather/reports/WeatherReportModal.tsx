@@ -14,7 +14,14 @@ import {
 import { useAppStore } from "@/lib/store";
 import { trackEvent } from "@/lib/analytics";
 import { REPORT_TYPES } from "@/lib/report-types";
-import { reportRefusal, reportsSubmitUrl } from "@/lib/reports-api";
+import {
+  CLARIFY_TIMEOUT_MS,
+  clarifyQuestions,
+  forgetReports,
+  reportRefusal,
+  reportsSubmitUrl,
+} from "@/lib/reports-api";
+import { postWorker } from "@/lib/weather-api";
 
 const SEVERITIES = [
   { id: "mild", label: "Mild", description: "Noticeable but not disruptive" },
@@ -71,18 +78,14 @@ export function WeatherReportModal() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/py/reports/clarify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          locationSlug: selectedLocation,
-          reportType: typeId,
-        }),
-      });
+      const res = await postWorker(
+        "reports/clarify",
+        { locationSlug: selectedLocation, reportType: typeId },
+        { timeoutMs: CLARIFY_TIMEOUT_MS },
+      );
 
       if (res.ok) {
-        const data = await res.json();
-        setQuestions(data.questions || []);
+        setQuestions(clarifyQuestions(await res.json()));
       }
     } catch {
       // Clarification is optional — continue without it
@@ -115,6 +118,8 @@ export function WeatherReportModal() {
         throw new Error(reportRefusal(body, "Failed to submit report"));
       }
 
+      // The kept list for this place is now out of date.
+      forgetReports(selectedLocation);
       setSubmitted(true);
       setStep("confirm");
       trackEvent("report_submitted", {

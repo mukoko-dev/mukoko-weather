@@ -27,24 +27,43 @@ const aiProfile = read("workers/ai/src/profile.rs");
 const forecastLib = read("workers/forecast/src/lib.rs");
 const forecastProfile = read("workers/forecast/src/profile.rs");
 const publicApi = read("workers/public-api/src/lib.rs");
+const aiRoutes = read("workers/crates/weather-core/src/ai/mod.rs");
 
 describe("the AI summary is not public", () => {
-  it("the AI Worker serves it on /internal/summary only", () => {
+  it("the AI Worker serves them on /internal/* only", () => {
     expect(aiLib).toContain('"/internal/summary" => Route::Summary');
-    expect(aiLib).not.toContain('"/v1/ai/summary"');
+    expect(aiLib).toContain('"/internal/followup" => Route::Followup');
+    expect(aiLib).toContain('"/internal/agriculture" => Route::Agriculture');
+    for (const gone of [
+      "/v1/ai/summary",
+      "/v1/ai/followup",
+      "/v1/ai/agriculture",
+    ]) {
+      expect(aiLib).not.toContain(`"${gone}"`);
+    }
     expect(aiLib).not.toMatch(/"\/v1\/ai"\s*(\||=>)/);
   });
 
-  it("the public API forwards /v1/ai/* only and builds its own request", () => {
-    expect(publicApi).toContain('path.starts_with("/v1/ai/")');
+  it("the public API forwards /v1/ai/* (and the report questions) only and builds its own request", () => {
+    // The set it forwards is one pure function, tested natively
+    // (`weather_core::ai::is_forwarded_path`): /v1/ai/* and the wizard's
+    // /v1/reports/clarify, never an /internal/ path.
+    expect(publicApi).toContain("weather_core::ai::is_forwarded_path(path)");
+    const rule = /pub fn is_forwarded_path[\s\S]*?\n}\n/.exec(aiRoutes)?.[0];
+    expect(rule).toContain('path.starts_with("/v1/ai/")');
+    expect(rule).toContain("path == clarify::PATH");
+    expect(rule).not.toContain("/internal");
     // The path it forwards is the visitor's, so /internal/* is unreachable.
     expect(publicApi).toContain('format!("https://ai{}", req.path())');
     expect(publicApi).not.toContain("/internal/summary");
   });
 
-  it("the internal Worker checks the service key before it forwards", () => {
+  it("the internal Worker checks the service key before it forwards, for each app route", () => {
     expect(internal).toMatch(
-      /\("\/internal\/ai\/summary", Method::Post\) => match authorised\(&req, &env\)\.await\? \{\s*Some\(refused\) => Ok\(refused\),\s*None => app_ai\(&mut req, &env, "\/internal\/summary"\)\.await,/,
+      /"\/internal\/ai\/summary" \| "\/internal\/ai\/followup" \| "\/internal\/ai\/agriculture"/,
+    );
+    expect(internal).toMatch(
+      /Method::Post,\s*\) => match authorised\(&req, &env\)\.await\? \{\s*Some\(refused\) => Ok\(refused\),[\s\S]*?None => \{\s*app_ai\(/,
     );
   });
 
@@ -59,7 +78,7 @@ describe("the AI summary is not public", () => {
 describe("the model budget", () => {
   const summary = aiHandlers.slice(
     aiHandlers.indexOf("pub async fn summary("),
-    aiHandlers.indexOf("/// `POST /v1/ai/followup`"),
+    aiHandlers.indexOf("/// `POST /internal/followup`"),
   );
 
   it("counts a summary only when the cache missed, and before the model", () => {
@@ -76,28 +95,47 @@ describe("the model budget", () => {
     expect(aiHandlers).toContain("Decision::GlobalLimit");
   });
 
+  it("the summary slice is the summary handler alone (its end anchor exists)", () => {
+    // indexOf returns -1 for a missing anchor, and slice(start, -1) would then
+    // run to the end of the file and let the follow-up's code satisfy the
+    // summary's assertions.
+    expect(aiHandlers).toContain("/// `POST /internal/followup`");
+    expect(summary).not.toContain("pub async fn followup(");
+    expect(summary).not.toContain("pub async fn agriculture(");
+  });
+
+  it("the farm data is waited for at most 10 s, so a hung forecast Worker cannot hold a spent budget unit", () => {
+    expect(aiHandlers).toContain(
+      "const FARM_DATA_TIMEOUT: Duration = Duration::from_secs(10);",
+    );
+    expect(aiHandlers).toContain("profile::within(FARM_DATA_TIMEOUT");
+  });
+
   it("the AI Worker binds the D1 database the budgets live in", () => {
     expect(aiWrangler).toMatch(/"binding":\s*"WEATHER_DB"/);
     expect(aiWrangler).toContain("9a8846ea-ee34-4479-bc4c-790ee2beabee");
   });
 
   it("only the signed-in routes spend a budget (the public ones keep the per-minute limiter)", () => {
-    // The summary is keyed by the signed-in person's id; the public history
-    // analysis and the AI search are keyed by the visitor's address. Chat has
-    // no budget of its own (the per-minute limiter), so no caller is built.
-    expect(aiLib).toContain("Route::Summary => {");
-    expect(aiLib).toContain(
-      "Route::History => Some(Caller::from_request(&req)),",
+    // The signed-in app's routes (summary, follow-up, agriculture) are keyed by
+    // the person's id; the public history analysis and the AI search are keyed
+    // by the visitor's address. Chat has no budget of its own (the per-minute
+    // limiter), so no caller is built.
+    expect(aiLib).toContain("if route.app() {");
+    expect(aiLib).toMatch(
+      /fn app\(&self\) -> bool \{\s*matches!\(\s*self,\s*Route::Summary \| Route::Followup \| Route::Agriculture\s*\)/,
     );
-    expect(aiLib).toContain("_ => None,");
-    expect(aiLib).toContain("Route::Completions | Route::Summary");
+    expect(aiLib).toContain("Some(Caller::with_subject(&req, subject))");
+    expect(aiLib).toContain("matches!(route, Route::History)");
+    expect(aiLib).toContain("Some(Caller::from_request(&req))");
+    expect(aiLib).toContain("if !route.internal() {");
   });
 });
 
 describe("the place profile grounds the summary prompt", () => {
   const summary = aiHandlers.slice(
     aiHandlers.indexOf("pub async fn summary("),
-    aiHandlers.indexOf("/// `POST /v1/ai/followup`"),
+    aiHandlers.indexOf("/// `POST /internal/followup`"),
   );
 
   it("the summary splices the block with its grounding rule, from the point and never the client's slug", () => {
@@ -133,5 +171,47 @@ describe("the place profile grounds the summary prompt", () => {
       expect(route).not.toContain(upstream);
     }
     expect(route).toContain("profile_prompt_block(&profile)");
+  });
+});
+
+describe("the follow-up and the agriculture explanation", () => {
+  const followup = aiHandlers.slice(
+    aiHandlers.indexOf("pub async fn followup("),
+    aiHandlers.indexOf("struct CachedExplanation"),
+  );
+  const agri = aiHandlers.slice(
+    aiHandlers.indexOf("pub async fn agriculture("),
+    aiHandlers.indexOf("/// `POST /v1/ai/chat`"),
+  );
+
+  it("the follow-up is counted before the model and grounded in the page's profile", () => {
+    expect(followup.indexOf("spend(ctx, Action::AiFollowup)")).toBeGreaterThan(
+      -1,
+    );
+    expect(followup.indexOf("spend(ctx, Action::AiFollowup)")).toBeLessThan(
+      followup.indexOf("gateway::run("),
+    );
+    expect(followup).toContain("profile::block_for_slug(");
+    expect(followup).toContain("with_profile(");
+    // No cache: nothing a caller steers is stored for others.
+    expect(followup).not.toContain("kv_put(");
+  });
+
+  it("the entitlement hook runs before the cache, and only a cache miss is counted", () => {
+    const entitled = agri.indexOf("agriculture::entitled(");
+    const cache = agri.indexOf("kv_get::<CachedExplanation>");
+    const spend = agri.indexOf("spend(ctx, Action::AiAgriculture)");
+    const model = agri.indexOf("gateway::run(");
+    expect(entitled).toBeGreaterThan(-1);
+    expect(cache).toBeGreaterThan(entitled);
+    expect(spend).toBeGreaterThan(cache);
+    expect(model).toBeGreaterThan(spend);
+  });
+
+  it("the farm data comes from the forecast Worker and only a seed's own slug is passed on", () => {
+    expect(agri).toContain("farm_data(");
+    expect(aiHandlers).toContain("https://forecast/agriculture?lat=");
+    expect(agri).toContain("let seed_slug = seed.map(|p| p.slug.as_str());");
+    expect(agri).not.toContain('loc["slug"]');
   });
 });

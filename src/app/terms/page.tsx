@@ -32,9 +32,9 @@ export default function TermsPage() {
             </p>
             <p className="mt-3">
               By accessing or using the Service at{" "}
-              <a href="https://weather.mukoko.com" className="sunbird">
+              <Link href="/" prefetch={false} className="sunbird">
                 weather.mukoko.com
-              </a>
+              </Link>
               , you agree to be bound by these Terms. If you do not agree,
               please do not use the Service.
             </p>

@@ -2,7 +2,7 @@
 
 import type { WeatherLocation } from "./locations";
 import { haversineKm } from "./geo";
-import { fetchPlaces } from "./weather-api";
+import { workerData } from "./worker-data";
 
 export interface GeoResult {
   status: "success" | "created" | "denied" | "unavailable" | "error";
@@ -84,19 +84,36 @@ export function detectUserLocation({
       async (position) => {
         const { latitude, longitude } = position.coords;
 
-        const controller = new AbortController();
-        const timer = setTimeout(
-          () => controller.abort(),
-          autoCreate ? GEO_CREATE_TIMEOUT_MS : GEO_LOOKUP_TIMEOUT_MS,
-        );
         try {
-          // The Rust Worker (weather-api.mukoko.com), one retry on a 5xx.
-          const res = await fetchPlaces(
+          // Shared read of the Worker's /v1/geo with the EXACT fix (exact-place
+          // naming and OSM-ref identity depend on it): the same fix asked twice
+          // (a remount, the silent refresh and a tap) is one call, and one
+          // retry on a 5xx. A failure is not remembered, so the visitor can try
+          // again at once.
+          const res = await workerData.read<{
+            nearest: WeatherLocation & {
+              named?: boolean;
+              namingSkipped?: boolean;
+            };
+            isNew?: boolean;
+            synthesized?: boolean;
+          }>(
             "geo",
-            `lat=${latitude}&lon=${longitude}${autoCreate ? "&autoCreate=true" : ""}`,
-            { signal: controller.signal },
+            {
+              lat: latitude,
+              lon: longitude,
+              autoCreate: autoCreate ? "true" : undefined,
+            },
+            {
+              exact: true,
+              retries: 1,
+              failureTtlMs: 0,
+              signal: AbortSignal.timeout(
+                autoCreate ? GEO_CREATE_TIMEOUT_MS : GEO_LOOKUP_TIMEOUT_MS,
+              ),
+            },
           );
-          if (!res.ok) {
+          if (!res.ok || !res.data) {
             resolve({
               status: "error",
               location: null,
@@ -106,7 +123,7 @@ export function detectUserLocation({
             return;
           }
 
-          const data = await res.json();
+          const data = res.data;
           const nearest: WeatherLocation = data.nearest;
           const isNew: boolean = data.isNew ?? false;
           const synthesized = data.synthesized === true;
@@ -138,8 +155,6 @@ export function detectUserLocation({
             coords: { lat: latitude, lon: longitude },
             distanceKm: null,
           });
-        } finally {
-          clearTimeout(timer);
         }
       },
       (error) => {

@@ -570,3 +570,146 @@ describe("no token or secret in logs or errors", () => {
     expect(logged).not.toContain("user_1");
   });
 });
+
+describe("a second scope: the CouchDB sync grant", () => {
+  const SYNC_JWT = "eyJhbGciOiJFUzI1NiJ9.grant.token-signature";
+  const syncAnswer = (over: Record<string, unknown> = {}) =>
+    ok({
+      access_token: SYNC_JWT,
+      issued_token_type: "urn:ietf:params:oauth:token-type:jwt",
+      token_type: "Bearer",
+      expires_in: 300,
+      scope: "couch:user",
+      ...over,
+    });
+  function makeSync(
+    extra: Partial<Parameters<typeof createPersonTokenExchanger>[0]> = {},
+  ) {
+    return createPersonTokenExchanger({
+      config: () => ({
+        transport: transport as unknown as GatewayConfig["transport"],
+        credentials: { clientId: "nyk_weatherkey01", clientSecret: SECRET },
+      }),
+      consoleClientId: () => CONSOLE,
+      now: () => clock,
+      scope: "couch:user",
+      maxCacheMs: 0,
+      ...extra,
+    });
+  }
+  const refused = (description: string) =>
+    new Response(
+      JSON.stringify({
+        detail: { error: "invalid_grant", error_description: description },
+      }),
+      { status: 400 },
+    );
+
+  it("asks for the scope it was given and nothing else", async () => {
+    transport.mockImplementation(async () => syncAnswer());
+    await makeSync().getPersonToken("user_1", subject());
+    const req = transport.mock.calls[0][0] as Request;
+    expect(new URLSearchParams(await req.text()).get("scope")).toBe(
+      "couch:user",
+    );
+  });
+
+  it("accepts back only that exact scope", async () => {
+    for (const scope of ["app-keys", "couch:user identity", "", "couch"]) {
+      transport.mockImplementation(async () => syncAnswer({ scope }));
+      await expect(
+        makeSync().getPersonToken("user_1", subject({ jti: scope })),
+        scope,
+      ).rejects.toMatchObject({ code: "gateway_unavailable" });
+    }
+    // And the default exchanger still insists on app-keys.
+    transport.mockImplementation(async () => syncAnswer());
+    await expect(
+      make().getPersonToken("user_1", subject()),
+    ).rejects.toMatchObject({ code: "gateway_unavailable" });
+  });
+
+  it("maxCacheMs: 0 never serves an answer twice, even a long-lived one", async () => {
+    transport.mockImplementation(async () => syncAnswer());
+    const ex = makeSync();
+    const at = subject();
+    await ex.getPersonToken("user_1", at);
+    await ex.getPersonToken("user_1", at);
+    expect(transport).toHaveBeenCalledTimes(2);
+    expect(ex.cacheSize()).toBe(0);
+  });
+
+  it("without maxCacheMs the default five minutes still apply", async () => {
+    transport.mockImplementation(async () => granted());
+    const ex = make();
+    const at = subject();
+    await ex.getPersonToken("user_1", at);
+    await ex.getPersonToken("user_1", at);
+    expect(transport).toHaveBeenCalledTimes(1);
+    expect(MAX_CACHE_MS).toBe(5 * 60_000);
+  });
+
+  it("a smaller maxCacheMs shortens the reuse", async () => {
+    transport.mockImplementation(async () => syncAnswer());
+    const ex = makeSync({ maxCacheMs: 40_000 });
+    const at = subject();
+    await ex.getPersonToken("user_1", at);
+    clock += 5_000;
+    await ex.getPersonToken("user_1", at);
+    expect(transport).toHaveBeenCalledTimes(1);
+    // 40 s of reuse, but never into the last SAFETY_MARGIN_MS of the token.
+    clock += 36_000;
+    await ex.getPersonToken("user_1", at);
+    expect(transport).toHaveBeenCalledTimes(2);
+  });
+
+  it("concurrent requests still share the one exchange in flight", async () => {
+    let release!: (r: Response) => void;
+    transport.mockImplementationOnce(
+      () => new Promise<Response>((r) => (release = r)),
+    );
+    const ex = makeSync();
+    const at = subject();
+    const a = ex.getPersonToken("user_1", at);
+    const b = ex.getPersonToken("user_1", at);
+    release(syncAnswer());
+    expect((await a).token).toBe((await b).token);
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
+
+  it("pendingDeletion decides a 400 invalid_grant by its description", async () => {
+    const pendingDeletion = (d: string | null) => d === "scheduled";
+    transport.mockImplementation(async () => refused("scheduled"));
+    await expect(
+      makeSync({ pendingDeletion }).getPersonToken("user_1", subject()),
+    ).rejects.toMatchObject({ code: "account_pending_deletion", status: 403 });
+
+    transport.mockImplementation(async () => refused("ended"));
+    await expect(
+      makeSync({ pendingDeletion }).getPersonToken("user_1", subject({ x: 1 })),
+    ).rejects.toMatchObject({ code: "reauth_required" });
+
+    // The predicate is the caller's: without one it is always "sign in again".
+    transport.mockImplementation(async () => refused("scheduled"));
+    await expect(
+      makeSync().getPersonToken("user_1", subject({ x: 2 })),
+    ).rejects.toMatchObject({ code: "reauth_required" });
+  });
+
+  it("pendingDeletion is only asked of invalid_grant", async () => {
+    const pendingDeletion = vi.fn(() => true);
+    transport.mockImplementation(async () => fail(400, "invalid_scope"));
+    await expect(
+      makeSync({ pendingDeletion }).getPersonToken("user_1", subject()),
+    ).rejects.toMatchObject({ code: "gateway_unconfigured" });
+    expect(pendingDeletion).not.toHaveBeenCalled();
+  });
+
+  it("the description is never logged", async () => {
+    transport.mockImplementation(async () => refused("PRIVATE-SENTENCE"));
+    await makeSync()
+      .getPersonToken("user_1", subject())
+      .catch(() => undefined);
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("PRIVATE-SENTENCE");
+  });
+});

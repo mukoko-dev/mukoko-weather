@@ -8,7 +8,7 @@
  * components in `src/app/[location]/*` keep working without changes.
  *
  * Collections:
- *   - weather_cache   : Short-lived weather API response cache (replaces KV WEATHER_CACHE)
+ *   - weather_cache   : Unused: nothing writes or reads it (the forecast Worker caches in KV); only its TTL index is kept so old rows expire
  *   - ai_summaries    : Tiered-TTL AI summary cache (replaces KV AI_SUMMARIES)
  *   - weather_history : Historical weather recordings for analytics
  *   - activities      : User activities for personalized weather insights
@@ -64,7 +64,7 @@ import { workerUrl } from "@/lib/weather-api";
 // ---------------------------------------------------------------------------
 
 export interface WeatherCacheDoc {
-  /** Coordinate-cell key (`weatherCacheKey`), not a place slug (#252). */
+  /** Coordinate-cell key (`cell:<lat>_<lon>`, 0.05 degrees), not a place slug (#252). */
   locationSlug: string;
   lat: number;
   lon: number;
@@ -255,7 +255,8 @@ function aiSuggestedRulesCollection() {
  * platform validator), keyed by the ICAO code as its natural `_id` so
  * re-seeding is idempotent and never creates duplicates (same deterministic-id
  * discipline as `air_quality_cache`). The `location` GeoJSON Point powers the
- * `$nearSphere` nearest-airport lookup in `api/py/_airports.py`.
+ * `$nearSphere` nearest-airport lookup the Python backend ran (deleted, #333;
+ * the Worker's catalogue replaced it).
  */
 export interface AirportDoc {
   /** ICAO code, uppercase — also the document `_id`. */
@@ -269,13 +270,13 @@ export interface AirportDoc {
   /**
    * Absent for the static seed. `"awc-stationinfo"` for an airport the
    * nearest-METAR search fetched on demand from the Aviation Weather Center
-   * (`api/py/_metar.py` `discover_airports`, #302).
+   * (the aviation Worker's `discover_airports`, #302).
    */
   source?: typeof DISCOVERED_AIRPORT_SOURCE;
   updatedAt: Date;
 }
 
-/** `source` of a fetched-on-demand airport — mirrors `DISCOVERED_SOURCE` in api/py/_airports.py. */
+/** `source` of a fetched-on-demand airport — the aviation Worker writes the same value. */
 export const DISCOVERED_AIRPORT_SOURCE = "awc-stationinfo";
 
 /**
@@ -567,9 +568,11 @@ export async function ensureIndexes(): Promise<void> {
       { expireAfterSeconds: 0 },
     ),
 
-    // Global-model baseline + Tomorrow.io enrichment (issue #246). All three
-    // rely on `expiresAt` for cleanup: budget buckets (hour/day/stats docs),
-    // the 3-hour enrichment cache, and the 180-day verification capture.
+    // Global-model baseline + Tomorrow.io enrichment (issue #246). Nothing
+    // writes these three any more (the Worker keeps its budget in D1 and its
+    // caches in KV; verification capture was not ported). The TTL indexes stay
+    // so the rows that exist still expire; dropping the collections is an
+    // owner step.
     safeCreateIndex(
       weatherDb().collection("providerBudget"),
       { expiresAt: 1 },
@@ -595,7 +598,7 @@ export async function ensureIndexes(): Promise<void> {
 
     // Airports: ICAO reference data for METAR/TAF. `_id` is the ICAO code
     // (unique for free); the 2dsphere index powers the $nearSphere
-    // nearest-airport lookup in api/py/_airports.py.
+    // nearest-airport lookup the deleted Python backend ran.
     safeCreateIndex(airportsCollection(), { location: "2dsphere" }),
   ]);
 }
@@ -742,26 +745,7 @@ export function entityMembershipsCollection() {
 }
 
 // ---------------------------------------------------------------------------
-// Weather cache operations
-// ---------------------------------------------------------------------------
-
-/**
- * Read a live cache row by its key. Rows are keyed by coordinate grid cell
- * (`weatherCacheKey(lat, lon)`, issue #252), never by place slug, and the
- * column keeps its historical name `locationSlug`.
- */
-export async function getCachedWeather(
-  cacheKey: string,
-): Promise<WeatherData | null> {
-  const doc = await weatherCacheCollection().findOne({
-    locationSlug: cacheKey,
-    expiresAt: { $gt: new Date() },
-  });
-  return doc?.data ?? null;
-}
-
-// ---------------------------------------------------------------------------
-// Unified weather fetch — cache read, then the canonical Python endpoint
+// Unified weather fetch — the Worker, hedged by a direct Open-Meteo read
 // ---------------------------------------------------------------------------
 
 export interface WeatherResult {
@@ -954,8 +938,8 @@ export function isSummaryStale(
 }
 
 // ---------------------------------------------------------------------------
-// Historical weather reads (recording happens in api/py/_weather.py — the
-// single writer; see getWeatherForLocation)
+// Historical weather reads (recorded days are written by the jobs Worker and
+// read through the places Worker's /v1/history)
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------

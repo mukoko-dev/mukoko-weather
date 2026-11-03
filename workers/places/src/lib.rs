@@ -1,7 +1,7 @@
 //! `mukoko-weather-places`: locations and their weather history.
 //!
-//! Ported from `api/py/_locations.py` (`/api/py/locations`, `/search`, `/geo`)
-//! and `api/py/_history.py` (`/api/py/history`), with the same parameters and
+//! Ported from `api/py/_locations.py` (Python `/locations`, `/search`, `/geo`)
+//! and `api/py/_history.py` (Python `/history`), with the same parameters and
 //! response shapes. No route and no workers.dev address: `mukoko-weather-api`
 //! reaches it through the `PLACES` service binding and serves it as
 //! `/v1/locations`, `/v1/search`, `/v1/geo` and `/v1/history`.
@@ -75,10 +75,19 @@ pub async fn fetch(mut req: Request, env: Env, ctx: Context) -> Result<Response>
     }
     let q = Query(query_pairs(&req)?);
     match req.path().as_str() {
-        "/health" => json(
-            200,
-            &json!({"service": "mukoko-weather-places", "status": "ok"}),
-        ),
+        "/health" => {
+            weather_edge::open_meteo::init(&env).await;
+            json(
+                200,
+                &json!({
+                    "service": "mukoko-weather-places",
+                    "status": "ok",
+                    // Whether the history archive uses the paid Open-Meteo
+                    // host (a key AND OPEN_METEO_ARCHIVE_LICENSED); never the key.
+                    "open_meteo_archive": weather_edge::open_meteo::archive_is_paid(),
+                }),
+            )
+        }
         "/locations" => locations_route(&env, &q).await,
         "/search" => search_route(&req, &env, &q).await,
         "/geo" => geo_route(&req, &env, &q).await,

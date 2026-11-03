@@ -1,7 +1,6 @@
 "use client";
 
-import { roundCoord } from "@/lib/location-privacy";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import type {
   CurrentWeather,
@@ -33,6 +32,7 @@ import {
 import { moonPhase } from "@/lib/moon";
 import { seedNowMs, useStableNow } from "@/lib/use-stable-now";
 import { useNearViewport } from "@/lib/use-near-viewport";
+import { useWorkerData } from "@/lib/use-worker-data";
 import { AQI_BAND_LABELS, aqiBand } from "@/lib/aq-grid";
 import { lastTileSpanClass } from "@/lib/dashboard-layout";
 import {
@@ -70,7 +70,6 @@ import {
 } from "./widgets";
 import { POLLUTANT_LABELS, type AirQualityResponse } from "./AirQualityCard";
 import { AirQualityWideSkeleton } from "./SectionSkeleton";
-import { fetchWorker } from "@/lib/weather-api";
 import { MetricValue } from "./MetricValue";
 
 interface Props {
@@ -265,44 +264,34 @@ type NormalState =
 function useNormalHigh(
   lat: number | undefined,
   lon: number | undefined,
+  /** The page's stable clock (the payload's own time until mount). */
+  now: Date,
   offsetSeconds?: number,
   /** False until the Conditions grid is near the viewport (deferred fetch). */
   enabled = true,
-) {
-  const [state, setState] = useState<NormalState>({ status: "loading" });
-
-  useEffect(() => {
-    if (!enabled) return;
-    if (typeof lat !== "number" || typeof lon !== "number") return;
-    const controller = new AbortController();
-    const date = localIsoDate(new Date(), offsetSeconds);
-    fetchWorker(
-      "normals",
-      `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}&date=${date}`,
-      { signal: controller.signal },
-    )
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return (await res.json()) as NormalsPayload;
-      })
-      .then((json) => {
-        setState({
-          status: "ready",
-          normalHigh:
-            json.available && typeof json.normalHigh === "number"
-              ? json.normalHigh
-              : null,
-        });
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setState({ status: "ready", normalHigh: null });
-        }
-      });
-    return () => controller.abort();
-  }, [lat, lon, offsetSeconds, enabled]);
-
-  return state;
+): NormalState {
+  const hasPoint = typeof lat === "number" && typeof lon === "number";
+  // The date is part of the shared key, so a place's normal is read once a
+  // day however often the section is mounted.
+  const state = useWorkerData<NormalsPayload>(
+    "normals",
+    {
+      lat: hasPoint ? lat : undefined,
+      lon: hasPoint ? lon : undefined,
+      date: localIsoDate(now, offsetSeconds),
+    },
+    enabled && hasPoint,
+  );
+  if (state.status === "loading") return { status: "loading" };
+  if (state.status === "error") return { status: "ready", normalHigh: null };
+  const json = state.data;
+  return {
+    status: "ready",
+    normalHigh:
+      json.available && typeof json.normalHigh === "number"
+        ? json.normalHigh
+        : null,
+  };
 }
 
 type AqPayload = AirQualityResponse & {
@@ -314,31 +303,16 @@ type AqState =
   | { status: "ready"; data: AqPayload }
   | { status: "error" };
 
-function useAirQuality(lat: number | undefined, lon: number | undefined) {
-  const [state, setState] = useState<AqState>({ status: "loading" });
-
-  useEffect(() => {
-    if (typeof lat !== "number" || typeof lon !== "number") return;
-    const controller = new AbortController();
-    fetchWorker(
-      "air-quality",
-      `lat=${roundCoord(lat)}&lon=${roundCoord(lon)}`,
-      {
-        signal: controller.signal,
-      },
-    )
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return (await res.json()) as AqPayload;
-      })
-      .then((json) => setState({ status: "ready", data: json }))
-      .catch(() => {
-        if (!controller.signal.aborted) setState({ status: "error" });
-      });
-    return () => controller.abort();
-  }, [lat, lon]);
-
-  return state;
+function useAirQuality(
+  lat: number | undefined,
+  lon: number | undefined,
+): AqState {
+  const hasPoint = typeof lat === "number" && typeof lon === "number";
+  return useWorkerData<AqPayload>(
+    "air-quality",
+    { lat: hasPoint ? lat : undefined, lon: hasPoint ? lon : undefined },
+    hasPoint,
+  );
 }
 
 // ── Air quality (wide) ──────────────────────────────────────────────────────
@@ -454,6 +428,7 @@ export function AtmosphericSummary({
   const normals = useNormalHigh(
     lat,
     lon,
+    now,
     data.utc_offset_seconds,
     nearViewport,
   );

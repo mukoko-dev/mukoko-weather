@@ -66,7 +66,7 @@ describe("agriculture page components", () => {
   it("history compares the Worker's /v1/history with its normals", () => {
     const src = read("AgricultureHistory.tsx");
     expect(src).toContain('"history"');
-    expect(src).toContain("location=${encodeURIComponent(slug)}&days=30");
+    expect(src).toContain("{ location: slug, days: 30 }");
     expect(src).toContain("historyFetchOptions(30)");
     expect(src).toContain('"normals"');
     expect(src).not.toContain("/api/py/normals");
@@ -86,19 +86,19 @@ describe("agriculture page components", () => {
       "const loading = history === null || summary === undefined;",
     );
     expect(src).toContain("averageNormals(start, end)");
-    expect(src).toContain("date=${date}");
+    expect(src).toContain("{ lat, lon, date }");
     expect(src).toContain("not a gauge");
   });
 
   it("history says so when it is partial or failed, with a retry", () => {
     const src = read("AgricultureHistory.tsx");
     // The answer's own flags are read, not just its data.
-    expect(src).toContain("readHistoryAnswer(await res.json())");
+    expect(src).toContain("readHistoryAnswer(json)");
     expect(src).toContain("degraded: answer.degraded");
     expect(src).toContain("DEGRADED_NOTE");
     expect(src).toContain("HISTORY_FAILED_NOTE");
     // A failed request is "failed", not an empty history.
-    expect(src).toContain("if (!res.ok) throw new Error(");
+    expect(src).toContain("workerData\n      .json<unknown>(");
     expect(src).toContain("failed: true");
     // The retry reruns the effect.
     expect(src).toContain("setAttempt((n) => n + 1)");

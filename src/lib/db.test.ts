@@ -819,37 +819,31 @@ describe("db-init indexes for the model baseline (issue #246)", () => {
     }
   });
 
-  it("uses the same camelCase collection names as the Python writers", async () => {
+  it("the forecast Worker reads the blend overrides from the camelCase collection name", async () => {
+    // The Python writers of the budget, cache and verification collections are
+    // gone (the Worker keeps its budget in D1 and its cache in KV); only the
+    // blend-weight overrides are still read from MongoDB.
     const fs = await import("fs");
-    const py = [
-      fs.readFileSync("api/py/_enrichment.py", "utf-8"),
-      fs.readFileSync("api/py/_verification.py", "utf-8"),
-      fs.readFileSync("api/py/_model_blend.py", "utf-8"),
-    ].join("\n");
-    for (const name of [
-      "providerBudget",
-      "enrichmentCache",
-      "forecastVerification",
-      "modelBlendConfig",
-    ]) {
-      expect(py).toContain(`weather_db()["${name}"]`);
-    }
+    const rust = fs.readFileSync(
+      "workers/forecast/src/blend_config.rs",
+      "utf-8",
+    );
+    expect(rust).toContain('const COLLECTION: &str = "modelBlendConfig";');
   });
 });
 
 describe("db-init indexes for agriculture (issue #265)", () => {
-  it("TTL-indexes the AI cache Python still writes and the retired payload cache (the farm payload is KV now, so leftover docs expire)", async () => {
+  it("keeps the TTL indexes of the retired agriculture caches so leftover documents expire (the farm payload and the explanation are KV in the Workers now)", async () => {
     const fs = await import("fs");
     const source = fs.readFileSync("src/lib/db.ts", "utf-8");
-    const py = fs.readFileSync("api/py/_agriculture.py", "utf-8");
     for (const name of ["agriculture_cache", "agriculture_ai"]) {
       expect(
         source.indexOf(`collection("${name}"),\n      { expiresAt: 1 }`),
         name,
       ).toBeGreaterThan(-1);
     }
-    expect(py).toContain('weather_db()["agriculture_ai"]');
-    expect(py).not.toContain('weather_db()["agriculture_cache"]');
+    // Nothing writes either collection any more.
+    expect(fs.existsSync("api/py/_agriculture.py")).toBe(false);
   });
 });
 

@@ -7,26 +7,29 @@
 //! - mukoko-api, which binds to this Worker for consumer reuse.
 //!
 //! ```text
-//! GET /v1/weather?lat=&lon=[&model=m][&models=a,b]   full WeatherData, the shape of /api/py/weather (`model` = the caller's own baseline model)
+//! GET /v1/weather?lat=&lon=[&model=m][&models=a,b]   full WeatherData, the shape of Python /weather (`model` = the caller's own baseline model)
 //! GET /v1/forecast?location=|lat=&lon=[&days=1..7]   the daily forecast contract
 //! GET /v1/locations/profile?slug=|lat=&lon=[&country=]   a place's knowledge (seasons, crops, climate, soil) and today's context
-//! GET /v1/agriculture?lat=&lon=[&location=][&country=][&crops=]   farm windows, rain, soil, water balance, frost and heat risk (the shape of /api/py/agriculture)
-//! GET /v1/air-quality?lat=&lon=                     the EPA AQI, the shape of /api/py/airquality
-//! GET /v1/air-quality/grid?lat=&lon=[&radiusKm=&n=]  US AQI on an n x n grid (the shape of /api/py/airquality/grid)
-//! GET /v1/haze?lat=&lon=                             haze panel data (the shape of /api/py/haze)
-//! GET /v1/normals?lat=&lon=[&date=]                  climate normals (the shape of /api/py/normals)
+//! GET /v1/agriculture?lat=&lon=[&location=][&country=][&crops=]   farm windows, rain, soil, water balance, frost and heat risk (the shape of Python /agriculture)
+//! GET /v1/air-quality?lat=&lon=                     the EPA AQI, the shape of Python /airquality
+//! GET /v1/air-quality/grid?lat=&lon=[&radiusKm=&n=]  US AQI on an n x n grid (the shape of Python /airquality/grid)
+//! GET /v1/haze?lat=&lon=                             haze panel data (the shape of Python /haze)
+//! GET /v1/normals?lat=&lon=[&date=]                  climate normals (the shape of Python /normals)
 //! GET /v1/normals/monthly?lat=&lon=                  the twelve monthly normals (temperature, rainfall, rainy days)
-//! GET /v1/enso                                       El Nino / La Nina phase (the shape of /api/py/enso)
-//! GET /v1/sg-air?lat=&lon=                           official Singapore NEA air quality (the shape of /api/py/sg-air)
-//! GET /v1/aviation/nearest-metar?lat=&lon=           nearest airport with a recent METAR (the shape of /api/py/aviation/nearest-metar)
-//! GET /v1/metar?icao=                                METARs and TAF, the shape of /api/py/metar
+//! GET /v1/enso                                       El Nino / La Nina phase (the shape of Python /enso)
+//! GET /v1/sg-air?lat=&lon=                           official Singapore NEA air quality (the shape of Python /sg-air)
+//! GET /v1/aviation/nearest-metar?lat=&lon=           nearest airport with a recent METAR (the shape of Python /aviation/nearest-metar)
+//! GET /v1/metar?icao=                                METARs and TAF, the shape of Python /metar
 //! GET /v1/airports/nearest?lat=&lon=[&count=][&maxDistanceKm=]
-//!                                                    the shape of /api/py/airports/nearest
+//!                                                    the shape of Python /airports/nearest
 //! GET /v1/locations, /v1/search, /v1/geo, /v1/history   places (mukoko-weather-places)
 //! POST /v1/devices, GET|PATCH /v1/devices/{id}      device preference profiles
 //! POST|GET /v1/reports, POST /v1/reports/upvote     community weather reports
-//! POST /v1/ai/{followup,chat,history/analyze,explore/search}   Shamwari Weather (the weather summary is not public: it is
-//!                                               a signed-in route of the app, reached through mukoko-weather-internal)
+//! POST /v1/ai/{chat,history/analyze,explore/search}   Shamwari Weather (the summary, the follow-up and the agriculture
+//!                                               explanation are not public: they are signed-in routes of the app,
+//!                                               reached through mukoko-weather-internal)
+//! POST /v1/reports/clarify                      the report wizard's follow-up questions (the AI Worker, which
+//!                                               answers a fixed pair whenever the model cannot)
 //! GET /health
 //! ```
 //!
@@ -41,7 +44,9 @@
 //! over `PLACES`; `/v1/ai/*` is forwarded to `mukoko-weather-ai` over
 //! `AI_SERVICE` with the client's IP (that Worker has its own, tighter limit).
 //! Anonymous requests are rate limited per client IP
-//! (`RATE_LIMITER`). A developer may send a Nyuchi API key, checked by the
+//! (`RATE_LIMITER`, 600 a minute: a school or office shares one address, and
+//! the upstream cost is bounded by the KV caches and the D1 budgets, not by
+//! this limiter). A developer may send a Nyuchi API key, checked by the
 //! Nyuchi API (`keys`), and is then limited per key (`KEY_RATE_LIMITER`).
 
 mod keys;
@@ -58,8 +63,6 @@ use worker::{event, Context, Env, Headers, Method, Request, RequestInit, Respons
 const FORECAST_BINDING: &str = "FORECAST";
 const AVIATION_BINDING: &str = "AVIATION";
 const AI_BINDING: &str = "AI_SERVICE";
-/// AI request bodies larger than this are refused here.
-const MAX_AI_BODY_BYTES: usize = 64 * 1024;
 /// Device profile bodies are a few hundred bytes.
 /// Device profile and community report bodies larger than this are refused here.
 const MAX_COMMUNITY_BODY_BYTES: usize = 16 * 1024;
@@ -75,13 +78,28 @@ const DEFAULT_ELEVATION_M: f64 = 1200.0;
 pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let origin = req.headers().get("Origin")?.unwrap_or_default();
     let cors_origin = cors::allowed_origin(&env, &origin);
-    let is_ai = is_ai_path(&req.path());
+    // The documented public read routes are open to any website (a GET, no
+    // credentials), as the Python routes they replace were. A listed origin
+    // still gets its own origin echoed; everything else keeps the allowlist.
+    // Every CORS decision is `weather_core::cors::cors_decision`, made on the
+    // method the page wants (a preflight names it in `Access-Control-Request-
+    // Method`), so a preflight for a write never gets `*`.
+    let path = req.path();
+    let method = req.method();
+    let requested = req.headers().get("Access-Control-Request-Method")?;
+    let decision = weather_core::cors::cors_decision(
+        weather_core::cors::cors_method(method.as_ref(), requested.as_deref()),
+        &path,
+        cors_origin.as_deref(),
+    );
+    let allow_origin = decision.allow_origin;
+    let is_ai = is_ai_path(&path);
 
     let resp = if req.method() == Method::Options {
         cors::preflight(
-            cors_origin.is_some(),
-            "GET, POST, PATCH, OPTIONS",
-            "Content-Type, Authorization, X-Mukoko-Client, X-API-Key, X-Client-Id, X-Client-Secret",
+            allow_origin.is_some(),
+            decision.methods,
+            decision.allow_headers,
         )
     } else if is_ai {
         if req.method() != Method::Post {
@@ -114,10 +132,10 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     }?;
     cors::apply(
         resp,
-        cors_origin.as_deref(),
+        allow_origin.as_deref(),
         Some(
             "X-Cache, X-Weather-Provider, X-Weather-Blend, X-Enrichment, X-Current-Source, \
-             X-Fetched-At, X-AQ-Source",
+             X-Fetched-At, X-AQ-Source, Retry-After",
         ),
     )
 }
@@ -328,17 +346,18 @@ async fn forward_community(req: &mut Request, env: &Env) -> Result<Response> {
     }
 }
 
-/// Shamwari's POST routes. The two reference-data GETs under `/v1/ai/` are
-/// answered here, not forwarded.
+/// Shamwari's POST routes and the report wizard's follow-up questions. The two
+/// reference-data GETs under `/v1/ai/` are answered here, not forwarded
+/// (`weather_core::ai::is_forwarded_path`).
 fn is_ai_path(path: &str) -> bool {
-    (path == "/v1/ai" || path.starts_with("/v1/ai/")) && !reference::serves(path)
+    weather_core::ai::is_forwarded_path(path)
 }
 
 /// Pass a Shamwari request to `mukoko-weather-ai` with the client's IP, and
 /// its answer back unchanged.
 async fn forward_ai(req: &mut Request, env: &Env) -> Result<Response> {
     let body = req.text().await.unwrap_or_default();
-    if body.len() > MAX_AI_BODY_BYTES {
+    if body.len() > weather_core::ai::public_body_cap(&req.path()) {
         return error(413, "payload_too_large", "The request body is too large.");
     }
     let headers = Headers::new();
@@ -433,9 +452,10 @@ async fn weather(req: &Request, env: &Env) -> Result<Response> {
                 // The edge lifetime follows the baseline that served it
                 // (`weather_core::blend::edge_cache_control`).
                 let provider = upstream.headers().get("X-Weather-Provider")?;
+                let stale = upstream.headers().get("X-Cache")?.as_deref() == Some("STALE");
                 resp.headers().set(
                     "Cache-Control",
-                    weather_core::blend::edge_cache_control(provider.as_deref()),
+                    weather_core::blend::edge_cache_control(provider.as_deref(), stale),
                 )?;
                 return Ok(resp);
             }
@@ -633,6 +653,10 @@ async fn probe_open_meteo() -> (Result<Option<f64>, u16>, u64) {
 /// the status page reads (`weather_core::status`).
 async fn status(env: &Env) -> Result<Response> {
     let started = now_ms();
+    // The probe must ask the Open-Meteo host the forecast Worker really uses:
+    // with the paid plan's key get_with_timeout moves it to the customer host,
+    // so this row no longer reports the free API's 429 while the paid one works.
+    weather_edge::open_meteo::init(env).await;
     let (forecast, places, aviation, ai, meteo) = futures::join!(
         probe_worker(env, FORECAST_BINDING),
         probe_worker(env, PLACES_BINDING),

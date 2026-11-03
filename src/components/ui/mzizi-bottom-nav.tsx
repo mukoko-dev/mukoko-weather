@@ -19,9 +19,7 @@
  *    `py-1` + a 21px icon + a 10px label, about 47px.
  * 4. (Superseded by 9.) Upstream's `h-20` bar left only 46px for the 48px
  *    items on an iPhone.
- * 5. An optional `label` (the landmark's aria-label) and `indicator`: a row
- *    one touch target tall directly above the items, on the bar's own
- *    surface (this app puts the location pager there — tappable dots).
+ * 5. An optional `label` (the landmark's aria-label).
  * 6. Icons come from lucide-react (this app has no `@/lib/icons` shim). The
  *    upstream literal colour fallbacks (a hex blue and an rgba glow) are dropped for
  *    the `--color-primary` token and `shadow-md`, since this repo forbids
@@ -43,14 +41,30 @@
  *    the home-indicator gesture zone, which a full-width bar welded to the
  *    viewport does not. Upstream's `5rem + safe area` height (change 4) and
  *    `pb-[env(safe-area-inset-bottom)]` are gone: the lift carries the inset.
- * 10. The `indicator` row is its own small floating pill, one touch target
- *    tall and `--mobile-nav-gap` above the bar (a two-row pill would stop
- *    being a pill). The `<nav>` landmark is the transparent fixed wrapper
- *    for both and lets taps through between them (`pointer-events-none`).
+ *    The `<nav>` landmark IS that pill (one element, one surface).
+ * 10. A LANE between pinned items (owner decision 2026-11-02, option B: one
+ *    bar instead of a bar plus a pager pill above it). New optional slots,
+ *    mutually exclusive with `items` (the props are a union, so TypeScript
+ *    refuses a mix):
+ *      - `leading`  pinned items at the start edge,
+ *      - `lane`     a node in the middle that takes all the remaining width
+ *                   (`flex-1 min-w-0`, so it may shrink and scroll),
+ *      - `trailing` pinned items at the end edge.
+ *    The component owns the layout only (pinned items never shrink, the lane
+ *    does); what scrolls, snaps or fades inside the lane is the consumer's
+ *    (this app: components/layout/PlaceLane.tsx, which also keeps its own
+ *    first chip pinned and its current chip in view). With a lane the pinned
+ *    items are as narrow as a touch target allows (`min-w` 48px, `px-2`, not
+ *    60px and `px-3`) and their labels collapse to screen-reader-only below
+ *    360px, so the lane keeps the width on a small phone; the bar uses
+ *    `gap-1` between its parts. Without `lane` the bar is exactly the
+ *    registry's single `items` row.
+ *    This replaces the earlier `indicator` pill (a second floating pill one
+ *    touch target tall above the bar, with a `--mobile-nav-gap` between): the
+ *    bar is now the only floating surface and both are gone.
  *
- * `--mobile-nav-height` in globals.css is the bar (4rem) + the gap + the
- * indicator pill (one touch target), without the lift or the safe area, so
- * `--mobile-nav-clearance` always matches it.
+ * `--mobile-nav-clearance` in globals.css is the bar (4rem) plus the lift,
+ * the safe area and a breath, so page content always matches the one bar.
  */
 
 import * as React from "react";
@@ -78,16 +92,34 @@ export interface BottomNavItem {
   ariaLabel?: string;
 }
 
-interface MziziBottomNavProps {
-  items: BottomNavItem[];
+/**
+ * What the bar shows: either the registry's single row of `items`, or pinned
+ * `leading` and `trailing` items around a `lane` (local addition 10).
+ */
+type MziziBottomNavLayout =
+  | {
+      items: BottomNavItem[];
+      leading?: undefined;
+      lane?: undefined;
+      trailing?: undefined;
+    }
+  | {
+      items?: undefined;
+      /** Pinned at the start edge, before the lane. */
+      leading?: BottomNavItem[];
+      /** The middle: takes the remaining width and may scroll (local addition). */
+      lane: React.ReactNode;
+      /** Pinned at the end edge, after the lane. */
+      trailing?: BottomNavItem[];
+    };
+
+type MziziBottomNavProps = MziziBottomNavLayout & {
   /** Override active detection (useful for client-side routing) */
   activeId?: string;
   className?: string;
   /** Landmark label (local addition). */
   label?: string;
-  /** Decorative row along the bottom edge of the bar (local addition). */
-  indicator?: React.ReactNode;
-}
+};
 
 /** Upstream active-item rule: `/` matches only exactly, others by prefix. */
 export function isBottomNavItemActive(
@@ -101,21 +133,89 @@ export function isBottomNavItemActive(
 }
 
 /**
- * The floating pill surface, shared by the bar and the indicator pill:
- * pill radius, a solid 0.5px border on all four sides (the Mzizi border
- * rule), lifted shadow, translucent card fill with blur (mukoko-news island).
+ * The floating pill surface: pill radius, a solid 0.5px border on all four
+ * sides (the Mzizi border rule), lifted shadow, translucent card fill with
+ * blur (mukoko-news island).
  */
 const FLOATING_SURFACE =
-  "pointer-events-auto rounded-full border-solid border-border border-[length:var(--border-width-rest)] bg-card/90 shadow-lg backdrop-blur-xl";
+  "rounded-full border-solid border-border border-[length:var(--border-width-rest)] bg-card/90 shadow-lg backdrop-blur-xl";
 
 export function MziziBottomNav({
   items,
+  leading,
+  lane,
+  trailing,
   activeId,
   className,
   label,
-  indicator,
 }: MziziBottomNavProps) {
   const pathname = usePathname() ?? "";
+  // The props are a union: `items` (the registry row) or a lane layout.
+  const hasLane = items === undefined;
+
+  function renderItem(item: BottomNavItem) {
+    const active = isBottomNavItemActive(item, pathname, activeId);
+
+    /* ── Center FAB ───────────────────────────────────────── */
+    if (item.isFab) {
+      return (
+        <button
+          key={item.id}
+          type="button"
+          onClick={item.onFabClick}
+          aria-label={item.ariaLabel ?? item.label}
+          className={cn(
+            "flex size-[52px] -translate-y-6 items-center justify-center rounded-full",
+            "bg-[var(--brand-accent,var(--color-primary))] shadow-md",
+            "transition-transform active:scale-95",
+          )}
+        >
+          <Plus className="size-[26px] text-background" strokeWidth={2.5} />
+        </button>
+      );
+    }
+
+    /* ── Standard nav item ────────────────────────────────── */
+    const Icon = active && item.activeIcon ? item.activeIcon : item.icon;
+    return (
+      <Link
+        key={item.id}
+        href={item.href}
+        prefetch={false}
+        aria-current={active ? "page" : undefined}
+        aria-label={item.ariaLabel}
+        className={cn(
+          "relative flex min-h-[var(--touch-target-min)] flex-col items-center justify-center gap-[3px] rounded-full py-1",
+          hasLane
+            ? "min-w-[var(--touch-target-min)] shrink-0 px-2"
+            : "min-w-[60px] px-3",
+          "text-[length:var(--text-nav-label)] font-medium transition-colors",
+          active
+            ? "text-[var(--brand-accent,var(--color-primary))]"
+            : "text-muted-foreground",
+        )}
+      >
+        {/* Active top accent bar — brand identity marker */}
+        {active && (
+          <span
+            aria-hidden="true"
+            className="absolute -top-[3px] h-[2.5px] w-7 rounded-full bg-[var(--brand-accent,var(--color-primary))]"
+          />
+        )}
+        <Icon
+          className={cn(
+            "size-[21px]",
+            active ? "stroke-[2.2]" : "stroke-[1.8]",
+          )}
+        />
+        {/* Below 360px a lane needs the width more than the label does; the
+            accessible name stays (`ariaLabel`, else this text). */}
+        <span className={hasLane ? "max-[359px]:sr-only" : undefined}>
+          {item.label}
+        </span>
+      </Link>
+    );
+  }
 
   return (
     <nav
@@ -123,88 +223,27 @@ export function MziziBottomNav({
       data-portal="https://mzizi.dev/components/mzizi-bottom-nav"
       aria-label={label}
       className={cn(
-        "pointer-events-none fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom,0px)+var(--mobile-nav-inset))] z-50 mx-auto flex max-w-md flex-col items-center gap-[var(--mobile-nav-gap)] md:hidden",
+        "fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom,0px)+var(--mobile-nav-inset))] z-50 mx-auto flex h-[var(--mobile-nav-bar-height)] max-w-md items-center md:hidden",
+        FLOATING_SURFACE,
+        hasLane ? "gap-1 px-1.5" : "justify-around px-2",
+        "[&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-2 [&_a]:focus-visible:outline-primary [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-offset-2 [&_button]:focus-visible:outline-primary",
         className,
       )}
     >
-      {indicator && (
-        <div
-          data-slot="mzizi-bottom-nav-indicator"
-          className={cn(
-            FLOATING_SURFACE,
-            "flex h-[var(--touch-target-min)] max-w-full items-center px-2",
-          )}
-        >
-          {indicator}
-        </div>
+      {items ? (
+        items.map(renderItem)
+      ) : (
+        <>
+          {leading?.map(renderItem)}
+          <div
+            data-slot="mzizi-bottom-nav-lane"
+            className="flex h-full min-w-0 flex-1 items-center"
+          >
+            {lane}
+          </div>
+          {trailing?.map(renderItem)}
+        </>
       )}
-      <div
-        data-slot="mzizi-bottom-nav-bar"
-        className={cn(
-          FLOATING_SURFACE,
-          "flex h-[var(--mobile-nav-bar-height)] w-full items-center justify-around px-2 [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-2 [&_a]:focus-visible:outline-primary [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-offset-2 [&_button]:focus-visible:outline-primary",
-        )}
-      >
-        {items.map((item) => {
-          const active = isBottomNavItemActive(item, pathname, activeId);
-
-          /* ── Center FAB ─────────────────────────────────────── */
-          if (item.isFab) {
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={item.onFabClick}
-                aria-label={item.ariaLabel ?? item.label}
-                className={cn(
-                  "flex size-[52px] -translate-y-6 items-center justify-center rounded-full",
-                  "bg-[var(--brand-accent,var(--color-primary))] shadow-md",
-                  "transition-transform active:scale-95",
-                )}
-              >
-                <Plus
-                  className="size-[26px] text-background"
-                  strokeWidth={2.5}
-                />
-              </button>
-            );
-          }
-
-          /* ── Standard nav item ──────────────────────────────── */
-          const Icon = active && item.activeIcon ? item.activeIcon : item.icon;
-          return (
-            <Link
-              key={item.id}
-              href={item.href}
-              prefetch={false}
-              aria-current={active ? "page" : undefined}
-              aria-label={item.ariaLabel}
-              className={cn(
-                "relative flex min-h-[var(--touch-target-min)] min-w-[60px] flex-col items-center justify-center gap-[3px] rounded-full px-3 py-1",
-                "text-[length:var(--text-nav-label)] font-medium transition-colors",
-                active
-                  ? "text-[var(--brand-accent,var(--color-primary))]"
-                  : "text-muted-foreground",
-              )}
-            >
-              {/* Active top accent bar — brand identity marker */}
-              {active && (
-                <span
-                  aria-hidden="true"
-                  className="absolute -top-[3px] h-[2.5px] w-7 rounded-full bg-[var(--brand-accent,var(--color-primary))]"
-                />
-              )}
-              <Icon
-                className={cn(
-                  "size-[21px]",
-                  active ? "stroke-[2.2]" : "stroke-[1.8]",
-                )}
-              />
-              <span>{item.label}</span>
-            </Link>
-          );
-        })}
-      </div>
     </nav>
   );
 }

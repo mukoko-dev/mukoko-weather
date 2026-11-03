@@ -1,5 +1,5 @@
 /**
- * Structural tests for the auth-gated /api/ai/* → /api/py/ai/* proxy.
+ * Structural tests for the auth-gated /api/ai/* proxy to the internal weather Worker.
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
@@ -17,18 +17,23 @@ describe("/api/ai proxy — auth gate", () => {
   });
 
   it("forwards the user identity, never the session cookie", () => {
-    expect(source).toContain('"X-Mukoko-User-Id"');
-    expect(source).toContain('"cookie"');
+    // The headers are built in src/lib/ai-worker.ts from the id and address
+    // only; the route never copies the request's headers.
+    expect(source).not.toContain("req.headers.forEach");
+    expect(source).toContain("userId");
   });
 });
 
-describe("/api/ai proxy — internal shared secret (issue #92)", () => {
-  it("stamps X-Mukoko-Internal when MUKOKO_INTERNAL_SECRET is configured", () => {
-    expect(source).toContain("process.env.MUKOKO_INTERNAL_SECRET");
-    expect(source).toContain('"X-Mukoko-Internal"');
+describe("/api/ai proxy — no Python and no shared secret any more", () => {
+  it("does not forward to /api/py and stamps no X-Mukoko-Internal secret", () => {
+    expect(source).not.toContain("/api/py");
+    expect(source).not.toContain("MUKOKO_INTERNAL_SECRET");
+    expect(source).not.toContain("X-Mukoko-Internal");
   });
 
-  it("remains optional — no secret, no header, deploys unaffected", () => {
-    expect(source).toContain("if (internalSecret)");
+  it("calls the internal weather Worker, never the browser's cookie", () => {
+    expect(source).toContain("aiWorkerOrigin()");
+    expect(source).toContain("WEATHER_SERVICE_API_KEY");
+    expect(source).toContain("aiWorkerHeaders(");
   });
 });

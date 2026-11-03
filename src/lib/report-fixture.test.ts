@@ -1,18 +1,16 @@
 /**
  * `tests/fixtures/report-submit.json` is the oracle for the Rust report builder:
- * what the real Python `submit_report` stored. The Python is deleted, so the
- * fixture names the git commit it was generated from and a script regenerates
- * it from that commit. Pinned here so the claim stays reproducible.
+ * what the real Python `submit_report` stored. The Python and the script that
+ * ran it (`scripts/gen_report_submit_fixtures.py`) are deleted (#333), so the
+ * fixture is now the pinned truth. Its header names the git commit the Python
+ * was taken from, so the claim stays reproducible from the repository history:
+ * `git show <commit>:api/py/_reports.py`.
  */
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 
 const ROOT = resolve(__dirname, "../..");
-const script = readFileSync(
-  resolve(ROOT, "scripts/gen_report_submit_fixtures.py"),
-  "utf-8",
-);
 const fixture = JSON.parse(
   readFileSync(resolve(ROOT, "tests/fixtures/report-submit.json"), "utf-8"),
 ) as {
@@ -22,17 +20,17 @@ const fixture = JSON.parse(
 };
 
 describe("report-submit fixture", () => {
-  it("records the pinned commit it was generated from, and the script agrees", () => {
+  it("records the commit of the Python it was generated from", () => {
     expect(fixture._generated.commit).toMatch(/^[0-9a-f]{40}$/);
-    const pinned = /^PINNED_COMMIT = "([0-9a-f]{40})"$/m.exec(script);
-    expect(pinned?.[1]).toBe(fixture._generated.commit);
     expect(fixture._generated.by).toBe("scripts/gen_report_submit_fixtures.py");
+    expect(fixture._generated.source).toBe("api/py/_reports.py submit_report");
   });
 
-  it("takes the Python from git at that commit, never from the working tree", () => {
-    expect(script).toContain('"git", "archive"');
-    expect(script).toContain("PINNED_COMMIT");
-    expect(script).not.toMatch(/sys\.path\.insert\(0, str\(ROOT/);
+  it("is authoritative: the oracle Python and its generator are gone", () => {
+    expect(existsSync(resolve(ROOT, "api"))).toBe(false);
+    expect(
+      existsSync(resolve(ROOT, "scripts/gen_report_submit_fixtures.py")),
+    ).toBe(false);
   });
 
   it("exercises the builder: accepted and refused requests", () => {

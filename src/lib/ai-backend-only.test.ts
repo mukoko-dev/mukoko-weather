@@ -3,17 +3,17 @@
  * backend uses the Workers AI binding; no frontend ever passes directly to
  * Cloudflare AI".
  *
- * Only the Rust weather Workers (workers/ai, through the native env.AI
- * binding and the shamwari gateway) run models. The Python backend (api/py)
- * reaches them over HTTPS through mukoko-weather-internal with the service
- * key and holds no Cloudflare AI token. Browser code, Next.js server/client
- * components, NEXT_PUBLIC_* vars and the embed go through
- * our backend routes (/api/ai/* → /api/py/ai/*, /api/py/chat, and the
- * Worker's /v1/ai/explore/search and /v1/ai/history/analyze). This test
- * fails if src/ or api/py
- * references the gateway host, a Workers AI call, an AI SDK or a Cloudflare
- * AI token env name — and, when a production build exists, if the client
- * bundle does.
+ * Only one Rust Worker, the AI Worker (workers/ai, through the native env.AI
+ * binding and the shamwari gateway), runs models: no other Worker binds
+ * Workers AI, and there is no Python backend any more (api/py is deleted,
+ * #333). Browser code, Next.js server/client components, NEXT_PUBLIC_* vars
+ * and the embed go through our backend routes (/api/ai/* to the AI Worker
+ * behind mukoko-weather-internal, and the public Worker's /v1/ai/chat,
+ * /v1/ai/explore/search, /v1/ai/history/analyze and /v1/reports/clarify).
+ * This test fails if src/ references the gateway host, a Workers AI call, an AI
+ * SDK or a Cloudflare AI token env name, if any Worker but the AI Worker binds
+ * Workers AI — and, when a production build exists, if the client bundle
+ * references them.
  */
 import { describe, expect, it } from "vitest";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -78,10 +78,39 @@ describe("AI is served by the backend only, through the weather Worker", () => {
     expect(violations(files, (f) => f === THIS_FILE)).toEqual([]);
   });
 
-  it("the Python backend api/py reaches AI only through the weather Worker", () => {
-    const files = walk(join(ROOT, "api", "py"), /\.py$/);
-    expect(files.length).toBeGreaterThan(0);
-    expect(violations(files)).toEqual([]);
+  it("there is no Python backend left to call a model", () => {
+    expect(existsSync(join(ROOT, "api"))).toBe(false);
+    expect(existsSync(join(ROOT, "requirements.txt"))).toBe(false);
+  });
+
+  it("only the AI Worker binds Workers AI or names the gateway", () => {
+    const workers = join(ROOT, "workers");
+    const others = readdirSync(workers).filter(
+      (name) =>
+        name !== "ai" &&
+        name !== "crates" &&
+        name !== "target" &&
+        statSync(join(workers, name)).isDirectory(),
+    );
+    expect(others.length).toBeGreaterThan(0);
+    const offenders: string[] = [];
+    for (const name of others) {
+      const config = join(workers, name, "wrangler.jsonc");
+      if (
+        existsSync(config) &&
+        /"ai"\s*:\s*\{/.test(readFileSync(config, "utf8"))
+      ) {
+        offenders.push(`${name}/wrangler.jsonc binds Workers AI`);
+      }
+      const sources = walk(join(workers, name, "src"), /\.(rs|ts)$/);
+      for (const file of sources) {
+        const text = readFileSync(file, "utf8");
+        if (/\benv\.ai\(|gateway\.ai\.cloudflare\.com|\bAI\.run\(/.test(text)) {
+          offenders.push(relative(ROOT, file));
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 
   it("the client bundle (when built) never references the gateway or AI tokens", () => {
