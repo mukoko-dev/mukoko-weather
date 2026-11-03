@@ -20,7 +20,9 @@ import {
   FakeBridge,
   GRANT_TTL_MS,
   PERSON,
+  START,
 } from "./test-support/couch-engine-harness";
+import { toRfc3339 } from "./couch-docs";
 import {
   LOCAL_WRITE_DEBOUNCE_MS,
   POLL_INTERVAL_MS,
@@ -151,6 +153,41 @@ describe("settings follow the person", () => {
     ]);
   });
 
+  it("a device whose own non-default settings predate sync takes the person's, not the other way round", async () => {
+    fresh();
+    const a = device("a");
+    await startDevice(a);
+    a.clock.now = START + 600_000;
+    a.bridge.change({
+      theme: "dark",
+      selectedActivities: ["livestock"],
+    });
+    await flush(a);
+
+    // b has its own light theme and a gardening activity from before sync;
+    // the server already has documents for the theme.
+    const b = device("b", {
+      theme: "light",
+      selectedActivities: ["gardening"],
+    });
+    b.clock.now = START + 1_200_000;
+    await startDevice(b);
+    await flush(b);
+
+    expect(couch.get("preference:theme")?.preferenceValue).toBe("dark");
+    expect(b.bridge.state.theme).toBe("dark");
+    // The activity b had is one the server has no document for: seeded, kept.
+    expect(couch.liveIds().sort()).toEqual([
+      "activity:gardening",
+      "activity:livestock",
+      "preference:theme",
+    ]);
+    expect([...b.bridge.state.selectedActivities].sort()).toEqual([
+      "gardening",
+      "livestock",
+    ]);
+  });
+
   it("a fresh device with default settings writes nothing to the server", async () => {
     fresh();
     const a = device("a", { theme: "dark" });
@@ -218,6 +255,93 @@ describe("settings follow the person", () => {
     expect(couch.get("preference:forecastModel")?.preferenceValue).toBe(
       "gfs_seamless",
     );
+  });
+
+  describe("a setting changed before the local database opened (offline, hidden, backing off)", () => {
+    /** A device that starts offline and changes its theme at `madeAtMs`. */
+    async function offlineDeviceThatChangedTheme(madeAtMs: number) {
+      const b = device("b");
+      b.flags.online = false;
+      await startDevice(b);
+      b.clock.now = madeAtMs;
+      b.bridge.change({ theme: "light" });
+      await b.clock.advance(LOCAL_WRITE_DEBOUNCE_MS, b.settle);
+      return b;
+    }
+    const comeOnline = async (b: Device, now: number) => {
+      b.clock.now = now;
+      b.flags.online = true;
+      b.triggers.forEach((t) => t("online"));
+      await b.settle();
+      await flush(b);
+    };
+
+    it("wins over a remote value that is OLDER than the change, and is written", async () => {
+      fresh();
+      const a = device("a", { theme: "dark" }); // seeded at START
+      await startDevice(a);
+      expect(couch.get("preference:theme")?.preferenceValue).toBe("dark");
+
+      const madeAt = START + 60_000;
+      const b = await offlineDeviceThatChangedTheme(madeAt);
+      await comeOnline(b, madeAt + 300_000);
+
+      expect(couch.get("preference:theme")).toMatchObject({
+        preferenceValue: "light",
+        updatedAt: toRfc3339(madeAt),
+      });
+      expect(b.bridge.state.theme).toBe("light");
+      // And the other device hears it.
+      await a.sync();
+      expect(a.bridge.state.theme).toBe("light");
+    });
+
+    it("loses to a remote value that is NEWER than the change, however late it connects", async () => {
+      fresh();
+      const a = device("a");
+      await startDevice(a);
+      a.clock.now = START + 600_000;
+      a.bridge.change({ theme: "dark" });
+      await flush(a);
+      expect(couch.get("preference:theme")?.preferenceValue).toBe("dark");
+
+      const b = await offlineDeviceThatChangedTheme(START + 60_000);
+      await comeOnline(b, START + 900_000);
+
+      expect(couch.get("preference:theme")?.preferenceValue).toBe("dark");
+      expect(b.bridge.state.theme).toBe("dark");
+    });
+
+    // (The engine-level tests in couch-sync.test.ts cover the same change made
+    // while the first credential fetch is failing and the engine backs off.)
+  });
+
+  it("the person's own order of activities survives another device's add and remove", async () => {
+    fresh();
+    const a = device("a", { selectedActivities: ["livestock", "gardening"] });
+    await startDevice(a);
+
+    // This device chose them in the opposite order from the one the documents
+    // sort in (same creation time, so by id: gardening, then livestock).
+    const b = device("b", { selectedActivities: ["livestock", "gardening"] });
+    await startDevice(b);
+    expect(b.bridge.state.selectedActivities).toEqual(["livestock", "gardening"]);
+
+    a.clock.now = START + 120_000;
+    a.bridge.change({ selectedActivities: ["livestock", "gardening", "soccer"] });
+    await flush(a);
+    await b.sync();
+    expect(b.bridge.state.selectedActivities).toEqual([
+      "livestock",
+      "gardening",
+      "soccer",
+    ]);
+
+    a.clock.now = START + 240_000;
+    a.bridge.change({ selectedActivities: ["livestock", "soccer"] });
+    await flush(a);
+    await b.sync();
+    expect(b.bridge.state.selectedActivities).toEqual(["livestock", "soccer"]);
   });
 
   it("the later of two concurrent edits wins on both devices", async () => {

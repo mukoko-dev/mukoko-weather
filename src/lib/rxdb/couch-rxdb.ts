@@ -21,6 +21,21 @@
  * the first error cancels it and the failure (with its HTTP status, kept by
  * the fetch layer) goes to the engine, which backs off.
  *
+ * ONE TAB REPLICATES. Every tab of the browser opens the same IndexedDB
+ * database, so it is opened `multiInstance: true` (tabs hear each other's
+ * writes, no stale queries) and the replication waits for leadership, as
+ * `replication.ts` does for the app's own preferences. Only the leader tab
+ * pulls and pushes; the engine asks `isLeader()` and a follower just applies
+ * what the shared database holds (`couch-sync.ts`). `onShared()` tells the
+ * engine the shared database changed, so a hidden leader can push what a
+ * visible follower wrote.
+ *
+ * WHOSE IT IS. The database holds one person's settings and activities, so
+ * `openUserDocStore` records the person (ids only, `sync-people-index.ts`) and
+ * `purgeUserDocStores` removes every recorded database but the signed-in
+ * person's: on sign-out (the session route answering 401) and when a different
+ * person is issued. Nothing here runs with the flag off.
+ *
  * Imported dynamically, only after the flag is on and a credential exists, so
  * RxDB's CouchDB plugin is in no page's first-load JavaScript.
  */
@@ -40,10 +55,22 @@ import {
 } from "./couch-fetch";
 import type { CouchSession } from "./couch-session";
 import type { SyncStore } from "./couch-sync";
+import {
+  forgetSyncPerson,
+  recordSyncPerson,
+  recordedSyncPeople,
+} from "./sync-people-index";
 
 export const SYNC_DB_PREFIX = "mukoko_weather_sync_";
 /** A whole cycle (pull, push, retries) may take this long before it is a failure. */
 export const CYCLE_TIMEOUT_MS = 60_000;
+/**
+ * How long the first leadership question waits for the election to settle in a
+ * tab that does not win it. After that the answer is read without waiting.
+ */
+export const LEADER_WAIT_MS = 3_000;
+/** Removing a database that another tab still holds open may not finish. */
+export const REMOVE_TIMEOUT_MS = 5_000;
 const PULL_BATCH = 200;
 const PUSH_BATCH = 50;
 
@@ -87,6 +114,13 @@ export interface OpenStoreOptions {
   retryTimeMs?: number;
   /** Database name suffix, so tests never collide. */
   nameSuffix?: string;
+  /** How long the first leadership answer waits for the election (tests shorten it). */
+  leaderWaitMs?: number;
+}
+
+/** The name of a person's local sync database. */
+function databaseName(personId: string, nameSuffix = ""): string {
+  return `${SYNC_DB_PREFIX}${personId}${nameSuffix}`;
 }
 
 /** Plain, frozen-free copy of a stored document's fields. */
@@ -117,11 +151,18 @@ export async function openUserDocStore(
   options: OpenStoreOptions = {},
 ): Promise<SyncStore | null> {
   try {
-    const [{ createRxDatabase, defaultConflictHandler }, replication] =
-      await Promise.all([
-        import("rxdb"),
-        import("rxdb/plugins/replication-couchdb"),
-      ]);
+    const [
+      { addRxPlugin, createRxDatabase, defaultConflictHandler },
+      replication,
+      { RxDBLeaderElectionPlugin },
+    ] = await Promise.all([
+      import("rxdb"),
+      import("rxdb/plugins/replication-couchdb"),
+      import("rxdb/plugins/leader-election"),
+    ]);
+    // `isLeader()`, `waitForLeadership()` and the elector come from this plugin
+    // (adding it twice is a no-op); the replication adds it only when it starts.
+    addRxPlugin(RxDBLeaderElectionPlugin);
     let storage = options.storage;
     if (!storage) {
       const dexie = await import("rxdb/plugins/storage-dexie");
@@ -130,10 +171,15 @@ export async function openUserDocStore(
         unknown
       >;
     }
+    // Written down BEFORE the database exists, so a database can never be
+    // there without a record that lets sign-out find and remove it.
+    recordSyncPerson(personId);
     const db = (await createRxDatabase({
-      name: `${SYNC_DB_PREFIX}${personId}${options.nameSuffix ?? ""}`,
+      name: databaseName(personId, options.nameSuffix),
       storage: storage as RxStorage<never, never>,
-      multiInstance: false,
+      // Shared by every tab of the browser: the tabs hear each other's writes
+      // and elect one leader to replicate.
+      multiInstance: true,
       eventReduce: true,
     })) as unknown as SyncDatabase;
 
@@ -152,7 +198,40 @@ export async function openUserDocStore(
     });
     const col = db.user_docs;
 
+    // The first answer may have to wait for the election to settle; once it
+    // has, the question is read without waiting (a follower is not held up
+    // again on every cycle).
+    let electionSettled = false;
+
     return {
+      async isLeader() {
+        if (db.isLeader()) {
+          electionSettled = true;
+          return true;
+        }
+        if (electionSettled) return false;
+        electionSettled = true;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          return await Promise.race([
+            db.waitForLeadership().then(() => true),
+            new Promise<boolean>((resolve) => {
+              timer = setTimeout(
+                () => resolve(false),
+                options.leaderWaitMs ?? LEADER_WAIT_MS,
+              );
+            }),
+          ]);
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
+      },
+
+      onShared(listener) {
+        const sub = col.$.subscribe(() => listener());
+        return () => sub.unsubscribe();
+      },
+
       async liveDocs() {
         const found = await col.find().exec();
         return found.map((d) => plain(d.toJSON() as unknown as UserDocType));
@@ -160,8 +239,11 @@ export async function openUserDocStore(
 
       async knownIds(ids) {
         if (ids.length === 0) return new Set();
+        // RxDB 17 answers with an ARRAY of documents (deleted ones included);
+        // reading its keys named positions, so nothing was ever "known" and a
+        // device's own values were seeded over the person's other devices'.
         const found = await col.storageInstance.findDocumentsById(ids, true);
-        return new Set(Object.keys(found));
+        return new Set(found.map((d) => d.id));
       },
 
       async upsert(doc) {
@@ -200,7 +282,9 @@ export async function openUserDocStore(
           url: session.databaseUrl,
           fetch: watched,
           live: false,
-          waitForLeadership: false,
+          // Only the leader tab replicates (the engine asks `isLeader()`
+          // first, so a follower never gets here to wait for ever).
+          waitForLeadership: true,
           autoStart: true,
           retryTime: options.retryTimeMs ?? 1_000,
           pull: {
@@ -255,5 +339,76 @@ export async function openUserDocStore(
     };
   } catch {
     return null;
+  }
+}
+
+export interface RemoveStoreOptions {
+  /** An RxDB storage; the browser default is Dexie (IndexedDB). */
+  storage?: RxStorage<unknown, unknown>;
+  /** Database name suffix, so tests never collide. */
+  nameSuffix?: string;
+  removeTimeoutMs?: number;
+}
+
+/**
+ * Delete a person's local sync database (their settings and activities, and the
+ * replication checkpoint). Resolves true when it is gone, false when it could
+ * not be removed (IndexedDB blocked or missing, another tab holding it open
+ * past the timeout). Never rejects. The caller closes its own handle first.
+ */
+export async function removeUserDocStore(
+  personId: string,
+  options: RemoveStoreOptions = {},
+): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const { removeRxDatabase } = await import("rxdb");
+    let storage = options.storage;
+    if (!storage) {
+      const dexie = await import("rxdb/plugins/storage-dexie");
+      storage = dexie.getRxStorageDexie() as unknown as RxStorage<
+        unknown,
+        unknown
+      >;
+    }
+    await Promise.race([
+      removeRxDatabase(
+        databaseName(personId, options.nameSuffix),
+        storage as RxStorage<never, never>,
+      ),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("remove timed out")),
+          options.removeTimeoutMs ?? REMOVE_TIMEOUT_MS,
+        );
+      }),
+    ]);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * Remove the local sync database of every recorded person except `keep` (of
+ * everyone when `keep` is null), and forget each one that is gone. A database
+ * that cannot be removed stays recorded, so the next run tries again. Never
+ * rejects; with nothing recorded it touches nothing, not even IndexedDB.
+ */
+export async function purgeUserDocStores(
+  keep: string | null,
+  options: RemoveStoreOptions = {},
+): Promise<void> {
+  try {
+    for (const personId of recordedSyncPeople()) {
+      if (personId === keep) continue;
+      if (await removeUserDocStore(personId, options)) {
+        forgetSyncPerson(personId);
+      }
+    }
+  } catch {
+    // Best effort: the sign-out never fails because of a local cleanup.
   }
 }

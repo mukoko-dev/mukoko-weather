@@ -8,7 +8,9 @@ import {
   failureAction,
   isTokenUsable,
   refreshDelayMs,
+  renewalDelayMs,
 } from "./couch-schedule";
+import { REFRESH_MIN_DELAY_MS as SHARED_MIN } from "../couch-session-timing";
 
 const NOW = 1_000_000_000_000;
 const exact = () => 0.5; // spread factor 1.0
@@ -39,6 +41,35 @@ describe("refreshDelayMs (injected clock)", () => {
     expect(refreshDelayMs(NOW + 600_000, NOW + 100_000)).toBe(
       500_000 - REFRESH_LEAD_MS,
     );
+  });
+});
+
+describe("renewalDelayMs (what the engine arms its timer with)", () => {
+  it("is refreshDelayMs for a credential with room, and the minimum for one without", () => {
+    expect(renewalDelayMs(NOW + 600_000, NOW)).toBe(600_000 - REFRESH_LEAD_MS);
+    for (const expiresAtMs of [
+      NOW + REFRESH_LEAD_MS,
+      NOW + 1_000,
+      NOW - 5_000,
+      Number.NaN,
+    ]) {
+      expect(refreshDelayMs(expiresAtMs, NOW)).toBe(0);
+      expect(renewalDelayMs(expiresAtMs, NOW), String(expiresAtMs)).toBe(
+        REFRESH_MIN_DELAY_MS,
+      );
+    }
+  });
+
+  it("is never below the minimum, whatever the expiry and the clock", () => {
+    for (let ttl = -10_000; ttl <= 400_000; ttl += 7_000) {
+      expect(renewalDelayMs(NOW + ttl, NOW)).toBeGreaterThanOrEqual(
+        REFRESH_MIN_DELAY_MS,
+      );
+    }
+  });
+
+  it("the minimum is the one the server side shares", () => {
+    expect(REFRESH_MIN_DELAY_MS).toBe(SHARED_MIN);
   });
 });
 

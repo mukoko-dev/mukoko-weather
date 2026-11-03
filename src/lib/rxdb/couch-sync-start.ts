@@ -61,6 +61,9 @@ export function startCouchSync(
       const engine = createCouchSyncEngine({
         fetchSession: () => session.fetchCouchSession(),
         ensureDatabase: (s) => session.ensurePersonalDatabase(s),
+        // Sign-out (401) and a different person remove the local database of
+        // anyone but the signed-in person; see `couch-rxdb.ts`.
+        purgeStores: (keep) => rxdb.purgeUserDocStores(keep),
         openStore: (personId) => rxdb.openUserDocStore(personId),
         bridge,
         deviceId,
@@ -72,8 +75,23 @@ export function startCouchSync(
         onTrigger: pageTriggers,
       });
       await engine.start();
+
+      // Tear down with the page: timers, listeners and the credential go, and
+      // the local database closes. A page restored from the back/forward cache
+      // is the same page coming back, so the engine starts again (it asks for
+      // a new credential and takes a new baseline).
+      const onPageHide = () => {
+        void engine.stop();
+      };
+      const onPageShow = (event: Event) => {
+        if ((event as PageTransitionEvent).persisted) void engine.start();
+      };
+      window.addEventListener("pagehide", onPageHide);
+      window.addEventListener("pageshow", onPageShow);
       return {
         stop: async () => {
+          window.removeEventListener("pagehide", onPageHide);
+          window.removeEventListener("pageshow", onPageShow);
           await engine.stop();
           starting = null;
         },

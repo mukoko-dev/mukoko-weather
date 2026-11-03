@@ -111,10 +111,32 @@ export class FakeStore implements SyncStore {
   replications = 0;
   closed = false;
   upserts: string[] = [];
+  /** Every document written, as written (for `updatedAt` assertions). */
+  written: UserDocType[] = [];
   tombstones: string[] = [];
+  /** `undefined` = no leader election (a single instance, always leader). */
+  leader: boolean | undefined = undefined;
+  private sharedListeners = new Set<() => void>();
   /** Called on every replication; throw to fail it. */
   onReplicate: (n: number, s: CouchSession) => Promise<void> | void = () =>
     undefined;
+
+  async isLeader() {
+    return this.leader ?? true;
+  }
+  onShared(listener: () => void) {
+    this.sharedListeners.add(listener);
+    return () => {
+      this.sharedListeners.delete(listener);
+    };
+  }
+  get sharedListenerCount(): number {
+    return this.sharedListeners.size;
+  }
+  /** Another tab wrote to the shared database. */
+  emitShared(): void {
+    for (const l of [...this.sharedListeners]) l();
+  }
 
   async liveDocs() {
     return [...this.docs.values()].map((d) => ({ ...d }));
@@ -126,6 +148,7 @@ export class FakeStore implements SyncStore {
   }
   async upsert(doc: UserDocType) {
     this.upserts.push(doc.id);
+    this.written.push({ ...doc });
     this.deleted.delete(doc.id);
     this.docs.set(doc.id, { ...doc });
   }
@@ -154,6 +177,8 @@ export interface Harness {
   sessions: { fetched: number };
   /** The sessions `ensureDatabase` was called with, in order. */
   ensured: CouchSession[];
+  /** The `keep` argument of every `purgeStores` call, in order. */
+  purged: (string | null)[];
 }
 
 export function harness(
@@ -163,6 +188,8 @@ export function harness(
     makeStore?: (personId: string) => FakeStore | null;
     /** Runs when the engine prepares the server-side database; throw to fail it. */
     ensure?: (n: number, s: CouchSession) => Promise<void> | void;
+    /** Runs when the engine purges other people's local databases; may throw. */
+    purge?: (keep: string | null) => Promise<void> | void;
   } = {},
 ): Harness {
   const clock = new Clock();
@@ -172,6 +199,7 @@ export function harness(
   const flags = { visible: true, online: true };
   const sessions = { fetched: 0 };
   const ensured: CouchSession[] = [];
+  const purged: (string | null)[] = [];
   const nextSession: (n: number, now: number) => Promise<CouchSession> =
     options.session ?? (async (_n, now) => session({ now }));
 
@@ -183,6 +211,10 @@ export function harness(
     ensureDatabase: async (s) => {
       ensured.push(s);
       await options.ensure?.(ensured.length, s);
+    },
+    purgeStores: async (keep) => {
+      purged.push(keep);
+      await options.purge?.(keep);
     },
     openStore: async (personId) => {
       const s = options.makeStore
@@ -204,5 +236,15 @@ export function harness(
       return () => triggers.delete(listener);
     },
   };
-  return { clock, bridge, stores, deps, triggers, flags, sessions, ensured };
+  return {
+    clock,
+    bridge,
+    stores,
+    deps,
+    triggers,
+    flags,
+    sessions,
+    ensured,
+    purged,
+  };
 }

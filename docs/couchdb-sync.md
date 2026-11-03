@@ -28,10 +28,44 @@ offline first (RxDB on the device).
   `import("./rxdb/couch-sync-start")`; that file reads the flag again before
   importing the engine, the RxDB layer or the session client.
   `couch-sync-flag-off.test.ts` guards behaviour and imports.
-- **Own database.** One RxDB database per person,
+- **Own database, and whose it is.** One RxDB database per person,
   `mukoko_weather_sync_<personId>`, collection `user_docs`
   (`src/lib/rxdb/couch-rxdb.ts`), never in `mukoko_weather`, so a second person
-  signing in on the device cannot push the first person's documents.
+  signing in on the device cannot push the first person's documents. It holds
+  that person's settings and activities, so it does not outlive their sign-in
+  on the browser: opening it records the person's id (ids only, in
+  `localStorage` through `safe-storage`, `src/lib/rxdb/sync-people-index.ts`,
+  written before the database exists), and `purgeUserDocStores` closes and
+  removes every recorded database but the signed-in person's: when
+  `/api/couch/session` answers 401 (nobody is signed in, including the first
+  request of an anonymous visitor on a browser an earlier sign-in used), and
+  once per run for the person who is signed in (a different person being issued
+  removes the previous person's). A database that cannot be removed (IndexedDB
+  blocked or missing, another tab holding it past 5 s) stays recorded and is
+  tried again at the next run; nothing throws into the page. With the flag off
+  none of this runs and nothing is read or created. If the flag is turned off
+  after having been on, a database that was left behind stays until the flag is
+  on again and someone signs out or in; clearing site data removes it too. A
+  transient 401 (the AuthKit session failing to refresh for a moment) also
+  clears the local mirror: the settings are still in the app's own preferences
+  and on the server, and the next signed-in page load pulls them again, but a
+  change made while offline that had not been written to a document yet would
+  then lose to the server's value.
+- **One tab replicates.** Every tab of the browser opens the same IndexedDB
+  database (`multiInstance: true`) and RxDB elects one leader tab; the
+  replication waits for leadership (`waitForLeadership: true`, as
+  `replication.ts` does). The engine asks `isLeader()` first: a follower writes
+  the person's own changes into the shared database, applies what is in it
+  (soon after the leader pulled it, via the shared-database change events),
+  never seeds, and asks for no credential of its own. A hidden leader does not
+  poll, but it replicates when another tab wrote into the shared database, so a
+  visible follower's change is not stranded behind a background tab. When the
+  leader tab closes, the next cycle of another tab takes over. **Not verified
+  in a real browser**: two tabs cannot be started in this environment (RxDB
+  refuses two databases of one name in one JavaScript process, and the memory
+  storage has no second process); the options passed to RxDB are pinned
+  (`couch-rxdb-options.test.ts`) and the engine's behaviour is tested with a
+  store that reports its leadership.
 - **Cycles, not a stream.** The gateway refuses continuous and event-source
   feeds, so replication is `live: false`: each cycle is one pull
   (`_changes?feed=normal`) and one push (`_all_docs` POST, `_bulk_docs`), then
@@ -42,11 +76,28 @@ offline first (RxDB on the device).
   for it, and seeding after the first pull fills only ids that have no document
   at all. Conflicts: last writer wins by `updatedAt`, the revision CouchDB chose
   on a tie, and a delete from the server (which carries no time) wins.
-- **Failures are silent and bounded.** 401 from the session route means signed
-  out (idle); 401 from the database means fetch a new credential once, then back
-  off; 403, 404, 429, 5xx, offline and timeouts back off 30 s doubling to 15 min
-  and the app stays local-only (`src/lib/rxdb/couch-sync.ts`,
-  `couch-schedule.ts`).
+- **A change is written when the local database opens, stamped with when it was
+  made.** The baseline the engine compares against is taken at `start()`, not
+  when the database opens, so a setting changed while the page was offline,
+  hidden or backing off is still a change when the database opens, and its
+  document carries the time of the change (not of the connection), so it wins
+  against an older value on the server and loses against a newer one.
+- **The person's own order of activities is kept.** The AI advice looks at the
+  first three; a remote add is appended, a remote remove drops that id, and the
+  order of the documents (oldest first, then by id) is used only for ids the
+  device does not hold yet.
+- **Failures are silent and bounded.** 401 from the session route means nobody
+  is signed in: the engine goes idle until the next page load, with no failure
+  count, no timer and no second request (see "Own database" for what it removes).
+  401 from the database means fetch a new credential once, then back off; 403,
+  404, 429, 5xx, offline and timeouts back off 30 s doubling to 15 min and the
+  app stays local-only (`src/lib/rxdb/couch-sync.ts`, `couch-schedule.ts`). A
+  credential with under 75 s left when it arrives is a failure too, and two
+  credential fetches are never closer than 5 s (`src/lib/couch-session-timing.ts`),
+  so a short-lived grant cannot make a loop.
+- **Teardown.** `pagehide` stops the engine (timers, listeners, the credential
+  and the open database go); a page restored from the back/forward cache starts
+  it again.
 - **Document shape follows the validator that runs in CouchDB, not the
   generated schema.** nyuchi-api `gateway/lib/couch_validate_personal.js` (pinned
   in `src/lib/rxdb/__fixtures__/`, executed by the tests) requires an integer
@@ -146,6 +197,19 @@ token or the key.
   `429` (the page backs off and nothing breaks, but `/api/app-keys` shares the
   ceiling). So a wide rollout of the flag needs a gateway decision about this
   key's ceiling, which is not made here.
+- **The CSP and `NYUCHI_API_URL`.** The page replicates with the host
+  `/api/couch/session` hands it, which is `NYUCHI_API_URL`. The Content Security
+  Policy table (`src/lib/security-headers.ts`) is pure data and never reads the
+  environment, so it lists the default API origin, `https://api.nyuchi.com`
+  (`NYUCHI_API_DEFAULT_ORIGIN`, pinned equal to the CSP entry by a test). When
+  `NYUCHI_API_URL` is another origin, `next.config.ts` appends that origin to
+  `connect-src` at build time (`couchApiConnectSrc(process.env)`), so the
+  variable must be set when the app is built, and changing it needs a rebuild
+  and redeploy, not only a restart. A `NYUCHI_API_URL` the policy cannot use (not
+  a bare https origin) adds nothing. **The policy still ships as
+  `Content-Security-Policy-Report-Only`**: a host missing from `connect-src`
+  would be reported at `/api/csp-report` but not blocked, and it will be blocked
+  once the policy is enforced, which is why the two have to match first.
 - **The page** prepares the database once per person per run with
   `POST {api}/v1/couch/personal` (`ensurePersonalDatabase`,
   `src/lib/rxdb/couch-session.ts`), again after a 404 from the database, then
@@ -192,7 +256,28 @@ was sent to any production endpoint. Only a live run can show: the real gateway
 (signing, its limits, the key and the allow-list), CORS from a real browser, the
 CouchDB JWT handler accepting the gateway's token, the real CouchDB and PouchDB
 revision behaviour, IndexedDB, a real browser's focus, visibility and `online`
-events, and the CSP (`https://api.nyuchi.com` is in `connect-src`).
+events, and the CSP (`https://api.nyuchi.com` is in `connect-src`, and the policy
+is report-only).
+
+Also not verified, because the test storage cannot show it:
+
+- **Leader election across real tabs.** RxDB refuses a second database of the
+  same name in one process, so two tabs cannot be run here. The options
+  (`multiInstance: true`, leader election, `waitForLeadership: true`) are pinned
+  by a test and the engine's leader and follower paths are tested with a store
+  that reports leadership; whether two real tabs elect one leader, and how fast a
+  new one takes over, is for a live check with two tabs.
+- **Removing the local database after sign-out** (`removeRxDatabase` on
+  IndexedDB) in a real browser, including a browser that blocks the removal or
+  has the database open in another tab. The code never throws and the person's
+  id stays in the index until the removal succeeds; the memory storage used in
+  tests removes cleanly.
+- **`pagehide` and the back/forward cache.** The engine stops on `pagehide` and
+  starts again on a persisted `pageshow`; real browsers differ in whether they
+  fire these for every kind of unload.
+- **IndexedDB being blocked or missing** (private windows, some webviews). The
+  sync is skipped silently and the index still records the person; the browser
+  paths were simulated, not run.
 
 ## Next slice
 

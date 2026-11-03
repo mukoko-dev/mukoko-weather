@@ -12,14 +12,21 @@
  * the same shape as the device-profile sync (`device-profile.ts`).
  */
 
+import { REFRESH_MIN_DELAY_MS as SHARED_REFRESH_MIN_DELAY_MS } from "../couch-session-timing";
+
 /** First wait after a failure. */
 export const BACKOFF_START_MS = 30_000;
 /** Longest wait between attempts. */
 export const BACKOFF_MAX_MS = 15 * 60_000;
 /** A new credential is requested this long before the old one expires. */
 export const REFRESH_LEAD_MS = 60_000;
-/** Never schedule a refresh sooner than this (a clock that is badly off). */
-export const REFRESH_MIN_DELAY_MS = 5_000;
+/**
+ * Never schedule a refresh sooner than this (a clock that is badly off). The
+ * constant is shared with the server side (`lib/couch-session-timing.ts`); the
+ * engine applies it as a floor on every renewal timer, so a credential that is
+ * already inside the lead window cannot make a loop.
+ */
+export const REFRESH_MIN_DELAY_MS = SHARED_REFRESH_MIN_DELAY_MS;
 /** How often a visible page pulls and pushes while nothing else triggers it. */
 export const POLL_INTERVAL_MS = 60_000;
 /** A focus or visibility trigger within this of the last run is ignored. */
@@ -33,13 +40,24 @@ export const PUSH_DEBOUNCE_MS = 2_000;
  * Milliseconds from `nowMs` until the credential should be refreshed: the
  * expiry minus the lead, never below `REFRESH_MIN_DELAY_MS`, and `0` when it
  * is already inside the lead window (refresh now). An unusable expiry
- * (`NaN`, past) means "refresh now".
+ * (`NaN`, past) means "refresh now". The engine never arms a timer with less
+ * than `REFRESH_MIN_DELAY_MS`, so "now" is at the soonest that far away.
  */
 export function refreshDelayMs(expiresAtMs: number, nowMs: number): number {
   if (!Number.isFinite(expiresAtMs) || !Number.isFinite(nowMs)) return 0;
   const untilExpiry = expiresAtMs - nowMs;
   if (untilExpiry <= REFRESH_LEAD_MS) return 0;
   return Math.max(REFRESH_MIN_DELAY_MS, untilExpiry - REFRESH_LEAD_MS);
+}
+
+/**
+ * When to arm the renewal timer: `refreshDelayMs`, but never sooner than
+ * `REFRESH_MIN_DELAY_MS`, so two credential fetches are never closer than that
+ * whatever the credential's expiry says (already inside the lead window, a
+ * clock that is off). The engine arms its timer with this and nothing else.
+ */
+export function renewalDelayMs(expiresAtMs: number, nowMs: number): number {
+  return Math.max(REFRESH_MIN_DELAY_MS, refreshDelayMs(expiresAtMs, nowMs));
 }
 
 /** True while the credential can still be used for a request that takes `slackMs`. */

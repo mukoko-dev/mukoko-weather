@@ -6,7 +6,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createCouchSyncEngine } from "./couch-sync";
 import { CouchHttpError } from "./couch-fetch";
+import { toRfc3339 } from "./couch-docs";
 import { CouchSessionError } from "./couch-session";
+import {
+  COUCH_MIN_ACCESS_TOKEN_LIFE_MS,
+  COUCH_MIN_GRANT_LIFE_MS,
+  REFRESH_MIN_DELAY_MS,
+} from "../couch-session-timing";
 import {
   FakeStore,
   GRANT_TTL_MS,
@@ -228,6 +234,457 @@ describe("preparing the person's database on the server", () => {
   });
 });
 
+describe("a change made before the local database opens is not lost", () => {
+  const changedAt = (h: Harness) => toRfc3339(h.clock.now);
+
+  it("is written when the database opens, stamped with when the person made it", async () => {
+    let calls = 0;
+    const h = harness({
+      session: async (_n, now) => {
+        calls += 1;
+        if (calls === 1) throw new CouchSessionError(503, "couch_unavailable");
+        return session({ now });
+      },
+    });
+    const engine = createCouchSyncEngine(h.deps);
+    await engine.start();
+    await engine.idle();
+    expect(engine.status()).toBe("backing_off");
+    expect(h.stores).toHaveLength(0);
+
+    await h.clock.advance(5_000, settleWith(engine));
+    const madeAt = changedAt(h);
+    h.bridge.change({ theme: "light" });
+    await h.clock.advance(20_000, settleWith(engine)); // still backing off
+
+    await h.clock.advance(10_000, settleWith(engine)); // the retry: store opens
+    const [store] = h.stores;
+    const theme = store.written.filter((d) => d.id === "preference:theme");
+    expect(theme).toHaveLength(1);
+    expect(theme[0]).toMatchObject({
+      preferenceValue: "light",
+      updatedAt: madeAt,
+    });
+    // Before the replication, so the pull meets it as a conflict to order by
+    // time instead of overwriting it.
+    expect(store.replications).toBeGreaterThanOrEqual(1);
+    await engine.stop();
+  });
+
+  it("is written when the page started offline and the connection comes back", async () => {
+    const h = harness();
+    h.flags.online = false;
+    const engine = createCouchSyncEngine(h.deps);
+    await engine.start();
+    await engine.idle();
+    expect(h.stores).toHaveLength(0);
+
+    const madeAt = changedAt(h);
+    h.bridge.change({ selectedActivities: ["livestock"] });
+    await h.clock.advance(60_000, settleWith(engine));
+    expect(h.stores).toHaveLength(0);
+
+    h.flags.online = true;
+    h.triggers.forEach((t) => t("online"));
+    await engine.idle();
+    const [store] = h.stores;
+    const doc = store.written.find((d) => d.id === "activity:livestock");
+    expect(doc).toBeDefined();
+    // A minute old: ordered against other devices by when it happened.
+    expect(doc?.updatedAt).toBe(madeAt);
+    await engine.stop();
+  });
+
+  it("several changes before it opens are all written; a removal of an activity that never had a document writes nothing", async () => {
+    const h = harness({ bridge: { selectedActivities: ["livestock"] } });
+    h.flags.online = false;
+    const engine = createCouchSyncEngine(h.deps);
+    await engine.start();
+    h.bridge.change({ theme: "dark", selectedForecastModel: "gfs_seamless" });
+    h.bridge.change({ selectedActivities: ["gardening"] });
+    h.flags.online = true;
+    h.triggers.forEach((t) => t("online"));
+    await engine.idle();
+    const ids = h.stores[0].written.map((d) => d.id).sort();
+    expect(ids).toEqual([
+      "activity:gardening",
+      "preference:forecastModel",
+      "preference:theme",
+    ]);
+    expect(h.stores[0].tombstones).toEqual([]);
+    await engine.stop();
+  });
+
+  it("an untouched setting still writes nothing: defaults never win", async () => {
+    const h = harness();
+    h.flags.online = false;
+    const engine = createCouchSyncEngine(h.deps);
+    await engine.start();
+    h.flags.online = true;
+    h.triggers.forEach((t) => t("online"));
+    await engine.idle();
+    expect(h.stores[0].written).toEqual([]);
+    await engine.stop();
+  });
+});
+
+describe("a short-lived credential never makes a hot loop", () => {
+  it.each([[40_000], [60_000]])(
+    "a %i ms grant is a failure that backs off: no store, no replication, a handful of requests a minute",
+    async (ttlMs) => {
+      const h = harness({
+        session: async (n, now) => {
+          // A runaway loop must fail the test, not hang it.
+          if (n > 400) throw new CouchSessionError(503, "runaway");
+          return session({ now, ttlMs });
+        },
+      });
+      const engine = createCouchSyncEngine(h.deps);
+      await engine.start();
+      await engine.idle();
+      expect(engine.status()).toBe("backing_off");
+      expect(h.clock.pending()).toContain(30_000);
+      expect(h.stores).toHaveLength(0);
+
+      let last = h.sessions.fetched;
+      for (let minute = 0; minute < 10; minute++) {
+        await h.clock.advance(60_000, settleWith(engine));
+        expect(h.sessions.fetched - last, `minute ${minute}`).toBeLessThanOrEqual(
+          4,
+        );
+        last = h.sessions.fetched;
+      }
+      expect(h.sessions.fetched).toBeLessThan(20);
+      await engine.stop();
+    },
+  );
+
+  it("a 91 s grant is used and renewed at a sane pace: a handful of requests a minute", async () => {
+    const h = harness({
+      session: async (n, now) => {
+        if (n > 400) throw new CouchSessionError(503, "runaway");
+        return session({ now, ttlMs: 91_000 });
+      },
+    });
+    const engine = await started(h);
+    expect(engine.status()).toBe("idle");
+    expect(h.stores[0].replications).toBe(1);
+    let last = h.sessions.fetched;
+    for (let minute = 0; minute < 10; minute++) {
+      await h.clock.advance(60_000, settleWith(engine));
+      expect(h.sessions.fetched - last, `minute ${minute}`).toBeLessThanOrEqual(
+        4,
+      );
+      last = h.sessions.fetched;
+    }
+    expect(engine.status()).toBe("idle");
+    await engine.stop();
+  });
+
+  it("a grant that is only just long enough is accepted, one second under is not", async () => {
+    const accepted = harness({
+      session: async (_n, now) =>
+        session({ now, ttlMs: COUCH_MIN_GRANT_LIFE_MS }),
+    });
+    const a = await started(accepted);
+    expect(a.status()).toBe("idle");
+    await a.stop();
+
+    const refused = harness({
+      session: async (_n, now) =>
+        session({ now, ttlMs: COUCH_MIN_GRANT_LIFE_MS - 1_000 }),
+    });
+    const r = await started(refused);
+    expect(r.status()).toBe("backing_off");
+    await r.stop();
+  });
+
+  it("every grant the issuer lets through is long enough for the page, and the page's floor is above its own renewal lead", () => {
+    expect(COUCH_MIN_GRANT_LIFE_MS).toBeLessThan(COUCH_MIN_ACCESS_TOKEN_LIFE_MS);
+    expect(COUCH_MIN_GRANT_LIFE_MS).toBeGreaterThan(REFRESH_LEAD_MS);
+  });
+
+  it("two credential fetches are never closer than the minimum delay, even for a grant inside the renewal lead window", async () => {
+    const fetchedAt: number[] = [];
+    const h = harness({
+      session: async (n, now) => {
+        if (n > 400) throw new CouchSessionError(503, "runaway");
+        fetchedAt.push(now);
+        return session({ now, ttlMs: COUCH_MIN_GRANT_LIFE_MS });
+      },
+    });
+    const engine = await started(h);
+    await h.clock.advance(10 * 60_000, settleWith(engine));
+    expect(fetchedAt.length).toBeGreaterThan(2);
+    for (let i = 1; i < fetchedAt.length; i++) {
+      expect(fetchedAt[i] - fetchedAt[i - 1]).toBeGreaterThanOrEqual(
+        REFRESH_MIN_DELAY_MS,
+      );
+    }
+    await engine.stop();
+  });
+});
+
+describe("the local database belongs to the person who signed in", () => {
+  it("a 401 from the route closes this person's database and removes every local sync database", async () => {
+    let signedOut = false;
+    const h = harness({
+      session: async (_n, now) => {
+        if (signedOut) throw new CouchSessionError(401, "unauthorized");
+        return session({ now });
+      },
+    });
+    const engine = await started(h);
+    h.purged.length = 0;
+    signedOut = true;
+    await h.clock.advance(GRANT_TTL_MS, settleWith(engine));
+    expect(engine.status()).toBe("signed_out");
+    expect(h.stores[0].closed).toBe(true);
+    expect(h.purged).toEqual([null]);
+    // Once: nothing asks again.
+    await h.clock.advance(30 * 60_000, settleWith(engine));
+    h.triggers.forEach((t) => t("focus"));
+    await engine.idle();
+    expect(h.purged).toEqual([null]);
+    await engine.stop();
+  });
+
+  it("an anonymous visitor's first and only request also clears what an earlier sign-in left", async () => {
+    const h = harness({
+      session: async () => {
+        throw new CouchSessionError(401, "unauthorized");
+      },
+    });
+    const engine = createCouchSyncEngine(h.deps);
+    await engine.start();
+    await engine.idle();
+    expect(h.purged).toEqual([null]);
+    expect(h.stores).toHaveLength(0);
+    await engine.stop();
+  });
+
+  it("the first cycle for a person removes every OTHER person's database, once", async () => {
+    const h = harness();
+    const engine = await started(h);
+    expect(h.purged).toEqual([PERSON]);
+    await h.clock.advance(5 * 60_000, settleWith(engine));
+    expect(h.purged).toEqual([PERSON]);
+    await engine.stop();
+  });
+
+  it("a different person issued in the same run closes the first database and removes it", async () => {
+    const other = "0190ffff-0000-7000-8000-00000000abcd";
+    let who = PERSON;
+    const h = harness({
+      session: async (_n, now) => session({ now, personId: who }),
+    });
+    const engine = await started(h);
+    who = other;
+    await h.clock.advance(GRANT_TTL_MS, settleWith(engine));
+    expect(h.stores).toHaveLength(2);
+    expect(h.stores[0].closed).toBe(true);
+    expect(h.purged).toEqual([PERSON, other]);
+    await engine.stop();
+  });
+
+  it("a purge that fails or throws never reaches the page and never stops the sync", async () => {
+    const h = harness({
+      purge: () => {
+        throw new Error("IndexedDB is blocked");
+      },
+    });
+    const engine = await started(h);
+    expect(engine.status()).toBe("idle");
+    expect(h.stores[0].replications).toBe(1);
+    await engine.stop();
+
+    const signedOut = harness({
+      session: async () => {
+        throw new CouchSessionError(401, "unauthorized");
+      },
+      purge: () => {
+        throw new Error("IndexedDB is blocked");
+      },
+    });
+    const e2 = createCouchSyncEngine(signedOut.deps);
+    await e2.start();
+    await e2.idle();
+    expect(e2.status()).toBe("signed_out");
+    await e2.stop();
+  });
+
+  it("an engine given no way to purge works as before", async () => {
+    const h = harness();
+    delete h.deps.purgeStores;
+    const engine = await started(h);
+    expect(engine.status()).toBe("idle");
+    await engine.stop();
+  });
+
+  it("a 403 or a failure is not a sign-out: nothing is removed", async () => {
+    const h = harness({
+      session: async () => {
+        throw new CouchSessionError(403, "account_pending_deletion");
+      },
+    });
+    const engine = createCouchSyncEngine(h.deps);
+    await engine.start();
+    await engine.idle();
+    expect(h.purged).toEqual([]);
+    await engine.stop();
+  });
+});
+
+describe("only the leader tab replicates", () => {
+  const withStore = (configure: (s: FakeStore) => void) => {
+    const store = new FakeStore();
+    configure(store);
+    return harness({ makeStore: () => store });
+  };
+
+  it("a tab that is not the leader does not replicate, does not prepare the database, and drops the credential", async () => {
+    const h = withStore((s) => {
+      s.leader = false;
+    });
+    const engine = await started(h);
+    expect(h.stores[0].replications).toBe(0);
+    expect(h.ensured).toEqual([]);
+    expect(engine.status()).toBe("idle");
+    // No credential kept: no renewal timer, only the poll.
+    expect(h.clock.pending()).toEqual([POLL_INTERVAL_MS]);
+    await h.clock.advance(10 * 60_000, settleWith(engine));
+    expect(h.sessions.fetched).toBe(1);
+    expect(h.stores[0].replications).toBe(0);
+    await engine.stop();
+  });
+
+  it("a follower still applies what the shared database holds, and writes the person's own changes into it", async () => {
+    const h = withStore((s) => {
+      s.leader = false;
+      s.docs.set("preference:theme", {
+        id: "preference:theme",
+        type: "preference",
+        schemaVersion: 1,
+        ownerPersonId: PERSON,
+        deviceId: "11111111-2222-4333-8444-555555555555",
+        createdAt: "2026-11-02T09:00:00.000Z",
+        updatedAt: "2026-11-02T09:00:00.000Z",
+        preferenceKey: "theme",
+        preferenceValue: "dark",
+      });
+    });
+    const engine = await started(h);
+    expect(h.bridge.state.theme).toBe("dark");
+
+    h.bridge.change({ selectedActivities: ["livestock"] });
+    await h.clock.advance(LOCAL_WRITE_DEBOUNCE_MS, settleWith(engine));
+    expect(h.stores[0].upserts).toContain("activity:livestock");
+    expect(h.stores[0].replications).toBe(0);
+    await engine.stop();
+  });
+
+  it("a follower never seeds: that is the leader's job, after its first pull", async () => {
+    const h = withStore((s) => {
+      s.leader = false;
+    });
+    h.bridge.change({ theme: "dark", selectedActivities: ["livestock"] });
+    const engine = createCouchSyncEngine(h.deps);
+    // The change above was made before start, so it is the baseline.
+    await engine.start();
+    await engine.idle();
+    expect(h.stores[0].upserts).toEqual([]);
+    await engine.stop();
+  });
+
+  it("when the leader goes away the next cycle takes over: a new credential, the database prepared, replication, seeding", async () => {
+    const store = new FakeStore();
+    store.leader = false;
+    const h = harness({
+      makeStore: () => store,
+      bridge: { theme: "dark" },
+    });
+    const engine = await started(h);
+    expect(store.replications).toBe(0);
+
+    store.leader = true;
+    await h.clock.advance(POLL_INTERVAL_MS, settleWith(engine));
+    expect(h.sessions.fetched).toBe(2);
+    expect(h.ensured).toHaveLength(1);
+    expect(store.replications).toBeGreaterThanOrEqual(1);
+    expect(store.upserts).toContain("preference:theme");
+    await engine.stop();
+  });
+
+  it("a leader tab that is hidden replicates when another tab wrote, and only then", async () => {
+    const h = withStore(() => undefined);
+    const engine = await started(h);
+    const [store] = h.stores;
+    expect(store.replications).toBe(1);
+
+    h.flags.visible = false;
+    await h.clock.advance(5 * 60_000, settleWith(engine));
+    expect(store.replications).toBe(1); // hidden: nothing on a timer
+
+    store.emitShared(); // another tab wrote into the shared database
+    await h.clock.advance(PUSH_DEBOUNCE_MS, settleWith(engine));
+    expect(store.replications).toBe(2);
+    await engine.stop();
+  });
+
+  it("a hidden tab that is not the leader does nothing when another tab wrote", async () => {
+    const h = withStore((s) => {
+      s.leader = false;
+    });
+    const engine = await started(h);
+    h.flags.visible = false;
+    h.stores[0].emitShared();
+    await h.clock.advance(PUSH_DEBOUNCE_MS * 3, settleWith(engine));
+    expect(h.stores[0].replications).toBe(0);
+    expect(h.sessions.fetched).toBe(1);
+    await engine.stop();
+  });
+
+  it("a visible follower applies what the leader pulled soon after it lands", async () => {
+    const h = withStore((s) => {
+      s.leader = false;
+    });
+    const engine = await started(h);
+    h.stores[0].docs.set("preference:theme", {
+      id: "preference:theme",
+      type: "preference",
+      schemaVersion: 1,
+      ownerPersonId: PERSON,
+      deviceId: "11111111-2222-4333-8444-555555555555",
+      createdAt: "2026-11-02T09:00:00.000Z",
+      updatedAt: "2026-11-02T09:00:00.000Z",
+      preferenceKey: "theme",
+      preferenceValue: "light",
+    });
+    h.stores[0].emitShared();
+    await h.clock.advance(PUSH_DEBOUNCE_MS, settleWith(engine));
+    expect(h.bridge.state.theme).toBe("light");
+    await engine.stop();
+  });
+
+  it("writes the engine makes itself are not mistaken for another tab's: no cycle begets a cycle", async () => {
+    const store = new FakeStore();
+    store.onReplicate = () => store.emitShared(); // the pull writes documents
+    const h = harness({ makeStore: () => store });
+    const engine = await started(h);
+    await h.clock.advance(PUSH_DEBOUNCE_MS * 4, settleWith(engine));
+    expect(store.replications).toBe(1);
+    await engine.stop();
+  });
+
+  it("the shared-write listener is removed when the engine stops and when the person changes", async () => {
+    const h = withStore(() => undefined);
+    const engine = await started(h);
+    expect(h.stores[0].sharedListenerCount).toBe(1);
+    await engine.stop();
+    expect(h.stores[0].sharedListenerCount).toBe(0);
+  });
+});
+
 describe("credential lifetime", () => {
   it("asks again a minute before it expires, while the page is visible", async () => {
     const h = harness();
@@ -293,7 +750,7 @@ describe("failures", () => {
     await engine.stop();
   });
 
-  it("signed out (401 from the route): idle, nothing opened, a quiet re-check later", async () => {
+  it("signed out (401 from the route): idle until the next page load, nothing opened, no timer", async () => {
     const h = harness({
       session: async () => {
         throw new CouchSessionError(401, "unauthorized");
@@ -304,11 +761,61 @@ describe("failures", () => {
     await engine.idle();
     expect(engine.status()).toBe("signed_out");
     expect(h.stores).toHaveLength(0);
-    expect(h.clock.pending()).toEqual([30_000]);
+    expect(h.clock.pending()).toEqual([]);
     await engine.stop();
   });
 
-  it("signed out in another tab: the next credential request is a 401, the token is dropped and replication stops", async () => {
+  it("an anonymous visitor makes exactly one request, however long the page stays open and whatever happens to it", async () => {
+    const h = harness({
+      session: async () => {
+        throw new CouchSessionError(401, "unauthorized");
+      },
+    });
+    const engine = createCouchSyncEngine(h.deps);
+    await engine.start();
+    await engine.idle();
+    expect(h.sessions.fetched).toBe(1);
+
+    // Two simulated hours: focus every 20 s (past the cooldown), the network
+    // dropping and coming back, a change of theme in the app, the poll.
+    for (let i = 0; i < 360; i++) {
+      await h.clock.advance(20_000, settleWith(engine));
+      h.triggers.forEach((t) => t("focus"));
+      if (i % 60 === 0) h.triggers.forEach((t) => t("online"));
+      if (i % 90 === 0) h.bridge.change({ theme: i % 180 === 0 ? "dark" : "light" });
+      await engine.idle();
+    }
+    expect(h.sessions.fetched).toBe(1);
+    expect(engine.status()).toBe("signed_out");
+    expect(h.clock.pending()).toEqual([]);
+    expect(h.stores).toHaveLength(0);
+    await engine.stop();
+  });
+
+  it("signed out is not a failure: it counts nothing, and a restart (the next page load) asks again", async () => {
+    let signedIn = false;
+    const h = harness({
+      session: async (_n, now) => {
+        if (!signedIn) throw new CouchSessionError(401, "unauthorized");
+        return session({ now });
+      },
+    });
+    const engine = createCouchSyncEngine(h.deps);
+    await engine.start();
+    await engine.idle();
+    expect(engine.status()).toBe("signed_out");
+    await engine.stop();
+
+    signedIn = true;
+    await engine.start();
+    await engine.idle();
+    expect(h.sessions.fetched).toBe(2);
+    expect(engine.status()).toBe("idle");
+    expect(h.stores[0].replications).toBe(1);
+    await engine.stop();
+  });
+
+  it("signed out in another tab: the next credential request is a 401, the token is dropped and everything stops", async () => {
     let signedOut = false;
     const h = harness({
       session: async (_n, now) => {
@@ -320,14 +827,18 @@ describe("failures", () => {
     expect(h.stores[0].replications).toBe(1);
 
     signedOut = true;
-    // The credential lapses; the poll then asks the route again.
+    // The credential lapses; the renewal asks the route and is told no.
     await h.clock.advance(GRANT_TTL_MS, settleWith(engine));
     expect(engine.status()).toBe("signed_out");
     const replications = h.stores[0].replications;
-    // No more replication, only occasional quiet re-checks at the back-off pace.
+    const asked = h.sessions.fetched;
     await h.clock.advance(30 * 60_000, settleWith(engine));
+    h.triggers.forEach((t) => t("focus"));
+    h.triggers.forEach((t) => t("online"));
+    await engine.idle();
     expect(h.stores[0].replications).toBe(replications);
-    expect(h.sessions.fetched).toBeLessThan(10);
+    expect(h.sessions.fetched).toBe(asked);
+    expect(h.clock.pending()).toEqual([]);
     await engine.stop();
   });
 
