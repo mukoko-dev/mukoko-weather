@@ -217,13 +217,25 @@ pub struct HttpResponse {
 /// Why no response came back.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransportError {
+    /// The request's `timeout_ms` passed before the exchange finished.
     Timeout,
+    /// The connection failed or broke, before or during the body.
     Network,
+    /// The body passed the request's `max_bytes` (declared or while reading).
+    /// No part of it is returned.
+    TooLarge,
+    /// The body is not UTF-8 text.
+    NotText,
+    /// The transport would not send the request (see
+    /// `external_transport::check_request`). Nothing left the Worker.
+    Refused,
 }
 
 /// What a runtime supplies: one GET, under the limits of its [`HttpRequest`]. In
-/// a Worker this wraps `fetch`; its future is not `Send`, which is why the
-/// trait is not either.
+/// a Worker this wraps `fetch`
+/// (`weather_edge::feed_transport::WorkerTransport`, whose rules are the pure
+/// `external_transport`); its future is not `Send`, which is why the trait is
+/// not either.
 #[allow(async_fn_in_trait)]
 pub trait Transport {
     async fn get(&self, req: &HttpRequest) -> Result<HttpResponse, TransportError>;
@@ -249,19 +261,28 @@ pub enum FetchError {
     /// did. Either the window is bigger than expected or the server ignored
     /// the `datetime` filter; either way something to look at, not to hide.
     PageLimit,
+    /// The transport refused to send the request. It is ours (a bug, or a
+    /// configuration that would have sent a credential or called another
+    /// host), not the feed's, so it never counts against the breaker.
+    Refused,
 }
 
 impl FetchError {
     /// Whether this failure counts toward opening the breaker: the feed is
     /// unwell (transport, timeout, 5xx, 429, a body that is not the feed's).
     /// A 4xx or a redirect (never followed, see [`HttpRequest`]) is our
-    /// request, and does not. `RepeatedPage` and `PageLimit` are not HTTP
-    /// outcomes; they reach the schedule through [`Fetched::unwell`] instead.
+    /// request, and does not; nor does a request the transport refused to
+    /// send. `RepeatedPage` and `PageLimit` are not HTTP outcomes; they reach
+    /// the schedule through [`Fetched::unwell`] instead.
     pub fn counts_against_breaker(self) -> bool {
         match self {
             Self::Timeout | Self::Transport | Self::BadBody(_) => true,
             Self::Status(s) => s >= 500 || s == 429,
-            Self::Disabled(_) | Self::CircuitOpen | Self::RepeatedPage | Self::PageLimit => false,
+            Self::Disabled(_)
+            | Self::CircuitOpen
+            | Self::RepeatedPage
+            | Self::PageLimit
+            | Self::Refused => false,
         }
     }
 
@@ -278,6 +299,7 @@ impl FetchError {
             Self::BadBody(why) => why,
             Self::RepeatedPage => "repeated_page",
             Self::PageLimit => "page_limit",
+            Self::Refused => "refused_request",
         }
     }
 }
@@ -464,6 +486,9 @@ impl<'a, T: Transport> Fetcher<'a, T> {
         let outcome = match self.transport.get(&req).await {
             Err(TransportError::Timeout) => Err(FetchError::Timeout),
             Err(TransportError::Network) => Err(FetchError::Transport),
+            Err(TransportError::TooLarge) => Err(FetchError::BadBody("too_large")),
+            Err(TransportError::NotText) => Err(FetchError::BadBody("not_utf8")),
+            Err(TransportError::Refused) => Err(FetchError::Refused),
             Ok(r) if !(200..300).contains(&r.status) => Err(FetchError::Status(r.status)),
             Ok(r) if r.body.len() > MAX_BODY_BYTES => Err(FetchError::BadBody("too_large")),
             Ok(r) => match serde_json::from_str::<Value>(&r.body) {
@@ -1211,6 +1236,56 @@ mod tests {
     }
 
     #[test]
+    fn what_a_transport_reports_becomes_a_stable_fetch_error_and_only_the_feeds_faults_count() {
+        for (reported, want, counts, code) in [
+            (
+                TransportError::Timeout,
+                FetchError::Timeout,
+                true,
+                "timeout",
+            ),
+            (
+                TransportError::Network,
+                FetchError::Transport,
+                true,
+                "transport",
+            ),
+            (
+                TransportError::TooLarge,
+                FetchError::BadBody("too_large"),
+                true,
+                "too_large",
+            ),
+            (
+                TransportError::NotText,
+                FetchError::BadBody("not_utf8"),
+                true,
+                "not_utf8",
+            ),
+            (
+                TransportError::Refused,
+                FetchError::Refused,
+                false,
+                "refused_request",
+            ),
+        ] {
+            let mut b = breaker();
+            let t0 = at(NOW);
+            for _ in 0..3 {
+                let fake = Fake::new(vec![Err(reported)]);
+                let f = Fetcher::new(&fake, "0.13.0").with_switches(on());
+                let got = block_on(f.saaopa_registry(&mut b, t0)).unwrap_err();
+                assert_eq!(got, want);
+                assert_eq!(got.counts_against_breaker(), counts);
+                assert_eq!(got.code(), code);
+            }
+            // A request we would not send never opens the circuit for everyone.
+            let expect = if counts { State::Open } else { State::Closed };
+            assert_eq!(b.state(millis(t0)), expect, "{code}");
+        }
+    }
+
+    #[test]
     fn three_unwell_answers_open_the_breaker_and_an_open_breaker_makes_no_request() {
         let mut b = breaker();
         let t0 = at(NOW);
@@ -1442,5 +1517,6 @@ mod tests {
         assert_eq!(FetchError::PageLimit.code(), "page_limit");
         assert_eq!(FetchError::BadBody("not_json").code(), "not_json");
         assert_eq!(FetchError::Disabled(Feed::SaaopaStatus).code(), "disabled");
+        assert_eq!(FetchError::Refused.code(), "refused_request");
     }
 }
