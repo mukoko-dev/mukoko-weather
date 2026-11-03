@@ -4,6 +4,7 @@
  * cannot be issued, and (last describe) the real issuer end to end against a
  * fake gateway that applies nyuchi-api's exchange rules. No network.
  */
+import { readFileSync } from "node:fs";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   FakeNyuchiGateway,
@@ -11,6 +12,7 @@ import {
 } from "@/lib/test-support/fake-nyuchi-gateway";
 import { peekClaims } from "@/lib/gateway-person-token";
 import { COUCH_SESSION_PATH } from "@/lib/couch-session-timing";
+import { SIGNED_OUT_CODE } from "@/lib/couch-session-contract";
 
 const withAuthMock = vi.hoisted(() => vi.fn());
 vi.mock("@workos-inc/authkit-nextjs", () => ({ withAuth: withAuthMock }));
@@ -119,6 +121,8 @@ describe("guards, in order", () => {
     const { POST } = await import("./route");
     const res = await POST(post());
     expect(res.status).toBe(401);
+    // The code the page matches: a 401 without it never means "signed out".
+    expect(await res.clone().json()).toMatchObject({ error: SIGNED_OUT_CODE });
     expect(rateLimitMock).not.toHaveBeenCalled();
     expect(issueMock).not.toHaveBeenCalled();
     await noSecrets(res);
@@ -258,7 +262,7 @@ describe("when a credential is issued", () => {
   it("maps the issuer's own refusals to their status and code", async () => {
     const { POST } = await import("./route");
     for (const [code, status] of [
-      ["reauth_required", 401],
+      [SIGNED_OUT_CODE, 401],
       ["account_pending_deletion", 403],
       ["rate_limited", 429],
       ["couch_unavailable", 503],
@@ -283,6 +287,13 @@ describe("when a credential is issued", () => {
     expect(logged).not.toContain(CREDENTIAL);
     expect(logged).not.toContain(ACCESS);
     expect(logged).not.toContain("api.nyuchi.com");
+  });
+});
+
+describe("the route file", () => {
+  it("explains once why it checks that sync is set up before it spends the person's allowance", () => {
+    const source = readFileSync(`${__dirname}/route.ts`, "utf8");
+    expect(source.match(/Not configured here/g)).toHaveLength(1);
   });
 });
 
@@ -499,7 +510,7 @@ describe("end to end: the real issuer, the exchange rules of nyuchi-api, a fake 
     });
   });
 
-  it("a session the gateway says has ended: 401 reauth_required", async () => {
+  it("the gateway refusing the token of a person who IS signed in is a retry (503), never the 401 that means 'signed out'", async () => {
     vi.stubGlobal(
       "fetch",
       async () =>
@@ -515,8 +526,16 @@ describe("end to end: the real issuer, the exchange rules of nyuchi-api, a fake 
     );
     const { POST } = await import("./route");
     const res = await POST(post());
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ error: "couch_unavailable" });
+  });
+
+  it("the only 401 is the route's own, when nobody is signed in, and it says so with a code", async () => {
+    withAuthMock.mockResolvedValue({ user: null });
+    const { POST } = await import("./route");
+    const res = await POST(post());
     expect(res.status).toBe(401);
-    expect(await res.json()).toMatchObject({ error: "reauth_required" });
+    expect(await res.json()).toMatchObject({ error: SIGNED_OUT_CODE });
   });
 
   it("a WorkOS token from another client is never sent to the gateway: 503", async () => {

@@ -333,11 +333,20 @@ export class FakeCouch {
         return respond(400, { detail: "Not allowed: body_not_allowed" });
       }
     }
+    if (decision.kind === "changes" && body && typeof body === "object") {
+      // `check_json_body`: POST _changes carries only the filter's input.
+      const extra = Object.keys(body as Json).filter(
+        (k) => k !== "doc_ids" && k !== "selector",
+      );
+      if (extra.length > 0) {
+        return respond(400, { detail: "Not allowed: body_not_allowed" });
+      }
+    }
 
     const params = new Map(q.query);
     switch (path) {
       case "_changes":
-        return respond(200, this.changes(params));
+        return respond(200, this.changes(params, body as Json | undefined));
       case "_all_docs":
         return respond(
           200,
@@ -354,23 +363,41 @@ export class FakeCouch {
 
   // -- CouchDB behaviour ----------------------------------------------------
 
-  private changes(params: Map<string, string>): Json {
+  /**
+   * `_changes`, as CouchDB answers it. `filter=_doc_ids` keeps only the ids the
+   * body (POST) or the `doc_ids` parameter (GET) names. `last_seq` is the
+   * sequence of the last row when the page was cut at `limit`, and otherwise
+   * the end of the feed (the database's update sequence), also when no row
+   * matched: a feed with nothing new still moves the checkpoint to the end.
+   */
+  private changes(params: Map<string, string>, body?: Json): Json {
     const since = Number(params.get("since") ?? 0) || 0;
     const limit = Number(params.get("limit") ?? CHANGES_LIMIT_MAX);
     const includeDocs = params.get("include_docs") === "true";
-    const rows = [...this.docs.entries()]
-      .filter(([, s]) => s.seq > since)
-      .sort((a, b) => a[1].seq - b[1].seq)
-      .slice(0, limit);
+    let wanted: Set<string> | null = null;
+    if (params.get("filter") === "_doc_ids") {
+      const ids = Array.isArray(body?.doc_ids)
+        ? (body.doc_ids as unknown[])
+        : (JSON.parse(params.get("doc_ids") ?? "[]") as unknown[]);
+      wanted = new Set(ids.filter((i): i is string => typeof i === "string"));
+    }
+    const all = [...this.docs.entries()]
+      .filter(([id, s]) => s.seq > since && (!wanted || wanted.has(id)))
+      .sort((a, b) => a[1].seq - b[1].seq);
+    const rows = all.slice(0, limit);
     const results = rows.map(([id, s]) => {
       const row: Json = { seq: s.seq, id, changes: [{ rev: s.rev }] };
       if (s.deleted) row.deleted = true;
       if (includeDocs) row.doc = this.get(id);
       return row;
     });
-    const last =
-      rows.length > 0 ? rows[rows.length - 1][1].seq : since || this.seq;
-    return { results, last_seq: last, pending: 0 };
+    const cut = all.length > rows.length;
+    const last = cut ? rows[rows.length - 1][1].seq : Math.max(this.seq, since);
+    return {
+      results,
+      last_seq: last,
+      pending: cut ? all.length - rows.length : 0,
+    };
   }
 
   private allDocs(

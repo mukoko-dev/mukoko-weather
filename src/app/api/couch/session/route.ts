@@ -8,11 +8,12 @@
  *   - `Content-Type: application/json` and a same-origin `Origin` are
  *     required (415 / 403), checked before anything else, so a cross-site
  *     form costs nothing;
- *   - the visitor must be signed in (`withAuth()`; 401 otherwise). 401 is the
- *     one answer that tells the page "signed out" (it then removes its local
- *     copy of the person's settings), so it is given only for that: an access
- *     token that is missing or ended while a person IS signed in is a refresh
- *     that failed for a moment, and is 503 (the issuer);
+ *   - the visitor must be signed in (`withAuth()`; 401 otherwise). That is the
+ *     ONLY 401 this route gives, and its body carries `SIGNED_OUT_CODE`: the
+ *     page removes its local copy of the person's settings on exactly that, and
+ *     on nothing else. Whatever the WorkOS token or the gateway say about a
+ *     person who IS signed in (an access token missing or ended after a refresh
+ *     that failed for a moment, a refused exchange) is 503 (the issuer);
  *   - the site must be set up for sync (503 `couch_unavailable`), checked
  *     BEFORE the limit so that an unconfigured site writes nothing to Mongo;
  *   - a per-user limit (Mongo, `checkUserRateLimit`, 120 an hour: the
@@ -48,6 +49,7 @@ import {
   CouchIssueError,
   couchSessionIssuer,
 } from "@/lib/couch-session-issuer";
+import { SIGNED_OUT_CODE } from "@/lib/couch-session-contract";
 import { gatewayOrigin } from "@/lib/nyuchi-gateway";
 import { checkUserRateLimit } from "@/lib/user-rate-limit";
 import { logWarn } from "@/lib/observability";
@@ -58,8 +60,7 @@ export const dynamic = "force-dynamic";
 const COUCH_SESSION_LIMIT: [number, number] = [120, 3600];
 
 const MESSAGES: Record<string, string> = {
-  unauthorized: "Sign in to sync your settings.",
-  reauth_required: "Your session has ended. Sign in again.",
+  [SIGNED_OUT_CODE]: "Sign in to sync your settings.",
   account_pending_deletion: "This account is scheduled for deletion.",
   rate_limited: "Too many requests. Try again shortly.",
   couch_unavailable: "Sync is not available right now.",
@@ -90,11 +91,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const { userId, accessToken } = await currentSession();
-  if (!userId) return errorResponse(401, "unauthorized");
+  // The only 401 this route gives, and the page removes its local copy of the
+  // person's settings when it sees it, so it carries a code of its own.
+  if (!userId) return errorResponse(401, SIGNED_OUT_CODE);
 
-  // Not configured here: answer without touching Mongo. The limiter below is
-  // a write per request, and a route that can do nothing must not spend the
-  // person's hourly allowance (or the database's time) to say so.
   // Not configured here: answer without touching Mongo. The limiter below is
   // a write per request, and a route that can do nothing must not spend the
   // person's hourly allowance (or the database's time) to say so.

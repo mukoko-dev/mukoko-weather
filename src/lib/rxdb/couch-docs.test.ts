@@ -14,7 +14,6 @@ import {
   isOwnedDocId,
   isWellFormedDoc,
   patchFromDocs,
-  personIdFromDatabase,
   pickWireFields,
   planChangeOps,
   planSeedOps,
@@ -161,20 +160,10 @@ describe("ids and vocabulary", () => {
     expect(toRfc3339(T0 + 7)).toBe("2026-11-02T10:00:00.007Z");
   });
 
-  it("reads the person id from a personal database name only", () => {
-    expect(personIdFromDatabase(`user_${PERSON}`)).toBe(PERSON);
-    for (const bad of [
-      "family_x",
-      "user_",
-      "user_UPPER",
-      "user_a/b",
-      "_users",
-      "",
-      null,
-      7,
-    ]) {
-      expect(personIdFromDatabase(bad), String(bad)).toBeNull();
-    }
+  it("the database name rule lives in the contract module, not here", () => {
+    expect(readFileSync(join(__dirname, "couch-docs.ts"), "utf8")).not.toMatch(
+      /personIdFromDatabase|PERSONAL_DB_RE/,
+    );
   });
 });
 
@@ -695,12 +684,67 @@ describe("documents -> state", () => {
     expect(patch.selectedActivities).toEqual(["aquaculture", "beekeeping"]);
   });
 
-  it("an activity another device removed disappears; one this client cannot sync stays", () => {
+  it("the order of new activities is by when they were made, as instants (other clients write other RFC 3339 forms)", () => {
+    const made = (id: string, createdAt: string) => ({ ...act(id), createdAt });
+    const patch = patchFromDocs(
+      [
+        made("planting", "2026-11-03T12:00:00+02:00"), // 10:00:00Z
+        made("harvest", "2026-11-03T10:00:00.500Z"),
+        made("mining", "2026-11-03T10:00:00Z"), // the same instant: by id
+        made("weddings", "not a time"), // unreadable: last
+        made("aquaculture", "2026-11-03T09:59:59.999999Z"),
+      ],
+      state(),
+    );
+    expect(patch.selectedActivities).toEqual([
+      "aquaculture",
+      "mining",
+      "planting",
+      "harvest",
+      "weddings",
+    ]);
+  });
+
+  // A missing document is not a removal. An activity is dropped from the
+  // device only when the local database holds its TOMBSTONE (another device
+  // deleted it and the deletion was pulled). No document at all means this
+  // device has not seen it yet: a follower tab whose leader has not seeded, a
+  // first cycle, a pull that has not landed, a local database that was just
+  // created. Dropping on absence would erase a person's activities.
+  it("an activity another device removed (its tombstone is here) disappears; one with no document at all, and one this client cannot sync, stay", () => {
     const patch = patchFromDocs(
       [],
-      state({ selectedActivities: ["livestock", "Legacy_Id"] }),
+      state({
+        selectedActivities: ["livestock", "gardening", "Legacy_Id"],
+      }),
+      new Set(["activity:livestock"]),
     );
-    expect(patch.selectedActivities).toEqual(["Legacy_Id"]);
+    expect(patch.selectedActivities).toEqual(["gardening", "Legacy_Id"]);
+  });
+
+  it("with no documents and no tombstones nothing is removed, whatever the device holds", () => {
+    expect(
+      patchFromDocs(
+        [],
+        state({ selectedActivities: ["livestock", "gardening", "Legacy_Id"] }),
+      ),
+    ).toEqual({});
+    expect(
+      patchFromDocs(
+        [theme("dark")],
+        state({ selectedActivities: ["livestock"] }),
+      ),
+    ).toEqual({ theme: "dark" });
+  });
+
+  it("a tombstone for an id the device does not hold, or one that is live again, removes nothing", () => {
+    expect(
+      patchFromDocs(
+        [act("livestock")],
+        state({ selectedActivities: ["livestock"] }),
+        new Set(["activity:livestock", "activity:gardening"]),
+      ),
+    ).toEqual({});
   });
 
   it("a different order of the same activities is not a change", () => {
@@ -737,6 +781,7 @@ describe("documents -> state", () => {
       const patch = patchFromDocs(
         docsFor(["livestock", "crop-farming", "football"]),
         state({ selectedActivities: ids.slice(0, 4) }),
+        new Set(["activity:gardening"]),
       );
       expect(patch.selectedActivities).toEqual([
         "livestock",
@@ -751,6 +796,7 @@ describe("documents -> state", () => {
         state({
           selectedActivities: ["livestock", "gardening", "crop-farming"],
         }),
+        new Set(["activity:gardening"]),
       );
       expect(patch.selectedActivities).toEqual([
         "livestock",
@@ -768,8 +814,9 @@ describe("documents -> state", () => {
           act("planting", T0),
         ],
         state({ selectedActivities: ["livestock"] }),
+        new Set(["activity:livestock"]),
       );
-      // "livestock" has no document: another device removed it.
+      // "livestock" is a tombstone here: another device removed it.
       expect(patch.selectedActivities).toEqual([
         "planting",
         "aquaculture",
@@ -819,8 +866,16 @@ describe("documents -> state", () => {
       patchFromDocs(
         [doc({ id: "preference:homePlace" }), doc({ id: "savedPlace:x" })],
         state({ selectedActivities: ["livestock"] }),
+        new Set(["activity:livestock"]),
       ).selectedActivities,
     ).toEqual([]);
+    // They say nothing about activities: without a tombstone nothing changes.
+    expect(
+      patchFromDocs(
+        [doc({ id: "preference:homePlace" }), doc({ id: "savedPlace:x" })],
+        state({ selectedActivities: ["livestock"] }),
+      ),
+    ).toEqual({});
   });
 });
 
@@ -856,6 +911,71 @@ describe("conflict rule (couchdb-documents.md)", () => {
     const olderDelete = at(T0 - 5, { _deleted: true });
     expect(resolveUserDocConflict(master, newerDelete)).toBe(newerDelete);
     expect(resolveUserDocConflict(master, olderDelete)).toBe(master);
+  });
+
+  // The deployed validator accepts ANY RFC 3339 time (fractional digits of any
+  // length or none, `Z` or an offset), and another client writes the forms it
+  // likes. Compared as text these order wrongly ("00.500Z" sorts before "00Z",
+  // "12:00:00+02:00" after "10:30:00Z"), so instants are compared as instants.
+  describe("times are compared as instants, not as text", () => {
+    const doc = (updatedAt: unknown, who: string) =>
+      ({ id: "preference:theme", updatedAt, who }) as never;
+
+    it.each([
+      // [master, fork, who wins]
+      ["2026-11-03T10:00:00Z", "2026-11-03T10:00:00.500Z", "fork"],
+      ["2026-11-03T10:00:00.500Z", "2026-11-03T10:00:00Z", "master"],
+      ["2026-11-03T10:00:00.5Z", "2026-11-03T10:00:00.500Z", "master"], // equal
+      ["2026-11-03T10:00:00.250Z", "2026-11-03T10:00:00.5Z", "fork"],
+      // 12:00+02:00 is 10:00Z: earlier than 10:30Z although it sorts after it.
+      ["2026-11-03T12:00:00+02:00", "2026-11-03T10:30:00Z", "fork"],
+      ["2026-11-03T10:30:00Z", "2026-11-03T12:00:00+02:00", "master"],
+      // The same instant in two forms is a tie: the server's stays.
+      ["2026-11-03T12:00:00+02:00", "2026-11-03T10:00:00Z", "master"],
+      ["2026-11-03T10:00:00Z", "2026-11-03T05:00:00-05:00", "master"],
+      // More fractional digits than a millisecond are cut, not refused.
+      ["2026-11-03T10:00:00.123456Z", "2026-11-03T10:00:00.124Z", "fork"],
+    ])("master %s, fork %s: %s wins", (m, f, who) => {
+      const master = doc(m, "master");
+      const fork = doc(f, "fork");
+      expect(resolveUserDocConflict(master, fork)).toBe(
+        who === "fork" ? fork : master,
+      );
+    });
+
+    it.each([
+      ["not a time"],
+      [""],
+      ["2026-11-03"],
+      ["2026-11-03 10:00:00Z"],
+      ["2026-13-45T25:61:61Z"],
+      [12345],
+      [null],
+      [undefined],
+    ])(
+      "an unparsable time (%j) on either side leaves the server's revision",
+      (bad) => {
+        const good = "2026-11-03T10:00:00Z";
+        const a = doc(good, "master");
+        const b = doc(bad, "fork");
+        expect(resolveUserDocConflict(a, b)).toBe(a);
+        // And when the server's is the unreadable one, it still stays.
+        const c = doc(bad, "master");
+        const d = doc(good, "fork");
+        expect(resolveUserDocConflict(c, d)).toBe(c);
+      },
+    );
+
+    it("a local delete is ordered by its instant too", () => {
+      const master = doc("2026-11-03T12:00:00+02:00", "master");
+      const later = {
+        id: "preference:theme",
+        updatedAt: "2026-11-03T10:30:00Z",
+        who: "fork",
+        _deleted: true,
+      } as never;
+      expect(resolveUserDocConflict(master, later)).toBe(later);
+    });
   });
 });
 

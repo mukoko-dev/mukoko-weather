@@ -26,6 +26,7 @@ import {
   peekClaims,
 } from "./gateway-person-token";
 import { COUCH_MIN_ACCESS_TOKEN_LIFE_MS } from "./couch-session-timing";
+import { SIGNED_OUT_CODE } from "./couch-session-contract";
 import {
   FakeNyuchiGateway,
   fakeJwt,
@@ -304,14 +305,33 @@ describe("what it hands back", () => {
 });
 
 describe("what the gateway can say, and what the page is told", () => {
-  it("a session that ended is reauth_required", async () => {
+  // 401 is the one status that tells the page "nobody is signed in" (it removes
+  // its local copy of the person's settings). The route has already seen a
+  // person signed in by the time the gateway is asked, so whatever the gateway
+  // says about the WorkOS token (revoked, skewed, the wrong client, an operator
+  // misconfiguration) is a reason to retry later, never "signed out".
+  it("the gateway refusing the WorkOS token of a person who IS signed in is couch_unavailable, not 'signed out'", async () => {
     const { issuer } = stubbed(() =>
       refusal(400, "invalid_grant", "The WorkOS session has ended."),
     );
     expect(await failure(issuer)).toMatchObject({
-      code: "reauth_required",
-      status: 401,
+      code: "couch_unavailable",
+      status: 503,
     });
+  });
+
+  it("every other refusal while a person is signed in is also a retry, never a 401", async () => {
+    for (const [status, error] of [
+      [401, "invalid_client"],
+      [400, "invalid_client"],
+      [400, "invalid_scope"],
+      [400, "invalid_request"],
+      [403, "forbidden"],
+    ] as const) {
+      const { issuer } = stubbed(() => refusal(status, error, "no"));
+      const err = await failure(issuer);
+      expect(err, `${status} ${error}`).toMatchObject({ status: 503 });
+    }
   });
 
   it("a scheduled deletion is account_pending_deletion, not 'sign in again'", async () => {
@@ -485,26 +505,42 @@ describe("a token that does not leave the server", () => {
     expect(gateway.requests).toEqual([]);
   });
 
-  it("nobody signed in is reauth_required: the one case that says the session has ended", async () => {
+  it("nobody signed in is signed_out: the one case that says so (401, with the code the page matches)", async () => {
     const err = await make()
       .issue({ userId: "", accessToken: accessToken() })
       .then(
         () => null,
         (e: unknown) => e,
       );
-    expect(err).toMatchObject({ code: "reauth_required", status: 401 });
+    expect(err).toMatchObject({ code: SIGNED_OUT_CODE, status: 401 });
     expect(gateway.requests).toEqual([]);
   });
 
-  it("nothing is sent for something that is no JWT", async () => {
+  it("nothing is sent for something that is no JWT, and for a person who is signed in that is a retry, not 'signed out'", async () => {
     const err = await make()
       .issue({ userId: WORKOS_USER, accessToken: "not-a-jwt" })
       .then(
         () => null,
         (e: unknown) => e,
       );
-    expect(err).toMatchObject({ code: "reauth_required", status: 401 });
+    expect(err).toMatchObject({ code: "couch_unavailable", status: 503 });
     expect(gateway.requests).toEqual([]);
+  });
+
+  it("no refusal of any kind can come out as a 401 for a signed-in person", async () => {
+    const tokens = [undefined, "", "not-a-jwt", accessToken(-5), accessToken()];
+    for (const token of tokens) {
+      const { issuer } = stubbed(() =>
+        refusal(400, "invalid_grant", "The WorkOS session has ended."),
+      );
+      const err = await issuer
+        .issue({ userId: WORKOS_USER, accessToken: token })
+        .then(
+          () => null,
+          (e: unknown) => e,
+        );
+      expect(err, String(token).slice(0, 10)).toMatchObject({ status: 503 });
+    }
   });
 
   // The route has already answered 401 for a request with no user, so a user

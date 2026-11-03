@@ -25,7 +25,7 @@
 import { parseBareOrigin } from "../bare-origin";
 import { COUCH_SESSION_PATH } from "../couch-session-timing";
 import { COUCH_REQUEST_TIMEOUT_MS, CouchHttpError } from "./couch-fetch";
-import { personIdFromDatabase } from "./couch-docs";
+import { personIdFromDatabase } from "../couch-session-contract";
 
 export interface CouchSession {
   token: string;
@@ -76,41 +76,54 @@ export function parseSessionBody(body: unknown): CouchSession {
   };
 }
 
-/** Ask the route for a credential. Never retries; the engine decides that. */
+/**
+ * Ask the route for a credential. Never retries; the engine decides that. One
+ * timeout covers the whole exchange (the answer and its body): a request that
+ * never answers must not hold the sync for ever, because every later cycle
+ * queues behind it. Past it the answer is "no answer" (`status` 0).
+ */
 export async function fetchCouchSession(
   fetchImpl: typeof fetch = fetch,
+  timeoutMs: number = COUCH_REQUEST_TIMEOUT_MS,
 ): Promise<CouchSession> {
-  let response: Response;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    response = await fetchImpl(COUCH_SESSION_PATH, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "{}",
-      credentials: "same-origin",
-      cache: "no-store",
-    });
-  } catch {
-    throw new CouchSessionError(0, "offline");
-  }
-  if (!response.ok) {
-    let code = "unavailable";
+    let response: Response;
     try {
-      const body = (await response.json()) as { error?: unknown };
-      if (typeof body.error === "string" && CODE_RE.test(body.error)) {
-        code = body.error;
-      }
+      response = await fetchImpl(COUCH_SESSION_PATH, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+        credentials: "same-origin",
+        cache: "no-store",
+        signal: controller.signal,
+      });
     } catch {
-      /* keep the generic code */
+      throw new CouchSessionError(0, "offline");
     }
-    throw new CouchSessionError(response.status, code);
+    if (!response.ok) {
+      let code = "unavailable";
+      try {
+        const body = (await response.json()) as { error?: unknown };
+        if (typeof body.error === "string" && CODE_RE.test(body.error)) {
+          code = body.error;
+        }
+      } catch {
+        /* keep the generic code */
+      }
+      throw new CouchSessionError(response.status, code);
+    }
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      throw new CouchSessionError(502, "bad_session");
+    }
+    return parseSessionBody(body);
+  } finally {
+    clearTimeout(timer);
   }
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    throw new CouchSessionError(502, "bad_session");
-  }
-  return parseSessionBody(body);
 }
 
 /** `https://<api>/v1/couch/personal`, on the same origin as the database URL. */

@@ -12,6 +12,7 @@
  * the same shape as the device-profile sync (`device-profile.ts`).
  */
 
+import { SIGNED_OUT_CODE } from "../couch-session-contract";
 import { REFRESH_MIN_DELAY_MS as SHARED_REFRESH_MIN_DELAY_MS } from "../couch-session-timing";
 
 /** First wait after a failure. */
@@ -95,19 +96,26 @@ export type FailureAction =
  * Decides what to do after a failure. `status` is the HTTP status when there
  * is one (0 or undefined: no response, i.e. offline, DNS, timeout).
  * `alreadyRefetched` is true when this attempt already used its one refetch.
+ * `code` is the `error` the route's answer carried.
  *
  * 401 from CouchDB's side: the grant was refused (expired early, or the
  * gateway's key rotated), so fetch a new one once; a second 401 is a real problem
- * and backs off. 401 from OUR session route means the person is signed out.
- * 403, 404, 429, 5xx and network errors all back off.
+ * and backs off. From OUR session route the person is signed out ONLY when the
+ * answer is a 401 that says so with `SIGNED_OUT_CODE`: going idle removes the
+ * local copy of their settings, which may hold the only record of a change made
+ * offline, so a 401 without the code (and every other status) is a failure to
+ * retry, never a sign-out. 403, 404, 429, 5xx and network errors all back off.
  */
 export function failureAction(
   source: "route" | "couch",
   status: number | undefined,
   alreadyRefetched: boolean,
+  code?: string,
 ): FailureAction {
   if (status === 401) {
-    if (source === "route") return "stay_idle";
+    if (source === "route") {
+      return code === SIGNED_OUT_CODE ? "stay_idle" : "back_off";
+    }
     return alreadyRefetched ? "back_off" : "refetch_token_once";
   }
   return "back_off";

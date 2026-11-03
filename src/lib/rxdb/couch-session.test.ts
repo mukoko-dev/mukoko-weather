@@ -8,6 +8,7 @@ import {
 } from "./couch-session";
 import { CouchHttpError } from "./couch-fetch";
 import { COUCH_SESSION_PATH } from "../couch-session-timing";
+import { SIGNED_OUT_CODE } from "../couch-session-contract";
 
 const PERSON = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
 const good = {
@@ -79,6 +80,51 @@ describe("fetchCouchSession", () => {
     expect(new Headers(init.headers).get("content-type")).toBe(
       "application/json",
     );
+  });
+
+  it("a request that never answers ends at the timeout as 'no answer', instead of holding the sync for ever", async () => {
+    let aborted = false;
+    const hung = ((_url: string, init?: RequestInit) =>
+      new Promise<Response>((_, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          aborted = true;
+          reject(new DOMException("aborted", "AbortError"));
+        });
+      })) as unknown as typeof fetch;
+    await expect(fetchCouchSession(hung, 20)).rejects.toMatchObject({
+      status: 0,
+      code: "offline",
+    });
+    expect(aborted).toBe(true);
+  });
+
+  it("a body that never arrives is also cut off by the timeout", async () => {
+    const slowBody = (async (_url: string, init?: RequestInit) => {
+      const res = new Response(null, { status: 200 });
+      res.json = () =>
+        new Promise((_, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")),
+          );
+        });
+      return res;
+    }) as unknown as typeof fetch;
+    await expect(fetchCouchSession(slowBody, 20)).rejects.toMatchObject({
+      status: 502,
+    });
+  });
+
+  it("a 401 keeps its code: the signed-out code is what tells the engine nobody is signed in", async () => {
+    await expect(
+      fetchCouchSession(reply(401, { error: SIGNED_OUT_CODE })),
+    ).rejects.toMatchObject({ status: 401, code: SIGNED_OUT_CODE });
+    // A 401 with no readable code carries the generic one, which is not it.
+    for (const body of [{}, { error: "<b>x</b>" }, "plain"]) {
+      const err = await fetchCouchSession(reply(401, body)).catch(
+        (e: unknown) => e,
+      );
+      expect(err).toMatchObject({ status: 401, code: "unavailable" });
+    }
   });
 
   it("a refusal carries the status and the route's code", async () => {

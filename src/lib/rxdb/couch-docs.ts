@@ -87,9 +87,6 @@ export const ACTIVITY_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const OWNED_ID_RE = new RegExp(
   `^(?:activity:[a-z0-9][a-z0-9-]{0,63}|preference:(?:${SYNCED_PREFERENCE_KEYS.join("|")}))$`,
 );
-/** `user_<personId>`: a CouchDB database name made of lower-case characters. */
-const PERSONAL_DB_RE = /^user_([a-z0-9][a-z0-9_-]{0,127})$/;
-
 const RFC3339_MS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -147,9 +144,49 @@ export function isOwnedDocId(id: unknown): id is string {
   return typeof id === "string" && OWNED_ID_RE.test(id);
 }
 
+/**
+ * Every id this client can have a document for: the two settings and one per
+ * activity the app offers. Short, fixed and derived from the app's own
+ * vocabulary, so the list the changes feed is filtered by (`filter=_doc_ids`,
+ * `couch-fetch.ts`) is bounded whatever is in the database: documents other
+ * clients keep there are never listed, never counted against a page of the pull
+ * and never able to hold it up.
+ */
+export function ownedDocIds(): string[] {
+  return [
+    ...SYNCED_PREFERENCE_KEYS.map(preferenceDocId),
+    ...ACTIVITIES.map((a) => activityDocId(a.id)),
+  ];
+}
+
 /** The CouchDB wire form of a time: always three fractional digits, UTC. */
 export function toRfc3339(ms: number): string {
   return new Date(ms).toISOString();
+}
+
+/**
+ * Any RFC 3339 time the deployed validator accepts (nyuchi-api
+ * `couch_validate_personal.js`: fractional digits of any length or none, `Z` or
+ * a `+hh:mm` / `-hh:mm` offset), not only the one form this client writes.
+ */
+const RFC3339_ANY_RE =
+  /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$/;
+
+/**
+ * A time as an instant in milliseconds, or null when it is not RFC 3339 or not
+ * a real date. Times are compared as instants and never as text: as text
+ * `…00.500Z` sorts before `…00Z`, and `12:00:00+02:00` (10:00 UTC) after
+ * `10:30:00Z`, so another client's choice of form would decide who wins a
+ * conflict. Fractional digits beyond a millisecond are cut (this client writes
+ * milliseconds; the tie that cutting can make is the server's to keep).
+ */
+export function instantMs(value: unknown): number | null {
+  if (typeof value !== "string") return null;
+  const m = RFC3339_ANY_RE.exec(value);
+  if (!m) return null;
+  const fraction = (m[2] ?? "").slice(0, 3).padEnd(3, "0");
+  const ms = Date.parse(`${m[1]}.${fraction}${m[3]}`);
+  return Number.isFinite(ms) ? ms : null;
 }
 
 export function isThemeValue(v: unknown): v is ThemeValue {
@@ -185,13 +222,6 @@ export function isKnownActivityId(v: unknown): v is string {
  * already holds here is never dropped to make room.
  */
 export const MAX_SYNCED_ACTIVITIES = 30;
-
-/** The person id inside a `user_<personId>` database name, else null. */
-export function personIdFromDatabase(database: unknown): string | null {
-  if (typeof database !== "string") return null;
-  const match = PERSONAL_DB_RE.exec(database);
-  return match ? match[1] : null;
-}
 
 /** True for a deleted document: RxDB's `_deleted` or CouchDB's. */
 function isDeleted(doc: { _deleted?: boolean }): boolean {
@@ -331,14 +361,18 @@ export function toPullDoc<T extends { id: string; _deleted?: boolean }>(
  *   theme, forecast model  from their document, when it exists and holds a
  *                          value the data model allows
  *   activities             the local list in the person's own order, minus
- *                          the ids another device removed, plus the ids the
- *                          device does not hold yet (oldest first, then by
- *                          id); an id this client could not have synced (one
- *                          outside the id pattern) is never dropped
+ *                          the ids another device removed (`deletedIds`: the
+ *                          ids whose TOMBSTONE the local database holds; an
+ *                          id with no document at all has simply not been
+ *                          seen yet and stays), plus the ids the device does
+ *                          not hold yet (oldest first, then by id, up to the
+ *                          device profile's limit); an id this client does
+ *                          not know is never dropped
  */
 export function patchFromDocs(
   docs: readonly UserDocType[],
   current: SyncableState,
+  deletedIds: ReadonlySet<string> = new Set(),
 ): SyncedPatch {
   const live = docs.filter((d) => isOwnedDocId(d.id));
   const patch: SyncedPatch = {};
@@ -361,22 +395,26 @@ export function patchFromDocs(
   // profile or the AI summary's first three.
   const fromDocs = live
     .filter((d) => d.type === "activity" && isKnownActivityId(d.activityId))
+    // Oldest first, as instants (an unreadable time sorts last), then by id.
     .sort(
       (a, b) =>
-        (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0) ||
-        (a.id < b.id ? -1 : 1),
+        compareInstants(a.createdAt, b.createdAt) || (a.id < b.id ? -1 : 1),
     )
     .map((d) => d.activityId as string);
   const wanted = new Set(fromDocs);
   const held = new Set(current.selectedActivities);
   // The person's own order is theirs: it decides which three activities the
-  // AI advice is about. Keep what the device holds where it is (dropping the
-  // ids another device removed; an id this client does not know is never
-  // dropped), then append the ids it does not hold yet, oldest first, only
-  // while there is room under the device profile's limit. Nothing the person
-  // already holds is removed to make room.
+  // AI advice is about. Keep what the device holds where it is, then append the
+  // ids it does not hold yet, oldest first, only while there is room under the
+  // device profile's limit. Nothing the person already holds is removed to make
+  // room, and nothing is removed because a document is MISSING: an id goes only
+  // when its tombstone is here (`deletedIds`: another device deleted it and the
+  // deletion was pulled), and an id this client does not know never goes.
   const kept = current.selectedActivities.filter(
-    (id) => !isKnownActivityId(id) || wanted.has(id),
+    (id) =>
+      !isKnownActivityId(id) ||
+      wanted.has(id) ||
+      !deletedIds.has(activityDocId(id)),
   );
   const room = Math.max(0, MAX_SYNCED_ACTIVITIES - kept.length);
   const next = [
@@ -388,6 +426,13 @@ export function patchFromDocs(
     patch.selectedActivities = next;
   }
   return patch;
+}
+
+/** -1, 0 or 1 by instant; a time that cannot be read is after every one that can. */
+function compareInstants(a: unknown, b: unknown): number {
+  const x = instantMs(a) ?? Number.POSITIVE_INFINITY;
+  const y = instantMs(b) ?? Number.POSITIVE_INFINITY;
+  return x === y ? 0 : x < y ? -1 : 1;
 }
 
 function sameMembers(a: readonly string[], b: readonly string[]): boolean {
@@ -549,19 +594,20 @@ type ConflictDoc = Partial<UserDocType> & { id: string; _deleted?: boolean };
 
 /**
  * The winner of two documents for one id: `master` is what CouchDB holds,
- * `fork` is this device's version. Later `updatedAt` wins; on a tie the
- * master stays. A tombstone from the master has no `updatedAt` and wins; a
- * local tombstone (which keeps its `updatedAt` on the device) is ordered
- * normally.
+ * `fork` is this device's version. The later `updatedAt` wins, compared as
+ * instants (`instantMs`: any RFC 3339 form, not text); on a tie the master
+ * stays, and so it does when either time cannot be read (the server's
+ * revision is the one every device already agrees on). A tombstone from the
+ * master has no `updatedAt` and wins; a local tombstone (which keeps its
+ * `updatedAt` on the device) is ordered normally.
  */
 export function resolveUserDocConflict<T extends ConflictDoc>(
   master: T,
   fork: T,
 ): T {
   if (isDeleted(master) && master.updatedAt === undefined) return master;
-  const m = master.updatedAt;
-  const f = fork.updatedAt;
-  if (typeof f === "string" && typeof m === "string" && f > m) return fork;
-  if (typeof f === "string" && typeof m !== "string") return fork;
-  return master;
+  const m = instantMs(master.updatedAt);
+  const f = instantMs(fork.updatedAt);
+  if (m === null || f === null) return master;
+  return f > m ? fork : master;
 }

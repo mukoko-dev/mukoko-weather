@@ -61,7 +61,10 @@
  * `src/lib/test-support/fake-nyuchi-gateway.ts`.
  */
 
-import { personIdFromDatabase } from "./rxdb/couch-docs";
+import {
+  SIGNED_OUT_CODE,
+  personIdFromDatabase,
+} from "./couch-session-contract";
 import {
   consoleClientId,
   createPersonTokenExchanger,
@@ -87,14 +90,21 @@ export interface IssuedCouchCredential {
   database: string;
 }
 
+/**
+ * `signed_out` is the one code with a 401, and it means exactly one thing:
+ * nobody is signed in (`SIGNED_OUT_CODE`, the code the page matches before it
+ * removes its local copy of the person's settings). Everything the gateway or
+ * the WorkOS token can say about a person who IS signed in is a retry
+ * (`couch_unavailable`, 503), or one of the two explicit refusals below.
+ */
 export type CouchIssueErrorCode =
-  | "reauth_required" // the WorkOS session ended
+  | typeof SIGNED_OUT_CODE
   | "account_pending_deletion"
   | "rate_limited"
   | "couch_unavailable";
 
 const STATUS: Record<CouchIssueErrorCode, number> = {
-  reauth_required: 401,
+  [SIGNED_OUT_CODE]: 401,
   account_pending_deletion: 403,
   rate_limited: 429,
   couch_unavailable: 503,
@@ -156,16 +166,19 @@ export interface GrantSource {
 function mapExchangeError(err: unknown): unknown {
   if (!(err instanceof PersonTokenError)) return err;
   switch (err.code) {
-    case "reauth_required":
-      return new CouchIssueError("reauth_required");
     case "account_pending_deletion":
       return new CouchIssueError("account_pending_deletion");
     case "rate_limited":
       return new CouchIssueError("rate_limited", err.retryAfterSeconds);
     default:
+      // reauth_required (the gateway refusing the WorkOS token: a revoked or
+      // skewed one, a client mismatch, an operator misconfiguration),
       // gateway_unconfigured, wrong_workos_client, exchange_refused,
-      // person_not_provisioned, gateway_unavailable: sync is not available
-      // for this person right now; the page stays local-only and backs off.
+      // person_not_provisioned, gateway_unavailable. The route has just seen a
+      // person signed in, so none of this is "signed out": sync is not
+      // available for them right now, the page keeps its local copy and backs
+      // off. A session that really ended is the route's own 401 (no user),
+      // which comes first and never reaches the gateway.
       return new CouchIssueError("couch_unavailable");
   }
 }
@@ -224,7 +237,7 @@ export function createCouchSessionIssuer(deps: {
       // Nobody signed in is the only case that says the session has ended: the
       // page treats 401 as "signed out" and removes its local copy of the
       // person's settings, so it is never used for a doubt.
-      if (!userId) throw new CouchIssueError("reauth_required");
+      if (!userId) throw new CouchIssueError(SIGNED_OUT_CODE);
 
       // A person IS signed in (the route has just seen them), so a missing or
       // ended access token is AuthKit's refresh failing for a moment (WorkOS

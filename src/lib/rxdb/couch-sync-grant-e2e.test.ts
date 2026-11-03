@@ -247,7 +247,7 @@ describe("the first sync", () => {
     const calls = callsOf(w);
     expect(calls[0]).toBe("POST /v1/couch/personal");
     expect(calls.slice(1)).toEqual(
-      expect.arrayContaining(["GET _changes", "POST _bulk_docs"]),
+      expect.arrayContaining(["POST _changes", "POST _bulk_docs"]),
     );
     expect(calls.filter((c) => c === "POST /v1/couch/personal")).toHaveLength(
       1,

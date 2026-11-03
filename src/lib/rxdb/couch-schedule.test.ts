@@ -11,6 +11,7 @@ import {
   renewalDelayMs,
 } from "./couch-schedule";
 import { REFRESH_MIN_DELAY_MS as SHARED_MIN } from "../couch-session-timing";
+import { SIGNED_OUT_CODE } from "../couch-session-contract";
 
 const NOW = 1_000_000_000_000;
 const exact = () => 0.5; // spread factor 1.0
@@ -111,8 +112,34 @@ describe("failureAction", () => {
     expect(failureAction("couch", 401, true)).toBe("back_off");
   });
 
-  it("a 401 from our own route means signed out", () => {
-    expect(failureAction("route", 401, false)).toBe("stay_idle");
+  it("a 401 from our own route means signed out ONLY when it says so with the code", () => {
+    expect(failureAction("route", 401, false, SIGNED_OUT_CODE)).toBe(
+      "stay_idle",
+    );
+    expect(failureAction("route", 401, true, SIGNED_OUT_CODE)).toBe(
+      "stay_idle",
+    );
+  });
+
+  it("any other 401 from the route (no code, another code) is a failure to retry, never a sign-out", () => {
+    for (const code of [
+      undefined,
+      "",
+      "unauthorized",
+      "reauth_required",
+      "x",
+    ]) {
+      expect(failureAction("route", 401, false, code), String(code)).toBe(
+        "back_off",
+      );
+    }
+    // The code alone does not make anything else a sign-out.
+    for (const status of [400, 403, 429, 503, 0, undefined]) {
+      expect(failureAction("route", status, false, SIGNED_OUT_CODE)).toBe(
+        "back_off",
+      );
+    }
+    expect(failureAction("couch", 401, true, SIGNED_OUT_CODE)).toBe("back_off");
   });
 
   it("404, 503, 403, 429, 5xx and no answer all back off", () => {

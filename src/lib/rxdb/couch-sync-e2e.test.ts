@@ -578,6 +578,117 @@ describe("what never leaves the device", () => {
   });
 });
 
+describe("a long feed of documents this client does not own", () => {
+  // Another client (the mobile app) keeps ciphertext documents in the same
+  // database: interests, saved places, one event per interaction (`interest` is
+  // the type of the data model that the deployed validator accepts today; its
+  // camelCase types are refused, see the contract-delta test in
+  // couch-docs.test.ts). RxDB's pull
+  // stops without saving its checkpoint when a page yields no document, so if
+  // the documents this client skipped were only dropped after the fact, a whole
+  // page of them would keep the next cycle on the same `since` for ever and the
+  // person's own settings behind them would never arrive.
+  const PAGE = 200; // PULL_BATCH in couch-rxdb.ts
+  const foreign = (n: number) => ({
+    _id: `interest:0190a1b2-c3d4-7e5f-8a9b-${String(n).padStart(12, "0")}`,
+    type: "interest",
+    schemaVersion: 1,
+    ownerPersonId: PERSON,
+    updatedAt: "2026-11-02T09:00:00.000Z",
+    envelope: { protected: "p", aad: "a", iv: "i", ciphertext: "c", tag: "t" },
+  });
+  const seedForeign = (count: number) => {
+    for (let i = 0; i < count; i += 1) {
+      const res = couch.seed(foreign(i));
+      expect(res.ok, JSON.stringify(res)).toBe(true);
+    }
+  };
+  const ownedByAnotherDevice = () => {
+    expect(
+      couch.seed({
+        _id: "preference:theme",
+        type: "preference",
+        schemaVersion: 1,
+        ownerPersonId: PERSON,
+        deviceId: "99999999-2222-4333-8444-555555555555",
+        createdAt: "2026-11-02T09:30:00.000Z",
+        updatedAt: "2026-11-02T09:30:00.000Z",
+        preferenceKey: "theme",
+        preferenceValue: "dark",
+      }).ok,
+    ).toBe(true);
+    expect(
+      couch.seed({
+        _id: "activity:livestock",
+        type: "activity",
+        schemaVersion: 1,
+        ownerPersonId: PERSON,
+        deviceId: "99999999-2222-4333-8444-555555555555",
+        createdAt: "2026-11-02T09:30:00.000Z",
+        updatedAt: "2026-11-02T09:30:00.000Z",
+        activityId: "livestock",
+      }).ok,
+    ).toBe(true);
+  };
+
+  it("more than two pages of foreign documents, then the person's own: the own ones still arrive", async () => {
+    fresh();
+    seedForeign(PAGE * 2 + 50);
+    ownedByAnotherDevice();
+
+    const b = device("b");
+    await startDevice(b);
+    expect(b.bridge.state.theme).toBe("dark");
+    expect(b.bridge.state.selectedActivities).toEqual(["livestock"]);
+    // Not by luck of one cycle: a second cycle changes nothing.
+    await b.sync();
+    expect(b.bridge.state.theme).toBe("dark");
+  });
+
+  it("foreign documents arriving after the person's own do not hold anything back either", async () => {
+    fresh();
+    ownedByAnotherDevice();
+    seedForeign(PAGE + 10);
+    const b = device("b");
+    await startDevice(b);
+    expect(b.bridge.state.theme).toBe("dark");
+  });
+
+  it("a feed that is entirely foreign ends: no error, nothing applied, a bounded number of requests per cycle", async () => {
+    fresh();
+    seedForeign(PAGE * 2 + 50);
+    const b = device("b");
+    await startDevice(b);
+    expect(b.engine.status()).toBe("idle");
+    const before = couch.calls.filter((c) => c.path === "_changes").length;
+    await b.sync();
+    await b.sync();
+    expect(b.engine.status()).toBe("idle");
+    expect(b.bridge.applied).toEqual([]);
+    const changes = couch.calls.filter((c) => c.path === "_changes");
+    // At most a couple per cycle, however long the foreign stretch is.
+    expect(changes.length - before).toBeLessThanOrEqual(4);
+    expect(changes.every((c) => c.status === 200)).toBe(true);
+  });
+
+  it("asks the server for this client's documents only: the list is bounded and does not grow with the feed", async () => {
+    fresh();
+    seedForeign(PAGE + 20);
+    ownedByAnotherDevice();
+    const b = device("b");
+    await startDevice(b);
+    const asks = couch.calls.filter((c) => c.path === "_changes");
+    expect(asks.length).toBeGreaterThan(0);
+    for (const ask of asks) {
+      expect(ask.method).toBe("POST");
+      expect(new URLSearchParams(ask.query).get("filter")).toBe("_doc_ids");
+      const ids = (ask.body as { doc_ids: string[] }).doc_ids;
+      expect(ids.length).toBeLessThanOrEqual(100);
+      expect(ids.every((id) => /^(activity|preference):/.test(id))).toBe(true);
+    }
+  });
+});
+
 describe("every request is one the gateway allows", () => {
   it("across the whole scenario, nothing was refused", async () => {
     fresh();
@@ -594,7 +705,7 @@ describe("every request is one the gateway allows", () => {
     for (const kind of kinds) {
       expect([
         "POST /v1/couch/personal",
-        "GET _changes",
+        "POST _changes",
         "POST _all_docs",
         "POST _bulk_docs",
       ]).toContain(kind);
