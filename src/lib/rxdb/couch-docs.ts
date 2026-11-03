@@ -44,6 +44,9 @@
  * undone by an edit that cannot be shown to be newer.
  */
 
+import { ACTIVITIES } from "../activities";
+import { ForecastModel } from "../weather";
+
 // ---------------------------------------------------------------------------
 // Vocabulary
 // ---------------------------------------------------------------------------
@@ -55,24 +58,21 @@ export const THEME_VALUES = ["light", "dark", "system"] as const;
 export type ThemeValue = (typeof THEME_VALUES)[number];
 
 /**
- * `forecastModel` values the data model allows (data-infra
- * `user.preference.schema.json`). The app's own list is wider or narrower in
- * places (`meteofrance_seamless` is not here), and a value outside this list
- * is simply not synced, never rewritten.
+ * The `forecastModel` values this app syncs: the ones its own picker offers,
+ * from the one place that defines them (`ForecastModel` in `weather.ts`, which
+ * the My Weather radio group renders). Not the data model's wider list
+ * (data-infra `user.preference.schema.json` also names `jma_gsm`,
+ * `ukmo_global_deterministic_10km` and `cma_grapes_global`, which this app has
+ * no way to choose or show, and does not name `meteofrance_seamless`, which it
+ * does): a pick another client made that is not in this list is ignored, never
+ * applied, and never replaces what the person chose here. Every value is also
+ * in the Worker's device-profile allowlist (`FORECAST_MODELS` in
+ * `weather_core::community`), so a synced pick cannot make `/v1/devices`
+ * answer 400; `couch-docs.test.ts` pins both.
  */
-export const FORECAST_MODEL_VALUES = [
-  "best_match",
-  "ecmwf_ifs",
-  "ecmwf_aifs025_single",
-  "gfs_seamless",
-  "icon_global",
-  "ukmo_global_deterministic_10km",
-  "cma_grapes_global",
-  "gem_global",
-  "meteofrance_arpege_world",
-  "jma_gsm",
-] as const;
-export type ForecastModelValue = (typeof FORECAST_MODEL_VALUES)[number];
+export const FORECAST_MODEL_VALUES: readonly `${ForecastModel}`[] =
+  Object.values(ForecastModel);
+export type ForecastModelValue = `${ForecastModel}`;
 
 /** The setting keys this client reads and writes. */
 export const SYNCED_PREFERENCE_KEYS = ["theme", "forecastModel"] as const;
@@ -163,6 +163,28 @@ export function isForecastModelValue(v: unknown): v is ForecastModelValue {
 export function isSyncableActivityId(v: unknown): v is string {
   return typeof v === "string" && ACTIVITY_ID_RE.test(v);
 }
+
+/**
+ * The activities this app offers (`src/lib/activities.ts`, the same ids the
+ * Worker's allowlist keys: `activity-guidance.json`, pinned equal by
+ * `couch-docs.test.ts`). A document for any other id is another client's, and
+ * is neither applied nor counted.
+ */
+const KNOWN_ACTIVITY_IDS: ReadonlySet<string> = new Set(
+  ACTIVITIES.map((a) => a.id),
+);
+
+export function isKnownActivityId(v: unknown): v is string {
+  return typeof v === "string" && KNOWN_ACTIVITY_IDS.has(v);
+}
+
+/**
+ * The most activities a device profile holds (`MAX_ACTIVITIES` in
+ * `weather_core::community`, and `platform-devices.ts`). Activities that
+ * arrive from other devices are taken only up to this many; what the person
+ * already holds here is never dropped to make room.
+ */
+export const MAX_SYNCED_ACTIVITIES = 30;
 
 /** The person id inside a `user_<personId>` database name, else null. */
 export function personIdFromDatabase(database: unknown): string | null {
@@ -334,8 +356,11 @@ export function patchFromDocs(
     }
   }
 
+  // Only activities this app offers: another client (the mobile app) may sync
+  // an id the web app has never heard of, and it must not reach the device
+  // profile or the AI summary's first three.
   const fromDocs = live
-    .filter((d) => d.type === "activity" && isSyncableActivityId(d.activityId))
+    .filter((d) => d.type === "activity" && isKnownActivityId(d.activityId))
     .sort(
       (a, b) =>
         (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0) ||
@@ -346,13 +371,17 @@ export function patchFromDocs(
   const held = new Set(current.selectedActivities);
   // The person's own order is theirs: it decides which three activities the
   // AI advice is about. Keep what the device holds where it is (dropping the
-  // ids another device removed; an id this client cannot sync is never
-  // dropped), then append the ids it does not hold yet, oldest first.
+  // ids another device removed; an id this client does not know is never
+  // dropped), then append the ids it does not hold yet, oldest first, only
+  // while there is room under the device profile's limit. Nothing the person
+  // already holds is removed to make room.
+  const kept = current.selectedActivities.filter(
+    (id) => !isKnownActivityId(id) || wanted.has(id),
+  );
+  const room = Math.max(0, MAX_SYNCED_ACTIVITIES - kept.length);
   const next = [
-    ...current.selectedActivities.filter(
-      (id) => !isSyncableActivityId(id) || wanted.has(id),
-    ),
-    ...fromDocs.filter((id) => !held.has(id)),
+    ...kept,
+    ...fromDocs.filter((id) => !held.has(id)).slice(0, room),
   ];
   // Same members is not a change worth applying, whatever the order.
   if (!sameMembers(next, current.selectedActivities)) {

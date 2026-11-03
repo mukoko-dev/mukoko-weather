@@ -1,10 +1,16 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { ACTIVITIES } from "../activities";
+import { ForecastModel } from "../weather";
 import {
   ACTIVITY_ID_RE,
   COUCH_DOC_SCHEMA_VERSION,
   FORECAST_MODEL_VALUES,
+  MAX_SYNCED_ACTIVITIES,
   activityDocId,
   assertPlaintextDoc,
+  isKnownActivityId,
   isOwnedDocId,
   isWellFormedDoc,
   patchFromDocs,
@@ -76,20 +82,66 @@ describe("ids and vocabulary", () => {
     }
   });
 
-  it("the forecast model list is exactly the data model's", () => {
-    // data-infra user.preference.schema.json (staging), pinned.
-    expect([...FORECAST_MODEL_VALUES]).toEqual([
-      "best_match",
-      "ecmwf_ifs",
-      "ecmwf_aifs025_single",
-      "gfs_seamless",
-      "icon_global",
+  describe("the forecast models that sync are the web app's own", () => {
+    const REPO = join(__dirname, "..", "..", "..");
+    const read = (...p: string[]) => readFileSync(join(REPO, ...p), "utf8");
+    /** The quoted values of a Rust `const NAME: [&str; N] = [ ... ];`. */
+    const rustList = (source: string, name: string): string[] => {
+      const start = source.indexOf(`pub const ${name}`);
+      expect(start, name).toBeGreaterThan(-1);
+      const body = source.slice(
+        source.indexOf("= [", start),
+        source.indexOf("];", start),
+      );
+      return [...body.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    };
+
+    it("are exactly the ForecastModel enum the My Weather picker is built from", () => {
+      expect([...FORECAST_MODEL_VALUES].sort()).toEqual(
+        Object.values(ForecastModel).sort(),
+      );
+    });
+
+    it("are exactly what the picker's radio group renders", () => {
+      const modal = read("src", "components", "weather", "MyWeatherModal.tsx");
+      const block = modal.slice(
+        modal.indexOf("const MODEL_OPTIONS"),
+        modal.indexOf("function ModelSelector"),
+      );
+      const offered = [...block.matchAll(/value: ForecastModel\.(\w+)/g)].map(
+        (m) => ForecastModel[m[1] as keyof typeof ForecastModel],
+      );
+      expect(offered.length).toBeGreaterThan(3);
+      expect([...FORECAST_MODEL_VALUES].sort()).toEqual([...offered].sort());
+    });
+
+    it("are each accepted by the device-profile allowlist of the Worker, so a synced pick never makes /v1/devices answer 400", () => {
+      const worker = rustList(
+        read("workers", "crates", "weather-core", "src", "community.rs"),
+        "FORECAST_MODELS",
+      );
+      expect(worker.length).toBeGreaterThan(5);
+      for (const model of FORECAST_MODEL_VALUES) {
+        expect(worker, model).toContain(model);
+      }
+    });
+
+    it("include the Météo-France model the picker offers (the data model's list does not)", () => {
+      expect(FORECAST_MODEL_VALUES).toContain("meteofrance_seamless");
+    });
+
+    it.each([
+      "jma_gsm",
       "ukmo_global_deterministic_10km",
       "cma_grapes_global",
       "gem_global",
       "meteofrance_arpege_world",
-      "jma_gsm",
-    ]);
+    ])(
+      "%s, which another client may set, is not a value of this app",
+      (model) => {
+        expect(FORECAST_MODEL_VALUES as readonly string[]).not.toContain(model);
+      },
+    );
   });
 
   it("every activity id the app ships fits the data model's id pattern", async () => {
@@ -399,13 +451,27 @@ describe("state -> documents", () => {
       state(),
       state({
         theme: "purple",
-        selectedForecastModel: "meteofrance_seamless",
+        // A model another client knows and this app does not offer.
+        selectedForecastModel: "jma_gsm",
         selectedActivities: ["Not_Valid", "has space"],
       }),
       new Map(),
       ctx(),
     );
     expect(ops).toEqual([]);
+  });
+
+  it("writes the Météo-France pick the picker offers", () => {
+    const ops = upserts(
+      planChangeOps(
+        state(),
+        state({ selectedForecastModel: "meteofrance_seamless" }),
+        new Map(),
+        ctx(),
+      ),
+    );
+    expect(ops.map((d) => d.preferenceValue)).toEqual(["meteofrance_seamless"]);
+    expect(validatorAccepts(ops[0])).toBe(true);
   });
 });
 
@@ -478,12 +544,155 @@ describe("documents -> state", () => {
     expect(patchFromDocs([theme("purple")], state())).toEqual({});
   });
 
+  describe("a forecast model set by another client", () => {
+    const model = (value: string) =>
+      doc({
+        id: "preference:forecastModel",
+        preferenceKey: "forecastModel",
+        preferenceValue: value,
+      });
+
+    it.each(["jma_gsm", "ukmo_global_deterministic_10km", "cma_grapes_global"])(
+      "%s is not applied: this app does not offer it",
+      (value) => {
+        expect(patchFromDocs([model(value)], state())).toEqual({});
+      },
+    );
+
+    it("never replaces the person's own pick on this device", () => {
+      const patch = patchFromDocs(
+        [model("jma_gsm")],
+        state({ selectedForecastModel: "ecmwf_ifs" }),
+      );
+      expect(patch.selectedForecastModel).toBeUndefined();
+    });
+
+    it("a model this app offers is applied, the Météo-France one too", () => {
+      expect(
+        patchFromDocs([model("meteofrance_seamless")], state())
+          .selectedForecastModel,
+      ).toBe("meteofrance_seamless");
+      expect(
+        patchFromDocs([model("gfs_seamless")], state()).selectedForecastModel,
+      ).toBe("gfs_seamless");
+    });
+  });
+
+  describe("activities from another client", () => {
+    const REPO = join(__dirname, "..", "..", "..");
+    const read = (...p: string[]) => readFileSync(join(REPO, ...p), "utf8");
+    const known = ACTIVITIES.map((a) => a.id);
+
+    it("an id the app does not know is ignored, not applied, even when it fits the id pattern", () => {
+      const patch = patchFromDocs(
+        [act("made-up-activity"), act("livestock", T0 + 1000)],
+        state(),
+      );
+      expect(patch.selectedActivities).toEqual(["livestock"]);
+    });
+
+    it("only unknown ids: nothing to apply", () => {
+      expect(
+        patchFromDocs([act("made-up-activity"), act("other-thing")], state()),
+      ).toEqual({});
+    });
+
+    it("an unknown id the device holds is left alone, neither dropped nor replaced", () => {
+      const patch = patchFromDocs(
+        [act("livestock")],
+        state({ selectedActivities: ["retired-activity"] }),
+      );
+      expect(patch.selectedActivities).toEqual([
+        "retired-activity",
+        "livestock",
+      ]);
+    });
+
+    it("the activities the app knows are exactly the ones its picker and the Worker know", () => {
+      expect(known.length).toBeGreaterThan(40);
+      const guidance = JSON.parse(
+        read(
+          "workers",
+          "crates",
+          "weather-core",
+          "data",
+          "reference",
+          "activity-guidance.json",
+        ),
+      ) as Record<string, string>;
+      expect(Object.keys(guidance).sort()).toEqual([...known].sort());
+      for (const id of known) expect(isKnownActivityId(id), id).toBe(true);
+      expect(isKnownActivityId("made-up-activity")).toBe(false);
+      expect(isKnownActivityId(42)).toBe(false);
+    });
+
+    describe("the device profile holds at most 30", () => {
+      it("is the Worker's limit and the app's own", () => {
+        expect(
+          read("workers", "crates", "weather-core", "src", "community.rs"),
+        ).toMatch(/pub const MAX_ACTIVITIES: usize = 30;/);
+        expect(read("src", "lib", "platform-devices.ts")).toMatch(
+          /const MAX_ACTIVITIES = 30;/,
+        );
+        expect(MAX_SYNCED_ACTIVITIES).toBe(30);
+      });
+
+      it("keeps the person's own activities first and takes the oldest remote ones up to the cap", () => {
+        const mine = known.slice(0, 10);
+        const remote = known.slice(10, 50); // 40 more, oldest first
+        const patch = patchFromDocs(
+          [...mine, ...remote].map((id, i) => act(id, T0 + i * 1000)),
+          state({ selectedActivities: mine }),
+        );
+        expect(patch.selectedActivities).toHaveLength(MAX_SYNCED_ACTIVITIES);
+        expect(patch.selectedActivities?.slice(0, 10)).toEqual(mine);
+        expect(patch.selectedActivities?.slice(10)).toEqual(
+          remote.slice(0, 20),
+        );
+      });
+
+      it("ties at an equal creation time are taken by id, so the result is the same on every device", () => {
+        const ids = known.slice(0, 40);
+        const a = patchFromDocs(
+          ids.map((id) => act(id, T0)),
+          state(),
+        );
+        const b = patchFromDocs(
+          [...ids].reverse().map((id) => act(id, T0)),
+          state(),
+        );
+        expect(a.selectedActivities).toHaveLength(MAX_SYNCED_ACTIVITIES);
+        expect(a.selectedActivities).toEqual(b.selectedActivities);
+        expect(a.selectedActivities).toEqual(
+          [...ids].sort().slice(0, MAX_SYNCED_ACTIVITIES),
+        );
+      });
+
+      it("a device already at the cap takes nothing more, and one over it loses nothing", () => {
+        const full = known.slice(0, MAX_SYNCED_ACTIVITIES);
+        expect(
+          patchFromDocs(
+            [...full, known[40]].map((id) => act(id)),
+            state({ selectedActivities: full }),
+          ),
+        ).toEqual({});
+        const over = known.slice(0, MAX_SYNCED_ACTIVITIES + 5);
+        expect(
+          patchFromDocs(
+            over.map((id) => act(id)),
+            state({ selectedActivities: over }),
+          ),
+        ).toEqual({});
+      });
+    });
+  });
+
   it("activities come from the documents, oldest first", () => {
     const patch = patchFromDocs(
-      [act("b-second", T0 + 2000), act("a-first", T0 + 1000)],
+      [act("beekeeping", T0 + 2000), act("aquaculture", T0 + 1000)],
       state(),
     );
-    expect(patch.selectedActivities).toEqual(["a-first", "b-second"]);
+    expect(patch.selectedActivities).toEqual(["aquaculture", "beekeeping"]);
   });
 
   it("an activity another device removed disappears; one this client cannot sync stays", () => {
@@ -497,14 +706,20 @@ describe("documents -> state", () => {
   it("a different order of the same activities is not a change", () => {
     expect(
       patchFromDocs(
-        [act("a-first", T0 + 1000), act("b-second", T0 + 2000)],
-        state({ selectedActivities: ["b-second", "a-first"] }),
+        [act("aquaculture", T0 + 1000), act("beekeeping", T0 + 2000)],
+        state({ selectedActivities: ["beekeeping", "aquaculture"] }),
       ),
     ).toEqual({});
   });
 
   describe("the person's own order is kept (the AI keeps only the first three)", () => {
-    const ids = ["livestock", "gardening", "crop-farming", "soccer", "braai"];
+    const ids = [
+      "livestock",
+      "gardening",
+      "crop-farming",
+      "football",
+      "barbecue",
+    ];
     // The documents were created in a different order than the person chose here.
     const docsFor = (list: string[]) =>
       list.map((id, i) => act(id, T0 + (list.length - i) * 1000));
@@ -512,27 +727,27 @@ describe("documents -> state", () => {
     it("a remote add is appended after the activities the device already holds", () => {
       const current = ["livestock", "gardening", "crop-farming"];
       const patch = patchFromDocs(
-        docsFor([...current, "soccer"]),
+        docsFor([...current, "football"]),
         state({ selectedActivities: current }),
       );
-      expect(patch.selectedActivities).toEqual([...current, "soccer"]);
+      expect(patch.selectedActivities).toEqual([...current, "football"]);
     });
 
     it("a remote remove drops that id and leaves the others in place", () => {
       const patch = patchFromDocs(
-        docsFor(["livestock", "crop-farming", "soccer"]),
+        docsFor(["livestock", "crop-farming", "football"]),
         state({ selectedActivities: ids.slice(0, 4) }),
       );
       expect(patch.selectedActivities).toEqual([
         "livestock",
         "crop-farming",
-        "soccer",
+        "football",
       ]);
     });
 
     it("an add and a remove together keep the local order of what stays", () => {
       const patch = patchFromDocs(
-        docsFor(["crop-farming", "livestock", "braai"]),
+        docsFor(["crop-farming", "livestock", "barbecue"]),
         state({
           selectedActivities: ["livestock", "gardening", "crop-farming"],
         }),
@@ -540,32 +755,32 @@ describe("documents -> state", () => {
       expect(patch.selectedActivities).toEqual([
         "livestock",
         "crop-farming",
-        "braai",
+        "barbecue",
       ]);
     });
 
     it("ids the device does not hold come in oldest first, and ties by id", () => {
       const patch = patchFromDocs(
         [
-          act("zulu", T0 + 1000),
-          act("alpha", T0 + 1000),
-          act("mike", T0 + 1000),
-          act("early", T0),
+          act("weddings", T0 + 1000),
+          act("aquaculture", T0 + 1000),
+          act("mining", T0 + 1000),
+          act("planting", T0),
         ],
         state({ selectedActivities: ["livestock"] }),
       );
       // "livestock" has no document: another device removed it.
       expect(patch.selectedActivities).toEqual([
-        "early",
-        "alpha",
-        "mike",
-        "zulu",
+        "planting",
+        "aquaculture",
+        "mining",
+        "weddings",
       ]);
     });
 
     it("new ids go after the local ones and unsyncable ids keep their place", () => {
       const patch = patchFromDocs(
-        docsFor(["livestock", "soccer"]),
+        docsFor(["livestock", "football"]),
         state({
           selectedActivities: ["Legacy_Id", "livestock", "Other_Legacy"],
         }),
@@ -574,16 +789,16 @@ describe("documents -> state", () => {
         "Legacy_Id",
         "livestock",
         "Other_Legacy",
-        "soccer",
+        "football",
       ]);
     });
 
     it("a fresh device takes the order the documents were made in", () => {
       const patch = patchFromDocs(
-        [act("b-second", T0 + 2000), act("a-first", T0 + 1000)],
+        [act("beekeeping", T0 + 2000), act("aquaculture", T0 + 1000)],
         state(),
       );
-      expect(patch.selectedActivities).toEqual(["a-first", "b-second"]);
+      expect(patch.selectedActivities).toEqual(["aquaculture", "beekeeping"]);
     });
 
     it("the same members in any order is never a patch", () => {
