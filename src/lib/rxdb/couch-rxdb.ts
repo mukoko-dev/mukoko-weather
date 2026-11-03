@@ -35,8 +35,9 @@
  * WHOSE IT IS. The database holds one person's settings and activities, so
  * `openUserDocStore` records the person (ids only, `sync-people-index.ts`) and
  * `purgeUserDocStores` removes every recorded database but the signed-in
- * person's: on sign-out (the session route answering `401 signed_out`) and when a different
- * person is issued. Nothing here runs with the flag off.
+ * person's: on sign-out (the session route answering `401 signed_out` on two
+ * page loads, `couch-sync.ts`) and when a different person is issued. Nothing
+ * here runs with the flag off.
  *
  * Imported dynamically, only after the flag is on and a credential exists, so
  * RxDB's CouchDB plugin is in no page's first-load JavaScript.
@@ -73,8 +74,59 @@ export const CYCLE_TIMEOUT_MS = 60_000;
 export const LEADER_WAIT_MS = 3_000;
 /** Removing a database that another tab still holds open may not finish. */
 export const REMOVE_TIMEOUT_MS = 5_000;
+/**
+ * How long a finished or failed cycle waits for the plugin to wind its
+ * replication down (`state.cancel()`). Past it the replication is abandoned.
+ */
+export const CANCEL_TIMEOUT_MS = 5_000;
+/** ...and `db.close()` for a database whose replication cannot be wound down. */
+export const CLOSE_TIMEOUT_MS = 5_000;
 const PULL_BATCH = 200;
 const PUSH_BATCH = 50;
+
+/**
+ * THE ONE PLACE this layer reaches into an RxDB internal, and why.
+ *
+ * The plugin retries a failed request for ever, and `cancel()` and `pause()`
+ * both queue behind the replication's start, which for a non-live replication
+ * only ends when the first sync does: a request that keeps failing would
+ * deadlock the cancel (and, through it, the cycle, the engine's queue, `stop()`
+ * and the pagehide). Flagging the replication as paused through its own state
+ * makes the retry loops return (`while (!done && !this.isStoppedOrPaused())`);
+ * the start then finishes and `cancel()` tears everything down. There is no
+ * public API for this: `pause()` is queued behind the same start.
+ *
+ * It is pinned against the installed RxDB by `couch-rxdb-internals.test.ts`
+ * (version, shape and behaviour, with a message saying what to re-check on an
+ * upgrade), and a cycle cannot hang on it even if an upgrade breaks it: the wait
+ * for `cancel()` is bounded (`CANCEL_TIMEOUT_MS`) and a replication that could
+ * not be wound down is abandoned and not followed by another.
+ */
+export function endReplicationRetries(state: {
+  internalReplicationState?: {
+    events: { paused: { next(paused: boolean): void } };
+  };
+}): void {
+  state.internalReplicationState?.events.paused.next(true);
+}
+
+/** True when `work` settled within `ms`, false when the wait ran out. */
+async function settledWithin(work: Promise<unknown>, ms: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work.then(
+        () => true,
+        () => true,
+      ),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 export const userDocsSchema: RxJsonSchema<UserDocType> = {
   version: 0,
@@ -118,6 +170,16 @@ export interface OpenStoreOptions {
   nameSuffix?: string;
   /** How long the first leadership answer waits for the election (tests shorten it). */
   leaderWaitMs?: number;
+  /**
+   * How a failed or abandoned cycle's replication is ended: the RxDB internal
+   * above by default; a test passes something inert to stand for an upgrade
+   * that broke it.
+   */
+  endCycle?: typeof endReplicationRetries;
+  /** How long to wait for the plugin to wind a replication down before abandoning it. */
+  cancelTimeoutMs?: number;
+  /** ...and for `db.close()`. */
+  closeTimeoutMs?: number;
 }
 
 /** The name of a person's local sync database. */
@@ -206,6 +268,16 @@ export async function openUserDocStore(
     let electionSettled = false;
     /** Ends the replication that is running now; null when none is. */
     let abandonCycle: (() => void) | null = null;
+    /**
+     * A replication of this database could not be wound down in time and was
+     * abandoned: it may still be retrying inside the plugin (it sends nothing:
+     * its requests are aborted). A second replication of the same identifier
+     * beside it would race it for the checkpoint, so none is started: later
+     * cycles fail at once as "no answer" and the engine backs off. The page
+     * keeps working on the local database until it is reloaded.
+     */
+    let stuck = false;
+    const endCycleWith = options.endCycle ?? endReplicationRetries;
 
     return {
       async isLeader() {
@@ -269,6 +341,7 @@ export async function openUserDocStore(
       },
 
       async runReplication(session: CouchSession) {
+        if (stuck) throw new CouchHttpError(0);
         let failure: unknown = null;
         const requests = new AbortController();
         const authed = createCouchFetch({
@@ -307,16 +380,13 @@ export async function openUserDocStore(
           },
         });
 
-        /**
-         * The plugin retries a failed request for ever, and `cancel()` and
-         * `pause()` both queue behind the start, which for a non-live
-         * replication only ends when the first sync does: a failing request
-         * would deadlock the cancel. Flagging the replication as paused
-         * through its own state makes the retry loops return at once; the
-         * start then finishes and `cancel()` tears everything down.
-         */
+        /** Ends the retry loops (see `endReplicationRetries`); never throws. */
         const endCycle = (): void => {
-          state.internalReplicationState?.events.paused.next(true);
+          try {
+            endCycleWith(state);
+          } catch {
+            // The bounded wait below is the safety net.
+          }
         };
 
         let timer: ReturnType<typeof setTimeout> | undefined;
@@ -349,12 +419,24 @@ export async function openUserDocStore(
           if (timer) clearTimeout(timer);
           abandonCycle = null;
           requests.abort(); // nothing of this cycle outlives it
-          await state.cancel().catch(() => undefined);
+          // Bounded: if the plugin cannot wind down (an RxDB upgrade changed
+          // what `endReplicationRetries` stands on), the cycle ends anyway and
+          // the replication is abandoned, not waited for for ever.
+          const woundDown = await settledWithin(
+            state.cancel(),
+            options.cancelTimeoutMs ?? CANCEL_TIMEOUT_MS,
+          );
+          if (!woundDown) stuck = true;
         }
       },
 
       async close() {
-        await db.close().catch(() => undefined);
+        // Bounded too: closing the database cancels its replications, and one
+        // that could not be wound down would hold the close (and `stop()`).
+        await settledWithin(
+          db.close(),
+          options.closeTimeoutMs ?? CLOSE_TIMEOUT_MS,
+        );
       },
     };
   } catch {

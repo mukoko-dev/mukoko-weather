@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { ACTIVITIES } from "../activities";
 import { isOwnedDocId, ownedDocIds } from "./couch-docs";
@@ -340,5 +341,71 @@ describe("_changes asks for this client's documents only", () => {
     const { f, seen } = server(() => ({ results: [], last_seq: "1" }));
     await f(ask("feed=normal&filter=_selector"));
     expect(seen[0].url.searchParams.getAll("filter")).toEqual(["_doc_ids"]);
+  });
+});
+
+describe("one request, one timeout (the helper every caller of this layer shares)", () => {
+  it("a response whose BODY never arrives is cut off by the timeout too, not only one whose headers never do", async () => {
+    const f = createCouchFetch({
+      databaseUrl: DB,
+      getToken: () => TOKEN,
+      timeoutMs: 20,
+      baseFetch: (async (_url: string, init?: RequestInit) => {
+        const res = new Response(null, { status: 200 });
+        res.text = () =>
+          new Promise((_, reject) => {
+            init?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            );
+          });
+        return res;
+      }) as never,
+    });
+    await expect(f(`${DB}_all_docs`, { method: "POST" })).rejects.toMatchObject(
+      { status: 502 },
+    );
+  });
+
+  it("the body that comes back is the one the server sent, readable by the caller (the plugin reads it with .json())", async () => {
+    const f = createCouchFetch({
+      databaseUrl: DB,
+      getToken: () => TOKEN,
+      baseFetch: transport(() => json({ ok: true, rows: [1, 2] }, 201)),
+    });
+    const res = await f(`${DB}_bulk_docs`, { method: "POST", body: "{}" });
+    expect(res.status).toBe(201);
+    expect(await res.json()).toEqual({ ok: true, rows: [1, 2] });
+  });
+
+  it("a request for exactly one more URL is allowed (the gateway's personal route), and nothing near it", async () => {
+    const PERSONAL = "https://api.test/v1/couch/personal";
+    const base = transport(() => json({ ready: true }));
+    const f = createCouchFetch({
+      databaseUrl: DB,
+      extraUrls: [PERSONAL],
+      getToken: () => TOKEN,
+      baseFetch: base,
+    });
+    await f(PERSONAL, { method: "POST" });
+    expect(base).toHaveBeenCalledTimes(1);
+    for (const url of [
+      `${PERSONAL}/../x`,
+      `${PERSONAL}?x=1`,
+      "https://api.test/v1/couch/session",
+      "https://evil.test/v1/couch/personal",
+    ]) {
+      await expect(f(url, { method: "POST" })).rejects.toMatchObject({
+        status: 0,
+      });
+    }
+    expect(base).toHaveBeenCalledTimes(1);
+  });
+
+  it("the timeout/abort/'no answer' plumbing is written once: one AbortController in the whole sync transport, none in the session client", () => {
+    const here = readFileSync(`${__dirname}/couch-fetch.ts`, "utf8");
+    const session = readFileSync(`${__dirname}/couch-session.ts`, "utf8");
+    expect(here.match(/new AbortController\(/g) ?? []).toHaveLength(1);
+    expect(session.match(/new AbortController\(/g) ?? []).toHaveLength(0);
+    expect(session.match(/\bsetTimeout\(/g) ?? []).toHaveLength(0);
   });
 });

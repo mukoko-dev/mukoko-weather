@@ -44,7 +44,7 @@ const stores: SyncStore[] = [];
 function session(): CouchSession {
   return {
     token: TOKEN,
-    expiresAtMs: T0 + 600_000,
+    expiresInMs: 600_000,
     database: `user_${PERSON}`,
     personId: PERSON,
     databaseUrl: `https://api.test/v1/couch/db/user_${PERSON}/`,
@@ -600,3 +600,92 @@ describe("failures", () => {
     expect(couch.get("activity:livestock")).toBeUndefined();
   });
 });
+
+describe(
+  "a cycle that cannot be wound down never holds the page",
+  {
+    timeout: 30_000,
+  },
+  () => {
+    // Ending a failed or abandoned cycle relies on one RxDB internal
+    // (`endReplicationRetries`, pinned in `couch-rxdb-internals.test.ts`). If a
+    // future RxDB changes it, `cancel()` of the plugin queues behind a start that
+    // never finishes, and the `finally` of the cycle would wait for ever (and the
+    // engine's chain, `stop()` and the pagehide with it). So the wait is bounded.
+    const brokenEnd = () => undefined; // an upgrade that made the internal inert
+
+    async function openBroken(over: { cancelTimeoutMs?: number } = {}) {
+      suffix += 1;
+      const store = await openUserDocStore(PERSON, {
+        storage: getRxStorageMemory() as never,
+        baseFetch: couch.fetch as typeof fetch,
+        retryTimeMs: 10,
+        // Longer than the leader election a first replication waits for (about
+        // 400 ms): the failure must be the request's, not the cycle's timer.
+        cycleTimeoutMs: 5_000,
+        cancelTimeoutMs: 300,
+        closeTimeoutMs: 300,
+        endCycle: brokenEnd,
+        nameSuffix: `_w${suffix}`,
+        ...over,
+      });
+      if (!store) throw new Error("store did not open");
+      stores.push(store);
+      return store;
+    }
+
+    it("a failing request with the internal inert: the cycle still ends, within the cycle timeout plus the cancel timeout, as an error the engine backs off on", async () => {
+      const store = await openBroken();
+      couch.failNext = { status: 503, count: 1_000 };
+      const started = Date.now();
+      const outcome = await Promise.race([
+        store.runReplication(session()).then(
+          () => "finished",
+          (e: unknown) => e,
+        ),
+        new Promise((r) => setTimeout(() => r("hung"), 15_000)),
+      ]);
+      expect(outcome).toBeInstanceOf(CouchHttpError);
+      // (The leader election comes first, then the 300 ms bound on the wind-down;
+      // without the bound this would not end at all.)
+      expect(Date.now() - started).toBeLessThan(12_000);
+    });
+
+    it("and the replication that could not be wound down is not followed by a second of the same identifier: later cycles fail at once as 'no answer'", async () => {
+      const store = await openBroken();
+      couch.failNext = { status: 503, count: 1_000 };
+      await store.runReplication(session()).catch(() => undefined);
+      const calls = couch.calls.length;
+      const again = Date.now();
+      await expect(store.runReplication(session())).rejects.toMatchObject({
+        name: "CouchHttpError",
+        status: 0,
+      });
+      expect(Date.now() - again).toBeLessThan(100);
+      // Nothing was sent for it, and the abandoned one sends nothing either.
+      await new Promise((r) => setTimeout(r, 150));
+      expect(couch.calls.length).toBe(calls);
+    });
+
+    it("closing the database does not wait for ever for a replication that cannot be wound down", async () => {
+      const store = await openBroken();
+      couch.failNext = { status: 503, count: 1_000 };
+      await store.runReplication(session()).catch(() => undefined);
+      const closed = await Promise.race([
+        store.close().then(() => "closed"),
+        new Promise((r) => setTimeout(() => r("hung"), 15_000)),
+      ]);
+      expect(closed).toBe("closed");
+    });
+
+    it("with the internal working, nothing is abandoned: the next cycle after a failure runs", async () => {
+      const store = await open();
+      couch.failNext = { status: 503, count: 100 };
+      await store.runReplication(session()).catch(() => undefined);
+      couch.failNext = null;
+      await store.upsert(activity("livestock"));
+      await store.runReplication(session());
+      expect(couch.get("activity:livestock")).toBeDefined();
+    });
+  },
+);

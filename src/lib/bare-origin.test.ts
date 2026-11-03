@@ -63,7 +63,7 @@ describe("the server and the browser decide alike", () => {
     try {
       const s = parseSessionBody({
         token: "credential-for-tests-0123456789",
-        expiresAt: "2026-11-02T10:05:00.000Z",
+        expiresIn: 300,
         database: "user_0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
         apiOrigin: input,
       });

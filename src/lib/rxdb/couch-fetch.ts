@@ -8,7 +8,12 @@
  *   - `Authorization: Bearer <token>` on every request; `credentials: "omit"`
  *     (no cookie ever travels to the sync host), `cache: "no-store"`, no
  *     redirects followed, one timeout over the whole exchange.
- *   - Refuses any URL outside the one database it was built for.
+ *   - Refuses any URL outside the one database it was built for (and the exact
+ *     extra URLs it was given: the gateway's personal route).
+ *   - Reads every response body inside the timeout (`requestWithin`, the one
+ *     place a request, its timeout and its abort are put together; the
+ *     same-origin session route uses it too) and hands the caller a body that is
+ *     already in memory.
  *   - A non-2xx answer throws `CouchHttpError(status)`. The replication plugin
  *     would otherwise try to read an error body as a list of changes, and a
  *     status it can read is what the engine's back-off decides on.
@@ -49,9 +54,65 @@ export class CouchHttpError extends Error {
 
 export type CouchFetch = typeof fetch;
 
+export interface RequestLimits {
+  /** One timeout over the whole exchange: the answer AND reading its body. */
+  timeoutMs: number;
+  /**
+   * Abandon the request, in flight or yet to be made, when this fires (a page
+   * that is going away).
+   */
+  signal?: AbortSignal;
+}
+
+/**
+ * ONE request under ONE timeout, and the only place in the sync transport that
+ * builds an `AbortController` or arms a timer. The answer AND `read`'s use of it
+ * (the body) must finish in time, so a response whose body never arrives cannot
+ * hold the sync for ever; a request that cannot be made or is cut off is the
+ * caller's "no answer" error (`noAnswer`), whose text never carries the URL, a
+ * header or the token. `read` turns the response into the caller's result and
+ * decides what a non-2xx answer is. Every request of this layer goes through
+ * here: the replication's own (`createCouchFetch`), the gateway's personal route
+ * (also `createCouchFetch`) and the same-origin session route
+ * (`fetchCouchSession`).
+ */
+export async function requestWithin<T>(
+  fetchImpl: typeof fetch,
+  url: string,
+  init: RequestInit,
+  limits: RequestLimits,
+  noAnswer: () => Error,
+  read: (response: Response) => Promise<T>,
+): Promise<T> {
+  if (limits.signal?.aborted) throw noAnswer();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), limits.timeoutMs);
+  const abandon = () => controller.abort();
+  limits.signal?.addEventListener("abort", abandon);
+  try {
+    let response: Response;
+    try {
+      response = await fetchImpl(url, { ...init, signal: controller.signal });
+    } catch {
+      // Offline, DNS, CORS, timeout, aborted: no answer to read.
+      throw noAnswer();
+    }
+    return await read(response);
+  } finally {
+    clearTimeout(timer);
+    limits.signal?.removeEventListener("abort", abandon);
+  }
+}
+
 export interface CouchFetchOptions {
   /** The database URL every request must stay under (ends with `/`). */
   databaseUrl: string;
+  /**
+   * Exact URLs, besides the database, the credential may be sent to (the
+   * gateway's `POST /v1/couch/personal`, which prepares the database). Exact:
+   * not a prefix, not with a query.
+   */
+  extraUrls?: string[];
   /** The current credential; null makes the request a 401 without sending it. */
   getToken: () => string | null;
   baseFetch?: typeof fetch;
@@ -94,6 +155,7 @@ export function filterChanges(body: unknown): unknown {
 export function createCouchFetch(options: CouchFetchOptions): CouchFetch {
   const baseFetch = options.baseFetch ?? fetch;
   const timeoutMs = options.timeoutMs ?? COUCH_REQUEST_TIMEOUT_MS;
+  const extraUrls = options.extraUrls ?? [];
 
   return async (input, init = {}) => {
     const url =
@@ -102,7 +164,7 @@ export function createCouchFetch(options: CouchFetchOptions): CouchFetch {
         : input instanceof URL
           ? input.href
           : input.url;
-    if (!url.startsWith(options.databaseUrl)) {
+    if (!url.startsWith(options.databaseUrl) && !extraUrls.includes(url)) {
       // The plugin builds its URLs from the database URL only; anything else
       // is a bug and must not carry the credential anywhere.
       throw new CouchHttpError(0);
@@ -128,46 +190,48 @@ export function createCouchFetch(options: CouchFetchOptions): CouchFetch {
       headers.set("content-type", "application/json");
     }
 
-    if (options.signal?.aborted) throw new CouchHttpError(0);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const abandon = () => controller.abort();
-    options.signal?.addEventListener("abort", abandon);
-    try {
-      let response: Response;
-      try {
-        response = await baseFetch(target, {
-          ...init,
-          method,
-          headers,
-          body,
-          credentials: "omit",
-          cache: "no-store",
-          redirect: "error",
-          signal: controller.signal,
-        });
-      } catch {
-        // Offline, DNS, CORS, timeout, aborted: no answer to read.
-        throw new CouchHttpError(0);
-      }
-      if (!response.ok) throw new CouchHttpError(response.status);
-
-      if (changes) {
-        let feed: unknown;
+    return requestWithin(
+      baseFetch,
+      target,
+      {
+        ...init,
+        method,
+        headers,
+        body,
+        credentials: "omit",
+        cache: "no-store",
+        redirect: "error",
+      },
+      { timeoutMs, signal: options.signal },
+      () => new CouchHttpError(0),
+      async (response) => {
+        if (!response.ok) throw new CouchHttpError(response.status);
+        // The body is read here, inside the timeout, and handed on whole: the
+        // caller (the plugin, or `ensurePersonalDatabase`) reads a body that is
+        // already in memory and cannot stall on it.
+        let text: string;
         try {
-          feed = await response.json();
+          text = await response.text();
         } catch {
           throw new CouchHttpError(502);
         }
-        return new Response(JSON.stringify(filterChanges(feed)), {
-          status: response.status,
-          headers: { "content-type": "application/json" },
-        });
-      }
-      return response;
-    } finally {
-      clearTimeout(timer);
-      options.signal?.removeEventListener("abort", abandon);
-    }
+        if (changes) {
+          let feed: unknown;
+          try {
+            feed = JSON.parse(text);
+          } catch {
+            throw new CouchHttpError(502);
+          }
+          text = JSON.stringify(filterChanges(feed));
+        }
+        return new Response(
+          response.status === 204 || response.status === 205 ? null : text,
+          {
+            status: response.status,
+            headers: { "content-type": "application/json" },
+          },
+        );
+      },
+    );
   };
 }

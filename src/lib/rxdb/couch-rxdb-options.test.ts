@@ -82,7 +82,7 @@ describe("what the sync asks RxDB for", () => {
     open.push(store);
     await store.runReplication({
       token,
-      expiresAtMs: Date.now() + 300_000,
+      expiresInMs: 300_000,
       database: `user_${PERSON}`,
       personId: PERSON,
       databaseUrl: `https://api.test/v1/couch/db/user_${PERSON}/`,

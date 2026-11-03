@@ -13,7 +13,7 @@ import { SIGNED_OUT_CODE } from "../couch-session-contract";
 const PERSON = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
 const good = {
   token: "a-credential-longer-than-sixteen",
-  expiresAt: "2026-11-02T10:10:00.000Z",
+  expiresIn: 300,
   database: `user_${PERSON}`,
   apiOrigin: "https://api.nyuchi.com",
 };
@@ -30,8 +30,39 @@ describe("parseSessionBody", () => {
       `https://api.nyuchi.com/v1/couch/db/user_${PERSON}/`,
     );
     expect(s.personId).toBe(PERSON);
-    expect(s.expiresAtMs).toBe(Date.parse(good.expiresAt));
+    // How long it lives from issue, as the server said: no absolute time, so
+    // nothing here can be compared with this device's clock.
+    expect(s.expiresInMs).toBe(300_000);
+    expect(Object.keys(s)).not.toContain("expiresAtMs");
     expect(s.token).toBe(good.token);
+  });
+
+  it("takes the lifetime as a number of seconds from the server, and refuses anything else", () => {
+    expect(parseSessionBody({ ...good, expiresIn: 90.4 }).expiresInMs).toBe(
+      90_400,
+    );
+    const bad: unknown[] = [
+      // The old shape: an absolute time is never read, so a route that still
+      // sends only that is refused rather than compared with the local clock.
+      {
+        token: good.token,
+        database: good.database,
+        apiOrigin: good.apiOrigin,
+        expiresAt: "2026-11-02T10:10:00.000Z",
+      },
+      { ...good, expiresIn: undefined },
+      { ...good, expiresIn: "300" },
+      { ...good, expiresIn: 0 },
+      { ...good, expiresIn: -5 },
+      { ...good, expiresIn: Number.NaN },
+      { ...good, expiresIn: Number.POSITIVE_INFINITY },
+      { ...good, expiresIn: 3_601 },
+    ];
+    for (const b of bad) {
+      expect(() => parseSessionBody(b), JSON.stringify(b)).toThrow(
+        CouchSessionError,
+      );
+    }
   });
 
   it("refuses anything that is not exactly the documented shape", () => {
@@ -41,7 +72,6 @@ describe("parseSessionBody", () => {
       {},
       { ...good, token: "short" },
       { ...good, token: 7 },
-      { ...good, expiresAt: "tomorrow" },
       { ...good, database: "family_x" },
       { ...good, database: `user_${PERSON}/../x` },
       { ...good, apiOrigin: "http://api.nyuchi.com" },
