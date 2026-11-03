@@ -8,6 +8,7 @@ import { createCouchSyncEngine } from "./couch-sync";
 import { CouchHttpError } from "./couch-fetch";
 import { toRfc3339 } from "./couch-docs";
 import { CouchSessionError } from "./couch-session";
+import { SIGNED_OUT_CODE } from "../couch-session-contract";
 import {
   COUCH_MIN_ACCESS_TOKEN_LIFE_MS,
   COUCH_MIN_GRANT_LIFE_MS,
@@ -16,6 +17,7 @@ import {
 import {
   FakeStore,
   GRANT_TTL_MS,
+  MemoryJournal,
   PERSON,
   harness,
   session,
@@ -433,7 +435,7 @@ describe("the local database belongs to the person who signed in", () => {
     let signedOut = false;
     const h = harness({
       session: async (_n, now) => {
-        if (signedOut) throw new CouchSessionError(401, "unauthorized");
+        if (signedOut) throw new CouchSessionError(401, SIGNED_OUT_CODE);
         return session({ now });
       },
     });
@@ -455,7 +457,7 @@ describe("the local database belongs to the person who signed in", () => {
   it("an anonymous visitor's first and only request also clears what an earlier sign-in left", async () => {
     const h = harness({
       session: async () => {
-        throw new CouchSessionError(401, "unauthorized");
+        throw new CouchSessionError(401, SIGNED_OUT_CODE);
       },
     });
     const engine = createCouchSyncEngine(h.deps);
@@ -503,7 +505,7 @@ describe("the local database belongs to the person who signed in", () => {
 
     const signedOut = harness({
       session: async () => {
-        throw new CouchSessionError(401, "unauthorized");
+        throw new CouchSessionError(401, SIGNED_OUT_CODE);
       },
       purge: () => {
         throw new Error("IndexedDB is blocked");
@@ -522,6 +524,83 @@ describe("the local database belongs to the person who signed in", () => {
     const engine = await started(h);
     expect(engine.status()).toBe("idle");
     await engine.stop();
+  });
+
+  describe("only a 401 that says 'signed out' wipes anything", () => {
+    // 401 without the code (a 401 from somewhere else, a misconfiguration, an
+    // expired token the server could not refresh) and every 5xx must leave the
+    // person's local database AND the record of unwritten changes alone: they
+    // may be the only copy of a change that was made offline.
+    const notSignedOut: [string, () => Error][] = [
+      ["a 401 with no code", () => new CouchSessionError(401, "unavailable")],
+      [
+        "a 401 with another code",
+        () => new CouchSessionError(401, "reauth_required"),
+      ],
+      [
+        "the old 'unauthorized' code",
+        () => new CouchSessionError(401, "unauthorized"),
+      ],
+      ["a 503", () => new CouchSessionError(503, "couch_unavailable")],
+      ["a 500", () => new CouchSessionError(500, "unavailable")],
+      ["a 429", () => new CouchSessionError(429, "rate_limited")],
+      ["no answer", () => new CouchSessionError(0, "offline")],
+    ];
+
+    it.each(notSignedOut)(
+      "%s: nothing is removed, the journal stays, and the engine backs off",
+      async (_name, make) => {
+        const journal = new MemoryJournal();
+        let failing = false;
+        const h = harness({
+          journal,
+          recorded: PERSON,
+          session: async (_n, now) => {
+            if (failing) throw make();
+            return session({ now });
+          },
+        });
+        const engine = await started(h);
+        h.purged.length = 0;
+        failing = true;
+        h.bridge.change({ theme: "dark" }); // a change not yet written anywhere
+        expect(journal.record).not.toBeNull();
+        await h.clock.advance(GRANT_TTL_MS, settleWith(engine));
+
+        expect(engine.status()).toBe("backing_off");
+        expect(h.purged).toEqual([]);
+        expect(h.stores[0].closed).toBe(false);
+        // The change was written to the local database, and the journal was
+        // not cleared by anything but that write.
+        expect(h.stores[0].written.map((d) => d.id)).toContain(
+          "preference:theme",
+        );
+        await engine.stop();
+      },
+    );
+
+    it("a 401 with the code does: the database is removed and the record is cleared", async () => {
+      const journal = new MemoryJournal();
+      let signedOut = false;
+      const h = harness({
+        journal,
+        recorded: null,
+        session: async (_n, now) => {
+          if (signedOut) throw new CouchSessionError(401, SIGNED_OUT_CODE);
+          return session({ now });
+        },
+      });
+      h.flags.online = true;
+      const engine = await started(h);
+      signedOut = true;
+      h.bridge.change({ theme: "dark" });
+      expect(journal.record).not.toBeNull();
+      await h.clock.advance(GRANT_TTL_MS, settleWith(engine));
+      expect(engine.status()).toBe("signed_out");
+      expect(h.purged).toContain(null);
+      expect(journal.record).toBeNull();
+      await engine.stop();
+    });
   });
 
   it("a 403 or a failure is not a sign-out: nothing is removed", async () => {
@@ -756,7 +835,7 @@ describe("failures", () => {
   it("signed out (401 from the route): idle until the next page load, nothing opened, no timer", async () => {
     const h = harness({
       session: async () => {
-        throw new CouchSessionError(401, "unauthorized");
+        throw new CouchSessionError(401, SIGNED_OUT_CODE);
       },
     });
     const engine = createCouchSyncEngine(h.deps);
@@ -771,7 +850,7 @@ describe("failures", () => {
   it("an anonymous visitor makes exactly one request, however long the page stays open and whatever happens to it", async () => {
     const h = harness({
       session: async () => {
-        throw new CouchSessionError(401, "unauthorized");
+        throw new CouchSessionError(401, SIGNED_OUT_CODE);
       },
     });
     const engine = createCouchSyncEngine(h.deps);
@@ -800,7 +879,7 @@ describe("failures", () => {
     let signedIn = false;
     const h = harness({
       session: async (_n, now) => {
-        if (!signedIn) throw new CouchSessionError(401, "unauthorized");
+        if (!signedIn) throw new CouchSessionError(401, SIGNED_OUT_CODE);
         return session({ now });
       },
     });
@@ -823,7 +902,7 @@ describe("failures", () => {
     let signedOut = false;
     const h = harness({
       session: async (_n, now) => {
-        if (signedOut) throw new CouchSessionError(401, "unauthorized");
+        if (signedOut) throw new CouchSessionError(401, SIGNED_OUT_CODE);
         return session({ now });
       },
     });

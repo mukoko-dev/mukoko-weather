@@ -11,15 +11,17 @@
  *
  * WHY NON-LIVE. The gateway refuses continuous and event-source feeds and
  * drops heartbeats (nyuchi-api `couch_proxy_policy.py`). `live: false` makes
- * the plugin do exactly one pull (`_changes?feed=normal`) and one push
- * (`_all_docs` POST, `_bulk_docs`), then cancel itself. The checkpoint
- * persists under the same `replicationIdentifier`, so the next cycle is
- * incremental. A timer, focus, "online" and a local write start the cycles
- * (`couch-sync.ts`).
+ * the plugin do exactly one pull (`_changes?feed=normal`, sent by the fetch
+ * layer as `POST` with `filter=_doc_ids` and this client's ids, so documents of
+ * other clients can neither fill nor stall a page) and one push (`_all_docs`
+ * POST, `_bulk_docs`), then cancel itself. The checkpoint persists under the
+ * same `replicationIdentifier`, so the next cycle is incremental. A timer,
+ * focus, "online" and a local write start the cycles (`couch-sync.ts`).
  *
  * The plugin retries a failed request on its own, for ever. A cycle must not:
  * the first error cancels it and the failure (with its HTTP status, kept by
- * the fetch layer) goes to the engine, which backs off.
+ * the fetch layer) goes to the engine, which backs off. `cancelReplication()`
+ * ends a running cycle at once and aborts its requests (the page is going away).
  *
  * ONE TAB REPLICATES. Every tab of the browser opens the same IndexedDB
  * database, so it is opened `multiInstance: true` (tabs hear each other's
@@ -33,7 +35,7 @@
  * WHOSE IT IS. The database holds one person's settings and activities, so
  * `openUserDocStore` records the person (ids only, `sync-people-index.ts`) and
  * `purgeUserDocStores` removes every recorded database but the signed-in
- * person's: on sign-out (the session route answering 401) and when a different
+ * person's: on sign-out (the session route answering `401 signed_out`) and when a different
  * person is issued. Nothing here runs with the flag off.
  *
  * Imported dynamically, only after the flag is on and a credential exists, so
@@ -202,6 +204,8 @@ export async function openUserDocStore(
     // has, the question is read without waiting (a follower is not held up
     // again on every cycle).
     let electionSettled = false;
+    /** Ends the replication that is running now; null when none is. */
+    let abandonCycle: (() => void) | null = null;
 
     return {
       async isLeader() {
@@ -260,12 +264,18 @@ export async function openUserDocStore(
         if (latest) await latest.remove();
       },
 
+      cancelReplication() {
+        abandonCycle?.();
+      },
+
       async runReplication(session: CouchSession) {
         let failure: unknown = null;
+        const requests = new AbortController();
         const authed = createCouchFetch({
           databaseUrl: session.databaseUrl,
           getToken: () => session.token,
           baseFetch: options.baseFetch,
+          signal: requests.signal,
         });
         const watched: CouchFetch = async (url, init) => {
           try {
@@ -323,12 +333,22 @@ export async function openUserDocStore(
             endCycle();
             reject(new CouchHttpError(0));
           }, options.cycleTimeoutMs ?? CYCLE_TIMEOUT_MS);
+          // The page is going away: end the cycle now, abort what it has in
+          // flight, and fail it as "no answer" (the engine ignores the failure
+          // of a run that was stopped).
+          abandonCycle = () => {
+            endCycle();
+            requests.abort();
+            reject(new CouchHttpError(0));
+          };
         });
         failed.catch(() => undefined); // never an unhandled rejection
         try {
           await Promise.race([state.awaitInitialReplication(), failed]);
         } finally {
           if (timer) clearTimeout(timer);
+          abandonCycle = null;
+          requests.abort(); // nothing of this cycle outlives it
           await state.cancel().catch(() => undefined);
         }
       },

@@ -13,6 +13,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createCouchSyncEngine } from "./couch-sync";
 import { toRfc3339 } from "./couch-docs";
+import { CouchHttpError } from "./couch-fetch";
 import {
   FakeStore,
   MemoryJournal,
@@ -368,6 +369,125 @@ describe("a change made while the first replication runs", () => {
     });
     expect(store.written).toHaveLength(2);
     await engine.stop();
+  });
+});
+
+describe("a missing document is not a removal", () => {
+  // The activities a person selected before sync existed have no document until
+  // the leader's first cycle seeds them. A follower (or any cycle that applies
+  // the documents before they exist) must not read "no document" as "another
+  // device removed it" and erase the person's choices.
+  it("a follower whose shared database is still empty keeps the person's activities and settings", async () => {
+    const store = new FakeStore();
+    store.leader = false;
+    const h = harness({
+      recorded: PERSON,
+      makeStore: () => store,
+      bridge: {
+        theme: "dark",
+        selectedActivities: ["livestock", "gardening", "crop-farming"],
+      },
+    });
+    const engine = await begin(h);
+    await h.clock.advance(POLL_INTERVAL_MS * 3, settleWith(engine));
+    expect(h.bridge.state.selectedActivities).toEqual([
+      "livestock",
+      "gardening",
+      "crop-farming",
+    ]);
+    expect(h.bridge.state.theme).toBe("dark");
+    expect(h.bridge.applied).toEqual([]);
+  });
+
+  it("the leader's first cycle seeds them, and a later empty read of the database removes nothing either", async () => {
+    const h = harness({
+      bridge: { selectedActivities: ["livestock", "gardening"] },
+    });
+    const engine = await begin(h);
+    expect(h.stores[0].upserts.sort()).toEqual([
+      "activity:gardening",
+      "activity:livestock",
+    ]);
+    expect(h.bridge.state.selectedActivities).toEqual([
+      "livestock",
+      "gardening",
+    ]);
+    // The local database is wiped under the running page (cleared site data):
+    // the person still has their activities.
+    h.stores[0].docs.clear();
+    await h.clock.advance(POLL_INTERVAL_MS, settleWith(engine));
+    expect(h.bridge.state.selectedActivities).toEqual([
+      "livestock",
+      "gardening",
+    ]);
+  });
+
+  it("a deletion that was pulled (a tombstone in the database) does remove it, and only that one", async () => {
+    const store = new FakeStore();
+    store.leader = false;
+    store.deleted.add("activity:gardening");
+    const h = harness({
+      recorded: PERSON,
+      makeStore: () => store,
+      bridge: { selectedActivities: ["livestock", "gardening"] },
+    });
+    await begin(h);
+    expect(h.bridge.state.selectedActivities).toEqual(["livestock"]);
+  });
+});
+
+describe("a replication that fails after its pull still applies what it pulled", () => {
+  // The plugin pulls first and pushes second. A push the server refuses (or a
+  // connection that drops half way) fails the whole replication; if the cycle
+  // then skipped applying, a push that keeps failing would keep every change
+  // from the person's other devices off this one, with nothing but a back-off
+  // to show for it.
+  it("the pulled value reaches the app although the replication failed, and the cycle still backs off", async () => {
+    const store = new FakeStore();
+    store.onReplicate = async () => {
+      store.docs.set(
+        "preference:theme",
+        themeDoc("dark", "2026-11-02T09:00:00.000Z"),
+      );
+      throw new CouchHttpError(503);
+    };
+    const h = harness({ recorded: PERSON, makeStore: () => store });
+    const engine = await begin(h);
+    expect(h.bridge.state.theme).toBe("dark");
+    expect(engine.status()).toBe("backing_off");
+  });
+
+  it("a person's change made meanwhile is not overwritten by it", async () => {
+    const store = new FakeStore();
+    store.onReplicate = async () => {
+      store.docs.set(
+        "preference:theme",
+        themeDoc("dark", "2026-11-02T09:00:00.000Z"),
+      );
+      h.bridge.change({ theme: "light" }); // the person picks light meanwhile
+      throw new CouchHttpError(500);
+    };
+    const h = harness({ recorded: PERSON, makeStore: () => store });
+    await begin(h);
+    expect(h.bridge.state.theme).toBe("light");
+  });
+
+  it("nothing is applied for a run that was stopped", async () => {
+    const store = new FakeStore();
+    store.onReplicate = async () => {
+      store.docs.set(
+        "preference:theme",
+        themeDoc("dark", "2026-11-02T09:00:00.000Z"),
+      );
+      throw new CouchHttpError(0);
+    };
+    const h = harness({ recorded: PERSON, makeStore: () => store });
+    const engine = createCouchSyncEngine(h.deps);
+    engines.push(engine);
+    const starting = engine.start();
+    const stopping = engine.stop();
+    await Promise.all([starting, stopping]);
+    expect(h.bridge.applied).toEqual([]);
   });
 });
 

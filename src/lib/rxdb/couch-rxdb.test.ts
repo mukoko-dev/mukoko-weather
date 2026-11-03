@@ -317,9 +317,70 @@ describe("push", () => {
     await store.runReplication(session());
     const seen = new Set(couch.calls.map((c) => `${c.method} ${c.path}`));
     expect([...seen].sort()).toEqual(
-      ["GET _changes", "POST _all_docs", "POST _bulk_docs"].sort(),
+      ["POST _changes", "POST _all_docs", "POST _bulk_docs"].sort(),
     );
     expect(couch.calls.every((c) => c.status < 400)).toBe(true);
+  });
+
+  describe("cancelReplication (the page is going away)", () => {
+    /** A transport whose requests never answer, until they are aborted. */
+    function hungTransport() {
+      const seen = { requests: 0, aborted: 0 };
+      const baseFetch = ((_url: string, init?: RequestInit) => {
+        seen.requests += 1;
+        return new Promise<Response>((_, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            seen.aborted += 1;
+            reject(new DOMException("aborted", "AbortError"));
+          });
+        });
+      }) as unknown as typeof fetch;
+      return { seen, baseFetch };
+    }
+
+    async function openOver(baseFetch: typeof fetch): Promise<SyncStore> {
+      suffix += 1;
+      const store = await openUserDocStore(PERSON, {
+        storage: getRxStorageMemory() as never,
+        baseFetch,
+        retryTimeMs: 10,
+        cycleTimeoutMs: 60_000, // far longer than the test
+        nameSuffix: `_c${suffix}`,
+      });
+      if (!store) throw new Error("store did not open");
+      stores.push(store);
+      return store;
+    }
+
+    it("ends the running replication at once, aborts its requests, and the replication fails as 'no answer'", async () => {
+      const { seen, baseFetch } = hungTransport();
+      const store = await openOver(baseFetch);
+      const running = store.runReplication(session());
+      const outcome = running.then(
+        () => "finished",
+        (e: unknown) => e,
+      );
+      for (let i = 0; i < 200 && seen.requests === 0; i += 1) {
+        await new Promise((r) => setTimeout(r, 5));
+      }
+      expect(seen.requests).toBeGreaterThan(0);
+
+      store.cancelReplication?.();
+      const result = await Promise.race([
+        outcome,
+        new Promise((r) => setTimeout(() => r("still running"), 3_000)),
+      ]);
+      expect(result).toBeInstanceOf(CouchHttpError);
+      expect(result).toMatchObject({ status: 0 });
+      expect(seen.aborted).toBeGreaterThan(0);
+    });
+
+    it("with nothing running it does nothing", async () => {
+      const store = await open();
+      expect(() => store.cancelReplication?.()).not.toThrow();
+      await store.runReplication(session()); // and the next one works
+      expect(couch.calls.length).toBeGreaterThan(0);
+    });
   });
 
   it("never asks for a live or continuous feed", async () => {

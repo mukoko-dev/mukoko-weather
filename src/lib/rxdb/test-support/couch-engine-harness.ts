@@ -163,6 +163,15 @@ export class FakeStore implements SyncStore {
   /** Called on every replication; throw to fail it. */
   onReplicate: (n: number, s: CouchSession) => Promise<void> | void = () =>
     undefined;
+  /** How many times the engine asked to abandon the running replication. */
+  cancelled = 0;
+  /** Set by a test whose replication waits: what `cancelReplication` should do. */
+  cancelHook: (() => void) | null = null;
+
+  cancelReplication() {
+    this.cancelled += 1;
+    this.cancelHook?.();
+  }
 
   async isLeader() {
     return this.leader ?? true;

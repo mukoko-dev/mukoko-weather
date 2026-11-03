@@ -70,12 +70,17 @@
  * replicates when another tab wrote into the shared database, so a visible
  * follower's change is never stranded.
  *
- * SIGNED OUT IS NOT A FAILURE. 401 from the credential route means nobody is
+ * SIGNED OUT IS NOT A FAILURE, AND ONLY A CERTAIN SIGN-OUT WIPES ANYTHING. A
+ * 401 from the credential route that carries `SIGNED_OUT_CODE` means nobody is
  * signed in: the engine goes idle until the next page load. No failure count,
  * no timer, no retry, no second request, whatever the page does. It closes and
  * removes the local sync database (`purgeStores`), which held the previous
- * person's settings; a different person issued later gets a database of their
- * own and the previous person's is removed.
+ * person's settings, and the record of unwritten changes; a different person
+ * issued later gets a database of their own and the previous person's is
+ * removed. A 401 WITHOUT the code, and every other status, is an ordinary
+ * failure: the local database may hold the only copy of a change made offline.
+ * Likewise an activity is dropped on a remote removal only when its tombstone
+ * is in the local database, never because a document is missing.
  *
  * FAILURES ARE SILENT AND BOUNDED. No console output, never a throw into a
  * render. 401 from the database = the credential was refused: fetch a new one
@@ -83,8 +88,20 @@
  * doubling to 15 min (`couch-schedule.ts`). A credential with under
  * `COUCH_MIN_GRANT_LIFE_MS` left is a failure too, and two credential fetches
  * are never closer than `REFRESH_MIN_DELAY_MS`, so a short-lived grant cannot
- * make a loop. `stop()` (tab close, a restart) cancels every timer and drops
- * the token from memory.
+ * make a loop. Nothing waits for ever (a credential request, opening the local
+ * database, a replication each have a deadline).
+ *
+ * STOP IS FAST, AND THE PENDING CHANGE GOES FIRST. `stop()` (pagehide, a
+ * restart) signals first: the waits the cycle is in end now (they race against
+ * a promise stop() rejects), the replication is abandoned, and every later step
+ * of the cycle asks whether the page has said stop before it runs. The pending
+ * change is written next, through a lock of its own that the cycle's long waits
+ * are not inside (so a replication of a minute does not delay it; the write
+ * debounce and `flush()` take the same path); then the chain is awaited, the
+ * database closed, the timers cleared and the token dropped from memory. A
+ * cycle belongs to the run it began in (`epoch`): after a stop and a start (a
+ * page restored from the back/forward cache) the old cycle ends at its next
+ * step instead of running beside the new one.
  */
 
 import {
@@ -97,6 +114,7 @@ import {
   type SyncedPatch,
   type UserDocType,
   activityDocId,
+  isKnownActivityId,
   isSyncableActivityId,
   preferenceDocId,
 } from "./couch-docs";
@@ -117,6 +135,21 @@ import { COUCH_MIN_GRANT_LIFE_MS } from "../couch-session-timing";
 
 /** Events from the store this soon after the engine's own write are its own. */
 const SELF_WRITE_GRACE_MS = 500;
+/**
+ * Opening the local database may not take longer than this. IndexedDB can
+ * block an open for ever (another tab holding an old version through an
+ * upgrade); a cycle waiting on it would freeze the whole engine, and every
+ * later cycle with it.
+ */
+export const OPEN_STORE_TIMEOUT_MS = 10_000;
+
+/** Thrown inside a cycle that the page has since stopped (or restarted past). */
+class Halt extends Error {
+  constructor() {
+    super("couch-sync: halted");
+    this.name = "Halt";
+  }
+}
 
 // ---------------------------------------------------------------------------
 // What the engine is given
@@ -145,6 +178,13 @@ export interface SyncStore {
   tombstone(id: string, nowMs: number): Promise<void>;
   /** One non-live pull + push. Rejects with a `CouchHttpError` on failure. */
   runReplication(session: CouchSession): Promise<void>;
+  /**
+   * Abandon the replication that is running, if any: its `runReplication`
+   * rejects at once and its requests are aborted. Called when the page is going
+   * away, so that stopping does not wait out a replication that can last a
+   * minute. Optional.
+   */
+  cancelReplication?(): void;
   close(): Promise<void>;
 }
 
@@ -320,7 +360,44 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
   /** A cycle was asked for by another tab's write (it may run while hidden). */
   let wakeRequested = false;
 
+  /**
+   * Counts start()s. A cycle belongs to the run it began in: after a stop() and
+   * a start() (a page restored from the back/forward cache) the old cycle, if
+   * it is still waiting on a request, ends at its next step instead of running
+   * beside the new one.
+   */
+  let epoch = 0;
+  /** True once this run's cycle or the page has said stop. */
+  const halted = (since: number): boolean =>
+    stopped || signedOut || since !== epoch;
+  /**
+   * Rejects (with `Halt`) when stop() is called. The cycle's long waits (a
+   * credential request, opening the database, a replication) race against it,
+   * so a request that never answers cannot hold the engine, nor stop() behind
+   * it. Replaced by every start().
+   */
+  let halting = newHalting();
+  function newHalting(): { promise: Promise<never>; halt: () => void } {
+    let halt: () => void = () => undefined;
+    const promise = new Promise<never>((_, reject) => {
+      halt = () => reject(new Halt());
+    });
+    promise.catch(() => undefined);
+    return { promise, halt };
+  }
+  const abortable = <T>(work: Promise<T>): Promise<T> =>
+    Promise.race([work, halting.promise]);
+
   let chain: Promise<void> = Promise.resolve();
+  /**
+   * The engine's view of what is written (`lastWritten`, `changedAt`, the
+   * journal) is read and updated by the cycle AND by flushes that must not wait
+   * for the cycle. Those sections run one at a time, here. The cycle's long
+   * waits (a credential, a replication) are NOT inside it.
+   */
+  let stateLock: Promise<unknown> = Promise.resolve();
+  /** Work started outside the chain (flushes), so `idle()` can wait for it. */
+  const loose = new Set<Promise<unknown>>();
   let cycleWaiting = false;
   let pollTimer: TimerHandle | null = null;
   let backoffTimer: TimerHandle | null = null;
@@ -334,6 +411,21 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
   const enqueue = (job: () => Promise<void>): void => {
     chain = chain.then(job, job);
   };
+
+  /** Run `job` after every earlier locked section, and before any later one. */
+  function locked<T>(job: () => Promise<T>): Promise<T> {
+    const run = stateLock.then(job, job);
+    stateLock = run.catch(() => undefined);
+    return run;
+  }
+
+  /** Remember a promise that is not in the chain until it settles. */
+  function track<T>(promise: Promise<T>): Promise<T> {
+    loose.add(promise);
+    const forget = () => void loose.delete(promise);
+    promise.then(forget, forget);
+    return promise;
+  }
 
   function clear(handle: TimerHandle | null): null {
     if (handle !== null) deps.clearTimer(handle);
@@ -365,9 +457,12 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
     }
   }
 
-  async function applyOps(ops: LocalDocOp[], nowMs: number): Promise<void> {
-    if (!store || ops.length === 0) return;
-    const target = store;
+  async function applyOps(
+    target: SyncStore,
+    ops: LocalDocOp[],
+    nowMs: number,
+  ): Promise<void> {
+    if (ops.length === 0) return;
     await writing(async () => {
       for (const op of ops) {
         if (op.kind === "upsert") await target.upsert(op.doc);
@@ -392,7 +487,7 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
    * and would loop, so it is a failure like any other and backs off.
    */
   async function fetchFresh(): Promise<CouchSession> {
-    const fresh = await deps.fetchSession();
+    const fresh = await abortable(deps.fetchSession());
     if (!(fresh.expiresAtMs - deps.now() >= COUCH_MIN_GRANT_LIFE_MS)) {
       throw new CouchSessionError(503, "credential_too_short");
     }
@@ -405,24 +500,29 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
   }
 
   function scheduleRefresh(s: CouchSession): void {
+    const run = epoch;
     refreshTimer = clear(refreshTimer);
     refreshTimer = deps.setTimer(
       () => {
         refreshTimer = null;
-        if (stopped || signedOut) return;
+        if (halted(run)) return;
         // A hidden page asks when it is shown again, not on a timer.
         if (!isVisible()) {
           session = null;
           return;
         }
         enqueue(async () => {
-          if (stopped || signedOut) return;
+          if (halted(run)) return;
           try {
-            session = await fetchFresh();
-            scheduleRefresh(session);
+            const fresh = await fetchFresh();
+            // The page was stopped while this was out: the token goes nowhere.
+            if (halted(run)) return;
+            session = fresh;
+            scheduleRefresh(fresh);
           } catch (err) {
+            if (halted(run)) return;
             session = null;
-            handleFailure(err);
+            handleFailure(err, run);
           }
         });
       },
@@ -432,7 +532,7 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
     );
   }
 
-  async function ensureSession(): Promise<CouchSession> {
+  async function ensureSession(run: number): Promise<CouchSession> {
     if (
       session &&
       isTokenUsable(session.expiresAtMs, deps.now(), REFRESH_LEAD_MS)
@@ -441,6 +541,8 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
     }
     session = null;
     const fresh = await fetchFresh();
+    // The page was stopped while the request was out: keep nothing, arm nothing.
+    if (halted(run)) throw new Halt();
     session = fresh;
     scheduleRefresh(fresh);
     return fresh;
@@ -464,7 +566,7 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
   async function purge(keep: string | null): Promise<void> {
     if (!deps.purgeStores) return;
     try {
-      await deps.purgeStores(keep);
+      await abortable(deps.purgeStores(keep));
     } catch {
       // Best effort: a blocked or missing IndexedDB must not reach the page.
     }
@@ -473,12 +575,43 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
   /** The local database of the signed-in person. */
   async function ensureStore(personId: string): Promise<SyncStore | null> {
     if (store && storePerson === personId) return store;
-    const opened = await deps.openStore(personId);
+    const opened = await openWithin(personId);
     if (!opened) return null;
     store = opened;
     storePerson = personId;
     unsubShared = opened.onShared?.(onSharedWrite) ?? null;
     return store;
+  }
+
+  /**
+   * Open the local database, but never wait for ever: past
+   * `OPEN_STORE_TIMEOUT_MS` it is a failure like any other (the cycle backs
+   * off), and a database that opens after that is closed again, not leaked.
+   */
+  async function openWithin(personId: string): Promise<SyncStore | null> {
+    let abandoned = false;
+    let timer: TimerHandle | null = null;
+    const opening = deps.openStore(personId).then((opened) => {
+      // Nobody is waiting for it any more: do not leave it open.
+      if (abandoned && opened) void opened.close().catch(() => undefined);
+      return opened;
+    });
+    opening.catch(() => undefined);
+    const timeout = new Promise<never>((_, reject) => {
+      timer = deps.setTimer(() => {
+        abandoned = true;
+        reject(new CouchHttpError(0));
+      }, OPEN_STORE_TIMEOUT_MS);
+    });
+    timeout.catch(() => undefined);
+    try {
+      return await abortable(Promise.race([opening, timeout]));
+    } catch (err) {
+      abandoned = true;
+      throw err;
+    } finally {
+      if (timer !== null) deps.clearTimer(timer);
+    }
   }
 
   /**
@@ -490,6 +623,7 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
    * the wrong person the cycle closes it and starts that person's own.
    */
   async function openLocal(): Promise<void> {
+    const run = epoch;
     if (stopped || signedOut || unavailable || store) return;
     let person: string | null = null;
     try {
@@ -500,6 +634,7 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
     if (!person) return;
     try {
       if (!(await ensureStore(person))) return; // the first cycle decides
+      if (halted(run)) return; // stop() closes whatever got opened
       tentative = true;
       await flushLocal();
     } catch {
@@ -545,18 +680,25 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
    * the person made them. Needs the local database, not a credential: it is
    * also what a tab that is not the leader does.
    */
-  async function flushLocal(): Promise<boolean> {
-    if (!store || !storePerson || !lastWritten) return false;
+  const flushLocal = (): Promise<boolean> => locked(flushNow);
+
+  /** The body of a flush; callers hold the state lock. */
+  async function flushNow(): Promise<boolean> {
+    // The database this flush started on: a flush never writes to another one
+    // because the engine moved on to another person while it was waiting.
+    const db = store;
+    if (!db || !storePerson || !lastWritten) return false;
+    const base = lastWritten;
     const next = cloneState(deps.bridge.read());
-    if (sameState(next, lastWritten)) {
+    if (sameState(next, base)) {
       changedAt = null;
       clearRecord();
       return false;
     }
     const at = changedAt ?? deps.now();
-    const live = new Map((await store.liveDocs()).map((d) => [d.id, d]));
-    const ops = planChangeOps(lastWritten, next, live, docContext(at));
-    await applyOps(ops, at);
+    const live = new Map((await db.liveDocs()).map((d) => [d.id, d]));
+    const ops = planChangeOps(base, next, live, docContext(at));
+    await applyOps(db, ops, at);
     lastWritten = next;
     if (sameState(cloneState(deps.bridge.read()), next)) {
       changedAt = null;
@@ -576,14 +718,17 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
    * include a change not yet written and make it look like the starting state,
    * and the server's older value would then replace it.
    */
-  async function seedOnce(): Promise<boolean> {
-    if (!store || !session || !lastWritten) return false;
-    if (seededPerson === session.personId) return false;
+  const seedOnce = (): Promise<boolean> => locked(seedNow);
+
+  async function seedNow(): Promise<boolean> {
+    const db = store;
+    const s = session;
+    if (!db || !s || !lastWritten || seededPerson === s.personId) return false;
     const state = cloneState(lastWritten);
-    const known = await store.knownIds(candidateIds(state));
+    const known = await db.knownIds(candidateIds(state));
     const ops = planSeedOps(state, known, docContext(deps.now()));
-    await applyOps(ops, deps.now());
-    seededPerson = session.personId;
+    await applyOps(db, ops, deps.now());
+    seededPerson = s.personId;
     return ops.length > 0;
   }
 
@@ -591,13 +736,29 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
    * Apply what the documents say, unless the person changed something
    * meanwhile. Resolves true when it had to write a change of the person's
    * first (so the caller replicates again).
+   *
+   * An activity the device holds is dropped only when the local database holds
+   * its TOMBSTONE, i.e. another device deleted it and the deletion was pulled.
+   * "No document" means this device has not seen it yet (a follower tab whose
+   * leader has not seeded, a database just created or wiped), not that anyone
+   * removed it, and reading it as a removal would erase the person's choices.
    */
-  async function applyRemote(): Promise<boolean> {
-    if (!store) return false;
-    const wrote = await flushLocal();
+  const applyRemote = (): Promise<boolean> => locked(applyNow);
+
+  async function applyNow(): Promise<boolean> {
+    const db = store;
+    if (!db) return false;
+    const wrote = await flushNow();
     const before = cloneState(deps.bridge.read());
-    const docs = await store.liveDocs();
-    const patch = patchFromDocs(docs, before);
+    const docs = await db.liveDocs();
+    const held = before.selectedActivities
+      .filter(isKnownActivityId)
+      .map(activityDocId);
+    const live = new Set(docs.map((d) => d.id));
+    const deleted = new Set(
+      [...(await db.knownIds(held))].filter((id) => !live.has(id)),
+    );
+    const patch = patchFromDocs(docs, before, deleted);
     if (Object.keys(patch).length === 0) return wrote;
     // A change made while the documents were read wins: the next cycle sees it.
     if (!sameState(before, deps.bridge.read())) return wrote;
@@ -628,11 +789,20 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
   }
 
   async function replicate(db: SyncStore, s: CouchSession): Promise<void> {
-    await writing(() => db.runReplication(s));
+    await writing(() => abortable(db.runReplication(s)));
+  }
+
+  /** A tab that is not the leader: apply what the shared database holds. */
+  async function followOnly(run: number): Promise<void> {
+    dropCredential();
+    await applyRemote();
+    if (halted(run)) return;
+    settled();
   }
 
   async function cycle(): Promise<void> {
     if (stopped || unavailable || signedOut) return;
+    const run = epoch;
     const wake = wakeRequested;
     wakeRequested = false;
     if (!isOnline()) {
@@ -653,29 +823,35 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
     try {
       // A tab that is not the leader asks for no credential of its own.
       if (store && !(await isLeaderOf(store))) {
-        dropCredential();
-        await applyRemote();
-        settled();
+        if (halted(run)) return;
+        await followOnly(run);
         return;
       }
-      const s = await ensureSession();
+      if (halted(run)) return;
+      const s = await ensureSession(run);
+      if (halted(run)) return;
       if (store && storePerson !== s.personId) {
         // A different person is signed in: the previous person's database
         // closes (and is removed below). If it was opened on a guess from the
         // record, what the person changed since this page started is still
         // theirs to write, to their own database; otherwise the baseline
         // starts again.
-        const guessed = tentative && startBaseline;
-        await closeStore();
-        lastWritten = guessed
-          ? cloneState(startBaseline as SyncableState)
-          : cloneState(deps.bridge.read());
+        await locked(async () => {
+          const guessed = tentative && startBaseline;
+          await closeStore();
+          lastWritten = guessed
+            ? cloneState(startBaseline as SyncableState)
+            : cloneState(deps.bridge.read());
+        });
+        if (halted(run)) return;
       }
       if (purgedFor !== s.personId) {
         await purge(s.personId);
+        if (halted(run)) return;
         purgedFor = s.personId;
       }
       const db = await ensureStore(s.personId);
+      if (halted(run)) return;
       if (!db) {
         // No local database, so nothing to sync and no use for a credential.
         unavailable = true;
@@ -685,26 +861,50 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
       }
       tentative = false; // a credential has said whose database this is
       if (!(await isLeaderOf(db))) {
-        dropCredential();
-        await applyRemote();
-        settled();
+        if (halted(run)) return;
+        await followOnly(run);
         return;
       }
+      if (halted(run)) return;
       if (deps.ensureDatabase && ensuredPerson !== s.personId) {
-        await deps.ensureDatabase(s);
+        await abortable(deps.ensureDatabase(s));
+        if (halted(run)) return;
         ensuredPerson = s.personId;
       }
       await flushLocal();
-      await replicate(db, s);
+      if (halted(run)) return;
+      try {
+        await replicate(db, s);
+      } catch (err) {
+        // The pull comes before the push. A push that keeps failing (a document
+        // the server refuses, a connection that drops half way) must not keep
+        // everything the pull stored off this device: apply it, then let the
+        // failure back the cycle off as usual.
+        if (!(err instanceof Halt) && !halted(run)) {
+          await applyRemote().catch(() => false);
+        }
+        throw err;
+      }
+      // From here on each step first asks whether the page has said stop: a
+      // cycle that finishes a replication after pagehide does not seed, apply
+      // or replicate again.
+      if (halted(run)) return;
       // A change made while that ran is written before anything is seeded or
       // applied, and pushed by the replication below.
       const flushed = await flushLocal();
+      if (halted(run)) return;
       const seeded = await seedOnce();
+      if (halted(run)) return;
       const wrote = await applyRemote();
-      if (seeded || flushed || wrote) await replicate(db, s);
+      if (halted(run)) return;
+      if (seeded || flushed || wrote) {
+        await replicate(db, s);
+        if (halted(run)) return;
+      }
       settled();
     } catch (err) {
-      handleFailure(err);
+      if (err instanceof Halt) return;
+      handleFailure(err, run);
     }
   }
 
@@ -732,8 +932,10 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
     });
   }
 
-  function handleFailure(err: unknown): void {
-    if (stopped) return;
+  function handleFailure(err: unknown, run: number): void {
+    // A failure of a cycle the page has since stopped (a replication that was
+    // abandoned, a request that came back late) is nobody's to back off on.
+    if (halted(run)) return;
     const fromRoute = err instanceof CouchSessionError;
     const status_ =
       fromRoute || err instanceof CouchHttpError
@@ -743,6 +945,9 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
       fromRoute ? "route" : "couch",
       status_,
       refetchedThisRun,
+      // Only a 401 that SAYS nobody is signed in goes idle and removes the
+      // local database; any other answer is a failure to retry.
+      err instanceof CouchSessionError ? err.code : undefined,
     );
     // The database is not there (never prepared, or gone): prepare it again
     // on the next cycle, after the back-off.
@@ -807,15 +1012,20 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
     writeTimer = clear(writeTimer);
     writeTimer = deps.setTimer(() => {
       writeTimer = null;
-      enqueue(async () => {
-        if (stopped || signedOut) return;
-        try {
-          if (await flushLocal()) schedulePush();
-        } catch {
-          // The next cycle writes it again.
-        }
-      });
+      // Not in the chain: a replication in progress can last a minute, and the
+      // person's change does not wait for it.
+      void track(flushAndPush());
     }, LOCAL_WRITE_DEBOUNCE_MS);
+  }
+
+  /** Write the pending change now, outside the chain, and push it soon. */
+  async function flushAndPush(): Promise<void> {
+    if (stopped || signedOut) return;
+    try {
+      if (await flushLocal()) schedulePush();
+    } catch {
+      // The record and the next cycle still hold it.
+    }
   }
 
   /**
@@ -850,6 +1060,8 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
     async start() {
       if (!stopped) return;
       stopped = false;
+      epoch += 1;
+      halting = newHalting();
       unavailable = false;
       signedOut = false;
       status = "idle";
@@ -879,7 +1091,11 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
 
     async stop() {
       if (stopped) return;
+      const run = epoch;
+      // Signal first: a cycle in flight ends at its next step (`halted`), and
+      // the waits it is in the middle of end now.
       stopped = true;
+      halting.halt();
       status = "stopped";
       clearAllTimers();
       unsubBridge?.();
@@ -889,9 +1105,22 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
       session = null; // the token leaves memory
       cycleWaiting = false;
       wakeRequested = false;
+      // A replication can last a minute: abandon it rather than wait it out.
+      try {
+        store?.cancelReplication?.();
+      } catch {
+        // Best effort.
+      }
+      // THEN the pending change, before anything that can take long. It goes
+      // through the state lock only, never the chain, so it does not wait for
+      // the cycle (a replication, a credential request) that is still running.
+      // The record in web storage already holds it, and stays if this fails.
+      if (!signedOut) await flushLocal().catch(() => false);
       await chain.catch(() => undefined);
-      // The page is going away: a change still inside the debounce is written
-      // now (best effort; the journal holds it if this does not complete).
+      // A start() since (a page restored from the back/forward cache) owns the
+      // state now; this stop has nothing more to tear down.
+      if (epoch !== run) return;
+      // A change that landed while the cycle was ending.
       if (!signedOut) await flushLocal().catch(() => false);
       await closeStore();
       purgedFor = null;
@@ -906,27 +1135,19 @@ export function createCouchSyncEngine(deps: EngineDeps): CouchSyncEngine {
     async flush() {
       if (stopped || signedOut) return;
       writeTimer = clear(writeTimer);
-      await new Promise<void>((done) => {
-        enqueue(async () => {
-          try {
-            if (!stopped && !signedOut && (await flushLocal())) schedulePush();
-          } catch {
-            // The journal and the next cycle still hold it.
-          } finally {
-            done();
-          }
-        });
-      });
+      await track(flushAndPush());
     },
 
     requestSync: () => requestSync(),
     status: () => status,
     async idle() {
-      let seen: Promise<void>;
-      do {
-        seen = chain;
+      for (;;) {
+        const seen = chain;
+        const pending = [...loose];
         await seen;
-      } while (seen !== chain);
+        await Promise.allSettled(pending);
+        if (seen === chain && loose.size === 0) return;
+      }
     },
   };
 }
