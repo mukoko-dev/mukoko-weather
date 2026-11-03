@@ -42,18 +42,30 @@
 //!   nothing about delivery (a push service may drop, delay or never deliver
 //!   a message; the in-app inbox is the record).
 //!
-//! **Not here, on purpose.** Severe-weather alerts (frost only), the TTL and
-//! urgency of a push (the sender's options; they belong with the alert and
-//! come in a later slice), the delivery-log claim itself, the guard that a
-//! batch in which every send is `Expired` deactivates nothing, and every call
-//! to the Nyuchi API or a push service.
+//! **What a send asks of the push service.** Each [`PlannedSend`] carries its
+//! [`PushOptions`] ([`push::frost_push_options`]): a `TTL` that ends the
+//! message with its night (09:00 local the next morning; a "tonight" alert is
+//! worth nothing after that), `Urgency: high` for severe frost and `normal`
+//! otherwise, and a `Topic` derived from the dedupe key so a retry replaces
+//! the copy a push service still holds. They come from the same `now` as the
+//! rest of the plan, so planning the same inputs twice still gives the same
+//! plan, while a later tick of the same night has a shorter TTL and the same
+//! key and topic. A night that is already over gives no options and so no
+//! send ([`Skip::Stale`]).
+//!
+//! **Not here, on purpose.** Severe-weather alerts (frost only), the
+//! delivery-log claim itself, the guard that a batch in which every send is
+//! `Expired` deactivates nothing, and every call to the Nyuchi API or a push
+//! service.
 //!
 //! The two bounds below are ours, untuned: no standard names them, and they
 //! should follow the Worker's subrequest budget once the tick exists.
 
 use chrono::{DateTime, Timelike, Utc};
 
-use crate::push::{self, AlertPrefs, Decision, DecisionInput, Payload, MAX_PUSHES_PER_DAY};
+use crate::push::{
+    self, AlertPrefs, Decision, DecisionInput, Payload, PushOptions, MAX_PUSHES_PER_DAY,
+};
 use crate::station_alert::{self, Confirmation, JoinedFrost, PlaceSite, StationReading};
 
 /// The alert kind in the dedupe key and the delivery log.
@@ -201,6 +213,11 @@ pub struct PlannedSend {
     /// `{cell}:frost:{night}` (`push::dedupe_key`).
     pub dedupe_key: String,
     pub payload: Payload,
+    /// The `TTL`, `Urgency` and `Topic` of the push ([`push::frost_push_options`]):
+    /// the message expires with its night, severe frost is `high`, and the
+    /// topic follows the key. Fixed for the plan, so every target of one place
+    /// asks the push service the same.
+    pub options: PushOptions,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -392,17 +409,27 @@ pub fn plan_frost(place: &PlaceInput, targets: &[AlertTarget]) -> FrostPlan {
     // Everything a send needs, built once. `None` means nothing can be sent.
     let local = local_now(place.now, place.utc_offset_seconds);
     let send = match (&verdict, &local) {
-        (PlaceVerdict::Frost(joined), Some(_)) => Some((
-            joined,
-            PlannedSend {
-                dedupe_key: push::dedupe_key(place.cell, KIND_FROST, &joined.alert.night),
+        (PlaceVerdict::Frost(joined), Some(_)) => {
+            let dedupe_key = push::dedupe_key(place.cell, KIND_FROST, &joined.alert.night);
+            // `None` when the night is already over: a push that would say
+            // "tonight" about a night that has ended is never built.
+            let planned = push::frost_push_options(
+                &joined.alert,
+                &dedupe_key,
+                place.now,
+                place.utc_offset_seconds,
+            )
+            .map(|options| PlannedSend {
+                dedupe_key,
                 payload: station_alert::frost_payload_with_evidence(
                     place.name.trim(),
                     place.slug,
                     joined,
                 ),
-            },
-        )),
+                options,
+            });
+            Some((joined, planned))
+        }
         _ => None,
     };
 
@@ -418,11 +445,18 @@ pub fn plan_frost(place: &PlaceInput, targets: &[AlertTarget]) -> FrostPlan {
                 (Some((joined, planned)), Some(local)) => {
                     match judge(t, place.slug, joined, local) {
                         Err(skip) => Action::Skip(skip),
+                        // Its night is over, so nothing can be asked of a push
+                        // service (`decide` drops these first; this is the
+                        // fail-closed side of the same rule).
+                        Ok(()) if planned.is_none() => Action::Skip(Skip::Stale),
                         Ok(()) if sends >= MAX_SENDS_PER_PLACE => Action::Skip(Skip::TickLimit),
-                        Ok(()) => {
-                            sends += 1;
-                            Action::Send(planned.clone())
-                        }
+                        Ok(()) => match planned {
+                            Some(planned) => {
+                                sends += 1;
+                                Action::Send(planned.clone())
+                            }
+                            None => Action::Skip(Skip::Stale),
+                        },
                     }
                 }
                 // A frost verdict always has both; if it ever did not, send nothing.
@@ -447,7 +481,7 @@ pub fn plan_frost(place: &PlaceInput, targets: &[AlertTarget]) -> FrostPlan {
 mod tests {
     use super::*;
     use crate::external_feeds::SOURCE_SAAOPA;
-    use crate::push::{FrostAlert, Risk};
+    use crate::push::{FrostAlert, Risk, Urgency};
     use crate::station_alert::StationSite;
     use chrono::{Duration, NaiveDateTime};
 
@@ -613,6 +647,12 @@ mod tests {
             Action::Send(PlannedSend {
                 dedupe_key: KEY_JUL10.to_string(),
                 payload: severe_payload(),
+                // 19:30 local to 09:00 local is 13.5 hours
+                options: PushOptions {
+                    ttl_seconds: 48_600,
+                    urgency: Urgency::High,
+                    topic: "frost-6e60291b482856a333062897b9".to_string(),
+                },
             })
         };
         let entry = |id: &str, action: Action| PlanEntry {
@@ -936,6 +976,72 @@ mod tests {
         let night2 = Some("cell:-17.85_31.05:frost:2026-07-11".to_string());
         assert_eq!(key_at("2026-07-11T09:15"), night2);
         assert_eq!(key_at("2026-07-11T18:15"), night2);
+    }
+
+    #[test]
+    fn a_push_expires_with_its_night_and_keeps_the_same_topic_all_night() {
+        // Moderate frost (lowest 2.4 at 03:00): `normal` urgency. The night of
+        // the 10th ends 09:00 local on the 11th (07:00Z).
+        let (times, temps) = hourly("2026-07-10T18:00", &MODERATE);
+        let mut no_quiet = target("t-01");
+        no_quiet.prefs.quiet_start = 0;
+        no_quiet.prefs.quiet_end = 0;
+        let options_at = |local: &str| {
+            let plan = plan_frost(&harare(&times, &temps, local), &[no_quiet.clone()]);
+            let options = plan.sends().next().map(|(_, s)| s.options.clone());
+            options
+        };
+        // 21:30 local: 11.5 hours to go
+        let first = options_at("2026-07-10T21:30").unwrap();
+        assert_eq!(first.ttl_seconds, 41_400);
+        assert_eq!(first.urgency, Urgency::Normal);
+        assert_eq!(first.topic, "frost-6e60291b482856a333062897b9");
+        // 23:10 local: 9 h 50 min. A later tick asks for less time, never more,
+        // and the same topic, so a retry replaces the copy still queued.
+        let later = options_at("2026-07-10T23:10").unwrap();
+        assert_eq!(later.ttl_seconds, 35_400);
+        assert_eq!(later.topic, first.topic);
+        // the morning after dawn, nothing is planned at all
+        assert_eq!(options_at("2026-07-11T09:15"), None);
+    }
+
+    #[test]
+    fn every_target_of_a_plan_asks_the_push_service_the_same() {
+        let (times, temps) = hourly("2026-07-10T18:00", &SEVERE);
+        let place = harare(&times, &temps, "2026-07-10T19:30");
+        let targets: Vec<AlertTarget> = (0..4).map(|i| target(&format!("t-{i}"))).collect();
+        let plan = plan_frost(&place, &targets);
+        let options: Vec<&PushOptions> = plan.sends().map(|(_, s)| &s.options).collect();
+        assert_eq!(options.len(), 4);
+        assert!(options.iter().all(|o| *o == options[0]));
+        assert_eq!(options[0].urgency, Urgency::High);
+    }
+
+    #[test]
+    fn the_ttl_is_the_time_left_in_the_night_at_every_tick_that_sends() {
+        // Severe frost at 03:00 on the 11th. Walk 15-minute ticks from 18:00 on
+        // the 10th to 08:45 on the 11th: whenever a send is planned, its TTL is
+        // exactly the time to 09:00 local, and it is never zero.
+        let (times, temps) = hourly("2026-07-10T18:00", &SEVERE);
+        let end = harare_at("2026-07-11T09:00");
+        let mut checked = 0;
+        let mut local = naive("2026-07-10T18:00");
+        let stop = naive("2026-07-11T09:00");
+        while local < stop {
+            let label = local.format("%Y-%m-%dT%H:%M").to_string();
+            let plan = plan_frost(&harare(&times, &temps, &label), &[target("t-01")]);
+            if let Some((_, s)) = plan.sends().next() {
+                let left = (end - harare_at(&label)).num_seconds();
+                assert!(left > 0, "{label}");
+                assert_eq!(i64::from(s.options.ttl_seconds), left, "{label}");
+                assert_eq!(s.options.urgency, Urgency::High, "{label}");
+                checked += 1;
+            }
+            local += Duration::minutes(15);
+        }
+        // The 03:00 frost is ahead from 18:00 through 03:00 itself: 37 ticks.
+        // After that no frost hour is left in the forecast, so nothing is sent.
+        assert_eq!(checked, 37);
     }
 
     #[test]
