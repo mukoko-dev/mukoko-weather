@@ -9,6 +9,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MAP_MODELS } from "./map-sources";
+import { APPLE_WEATHERKIT_MODEL } from "./forecast-sources";
+import { ForecastModel } from "./weather";
 
 const rust = readFileSync(
   join(process.cwd(), "workers/crates/weather-core/src/community.rs"),
@@ -33,9 +35,47 @@ describe("device profile forecast models (Rust Worker allowlist)", () => {
       expect(accepted.has(id)).toBe(true);
   });
 
+  it("accepts Apple Weather before anything serves it", () => {
+    // A device on a newer client may store it; refusing would fail every
+    // preference sync for that device. Whether a person is OFFERED it is the
+    // `apple_weatherkit` feature flag, not this list.
+    expect(accepted.has(APPLE_WEATHERKIT_MODEL)).toBe(true);
+  });
+
   it("is not an open list", () => {
     expect(accepted.has("gpt")).toBe(false);
-    expect(accepted.size).toBe(11);
+    expect(accepted.size).toBe(12);
+  });
+});
+
+describe("the MongoDB bridge applies the same list (it is the last stop before the database)", () => {
+  const bridge = readFileSync(
+    join(process.cwd(), "workers/mongo-bridge/src/validate.ts"),
+    "utf8",
+  );
+  const body = bridge
+    .slice(bridge.indexOf("export const FORECAST_MODELS"))
+    .split("] as const;")[0];
+  const bridged = new Set(
+    [...body.matchAll(/"([a-z0-9_]+)"/g)].map((m) => m[1]),
+  );
+
+  it("accepts exactly the models the Rust Worker accepts", () => {
+    // A model the Rust Worker lets through but the bridge refuses fails the
+    // whole PATCH there, and the client never notices: preferences stop syncing.
+    expect([...bridged].sort()).toEqual([...accepted].sort());
+  });
+
+  it("accepts Apple Weather", () => {
+    expect(bridged.has(APPLE_WEATHERKIT_MODEL)).toBe(true);
+  });
+});
+
+describe("every model the My Weather picker can store is accepted", () => {
+  it("accepts each ForecastModel value (a refusal would break device sync)", () => {
+    for (const m of Object.values(ForecastModel)) {
+      expect(accepted.has(m), m).toBe(true);
+    }
   });
 });
 

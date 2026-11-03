@@ -16,6 +16,7 @@ export const FORECAST_MODELS = [
   "gem_global",
   "meteofrance_arpege_world",
   "meteofrance_seamless",
+  "apple_weatherkit",
   "ecmwf_ifs04",
   "icon_seamless",
 ] as const;

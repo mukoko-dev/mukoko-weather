@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import nextConfig from "../../next.config";
@@ -6,8 +6,10 @@ import {
   buildCsp,
   CORS_POLICY,
   CSP_DIRECTIVES,
+  couchApiConnectSrc,
   PERMISSIONS_POLICY,
 } from "./security-headers";
+import { gatewayOrigin, NYUCHI_API_DEFAULT_ORIGIN } from "./nyuchi-gateway";
 
 type Rule = { source: string; headers: { key: string; value: string }[] };
 const rules = (await (
@@ -88,10 +90,126 @@ describe("security headers (B05)", () => {
       );
   });
 
+  it("lets the flagged CouchDB sync reach the Nyuchi API, and only connect-src", () => {
+    expect(CSP_DIRECTIVES["connect-src"]).toContain("https://api.nyuchi.com");
+    for (const directive of Object.keys(CSP_DIRECTIVES)) {
+      if (directive === "connect-src") continue;
+      expect(
+        (CSP_DIRECTIVES as Record<string, string[]>)[directive],
+        directive,
+      ).not.toContain("https://api.nyuchi.com");
+    }
+  });
+
   it("allows no Google Fonts origin (fonts are self-hosted via next/font)", () => {
     const csp = buildCsp();
     expect(csp).not.toContain("fonts.googleapis.com");
     expect(csp).not.toContain("fonts.gstatic.com");
+  });
+});
+
+describe("the host the CouchDB sync replicates with is in the CSP", () => {
+  const connectSrc = (csp: string): string[] =>
+    (csp.split("; ").find((p) => p.startsWith("connect-src ")) ?? "")
+      .split(" ")
+      .slice(1);
+  const served = async (): Promise<string> => {
+    const r = (
+      (await (
+        nextConfig as { headers: () => Promise<Rule[]> }
+      ).headers()) as Rule[]
+    ).filter((x) => x.source === "/((?!_next/|api/).*)");
+    return hdr(r, "Content-Security-Policy-Report-Only") ?? "";
+  };
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("the origin the route is configured with in production is the table's entry", () => {
+    expect(NYUCHI_API_DEFAULT_ORIGIN).toBe("https://api.nyuchi.com");
+    expect(CSP_DIRECTIVES["connect-src"]).toContain(NYUCHI_API_DEFAULT_ORIGIN);
+    // And it is a value the route accepts and hands to the page as it is.
+    expect(gatewayOrigin({ NYUCHI_API_URL: NYUCHI_API_DEFAULT_ORIGIN })).toBe(
+      NYUCHI_API_DEFAULT_ORIGIN,
+    );
+  });
+
+  it("the table stays pure data: it reads no environment", () => {
+    const source = readFileSync(
+      resolve(__dirname, "security-headers.ts"),
+      "utf8",
+    );
+    expect(source).not.toMatch(/process\.env/);
+  });
+
+  it("couchApiConnectSrc names the configured origin by the route's own rule, or nothing", () => {
+    expect(
+      couchApiConnectSrc({ NYUCHI_API_URL: "https://api.staging.nyuchi.test" }),
+    ).toEqual(["https://api.staging.nyuchi.test"]);
+    expect(couchApiConnectSrc({ NYUCHI_API_URL: " https://x.test/ " })).toEqual(
+      ["https://x.test"],
+    );
+    for (const bad of [
+      undefined,
+      "",
+      "   ",
+      "http://api.nyuchi.com",
+      "https://api.nyuchi.com/v1",
+      "https://user:pass@api.nyuchi.com",
+      "not a url",
+    ]) {
+      expect(couchApiConnectSrc({ NYUCHI_API_URL: bad }), String(bad)).toEqual(
+        [],
+      );
+      // Where the route would answer 503, nothing is added.
+      expect(gatewayOrigin({ NYUCHI_API_URL: bad })).toBeNull();
+    }
+  });
+
+  it("buildCsp adds extra hosts to connect-src only, and never twice", () => {
+    const csp = buildCsp(undefined, [
+      "https://api.staging.nyuchi.test",
+      "https://api.nyuchi.com",
+    ]);
+    expect(connectSrc(csp)).toContain("https://api.staging.nyuchi.test");
+    expect(
+      connectSrc(csp).filter((h) => h === "https://api.nyuchi.com"),
+    ).toHaveLength(1);
+    expect(csp.match(/api\.staging\.nyuchi\.test/g)).toHaveLength(1);
+    expect(buildCsp()).toBe(buildCsp(undefined, []));
+  });
+
+  it("whatever origin the route would hand the page is in the CSP next.config serves for the same environment", async () => {
+    for (const url of [
+      NYUCHI_API_DEFAULT_ORIGIN,
+      "https://api.staging.nyuchi.test",
+      "https://api.nyuchi.com:8443",
+      "http://localhost:8000",
+    ]) {
+      vi.stubEnv("NYUCHI_API_URL", url);
+      const handedToThePage = gatewayOrigin();
+      expect(handedToThePage, url).not.toBeNull();
+      expect(connectSrc(await served()), url).toContain(
+        handedToThePage as string,
+      );
+    }
+  });
+
+  it("with the variable unset or unusable the served CSP is the table's own", async () => {
+    for (const url of ["", "ftp://x.test", "https://api.nyuchi.com/path"]) {
+      vi.stubEnv("NYUCHI_API_URL", url);
+      expect(await served(), url).toBe(buildCsp());
+    }
+  });
+
+  it("is still report-only (nothing is blocked yet)", async () => {
+    const all = (await (
+      nextConfig as { headers: () => Promise<Rule[]> }
+    ).headers()) as Rule[];
+    const keys = all
+      .filter((x) => x.source === "/((?!_next/|api/).*)")
+      .flatMap((x) => x.headers.map((h) => h.key));
+    expect(keys).toContain("Content-Security-Policy-Report-Only");
+    expect(keys).not.toContain("Content-Security-Policy");
   });
 });
 

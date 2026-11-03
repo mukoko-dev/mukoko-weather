@@ -7,6 +7,7 @@ use std::time::Duration;
 
 pub mod budget;
 pub mod cors;
+pub mod feed_transport;
 pub mod open_meteo;
 pub mod responses;
 pub mod service;

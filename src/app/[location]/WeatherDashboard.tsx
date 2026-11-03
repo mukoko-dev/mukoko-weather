@@ -31,6 +31,8 @@ import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { useLocationSwipe } from "@/lib/use-location-pager";
 import { Footer } from "@/components/layout/Footer";
+import { ForecastCredit } from "@/components/ui/forecast-credit";
+import { isExternalForecastModel } from "@/lib/forecast-sources";
 import { CurrentConditions } from "@/components/weather/CurrentConditions";
 import { AtmosphericSummary } from "@/components/weather/AtmosphericSummary";
 import { HourlyScrollCards } from "@/components/weather/HourlyScrollCards";
@@ -214,6 +216,9 @@ export function WeatherDashboard({
   // series at once, before any new fetch.
   const selectedForecastModel = useAppStore((s) => s.selectedForecastModel);
   const model = normalizeForecastModel(selectedForecastModel);
+  // A model another provider serves (Apple Weather), not Open-Meteo: its data
+  // carries a credit and is not kept longer than that provider allows.
+  const modelIsExternal = isExternalForecastModel(model);
   const extrasKey = modelExtrasKey(location.lat, location.lon, model);
 
   // The client fetch of /v1/weather: the model comparison + minutely nowcast,
@@ -247,6 +252,10 @@ export function WeatherDashboard({
     modelsKey: COMPARISON_MODELS.join(","),
   });
   const extras = live.extras ?? emptyModelExtras(extrasKey);
+  // The picked model's forecast, when the server confirmed it served that model
+  // for the place on screen; null for the blend (and while a pick is still
+  // loading, or answered with the blend).
+  const modelBaseline = extras.baseline;
   // What is on screen: the seed, a picked model's baseline, or (when the seed
   // was the seasonal estimate) the first live forecast a fetch brought. The
   // banner and everything derived from the forecast follow it, so a recovery
@@ -404,21 +413,30 @@ export function WeatherDashboard({
   }, [location.slug, setSelectedLocation]);
 
   // Cache weather hint for the loading skeleton — enables weather-aware
-  // Three.js animation on subsequent visits to this location.
+  // Three.js animation on subsequent visits to this location. The hint is kept
+  // for 2 hours, longer than an external provider's data may be retained
+  // (Apple Weather: 15 minutes), so it is taken from the seeded blend, never
+  // from an external model's baseline.
+  const hintCurrent =
+    modelBaseline && modelIsExternal ? seedWeather.current : weather.current;
+  const hintWeatherCode = hintCurrent.weather_code;
+  const hintIsDay = hintCurrent.is_day;
+  const hintTemperature = hintCurrent.temperature_2m;
+  const hintWindSpeed = hintCurrent.wind_speed_10m;
   useEffect(() => {
     cacheWeatherHint(location.slug, {
-      weatherCode: weather.current.weather_code,
-      isDay: weather.current.is_day === 1,
-      temperature: weather.current.temperature_2m,
-      windSpeed: weather.current.wind_speed_10m,
+      weatherCode: hintWeatherCode,
+      isDay: hintIsDay === 1,
+      temperature: hintTemperature,
+      windSpeed: hintWindSpeed,
       timestamp: Date.now(),
     });
   }, [
     location.slug,
-    weather.current.weather_code,
-    weather.current.is_day,
-    weather.current.temperature_2m,
-    weather.current.wind_speed_10m,
+    hintWeatherCode,
+    hintIsDay,
+    hintTemperature,
+    hintWindSpeed,
   ]);
 
   // Keep the last good payload for this place on the device so the next
@@ -550,6 +568,16 @@ export function WeatherDashboard({
                 weather={weather}
                 placeName={location.name}
               />
+            </div>
+          )}
+
+          {/* The credit an external forecast provider requires, while the
+              server has confirmed its forecast as the baseline on screen
+              (Apple Weather: trademark, legal link and the notice that its
+              data was modified). Nothing for the blend or an Open-Meteo model. */}
+          {modelBaseline && modelIsExternal && (
+            <div className="kestrel-ink">
+              <ForecastCredit models={[model]} use="baseline" />
             </div>
           )}
 
