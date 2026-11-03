@@ -30,10 +30,13 @@ on:
   # main commit the deploy builds, never a caller-chosen ref.
   workflow_call:
 
-# The event name keeps a deploy's gate out of the push/PR group, so a push
-# can never cancel a gate that a deploy is waiting on.
+# In a called workflow the github context is the CALLER's, so github.workflow
+# is "Workers" for this workflow's own runs and "Workers deploy" for the gate
+# a deploy calls. That keeps the gate out of the standalone push/PR group: a
+# push to main starts both, and the standalone run must never cancel the gate
+# a deploy is waiting on.
 concurrency:
-  group: workers-${{ github.event_name }}-${{ github.ref }}
+  group: workers-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
