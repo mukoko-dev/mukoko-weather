@@ -9,7 +9,9 @@
  *     (no cookie ever travels to the sync host), `cache: "no-store"`, no
  *     redirects followed, one timeout over the whole exchange.
  *   - Refuses any URL outside the one database it was built for (and the exact
- *     extra URLs it was given: the gateway's personal route).
+ *     extra URLs it was given: the gateway's personal route). The URL is parsed,
+ *     not prefix-matched: same origin, no user information, no dot segment however
+ *     spelled, no backslash, and a path under the database's own (`isAllowedUrl`).
  *   - Reads every response body inside the timeout (`requestWithin`, the one
  *     place a request, its timeout and its abort are put together; the
  *     same-origin session route uses it too) and hands the caller a body that is
@@ -36,6 +38,12 @@
  *     (`couch_proxy_policy.py`: `filter` `_doc_ids`, a `doc_ids` body on
  *     `POST _changes`), and a filtered feed still ends at the end of the
  *     database, so the checkpoint moves.
+ *   - The plugin's push check (`POST _all_docs` with `include_docs`) answers a
+ *     deleted document with no body, which the plugin reads as "nothing there":
+ *     it would write over a deletion made elsewhere whatever the times say. The
+ *     deleted revision is read back (`GET <id>?rev=`, `withDeletedDocs`) so the
+ *     conflict rule, which orders a delete by its `updatedAt` like any edit, is
+ *     asked.
  *
  * Nothing here logs, and no error text carries the token, a URL or a body.
  */
@@ -132,6 +140,88 @@ function isChangesFeed(url: URL, method: string): boolean {
   return method === "GET" && url.pathname.endsWith("/_changes");
 }
 
+/** `%2e` / `%2E` and `.` read the same to a URL parser and to a server. */
+const DOT_SEGMENT_RE = /^(?:\.|%2e){1,2}$/i;
+/** The path of an absolute URL as written, before any parser normalises it. */
+const RAW_PATH_RE = /^[a-z][a-z0-9+.-]*:\/\/[^/?#]*([^?#]*)/i;
+
+/**
+ * Whether the path as WRITTEN could climb out of where it starts or hide a
+ * separator. The URL parser removes `..` (and `%2e%2e`) before anything can
+ * look at them, so this reads the text itself: no dot segment, however it is
+ * spelled or how often it is percent-encoded; no empty segment but a final one;
+ * no backslash and no encoded slash or backslash (a server may read them as
+ * separators); no `@`.
+ */
+function pathIsPlain(raw: string): boolean {
+  if (raw.includes("\\") || raw.includes("@")) return false;
+  const match = RAW_PATH_RE.exec(raw);
+  if (!match) return false;
+  const segments = match[1].split("/").slice(1); // the path starts with "/"
+  for (let i = 0; i < segments.length; i += 1) {
+    let segment = segments[i];
+    // Decoded as often as it changes (bounded), because a server behind a
+    // proxy may decode once more than the parser did.
+    for (let round = 0; round < 4; round += 1) {
+      if (DOT_SEGMENT_RE.test(segment)) return false;
+      if (/[\\/]/.test(segment) || /%(?:2f|5c)/i.test(segment)) return false;
+      let decoded: string;
+      try {
+        decoded = decodeURIComponent(segment);
+      } catch {
+        return false;
+      }
+      if (decoded === segment) break;
+      segment = decoded;
+    }
+    if (segment === "" && i < segments.length - 1) return false;
+  }
+  return true;
+}
+
+/**
+ * Whether `raw` is a URL the credential may be sent to: the exact extra URLs
+ * given (the gateway's personal route), or the person's own database and
+ * what lies under it. Decided on the parsed URL, never on a prefix of the text:
+ * the same origin (scheme, host and port), no user information, a plain path
+ * (`pathIsPlain`), and a normalised path that is the database's own or begins
+ * with it followed by a `/` (so `user_abc2` is not under `user_abc`).
+ */
+function isAllowedUrl(
+  raw: string,
+  database: URL | null,
+  extraUrls: readonly string[],
+): boolean {
+  if (extraUrls.includes(raw)) return true;
+  if (!database) return false;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (url.origin !== database.origin || url.origin === "null") return false;
+  if (url.username !== "" || url.password !== "") return false;
+  if (!pathIsPlain(raw)) return false;
+  const base = database.pathname.replace(/\/+$/, "");
+  return (
+    url.pathname === base ||
+    url.pathname === `${base}/` ||
+    url.pathname.startsWith(`${base}/`)
+  );
+}
+
+function parseDatabaseUrl(raw: string): URL | null {
+  try {
+    const url = new URL(raw);
+    return url.username === "" && url.password === "" && url.origin !== "null"
+      ? url
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Keep only the rows this client owns; the rest of the answer is untouched.
  *
@@ -152,10 +242,121 @@ export function filterChanges(body: unknown): unknown {
   return { ...feed, results: owned };
 }
 
+/** `POST .../_all_docs` asking for documents by key: the plugin's push check. */
+function isDocLookup(url: string, init: RequestInit): boolean {
+  if ((init.method ?? "GET").toUpperCase() !== "POST") return false;
+  if (!url.split("?")[0].endsWith("/_all_docs")) return false;
+  try {
+    const body = JSON.parse(typeof init.body === "string" ? init.body : "") as {
+      include_docs?: unknown;
+      keys?: unknown;
+    };
+    return body.include_docs === true && Array.isArray(body.keys);
+  } catch {
+    return false;
+  }
+}
+
+/** The most deleted documents one lookup reads back (a push batch is 50). */
+const MAX_DELETED_READS = 50;
+
+/**
+ * Fill in the documents of the deleted ones.
+ *
+ * `_all_docs?include_docs=true` answers a deleted document with `doc: null`
+ * (`value: {rev, deleted: true}`), and the plugin reads "no document" as "nothing
+ * on the server, no conflict": it then writes its own revision over a deletion
+ * made elsewhere whatever the times say, so the conflict rule (the later
+ * `updatedAt` wins, and a tombstone has one) would never be asked. The deleted
+ * revision's body (its common fields) is read with `GET <id>?rev=<rev>`, which
+ * the gateway allows (`couch_proxy_policy.py`: a plain document, any query but
+ * the denied ones), and put in `doc`, so the plugin sees the tombstone as the
+ * master state it is. Best effort: a read that fails leaves `doc: null`, which
+ * is what the plugin would have had.
+ */
+async function withDeletedDocs(
+  response: Response,
+  fetchDoc: CouchFetch,
+  root: string,
+): Promise<Response> {
+  const text = await response.text();
+  const keep = () =>
+    new Response(text, {
+      status: response.status,
+      headers: { "content-type": "application/json" },
+    });
+  let body: { rows?: unknown };
+  try {
+    body = JSON.parse(text) as { rows?: unknown };
+  } catch {
+    return keep();
+  }
+  if (!body || !Array.isArray(body.rows)) return keep();
+  let reads = 0;
+  let changed = false;
+  for (const row of body.rows as Record<string, unknown>[]) {
+    const value = row?.value as
+      | { deleted?: unknown; rev?: unknown }
+      | undefined;
+    if (
+      !row ||
+      row.doc != null ||
+      typeof row.id !== "string" ||
+      !isOwnedDocId(row.id) ||
+      value?.deleted !== true ||
+      typeof value.rev !== "string" ||
+      reads >= MAX_DELETED_READS
+    ) {
+      continue;
+    }
+    reads += 1;
+    try {
+      const got = await fetchDoc(
+        `${root}${encodeURIComponent(row.id)}?rev=${encodeURIComponent(value.rev)}`,
+      );
+      const doc = (await got.json()) as Record<string, unknown> | null;
+      if (doc && doc._deleted === true && doc._id === row.id) {
+        row.doc = doc;
+        changed = true;
+      }
+    } catch {
+      // Leave it as the server answered; the plugin copes with "no document".
+    }
+  }
+  return changed
+    ? new Response(JSON.stringify(body), {
+        status: response.status,
+        headers: { "content-type": "application/json" },
+      })
+    : keep();
+}
+
 export function createCouchFetch(options: CouchFetchOptions): CouchFetch {
+  const plain = createPlainCouchFetch(options);
+  const database = parseDatabaseUrl(options.databaseUrl);
+  if (!database) return plain;
+  const root = database.href.endsWith("/")
+    ? database.href
+    : `${database.href}/`;
+  return async (input, init = {}) => {
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url;
+    const response = await plain(input, init);
+    return isDocLookup(url, init)
+      ? withDeletedDocs(response, plain, root)
+      : response;
+  };
+}
+
+function createPlainCouchFetch(options: CouchFetchOptions): CouchFetch {
   const baseFetch = options.baseFetch ?? fetch;
   const timeoutMs = options.timeoutMs ?? COUCH_REQUEST_TIMEOUT_MS;
   const extraUrls = options.extraUrls ?? [];
+  const database = parseDatabaseUrl(options.databaseUrl);
 
   return async (input, init = {}) => {
     const url =
@@ -164,7 +365,7 @@ export function createCouchFetch(options: CouchFetchOptions): CouchFetch {
         : input instanceof URL
           ? input.href
           : input.url;
-    if (!url.startsWith(options.databaseUrl) && !extraUrls.includes(url)) {
+    if (!isAllowedUrl(url, database, extraUrls)) {
       // The plugin builds its URLs from the database URL only; anything else
       // is a bug and must not carry the credential anywhere.
       throw new CouchHttpError(0);

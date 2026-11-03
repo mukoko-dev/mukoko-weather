@@ -68,6 +68,271 @@ describe("requests", () => {
   });
 });
 
+// The credential is sent to the person's own database and to nothing else. The
+// check parses the URL (a prefix test on the text is fooled by every URL trick
+// there is): same origin, no user information, no dot segment however it is
+// written, no backslash, and a path that is the database's or lies under it.
+describe("the URL guard: the credential goes to the person's own database only", () => {
+  const PERSONAL = "https://api.test/v1/couch/personal";
+  const make = () => {
+    // Also a valid (empty) changes feed, for the feed URLs.
+    const base = transport(() => json({ ok: true, results: [], last_seq: 0 }));
+    const f = createCouchFetch({
+      databaseUrl: DB,
+      extraUrls: [PERSONAL],
+      getToken: () => TOKEN,
+      baseFetch: base,
+    });
+    return { base, f };
+  };
+
+  it.each([
+    ["the database itself", DB],
+    ["the changes feed with a query", `${DB}_changes?since=0&limit=200`],
+    ["all docs", `${DB}_all_docs`],
+    ["bulk docs", `${DB}_bulk_docs`],
+    ["a document by id, encoded", `${DB}activity%3Alivestock`],
+    ["a deleted revision", `${DB}activity%3Alivestock?rev=2-abcdef`],
+    ["a local checkpoint document", `${DB}_local/abc123`],
+  ])("allows %s", async (_name, url) => {
+    const { base, f } = make();
+    await expect(f(url)).resolves.toBeInstanceOf(Response);
+    expect(base).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows the exact personal route, and only that", async () => {
+    const { base, f } = make();
+    await expect(f(PERSONAL, { method: "POST" })).resolves.toBeInstanceOf(
+      Response,
+    );
+    expect(base).toHaveBeenCalledTimes(1);
+    for (const url of [
+      `${PERSONAL}/`,
+      `${PERSONAL}?x=1`,
+      `${PERSONAL}/../x`,
+      `${PERSONAL}2`,
+    ]) {
+      await expect(f(url), url).rejects.toMatchObject({ status: 0 });
+    }
+    expect(base).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    // dot segments, as written
+    ["a dot-dot segment", `${DB}../user_other/_changes`],
+    ["a dot-dot after a segment", `${DB}_changes/../../user_other/_changes`],
+    ["a single dot segment", `${DB}./_changes`],
+    // ...and as the URL parser also reads them (percent-encoded dots)
+    ["an encoded dot-dot", `${DB}%2e%2e/user_other/_changes`],
+    ["an upper-case encoded dot-dot", `${DB}%2E%2E/user_other/_changes`],
+    ["a half-encoded dot-dot", `${DB}.%2e/user_other/_changes`],
+    ["the other half-encoded dot-dot", `${DB}%2e./user_other/_changes`],
+    ["an encoded single dot", `${DB}%2e/_changes`],
+    ["a double-encoded dot-dot", `${DB}%252e%252e/user_other/_changes`],
+    // separators in disguise
+    ["an encoded slash", `${DB}..%2fuser_other%2f_changes`],
+    ["a backslash", `${DB}_changes\\..\\..\\user_other`],
+    ["an encoded backslash", `${DB}%5c..%5cuser_other`],
+    ["an empty segment", `https://api.test/v1/couch/db/user_abc//_changes`],
+    // another database that merely starts with the same text
+    [
+      "a lookalike prefix (user_abc2)",
+      "https://api.test/v1/couch/db/user_abc2/_changes",
+    ],
+    [
+      "a lookalike prefix (user_abc-x)",
+      "https://api.test/v1/couch/db/user_abc-x/_all_docs",
+    ],
+    ["a sibling database", "https://api.test/v1/couch/db/user_other/_changes"],
+    ["the parent path", "https://api.test/v1/couch/db/"],
+    ["a database-less path", "https://api.test/v1/couch/db"],
+    // another origin
+    ["another host", "https://evil.test/v1/couch/db/user_abc/_changes"],
+    [
+      "a host that starts with ours",
+      "https://api.test.evil.test/v1/couch/db/user_abc/_changes",
+    ],
+    ["another port", "https://api.test:8443/v1/couch/db/user_abc/_changes"],
+    ["another scheme", "http://api.test/v1/couch/db/user_abc/_changes"],
+    // user information
+    [
+      "user information naming another host",
+      "https://api.test@evil.test/v1/couch/db/user_abc/_changes",
+    ],
+    [
+      "user information on our host",
+      "https://user:pw@api.test/v1/couch/db/user_abc/_changes",
+    ],
+    ["a user name only", "https://user@api.test/v1/couch/db/user_abc/_changes"],
+    [
+      "an at sign in the path",
+      "https://api.test/v1/couch/db/user_abc/@evil.test/_changes",
+    ],
+    // not a URL at all
+    ["a relative path", "/v1/couch/db/user_abc/_changes"],
+    ["an empty string", ""],
+    ["nonsense", "not a url"],
+  ])("refuses %s and sends nothing", async (_name, url) => {
+    const { base, f } = make();
+    await expect(f(url), url).rejects.toBeInstanceOf(CouchHttpError);
+    await expect(f(url), url).rejects.toMatchObject({ status: 0 });
+    expect(base).not.toHaveBeenCalled();
+  });
+
+  it("works the same when the database URL is given without its trailing slash", async () => {
+    const base = transport(() => json({ results: [], last_seq: 0 }));
+    const f = createCouchFetch({
+      databaseUrl: "https://api.test/v1/couch/db/user_abc",
+      getToken: () => TOKEN,
+      baseFetch: base,
+    });
+    await f("https://api.test/v1/couch/db/user_abc/_changes");
+    await f("https://api.test/v1/couch/db/user_abc");
+    expect(base).toHaveBeenCalledTimes(2);
+    await expect(
+      f("https://api.test/v1/couch/db/user_abc2/_changes"),
+    ).rejects.toMatchObject({ status: 0 });
+    expect(base).toHaveBeenCalledTimes(2);
+  });
+
+  it("an unreadable database URL allows nothing but the exact extra URLs", async () => {
+    const base = transport(() => json({}));
+    const f = createCouchFetch({
+      databaseUrl: "not a url",
+      extraUrls: [PERSONAL],
+      getToken: () => TOKEN,
+      baseFetch: base,
+    });
+    await expect(f(`${DB}_changes`)).rejects.toMatchObject({ status: 0 });
+    await expect(f(PERSONAL, { method: "POST" })).resolves.toBeInstanceOf(
+      Response,
+    );
+  });
+
+  it("the token is not in the error of a refused request", async () => {
+    const { f } = make();
+    const err = await f("https://evil.test/steal").catch((e: Error) => e);
+    expect(String(err)).not.toContain(TOKEN);
+    expect(String(err)).not.toContain("evil.test");
+  });
+});
+
+// The plugin's push check reads `_all_docs?include_docs` and takes a row with
+// no `doc` for "nothing on the server", so a deletion made elsewhere would be
+// written over whatever the times say. The deleted revision is read back.
+describe("a deleted document's body is read back for the push check", () => {
+  const TOMBSTONE = {
+    _id: "activity:gardening",
+    _rev: "2-bbbb",
+    _deleted: true,
+    type: "activity",
+    updatedAt: "2026-11-02T10:00:09.000Z",
+  };
+  const lookup = (keys: string[]) => ({
+    method: "POST",
+    body: JSON.stringify({ keys, include_docs: true, deleted: "ok" }),
+  });
+  const deletedRow = (id: string, rev = "2-bbbb") => ({
+    id,
+    key: id,
+    value: { rev, deleted: true },
+    doc: null,
+  });
+
+  function setup(docAnswer: () => Response) {
+    const seen: { url: string; method: string }[] = [];
+    const base = transport(({ url, init }) => {
+      seen.push({ url, method: init.method ?? "GET" });
+      return url.includes("_all_docs")
+        ? json({
+            total_rows: 2,
+            offset: 0,
+            rows: [
+              deletedRow("activity:gardening"),
+              {
+                id: "preference:theme",
+                key: "preference:theme",
+                value: { rev: "1-a" },
+                doc: { _id: "preference:theme", _rev: "1-a" },
+              },
+              { key: "activity:never", error: "not_found" },
+            ],
+          })
+        : docAnswer();
+    });
+    const f = createCouchFetch({
+      databaseUrl: DB,
+      getToken: () => TOKEN,
+      baseFetch: base,
+    });
+    return { f, seen };
+  }
+
+  it("puts the tombstone in the row, asked for by id and revision", async () => {
+    const { f, seen } = setup(() => json(TOMBSTONE));
+    const res = await f(`${DB}_all_docs`, lookup(["activity:gardening"]));
+    const rows = (await res.json()).rows;
+    expect(rows[0].doc).toEqual(TOMBSTONE);
+    // The live document and the missing key are as the server answered.
+    expect(rows[1].doc).toEqual({ _id: "preference:theme", _rev: "1-a" });
+    expect(rows[2].doc).toBeUndefined();
+    expect(seen.map((s) => `${s.method} ${s.url}`)).toEqual([
+      `POST ${DB}_all_docs`,
+      `GET ${DB}activity%3Agardening?rev=2-bbbb`,
+    ]);
+  });
+
+  it("a read that fails leaves the row as the server answered it", async () => {
+    for (const answer of [
+      () => json({ error: "not_found" }, 404),
+      () => json({ error: "x" }, 500),
+      () => json(null),
+      () => json({ _id: "other", _deleted: true }),
+      () => json({ _id: "activity:gardening", _rev: "2-bbbb" }), // not deleted
+    ]) {
+      const { f } = setup(answer);
+      const res = await f(`${DB}_all_docs`, lookup(["activity:gardening"]));
+      expect((await res.json()).rows[0].doc).toBeNull();
+    }
+  });
+
+  it("a request that is not a lookup of documents by key is passed on untouched", async () => {
+    const { f, seen } = setup(() => json(TOMBSTONE));
+    // No include_docs, a GET, and another path: none reads a deleted body.
+    await f(`${DB}_all_docs`, {
+      method: "POST",
+      body: JSON.stringify({ keys: ["activity:gardening"] }),
+    });
+    await f(`${DB}_all_docs`);
+    await f(`${DB}_bulk_docs`, lookup(["activity:gardening"]));
+    expect(seen.filter((s) => s.method === "GET")).toHaveLength(1); // the plain GET itself
+    expect(seen.some((s) => s.url.includes("?rev="))).toBe(false);
+  });
+
+  it("only ids this client owns are read back", async () => {
+    const base = transport(({ url }) =>
+      url.includes("_all_docs")
+        ? json({
+            rows: [
+              deletedRow("savedPlace:0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"),
+            ],
+          })
+        : json(TOMBSTONE),
+    );
+    const f = createCouchFetch({
+      databaseUrl: DB,
+      getToken: () => TOKEN,
+      baseFetch: base,
+    });
+    const res = await f(
+      `${DB}_all_docs`,
+      lookup(["savedPlace:0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"]),
+    );
+    expect((await res.json()).rows[0].doc).toBeNull();
+    expect(base).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("a signal from the caller", () => {
   it("aborts the request that is in flight, as 'no answer'", async () => {
     let aborted = false;
