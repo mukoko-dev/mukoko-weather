@@ -600,6 +600,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "mukoko-weather-push"
+version = "0.1.0"
+dependencies = [
+ "js-sys",
+ "serde_json",
+ "wasm-bindgen-futures",
+ "weather-core",
+ "weather-edge",
+ "weather-webpush",
+ "web-sys",
+ "worker",
+]
+
+[[package]]
 name = "mukoko-weather-stations"
 version = "0.1.0"
 dependencies = [
