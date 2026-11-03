@@ -213,12 +213,18 @@ offline first (RxDB on the device).
   offers, is not in the validator's enum**: a document for it is refused, and a
   refused document delays everything pushed with it, so that pick stays on the
   device: it is never written or seeded, and a document from another device
-  never replaces it. A model another client set that this app does not offer
+  never replaces it. **`apple_weatherkit` (Apple Weather, behind
+  `FLAGS.apple_weatherkit`, off) is local-only for the same reason**: another
+  provider's model, with no id in the validator's enum, so it joins
+  `LOCAL_ONLY_FORECAST_MODELS` through `ForecastModel` whether or not the picker
+  offers it. A model another client set that this app does not offer
   (`jma_gsm`, `ukmo_global_deterministic_10km`, `cma_grapes_global`, `gem_global`,
   `meteofrance_arpege_world`) is ignored and never replaces the person's own pick
   here; it does not stop this device's own edit of that setting from being
   pushed either (the push modifier lets the server's version through by shape).
-  Every synced model is in the Worker's device-profile allowlist. Activities
+  Every synced model is in the Worker's device-profile allowlist (the device
+  profile, not CouchDB, carries a local-only pick: `apple_weatherkit` is in that
+  allowlist too). Activities
   from another client are applied only if the app knows the id
   (`src/lib/activities.ts`, equal to the Worker's allowlist) and only up to 30,
   the device profile's limit, after the ones the person already holds; nothing
@@ -451,9 +457,10 @@ value or a stricter rule fails a test with the document that no longer passes.
   data-infra's `forecastModel` enum (propose adding it); until then that pick
   stays on the device.
 - The Worker's device-profile list (`FORECAST_MODELS` in
-  `weather_core::community`, 11 ids) and the validator's enum (10 ids) are two
-  different lists: the Worker has `ecmwf_ifs025`, `ecmwf_ifs04`, `icon_seamless`
-  and `meteofrance_seamless` that the validator lacks; the validator has
+  `weather_core::community`, 12 ids) and the validator's enum (10 ids) are two
+  different lists: the Worker has `apple_weatherkit`, `ecmwf_ifs025`,
+  `ecmwf_ifs04`, `icon_seamless` and `meteofrance_seamless` that the validator
+  lacks; the validator has
   `ukmo_global_deterministic_10km`, `cma_grapes_global` and `jma_gsm` that the
   Worker lacks. `couch-docs.test.ts` pins the difference so a change on either
   side is noticed. What syncs is the intersection with what the app offers.
@@ -716,8 +723,9 @@ Also not verified, because the test storage cannot show it:
   a refused write fails the cycle and backs off (it never loops). Nothing here
   detects or repairs a clock like that; the person's changes stay in the local
   database.
-- **The pick the validator cannot hold stays local.** `meteofrance_seamless`
-  (above) is not synced; it is the person's pick on this device only.
+- **The picks the validator cannot hold stay local.** `meteofrance_seamless` and
+  `apple_weatherkit` (above) are not synced; each is the person's pick on this
+  device only.
 - **Anonymous visitors, with the flag on, download the engine and make one
   `POST /api/couch/session` per page load (a guaranteed 401).** Real, and
   irrelevant while the flag is off. Before widening the flag: a signed-in hint
