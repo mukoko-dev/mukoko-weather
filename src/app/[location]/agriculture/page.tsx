@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { resolveLocationParam } from "@/lib/load-location";
-import { getCachedSeason } from "@/lib/location-payload";
+import { getCachedSeason } from "@/lib/place-seed-server";
 import { getCurrentUser } from "@/lib/auth";
 import { breadcrumbJsonLd } from "@/lib/json-ld";
 import { buildPageMetadata } from "@/lib/metadata";
