@@ -14,9 +14,11 @@ import {
 import {
   BASELINE_HEADERS,
   CORS_POLICY,
+  CSP_REPORT_PATH,
   FRAMEABLE_PATHS,
   FRAME_HEADER,
   buildCsp,
+  couchApiConnectSrc,
 } from "./src/lib/security-headers";
 
 const withSerwist = withSerwistInit({
@@ -91,7 +93,9 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Content-Security-Policy-Report-Only",
-            value: buildCsp(),
+            // The table plus the Nyuchi API origin the CouchDB sync is told to
+            // replicate with (NYUCHI_API_URL), read here so the table stays data.
+            value: buildCsp(CSP_REPORT_PATH, couchApiConnectSrc(process.env)),
           },
         ],
       },
