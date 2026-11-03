@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { readFileSync } from "fs";
-import { resolve } from "path";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "fs";
+import { tmpdir } from "os";
+import { join, resolve } from "path";
 
 // Mock the Zustand store so importing MapLibreMap doesn't pull in the RxDB
 // bridge / replication side effects. The pure helpers under test don't use it.
@@ -10,7 +11,12 @@ vi.mock("@/lib/store", () => ({
 }));
 
 import { getMapTilerStyle, classifyMapError } from "./MapLibreMap";
-import { WEATHER_OVERLAY_ID } from "@/lib/map-layers";
+import { WEATHER_OVERLAY_ID, maplibreWorkerUrl } from "@/lib/map-layers";
+import {
+  WORKER_FILE,
+  copyWorker,
+  relativeImports,
+} from "../../../../scripts/copy-maplibre-worker.mjs";
 
 // Node-env structural checks (no DOM renderer) — read the component source.
 const source = readFileSync(resolve(__dirname, "MapLibreMap.tsx"), "utf-8");
@@ -131,17 +137,18 @@ describe("MapLibre web worker (maplibre-gl v6)", () => {
     expect(source).toContain("maplibreWorkerUrl(getVersion())");
   });
 
-  it("serves the worker from a per-version folder the copy script fills", async () => {
+  it("serves the worker from a per-version folder the copy script fills", () => {
     // Versioned so a tab on an old bundle never pairs with a newer worker.
-    const { maplibreWorkerUrl } = await import("@/lib/map-layers");
     expect(maplibreWorkerUrl("6.12.0")).toBe(
       "/vendor/maplibre-gl/6.12.0/maplibre-gl-worker.mjs",
     );
     const script = read("scripts/copy-maplibre-worker.mjs");
-    expect(script).toContain('"public", "vendor", "maplibre-gl", version');
-    // The worker imports ./maplibre-gl-shared.mjs, so both must be copied.
-    expect(script).toContain("maplibre-gl-worker.mjs");
-    expect(script).toContain("maplibre-gl-shared.mjs");
+    expect(script).toContain('"public", "vendor", "maplibre-gl"');
+    // The folder is <out root>/<version>; the file the URL names is the entry
+    // point the script starts from.
+    expect(script).toContain("join(outRoot, version)");
+    expect(WORKER_FILE).toBe("maplibre-gl-worker.mjs");
+    expect(maplibreWorkerUrl("6.12.0").endsWith(`/${WORKER_FILE}`)).toBe(true);
   });
 
   it("copies the worker before every build and dev run", () => {
@@ -152,18 +159,52 @@ describe("MapLibre web worker (maplibre-gl v6)", () => {
     expect(pkg.scripts.predev).toContain("copy-maplibre-worker.mjs");
   });
 
-  it("the installed maplibre-gl still ships both worker files", () => {
-    const dist = resolve(root, "node_modules/maplibre-gl/dist");
-    expect(() =>
-      readFileSync(resolve(dist, "maplibre-gl-worker.mjs")),
-    ).not.toThrow();
-    expect(
-      readFileSync(resolve(dist, "maplibre-gl-worker.mjs"), "utf-8"),
-    ).toContain("./maplibre-gl-shared.mjs");
-    // The module the worker imports must exist under exactly that name.
-    expect(() =>
-      readFileSync(resolve(dist, "maplibre-gl-shared.mjs")),
-    ).not.toThrow();
+  // The package has shipped two layouts: a thin worker importing a separate
+  // ./maplibre-gl-shared.mjs (6.12.0), and one self-contained worker (6.13.0
+  // and later, where dist/ keeps an empty, unreferenced shared placeholder). Which
+  // one is installed does not matter; what must hold is that nothing the
+  // worker imports is left behind. These run against whatever is installed.
+  describe("the installed maplibre-gl", () => {
+    const packageDir = resolve(root, "node_modules/maplibre-gl");
+    const dist = resolve(packageDir, "dist");
+    const workerSource = () =>
+      readFileSync(resolve(dist, WORKER_FILE), "utf-8");
+
+    it("ships a worker with code in it", () => {
+      // An empty entry would load without error and then never answer.
+      expect(workerSource().length).toBeGreaterThan(10_000);
+    });
+
+    it("ships every relative module the worker imports", () => {
+      for (const specifier of relativeImports(workerSource())) {
+        const file = resolve(dist, specifier);
+        expect(existsSync(file), `${specifier} is missing from dist/`).toBe(
+          true,
+        );
+      }
+    });
+
+    it("gets every module the worker imports beside the served copy", () => {
+      const outRoot = mkdtempSync(join(tmpdir(), "maplibre-vendor-"));
+      try {
+        const { version, outDir, files } = copyWorker({ packageDir, outRoot });
+        // The URL the browser is given points into this folder.
+        const served = maplibreWorkerUrl(version);
+        expect(served).toBe(`/vendor/maplibre-gl/${version}/${WORKER_FILE}`);
+        expect(files[0]).toBe(WORKER_FILE);
+        expect(existsSync(join(outDir, WORKER_FILE))).toBe(true);
+        for (const specifier of relativeImports(workerSource())) {
+          expect(
+            existsSync(resolve(outDir, specifier)),
+            `${specifier} must sit beside the served worker`,
+          ).toBe(true);
+          // And it is the real module, not an empty stand-in.
+          expect(statSync(resolve(outDir, specifier)).size).toBeGreaterThan(0);
+        }
+      } finally {
+        rmSync(outRoot, { recursive: true, force: true });
+      }
+    });
   });
 
   it("keeps MapLibre's focusable controls visible to assistive tech", () => {
