@@ -292,6 +292,15 @@ Create each one with `npx wrangler secrets-store secret create 56f84bfa8a564c54a
 
 Before a release goes to `main`, deploy the Workers from `staging` by hand with wrangler, using the Cloudflare token from the environment (no GitHub Actions): `npm ci` in `workers/mongo-bridge`, then `npx wrangler@4.138.0 deploy` in each Worker directory in the order above, with `CLOUDFLARE_ACCOUNT_ID` set. There are no separate staging Workers, so this is a production deploy: record each Worker's live version first (`wrangler deployments list --name <script>`) as the rollback target, stop at the first failure, and check each custom domain's `/health` (and `/health?probe=mongo` on the public API) after it. Test the changed routes against the live Workers, and delete any test data you created. Only then merge the release PR to `main`; that is the minor bump, tagged with `tag-release`.
 
+## Turning on the CouchDB sync
+
+The sync of preferences and activities with the person's own CouchDB database (#396) ships dark: `FLAGS.couch_sync` is `false`, and `POST /api/couch/session` answers `503 couch_unavailable` until the gateway will issue this app its credential. The design, the nyuchi-api code it was checked against and the not-verified list are in [docs/couchdb-sync.md](docs/couchdb-sync.md). The credential is the Nyuchi API's `couch:user` sync grant, made on the server with this app's existing key (`NYUCHI_APP_KEYS_API_KEY`, `identity app-keys weather`): no new secret and no new environment variable. Two owner steps turn it on, in this order, and neither is in this repository:
+
+1. On the Fly app `nyuchi-api`, add the client id of this app's key to `COUCH_SYNC_CLIENT_IDS`. It is the `nyk_…` part of `NYUCHI_APP_KEYS_API_KEY` before the dot (a public identifier; the `nys_…` secret never goes in the list), not the WorkOS client id. Without it the exchange is refused with `400 invalid_scope` and the site logs "Token exchange refused this app's key".
+2. Enable CouchDB's JWT handler as described in nyuchi-api `docs/architecture/couchdb-sync.md`. Until then CouchDB refuses every forwarded request with `401`.
+
+Then run the live check in the doc (flag on in one signed-in browser, watch the Network tab) before anyone flips the flag in code. Taking the client id off the list stops outstanding grants within minutes and the app falls back to local-only.
+
 ## Reporting Issues
 
 Use the [GitHub Issues](https://github.com/nyuchitech/mukoko-weather/issues) page. We have templates for:
