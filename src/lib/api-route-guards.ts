@@ -36,6 +36,34 @@ export function sameOriginJsonRefusal(req: Request): CrossSiteRefusal | null {
   return allowed ? null : "forbidden_origin";
 }
 
+/** The name of AuthKit's session cookie: `WORKOS_COOKIE_NAME`, else `wos-session`. */
+export function sessionCookieName(): string {
+  return process.env.WORKOS_COOKIE_NAME || "wos-session";
+}
+
+/**
+ * Whether the request carries a (non-empty) AuthKit session cookie. That is how
+ * "nobody is signed in" is told from "AuthKit could not say who": `withAuth()`
+ * also answers `{ user: null }` when a refresh of the access token FAILED while
+ * the sealed session cookie is intact (a WorkOS outage, or a single-use refresh
+ * token that a concurrent request had already used), so a missing user ALONE
+ * proves nothing. A request with no session cookie at all is the one that is
+ * certainly not signed in.
+ */
+export function hasSessionCookie(req: Request): boolean {
+  const header = req.headers.get("cookie");
+  if (!header) return false;
+  const name = sessionCookieName();
+  for (const part of header.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq < 0) continue;
+    if (part.slice(0, eq).trim() === name && part.slice(eq + 1).trim() !== "") {
+      return true;
+    }
+  }
+  return false;
+}
+
 export interface CurrentSession {
   userId: string | null;
   accessToken?: string;

@@ -85,7 +85,14 @@ export const COUCH_SYNC_MAX_SECONDS = 300;
 export interface IssuedCouchCredential {
   /** The short-lived bearer the browser replicates with. Never logged. */
   token: string;
-  expiresAtMs: number;
+  /**
+   * How long it lives from now, in whole seconds, counted on THIS server's
+   * clock at the moment of issue (rounded down: never a moment the grant no
+   * longer has). The page gets a duration, not a time of day, because its
+   * clock is not this one (a few minutes off is common) and the grant is only
+   * five minutes long. The grant's own `exp` is the server-side check.
+   */
+  expiresInSeconds: number;
   /** `user_<personId>`. */
   database: string;
 }
@@ -221,10 +228,12 @@ function toCredential(
   }
   const database = `user_${sub}`;
   if (personIdFromDatabase(database) !== sub) throw bad();
-  // The earlier of what the exchange said and what the token says.
-  const expiresAtMs = Math.min(grant.expiresAtMs, exp * 1000);
-  if (!Number.isFinite(expiresAtMs) || expiresAtMs <= nowMs) throw bad();
-  return { token: grant.token, expiresAtMs, database };
+  // The earlier of what the exchange said and what the token says, as a
+  // duration from now (server clock), rounded down. Under a second is nothing.
+  const endsAtMs = Math.min(grant.expiresAtMs, exp * 1000);
+  const expiresInSeconds = Math.floor((endsAtMs - nowMs) / 1000);
+  if (!Number.isFinite(endsAtMs) || !(expiresInSeconds >= 1)) throw bad();
+  return { token: grant.token, expiresInSeconds, database };
 }
 
 export function createCouchSessionIssuer(deps: {

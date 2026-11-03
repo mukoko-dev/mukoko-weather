@@ -8,12 +8,17 @@
  *   - `Content-Type: application/json` and a same-origin `Origin` are
  *     required (415 / 403), checked before anything else, so a cross-site
  *     form costs nothing;
- *   - the visitor must be signed in (`withAuth()`; 401 otherwise). That is the
- *     ONLY 401 this route gives, and its body carries `SIGNED_OUT_CODE`: the
- *     page removes its local copy of the person's settings on exactly that, and
- *     on nothing else. Whatever the WorkOS token or the gateway say about a
- *     person who IS signed in (an access token missing or ended after a refresh
- *     that failed for a moment, a refused exchange) is 503 (the issuer);
+ *   - the visitor must be signed in (`withAuth()`). The ONLY 401 this route
+ *     gives is for a request with NO session cookie at all, and its body
+ *     carries `SIGNED_OUT_CODE`: the page counts it, and removes its local copy
+ *     of the person's settings only when it sees it again on a later page load.
+ *     `withAuth()` also gives no user when AuthKit's refresh of the access
+ *     token FAILS while the sealed session cookie is intact (a WorkOS outage; a
+ *     single-use refresh token that a concurrent request used first), so a
+ *     cookie with no user is 503, not 401 (`hasSessionCookie`). Whatever the
+ *     WorkOS token or the gateway say about a person who IS signed in (an
+ *     access token missing or ended, a refused exchange) is 503 too (the
+ *     issuer);
  *   - the site must be set up for sync (503 `couch_unavailable`), checked
  *     BEFORE the limit so that an unconfigured site writes nothing to Mongo;
  *   - a per-user limit (Mongo, `checkUserRateLimit`, 120 an hour: the
@@ -21,11 +26,19 @@
  *     before, so one visible tab asks about fifteen times an hour and a few
  *     tabs stay well inside; the gateway holds a person to 30 exchanges a
  *     minute on top);
+ *   - a site-wide budget (`couch-session-budget.ts`, 6 every 20 s) for the
+ *     gateway's token endpoint, 30 a minute for this site's one key, which
+ *     `/api/app-keys` shares: sync cannot use up the key; a refused request
+ *     spends no exchange;
  *   - no cookie, WorkOS token or body is forwarded, logged or returned.
  *
- * It answers exactly `{ token, expiresAt, database, apiOrigin }` and nothing
- * else, `Cache-Control: no-store`. It is not in `CORS_POLICY.open`: only this
- * site's own pages can call it.
+ * It answers exactly `{ token, expiresIn, database, apiOrigin }` and nothing
+ * else, `Cache-Control: no-store`. `expiresIn` is how many seconds the
+ * credential lives from the moment it was issued (the server's clock at issue
+ * time): a duration, because the page's clock is not this one, and an absolute
+ * time compared with a device clock a few minutes off breaks a five-minute
+ * credential. It is not in `CORS_POLICY.open`: only this site's own pages can
+ * call it.
  *
  * The credential is the gateway's CouchDB sync grant (`couch:user`), made by
  * `couchSessionIssuer()` (`@/lib/couch-session-issuer`, which cites the
@@ -42,9 +55,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   currentSession,
+  hasSessionCookie,
   NO_STORE,
   sameOriginJsonRefusal,
 } from "@/lib/api-route-guards";
+import { syncBudget } from "@/lib/couch-session-budget";
 import {
   CouchIssueError,
   couchSessionIssuer,
@@ -91,9 +106,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const { userId, accessToken } = await currentSession();
-  // The only 401 this route gives, and the page removes its local copy of the
-  // person's settings when it sees it, so it carries a code of its own.
-  if (!userId) return errorResponse(401, SIGNED_OUT_CODE);
+  if (!userId) {
+    // A session cookie with no user is AuthKit failing to refresh (or the
+    // middleware having been skipped), not a sign-out: the sealed cookie is
+    // still there and a later request may well work. Say "not available now"
+    // (503, which the page backs off on and deletes nothing for).
+    if (hasSessionCookie(req)) return errorResponse(503, "couch_unavailable");
+    // The only 401 this route gives: no session cookie at all. The page counts
+    // it (it removes its local copy of the person's settings only once it has
+    // seen it again on a later page load), so it carries a code of its own.
+    return errorResponse(401, SIGNED_OUT_CODE);
+  }
 
   // Not configured here: answer without touching Mongo. The limiter below is
   // a write per request, and a route that can do nothing must not spend the
@@ -108,16 +131,33 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return errorResponse(429, "rate_limited", limit.retryAfterSeconds);
   }
 
+  // Then the site-wide budget for the gateway's token endpoint, which this
+  // site's one key shares with /api/app-keys (`couch-session-budget.ts`). After
+  // the person's own limit, so that one person cannot spend it for everybody,
+  // and before the exchange, so that a refused request spends nothing.
+  const budget = await syncBudget.spend();
+  if (!budget.allowed) {
+    return errorResponse(429, "rate_limited", budget.retryAfterSeconds);
+  }
+
   try {
     // What the issuer returns is already checked (a sync grant for a personal
     // database, not yet ended): `toCredential` in the issuer is the one place.
     const credential = await issuer.issue({ userId, accessToken });
+    // A duration the page can use, never a time of day it would have to compare
+    // with its own clock.
+    if (
+      !Number.isInteger(credential.expiresInSeconds) ||
+      credential.expiresInSeconds < 1
+    ) {
+      throw new CouchIssueError("couch_unavailable");
+    }
     // An allow-list, not a pass-through: nothing the issuer returns beyond
     // these four fields can reach the browser.
     return NextResponse.json(
       {
         token: credential.token,
-        expiresAt: new Date(credential.expiresAtMs).toISOString(),
+        expiresIn: credential.expiresInSeconds,
         database: credential.database,
         apiOrigin,
       },
@@ -125,6 +165,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   } catch (err) {
     if (err instanceof CouchIssueError) {
+      if (err.code === "rate_limited") {
+        // The gateway's own 429: the key's ceiling was reached by something
+        // this site's budget does not see. Stop sending exchanges for the time
+        // it named; the line is written once per cooldown, with no person in it.
+        if (syncBudget.noteGatewayRateLimit(err.retryAfterSeconds)) {
+          logWarn({
+            source: "nyuchi-gateway",
+            message:
+              "Gateway rate-limited the sync grant exchange; sync exchanges paused briefly",
+            meta: { retryAfterSeconds: err.retryAfterSeconds ?? null },
+          });
+        }
+      }
       return errorResponse(err.status, err.code, err.retryAfterSeconds);
     }
     // Names only: never the error text, which could echo request material.

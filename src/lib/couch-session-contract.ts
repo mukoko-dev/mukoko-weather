@@ -11,11 +11,14 @@
  */
 
 /**
- * The `error` of the route's 401 when nobody is signed in. The page removes its
- * local copy of the person's settings only on a 401 that carries it: a 401 or
- * any other status without it (a refresh that failed for a moment, the gateway
- * refusing a token, a misconfiguration) is a failure to retry, because the local
- * copy may hold the only record of a change made offline.
+ * The `error` of the route's 401 when nobody is signed in, i.e. the request
+ * carried no session cookie at all (a cookie with no user is a 503: AuthKit's
+ * refresh can fail while the cookie is intact). The page can remove its local
+ * copy of the person's settings only after hearing a 401 that carries it, on two
+ * page loads a minute apart: a 401 or any other status without it (a refresh
+ * that failed for a moment, the gateway refusing a token, a misconfiguration) is
+ * a failure to retry, because the local copy may hold the only record of a
+ * change made offline, and one answer alone is only an inference.
  */
 export const SIGNED_OUT_CODE = "signed_out";
 

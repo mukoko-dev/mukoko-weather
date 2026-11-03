@@ -20,6 +20,14 @@ vi.mock("@workos-inc/authkit-nextjs", () => ({ withAuth: withAuthMock }));
 const rateLimitMock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/user-rate-limit", () => ({ checkUserRateLimit: rateLimitMock }));
 
+// The site-wide budget is tested on its own (`couch-session-budget.test.ts`);
+// here the route's use of it is what matters.
+const budgetMock = vi.hoisted(() => ({
+  spend: vi.fn(),
+  noteGatewayRateLimit: vi.fn(),
+}));
+vi.mock("@/lib/couch-session-budget", () => ({ syncBudget: budgetMock }));
+
 const warnMock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/observability", () => ({
   logWarn: warnMock,
@@ -62,10 +70,15 @@ beforeEach(() => {
     warnMock,
     issuerMock,
     issueMock,
+    budgetMock.spend,
+    budgetMock.noteGatewayRateLimit,
   ])
     m.mockReset();
+  vi.unstubAllEnvs();
   vi.stubEnv("NYUCHI_API_URL", "https://api.nyuchi.com");
   rateLimitMock.mockResolvedValue({ allowed: true });
+  budgetMock.spend.mockResolvedValue({ allowed: true });
+  budgetMock.noteGatewayRateLimit.mockReturnValue(true);
   withAuthMock.mockResolvedValue({
     user: { id: "user_1" },
     accessToken: ACCESS,
@@ -73,7 +86,7 @@ beforeEach(() => {
   issuerMock.mockReturnValue({ issue: issueMock });
   issueMock.mockResolvedValue({
     token: CREDENTIAL,
-    expiresAtMs: Date.parse("2026-11-02T10:10:00.000Z"),
+    expiresInSeconds: 300,
     database: `user_${PERSON}`,
   });
 });
@@ -128,10 +141,88 @@ describe("guards, in order", () => {
     await noSecrets(res);
   });
 
-  it("401 when AuthKit cannot say who it is (a path it skipped)", async () => {
+  it("401 when AuthKit cannot say who it is (a path it skipped) and the browser sent no session cookie", async () => {
     withAuthMock.mockRejectedValue(new Error("no middleware"));
     const { POST } = await import("./route");
     expect((await POST(post())).status).toBe(401);
+  });
+
+  describe("a session cookie with no user is not 'signed out'", () => {
+    // AuthKit also answers `{ user: null }` when a refresh of the access token
+    // FAILS while the session cookie is intact (its catch block in
+    // `session.js`, `updateSession`; a refresh token is single-use, so two
+    // requests racing for one has the same shape). The page removes the
+    // person's local copy of their settings on a 401 `signed_out`, and a wipe
+    // cannot be undone, so a doubt is a 503 and only a request with NO session
+    // cookie is the 401.
+    const withCookie = (cookie: string) =>
+      post({
+        "content-type": "application/json",
+        origin: SITE,
+        cookie,
+      });
+
+    it("withAuth gives no user although the cookie is there: 503 couch_unavailable, nothing spent", async () => {
+      withAuthMock.mockResolvedValue({ user: null });
+      const { POST } = await import("./route");
+      const res = await POST(withCookie("wos-session=sealed-by-authkit"));
+      expect(res.status).toBe(503);
+      expect(await res.clone().json()).toMatchObject({
+        error: "couch_unavailable",
+      });
+      expect(await res.clone().text()).not.toContain(SIGNED_OUT_CODE);
+      expect(rateLimitMock).not.toHaveBeenCalled();
+      expect(budgetMock.spend).not.toHaveBeenCalled();
+      expect(issueMock).not.toHaveBeenCalled();
+      await noSecrets(res);
+    });
+
+    it("withAuth throwing with the cookie there is the same doubt", async () => {
+      withAuthMock.mockRejectedValue(new Error("no middleware"));
+      const { POST } = await import("./route");
+      const res = await POST(withCookie("wos-session=sealed"));
+      expect(res.status).toBe(503);
+    });
+
+    it("the transient case ends: the next request, with a user again, is a credential", async () => {
+      const { POST } = await import("./route");
+      withAuthMock.mockResolvedValueOnce({ user: null });
+      expect((await POST(withCookie("wos-session=sealed"))).status).toBe(503);
+      expect((await POST(withCookie("wos-session=sealed"))).status).toBe(200);
+    });
+
+    it("finds the cookie among others, and only by its exact name", async () => {
+      withAuthMock.mockResolvedValue({ user: null });
+      const { POST } = await import("./route");
+      const status = async (cookie: string) =>
+        (await POST(withCookie(cookie))).status;
+      expect(await status("a=1; wos-session=abc; b=2")).toBe(503);
+      expect(await status("wos-session=abc")).toBe(503);
+      // Not the session cookie: an anonymous visitor with other cookies.
+      expect(await status("a=1; b=2")).toBe(401);
+      expect(await status("xwos-session=abc")).toBe(401);
+      expect(await status("wos-session-other=abc")).toBe(401);
+      expect(await status("a=wos-session=abc")).toBe(401);
+      // A cookie with nothing in it is no session.
+      expect(await status("wos-session=")).toBe(401);
+      expect(await status("")).toBe(401);
+    });
+
+    it("follows WORKOS_COOKIE_NAME, as AuthKit does", async () => {
+      vi.stubEnv("WORKOS_COOKIE_NAME", "mukoko-session");
+      withAuthMock.mockResolvedValue({ user: null });
+      const { POST } = await import("./route");
+      expect((await POST(withCookie("mukoko-session=abc"))).status).toBe(503);
+      expect((await POST(withCookie("wos-session=abc"))).status).toBe(401);
+    });
+
+    it("an anonymous visitor (no cookie) is still the 401 the page acts on", async () => {
+      withAuthMock.mockResolvedValue({ user: null });
+      const { POST } = await import("./route");
+      const res = await POST(post());
+      expect(res.status).toBe(401);
+      expect(await res.json()).toMatchObject({ error: SIGNED_OUT_CODE });
+    });
   });
 
   it("429 over the per-user limit, with Retry-After, and nothing is issued", async () => {
@@ -141,12 +232,110 @@ describe("guards, in order", () => {
     expect(res.status).toBe(429);
     expect(res.headers.get("retry-after")).toBe("42");
     expect(issueMock).not.toHaveBeenCalled();
+    // A person over their own limit takes nothing from the site-wide budget.
+    expect(budgetMock.spend).not.toHaveBeenCalled();
     expect(rateLimitMock).toHaveBeenCalledWith(
       "couch-session",
       "user_1",
       120,
       3600,
     );
+  });
+});
+
+describe("the site-wide budget (the gateway's 30 exchanges a minute for this site's one key)", () => {
+  it("429 with Retry-After when the site's budget is spent, and nothing is exchanged", async () => {
+    budgetMock.spend.mockResolvedValue({
+      allowed: false,
+      retryAfterSeconds: 13,
+    });
+    const { POST } = await import("./route");
+    const res = await POST(post());
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("13");
+    expect(await res.clone().json()).toMatchObject({ error: "rate_limited" });
+    // A refused request must not spend the exchange.
+    expect(issueMock).not.toHaveBeenCalled();
+    await noSecrets(res);
+  });
+
+  it("is asked after sign-in, the configuration and the person's own limit, and before the exchange", async () => {
+    const order: string[] = [];
+    withAuthMock.mockImplementation(async () => {
+      order.push("auth");
+      return { user: { id: "user_1" }, accessToken: ACCESS };
+    });
+    issuerMock.mockImplementation(() => {
+      order.push("configured");
+      return { issue: issueMock };
+    });
+    rateLimitMock.mockImplementation(async () => {
+      order.push("person");
+      return { allowed: true };
+    });
+    budgetMock.spend.mockImplementation(async () => {
+      order.push("site");
+      return { allowed: true };
+    });
+    issueMock.mockImplementation(async () => {
+      order.push("exchange");
+      return {
+        token: CREDENTIAL,
+        expiresInSeconds: 300,
+        database: `user_${PERSON}`,
+      };
+    });
+    const { POST } = await import("./route");
+    expect((await POST(post())).status).toBe(200);
+    expect(order).toEqual(["auth", "configured", "person", "site", "exchange"]);
+  });
+
+  it("an anonymous visitor, an unconfigured site and a person over their own limit never touch it", async () => {
+    const { POST } = await import("./route");
+    withAuthMock.mockResolvedValueOnce({ user: null });
+    await POST(post());
+    issuerMock.mockReturnValueOnce(null);
+    await POST(post());
+    rateLimitMock.mockResolvedValueOnce({
+      allowed: false,
+      retryAfterSeconds: 3,
+    });
+    await POST(post());
+    expect(budgetMock.spend).not.toHaveBeenCalled();
+  });
+
+  it("the gateway answering 429 anyway is noted, so this instance stops sending exchanges, and logged once with no person in it", async () => {
+    issueMock.mockRejectedValue(new CouchIssueError("rate_limited", 17));
+    const { POST } = await import("./route");
+    const res = await POST(post());
+    expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("17");
+    expect(budgetMock.noteGatewayRateLimit).toHaveBeenCalledWith(17);
+    expect(warnMock).toHaveBeenCalledTimes(1);
+    const logged = JSON.stringify(warnMock.mock.calls);
+    expect(logged).not.toContain("user_1");
+    expect(logged).not.toContain(ACCESS);
+    expect(logged).not.toContain(CREDENTIAL);
+
+    // A second 429 inside the same cooldown is not logged again.
+    budgetMock.noteGatewayRateLimit.mockReturnValue(false);
+    warnMock.mockClear();
+    await POST(post());
+    expect(warnMock).not.toHaveBeenCalled();
+  });
+
+  it("no other refusal begins a cooldown", async () => {
+    const { POST } = await import("./route");
+    for (const code of [
+      "account_pending_deletion",
+      "couch_unavailable",
+    ] as const) {
+      issueMock.mockRejectedValue(new CouchIssueError(code));
+      await POST(post());
+    }
+    issueMock.mockRejectedValue(new Error("boom"));
+    await POST(post());
+    expect(budgetMock.noteGatewayRateLimit).not.toHaveBeenCalled();
   });
 });
 
@@ -194,16 +383,17 @@ describe("503 when the sync grant cannot be issued", () => {
     expect(rateLimitMock).not.toHaveBeenCalled();
   });
 
-  it("a configured site spends the person's hourly allowance only once the answer needs the gateway", async () => {
+  it("a configured site spends the person's hourly allowance and one exchange of the site's budget only once the answer needs the gateway", async () => {
     const { POST } = await import("./route");
     await POST(post());
     expect(rateLimitMock).toHaveBeenCalledTimes(1);
+    expect(budgetMock.spend).toHaveBeenCalledTimes(1);
     expect(issueMock).toHaveBeenCalledTimes(1);
   });
 });
 
 describe("when a credential is issued", () => {
-  it("answers exactly token, expiresAt, database and apiOrigin", async () => {
+  it("answers exactly token, expiresIn, database and apiOrigin: a duration, no time of day", async () => {
     const { POST } = await import("./route");
     const res = await POST(post());
     expect(res.status).toBe(200);
@@ -212,12 +402,12 @@ describe("when a credential is issued", () => {
     expect(Object.keys(body).sort()).toEqual([
       "apiOrigin",
       "database",
-      "expiresAt",
+      "expiresIn",
       "token",
     ]);
     expect(body).toEqual({
       token: CREDENTIAL,
-      expiresAt: "2026-11-02T10:10:00.000Z",
+      expiresIn: 300,
       database: `user_${PERSON}`,
       apiOrigin: "https://api.nyuchi.com",
     });
@@ -230,6 +420,7 @@ describe("when a credential is issued", () => {
   it("drops any extra field the issuer returns", async () => {
     issueMock.mockResolvedValue({
       token: CREDENTIAL,
+      expiresInSeconds: 300,
       expiresAtMs: Date.parse("2026-11-02T10:10:00.000Z"),
       database: `user_${PERSON}`,
       refreshToken: "must-not-leak",
@@ -241,22 +432,35 @@ describe("when a credential is issued", () => {
     expect(text).not.toContain("must-not-leak");
     expect(text).not.toContain("person@example.com");
     expect(text).not.toContain("family_x");
+    // Not even a time of day the issuer might still carry.
+    expect(text).not.toContain("2026-11-02");
+    expect(text).not.toContain("expiresAt");
   });
 
   // (That a credential is well formed, names a personal database and has not
   // ended is the issuer's job and is tested there, once: `toCredential` in
   // `couch-session-issuer.test.ts`. The route does not check it a second time;
-  // it still answers 503 if the issuer hands it something it cannot print.)
-  it("503 if the issuer hands over a time that cannot be written, and the text never carries the token", async () => {
+  // it still answers 503 if the issuer hands it a duration the page could not
+  // use.)
+  it("503 if the issuer hands over a duration that is not a positive whole number of seconds, and the text never carries the token", async () => {
     const { POST } = await import("./route");
-    issueMock.mockResolvedValue({
-      token: CREDENTIAL,
-      expiresAtMs: Number.NaN,
-      database: `user_${PERSON}`,
-    });
-    const res = await POST(post());
-    expect(res.status).toBe(503);
-    expect(await res.text()).not.toContain(CREDENTIAL);
+    for (const expiresInSeconds of [
+      Number.NaN,
+      0,
+      -3,
+      Number.POSITIVE_INFINITY,
+      2.5,
+      undefined,
+    ]) {
+      issueMock.mockResolvedValue({
+        token: CREDENTIAL,
+        expiresInSeconds,
+        database: `user_${PERSON}`,
+      });
+      const res = await POST(post());
+      expect(res.status, String(expiresInSeconds)).toBe(503);
+      expect(await res.text()).not.toContain(CREDENTIAL);
+    }
   });
 
   it("maps the issuer's own refusals to their status and code", async () => {
@@ -365,11 +569,11 @@ describe("end to end: the real issuer, the exchange rules of nyuchi-api, a fake 
     const res = await POST(post());
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
-    const body = (await res.json()) as Record<string, string>;
+    const body = (await res.json()) as Record<string, string | number>;
     expect(Object.keys(body).sort()).toEqual([
       "apiOrigin",
       "database",
-      "expiresAt",
+      "expiresIn",
       "token",
     ]);
     expect(body.apiOrigin).toBe("https://api.nyuchi.com");
@@ -377,15 +581,16 @@ describe("end to end: the real issuer, the exchange rules of nyuchi-api, a fake 
 
     // The token is the sync grant, not a sign-in and not the WorkOS token.
     expect(body.token).not.toBe(at);
-    expect(peekClaims(body.token)).toMatchObject({
+    expect(peekClaims(body.token as string)).toMatchObject({
       sub: PERSON,
       aud: "couch-sync",
       scope: "couch:user",
       act: { sub: KEY_ID },
     });
-    const ends = Date.parse(body.expiresAt);
-    expect(ends - Date.now()).toBeGreaterThan(250_000);
-    expect(ends - Date.now()).toBeLessThanOrEqual(300_000);
+    // A duration from the server's clock at issue time, whole seconds.
+    expect(Number.isInteger(body.expiresIn)).toBe(true);
+    expect(body.expiresIn as number).toBeGreaterThan(250);
+    expect(body.expiresIn as number).toBeLessThanOrEqual(300);
     // The gateway accepts it for this person's database, as the proxy would.
     expect(gateway.authorize(`Bearer ${body.token}`)).toMatchObject({
       ok: true,
@@ -437,10 +642,9 @@ describe("end to end: the real issuer, the exchange rules of nyuchi-api, a fake 
       accessToken: freshAccessToken(150),
     });
     const { POST } = await import("./route");
-    const body = (await (await POST(post())).json()) as { expiresAt: string };
-    const left = Date.parse(body.expiresAt) - Date.now();
-    expect(left).toBeGreaterThan(100_000);
-    expect(left).toBeLessThanOrEqual(150_000);
+    const body = (await (await POST(post())).json()) as { expiresIn: number };
+    expect(body.expiresIn).toBeGreaterThan(100);
+    expect(body.expiresIn).toBeLessThanOrEqual(150);
   });
 
   it.each([

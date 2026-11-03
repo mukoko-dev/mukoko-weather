@@ -227,8 +227,13 @@ describe("what it hands back", () => {
       act: { sub: KEY_ID },
     });
     expect(got.database).toBe(`user_${PERSON}`);
-    expect(got.expiresAtMs).toBe(T0 + 300_000);
-    expect(got.expiresAtMs).toBe((claims.exp as number) * 1000);
+    // A duration counted at issue time on THIS server's clock, never a time of
+    // day: the page cannot compare a server time with its own clock.
+    expect(got.expiresInSeconds).toBe(300);
+    expect(got.expiresInSeconds * 1000).toBe(
+      (claims.exp as number) * 1000 - T0,
+    );
+    expect(Object.keys(got)).not.toContain("expiresAtMs");
   });
 
   it("is five minutes at most, however long the WorkOS token lives", async () => {
@@ -236,7 +241,7 @@ describe("what it hands back", () => {
       userId: WORKOS_USER,
       accessToken: accessToken(3600),
     });
-    expect(got.expiresAtMs - T0).toBe(COUCH_SYNC_MAX_SECONDS * 1000);
+    expect(got.expiresInSeconds).toBe(COUCH_SYNC_MAX_SECONDS);
   });
 
   it("never outlives the WorkOS access token it came from", async () => {
@@ -244,7 +249,37 @@ describe("what it hands back", () => {
       userId: WORKOS_USER,
       accessToken: accessToken(200),
     });
-    expect(got.expiresAtMs - T0).toBe(200_000);
+    expect(got.expiresInSeconds).toBe(200);
+  });
+
+  it("rounds DOWN to a whole second, so the page never believes in a moment the grant no longer has", async () => {
+    const halfASecondIn = stubbed(() =>
+      exchangeAnswer(grantToken({ exp: Math.floor(T0 / 1000) + 300 }), {
+        expires_in: 300,
+      }),
+    );
+    clock = T0 + 500; // the exchange runs half a second into the second
+    const got = await halfASecondIn.issuer.issue({
+      userId: WORKOS_USER,
+      accessToken: accessToken(),
+    });
+    // The grant's exp is on a whole second, T0 + 300 s: 299.5 s from now.
+    expect(got.expiresInSeconds).toBe(299);
+  });
+
+  it("a grant with less than a second left is refused, not handed over as zero", async () => {
+    const nearlyOver = stubbed(() =>
+      exchangeAnswer(grantToken({ exp: Math.floor(T0 / 1000) + 1 }), {
+        expires_in: 1,
+      }),
+    );
+    clock = T0 + 500;
+    await expect(
+      nearlyOver.issuer.issue({
+        userId: WORKOS_USER,
+        accessToken: accessToken(),
+      }),
+    ).rejects.toMatchObject({ code: "couch_unavailable" });
   });
 
   it("takes the earlier of the exchange's expires_in and the token's own exp", async () => {
@@ -255,7 +290,7 @@ describe("what it hands back", () => {
       userId: WORKOS_USER,
       accessToken: accessToken(),
     });
-    expect(a.expiresAtMs).toBe(T0 + 100_000);
+    expect(a.expiresInSeconds).toBe(100);
 
     clock = T0;
     const shortToken = stubbed(() =>
@@ -267,7 +302,7 @@ describe("what it hands back", () => {
       userId: WORKOS_USER,
       accessToken: accessToken(),
     });
-    expect(b.expiresAtMs).toBe(T0 + 60_000);
+    expect(b.expiresInSeconds).toBe(60);
   });
 
   it("makes a new exchange for every request; only concurrent ones share", async () => {
@@ -293,13 +328,13 @@ describe("what it hands back", () => {
       userId: WORKOS_USER,
       accessToken: accessToken(),
     });
-    clock = first.expiresAtMs - 60_000;
+    clock = T0 + first.expiresInSeconds * 1000 - 60_000;
     // The proxy refreshed the WorkOS token for this route: a new 300 s one.
     const renewed = await issuer.issue({
       userId: WORKOS_USER,
       accessToken: accessToken(),
     });
-    expect(renewed.expiresAtMs - clock).toBe(300_000);
+    expect(renewed.expiresInSeconds).toBe(300);
     expect(renewed.token).not.toBe(first.token);
   });
 });
@@ -583,7 +618,7 @@ describe("a token that does not leave the server", () => {
       userId: WORKOS_USER,
       accessToken: accessToken(floor),
     });
-    expect(ok.expiresAtMs - T0).toBe(floor * 1000);
+    expect(ok.expiresInSeconds).toBe(floor);
     expect(gateway.requests).toHaveLength(1);
   });
 
