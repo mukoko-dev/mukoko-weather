@@ -2,10 +2,10 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
 import { CurrentLocationHome } from "./CurrentLocationHome";
-import { getLocationFromDb, getCountryByCode } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { getLocationFromDb } from "@/lib/db";
 import { readLastLocation } from "@/lib/last-location";
-import { seasonWithinBudget } from "@/lib/place-seed-server";
+import { localPlaceForSlug } from "@/lib/local-place";
+import { localSeason } from "@/lib/season-local";
 import type { PlaceSeed } from "@/lib/place-controller";
 import type { WeatherLocation } from "@/lib/locations";
 import { ipFallbackLocation } from "@/lib/home-location";
@@ -43,11 +43,19 @@ export const dynamic = "force-dynamic";
  * Server side seeds the page with the best location it can know without
  * device GPS (which only exists in the browser). It sends the shell and the
  * place, never weather:
- * 1. lastLocation cookie that resolves to a real location → that place.
+ * 1. lastLocation cookie that resolves to a real location → that place (a
+ *    shipped place or a spot needs no lookup at all, #452).
  * 2. Else IP geo (Vercel's x-vercel-ip-latitude/longitude headers, find-only).
  * 3. Else Harare, a shipped seed that renders without any lookup. Never a page
  *    for choosing cities (#414): search and browse are one tap away in My
  *    Weather and on the Locations list.
+ *
+ * The season (prebuilt table), the country name (static list) and the signed-in
+ * person (read by the client from AuthKit's provider) are not awaited (#452).
+ * What this render still waits for is only the lookup of a cookie naming a
+ * place that is neither shipped nor a spot, and the IP-geo call for a visitor
+ * with no cookie; both are bounded by HOME_SEED_DEADLINE_MS, behind the
+ * skeleton the page streams first.
  *
  * CurrentLocationHome then refreshes via GPS on mount and swaps the dashboard
  * IN PLACE when the visitor is somewhere else — no redirect exists for a
@@ -101,20 +109,7 @@ function withinDeadline<T>(
 async function HomeContent() {
   const built = await withinDeadline(buildHome(), HOME_SEED_DEADLINE_MS);
   if (built !== SEED_DEADLINE) return built;
-  const user = await withinDeadline(
-    getCurrentUser().catch(() => null),
-    500,
-  );
-  return (
-    <CurrentLocationHome
-      initial={null}
-      user={
-        user && user !== SEED_DEADLINE
-          ? { id: user.id, email: user.email ?? null }
-          : null
-      }
-    />
-  );
+  return <CurrentLocationHome initial={null} />;
 }
 
 async function buildHome() {
@@ -128,7 +123,11 @@ async function buildHome() {
   let detectedLocation: WeatherLocation | null = null;
 
   if (lastLocation) {
-    const resolved = await getLocationFromDb(lastLocation).catch(() => null);
+    // A shipped place or a spot is answered with no lookup; only another slug
+    // asks the store.
+    const resolved =
+      localPlaceForSlug(lastLocation) ??
+      (await getLocationFromDb(lastLocation).catch(() => null));
     if (resolved) detectedLocation = resolved;
     // Unresolvable cookie — ignore it and continue to IP-geo detection below.
   }
@@ -196,11 +195,6 @@ async function buildHome() {
   // The GPS refresh and the location card in CurrentLocationHome are unchanged.
   if (!detectedLocation) detectedLocation = defaultHomeLocation();
 
-  const currentUser = await getCurrentUser().catch(() => null);
-  const aiUser = currentUser
-    ? { id: currentUser.id, email: currentUser.email ?? null }
-    : null;
-
   // Strip MongoDB _id (ObjectId with .toJSON()) before crossing to the client.
   const { _id: _removed, ...seededLocation } =
     detectedLocation as WeatherLocation & {
@@ -212,18 +206,11 @@ async function buildHome() {
   // forecast, painted over the copy stored on the device.
   const location = seededLocation;
   const countryCode = (location.country ?? "").toUpperCase();
-  const [countryDoc, season] = await Promise.all([
-    countryCode
-      ? getCountryByCode(countryCode).catch(() => null)
-      : Promise.resolve(null),
-    seasonWithinBudget(countryCode, location.lat ?? 0),
-  ]);
-
   const initial: PlaceSeed = {
     location,
-    season,
-    countryName: countryDoc?.name ?? countryDisplayName(countryCode),
+    season: localSeason(new Date(), countryCode, location.lat ?? 0),
+    countryName: countryDisplayName(countryCode),
   };
 
-  return <CurrentLocationHome initial={initial} user={aiUser} />;
+  return <CurrentLocationHome initial={initial} />;
 }

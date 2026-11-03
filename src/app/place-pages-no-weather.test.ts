@@ -36,6 +36,11 @@ vi.mock("@/lib/db", async (importOriginal) => {
   };
 });
 vi.mock("@/lib/auth", () => ({ getCurrentUser: async () => null }));
+// The place stage reads the signed-in person from AuthKit's provider in the
+// browser (useAiUser); the provider's module cannot be loaded outside Next.
+vi.mock("@workos-inc/authkit-nextjs/components", () => ({
+  useAuth: () => ({ user: null }),
+}));
 vi.mock("next/navigation", () => ({
   notFound: () => {
     throw new Error("NEXT_NOT_FOUND");
@@ -198,10 +203,11 @@ const WEATHER_LOADERS = [
 const ENTRIES = [
   "app/page.tsx",
   "app/[location]/page.tsx",
-  "app/[location]/layout.tsx",
   "app/[location]/load-location.ts",
   "lib/load-location.ts",
   "lib/place-seed-server.ts",
+  "lib/local-place.ts",
+  "lib/season-local.ts",
 ];
 
 /** `src/lib/db.ts` is a library of many things; importers are checked by name. */
