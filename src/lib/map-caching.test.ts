@@ -43,9 +43,9 @@ describe("service worker map-tile caching", () => {
   it("matches the tiles Worker's path, not the retired Python route", () => {
     // Both tile rules must target /v1/map-tiles: /api/py/map-tiles is gone, so
     // a rule on it would match nothing and every tile would skip the cache.
-    expect(sw.split('url.pathname.startsWith("/v1/map-tiles")').length - 1).toBe(
-      2,
-    );
+    expect(
+      sw.split('url.pathname.startsWith("/v1/map-tiles")').length - 1,
+    ).toBe(2);
     expect(sw).not.toContain("/api/py/");
     // The URL the map builds is the one the rules match.
     expect(weatherOverlayTileUrl("temperature", "now")).toContain(
