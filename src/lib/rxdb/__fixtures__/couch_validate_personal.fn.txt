@@ -1,0 +1,213 @@
+// PINNED COPY, not edited: the write rules of a person's private CouchDB
+// database (user_<personId>), as nyuchi/nyuchi-api ships them.
+//
+//   source   nyuchi/nyuchi-api, branch staging, gateway/lib/couch_validate_personal.js
+//   commit   a665d20a1d9452fc39ba70d29f61f35762b74f48 (2026-11-02, "re-sync the
+//            private-database rules to data-infra#163"): the last commit that
+//            touched the file. v0.53.0 and main have the same file. Staging's
+//            head when this copy was read was 3ea461dfef2af2551440ed20efd6bbb3b74fb2c3.
+//   read on  2026-11-03
+//   blob     13807551ca1f0ac1671c72837a7611db89b7b3ad (git blob SHA-1 of the file)
+//   sha-256  1128ab258c911eb890eaa7f86654fe55ae866983d74b0e0b0082351dc1a222cc
+//            (the value nyuchi-api's own couch_validate_personal.source.json pins)
+//   origin   generated in nyuchi/data-infra from schemas/model/userdb.yaml
+//            (data-infra commit ace188646db7b5c515595d92a4e97f4a7d2996ae)
+//
+// This replaced the v0.51.0 function (integer schemaVersion, ownerPersonId,
+// stub tombstones), which was the wrong contract. THE TESTS EXECUTE THIS FUNCTION
+// on every document the client writes (live documents, tombstones, every setting
+// it syncs); `couch-validator-pin.test.ts` checks that everything under the marker
+// line below is byte-for-byte the file the sidecar `couch_validate_personal.source.json`
+// pins. The comment inside the function says "PROPOSED: nothing installs this on a
+// live CouchDB", which is stale: nyuchi-api's POST /v1/couch/personal installs it as
+// _design/user (gateway/lib/couch_documents.py). Nothing here has run against a live
+// CouchDB.
+//
+// RE-PIN whenever nyuchi-api's couch_validate_personal.js changes:
+//   curl -H 'Accept: application/vnd.github.raw' \
+//     'https://api.github.com/repos/nyuchi/nyuchi-api/contents/gateway/lib/couch_validate_personal.js?ref=staging' \
+//     > body.js
+//   (add -H "Authorization: Bearer $GH_TOKEN" if the repository needs it), then
+//   write this header, the marker line and body.js into this file, update the
+//   sidecar's commit, blobSha and sha256, and let the tests say what moved.
+// ---- BEGIN VERBATIM COPY: every byte below this line is the gateway's file ----
+function (newDoc, oldDoc, userCtx, secObj) {
+  // Generated from schemas/model/userdb.yaml by schemas/tools/generate.py. Do not edit; edit the model.
+  // PROPOSED (docs/adr/0002-user-database-document-model.md): nothing installs this on a live CouchDB.
+  //
+  // What it enforces in a person's own database (user_<personId>):
+  //   1. only the owner writes: the JWT subject (userCtx.name) names this database
+  //   2. only a listed document type, and the part of _id before the colon is the type
+  //   3. no field outside the type's schema (so no _attachments, no stray data), the
+  //      required fields, and every value in its form (the JSON Schema embedded below)
+  //   4. a natural key in _id equals the field it stands for
+  //   5. an envelope is a JWE of the profile: the protected header is exactly alg
+  //      "dir", enc "A256GCM" and a kid, and the aad names this document's _id
+  //   6. the whole document is at most MAX_BYTES of UTF-8 JSON
+  //   7. updatedAt is not more than FUTURE_MS ahead of this server's clock
+  // oldDoc is not used on purpose: a replication can deliver a revision whose parent
+  // is not the one stored here, and the rules above hold of any single revision.
+  var DB_PREFIX = "user_";
+  var MAX_BYTES = 1048576;
+  var FUTURE_MS = 86400000;
+  var SCHEMAS = {
+    "preference": {"type":"object","additionalProperties":false,"properties":{"_id":{"type":"string","pattern":"^preference:(theme|language|temperatureUnit|windSpeedUnit|pressureUnit|precipitationUnit|distanceUnit|forecastModel|homePlace)$"},"schemaVersion":{"type":"string","pattern":"^v[0-9]+\\.[0-9]+$"},"type":{"const":"preference"},"deviceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},"_deleted":{"type":"boolean"},"createdAt":{"type":"string","format":"date-time","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"},"updatedAt":{"type":"string","format":"date-time","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"},"preferenceKey":{"type":"string","enum":["theme","language","temperatureUnit","windSpeedUnit","pressureUnit","precipitationUnit","distanceUnit","forecastModel"]},"preferenceValue":{"type":"string","maxLength":64},"envelope":{"type":"object","additionalProperties":false,"properties":{"protected":{"type":"string","pattern":"^[A-Za-z0-9_-]+$","minLength":52,"maxLength":200},"aad":{"type":"string","pattern":"^[A-Za-z0-9_-]+$","minLength":1,"maxLength":320},"iv":{"type":"string","pattern":"^[A-Za-z0-9_-]{16}$"},"ciphertext":{"type":"string","pattern":"^[A-Za-z0-9_-]+$","minLength":3,"maxLength":32768},"tag":{"type":"string","pattern":"^[A-Za-z0-9_-]{22}$"}},"required":["protected","aad","iv","ciphertext","tag"]},"_rev":{"type":"string","pattern":"^[1-9][0-9]{0,9}-[0-9a-f]{32}$"},"_revisions":{"type":"object"}},"required":["_id","schemaVersion","type","deviceId","createdAt","updatedAt"],"allOf":[{"if":{"allOf":[{"not":{"properties":{"_deleted":{"const":true}},"required":["_deleted"]}},{"properties":{"_id":{"pattern":"^preference:(theme|language|temperatureUnit|windSpeedUnit|pressureUnit|precipitationUnit|distanceUnit|forecastModel)$"}}}]},"then":{"required":["preferenceKey","preferenceValue"],"not":{"required":["envelope"]}}},{"if":{"allOf":[{"not":{"properties":{"_deleted":{"const":true}},"required":["_deleted"]}},{"properties":{"_id":{"pattern":"^preference:(homePlace)$"}}}]},"then":{"required":["envelope"],"allOf":[{"not":{"required":["preferenceKey"]}},{"not":{"required":["preferenceValue"]}}]}},{"if":{"properties":{"preferenceKey":{"const":"theme"}},"required":["preferenceKey"]},"then":{"properties":{"preferenceValue":{"enum":["light","dark","system"]}}}},{"if":{"properties":{"preferenceKey":{"const":"language"}},"required":["preferenceKey"]},"then":{"properties":{"preferenceValue":{"pattern":"^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$"}}}},{"if":{"properties":{"preferenceKey":{"const":"temperatureUnit"}},"required":["preferenceKey"]},"then":{"properties":{"preferenceValue":{"enum":["Cel","[degF]"]}}}},{"if":{"properties":{"preferenceKey":{"const":"windSpeedUnit"}},"required":["preferenceKey"]},"then":{"properties":{"preferenceValue":{"enum":["km/h","m/s","[mi_i]/h","[kn_i]"]}}}},{"if":{"properties":{"preferenceKey":{"const":"pressureUnit"}},"required":["preferenceKey"]},"then":{"properties":{"preferenceValue":{"enum":["hPa","kPa","mm[Hg]","[in_i'Hg]"]}}}},{"if":{"properties":{"preferenceKey":{"const":"precipitationUnit"}},"required":["preferenceKey"]},"then":{"properties":{"preferenceValue":{"enum":["mm","[in_i]"]}}}},{"if":{"properties":{"preferenceKey":{"const":"distanceUnit"}},"required":["preferenceKey"]},"then":{"properties":{"preferenceValue":{"enum":["km","[mi_i]"]}}}},{"if":{"properties":{"preferenceKey":{"const":"forecastModel"}},"required":["preferenceKey"]},"then":{"properties":{"preferenceValue":{"enum":["best_match","ecmwf_ifs","ecmwf_aifs025_single","gfs_seamless","icon_global","ukmo_global_deterministic_10km","cma_grapes_global","gem_global","meteofrance_arpege_world","jma_gsm"]}}}},{"if":{"properties":{"_deleted":{"const":true}},"required":["_deleted"]},"then":{"allOf":[{"not":{"required":["preferenceKey"]}},{"not":{"required":["preferenceValue"]}},{"not":{"required":["envelope"]}}]}}]},
+    "savedPlace": {"type":"object","additionalProperties":false,"properties":{"_id":{"type":"string","pattern":"^savedPlace:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"schemaVersion":{"type":"string","pattern":"^v[0-9]+\\.[0-9]+$"},"type":{"const":"savedPlace"},"deviceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},"_deleted":{"type":"boolean"},"createdAt":{"type":"string","format":"date-time","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"},"updatedAt":{"type":"string","format":"date-time","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"},"envelope":{"type":"object","additionalProperties":false,"properties":{"protected":{"type":"string","pattern":"^[A-Za-z0-9_-]+$","minLength":52,"maxLength":200},"aad":{"type":"string","pattern":"^[A-Za-z0-9_-]+$","minLength":1,"maxLength":320},"iv":{"type":"string","pattern":"^[A-Za-z0-9_-]{16}$"},"ciphertext":{"type":"string","pattern":"^[A-Za-z0-9_-]+$","minLength":3,"maxLength":32768},"tag":{"type":"string","pattern":"^[A-Za-z0-9_-]{22}$"}},"required":["protected","aad","iv","ciphertext","tag"]},"_rev":{"type":"string","pattern":"^[1-9][0-9]{0,9}-[0-9a-f]{32}$"},"_revisions":{"type":"object"}},"required":["_id","schemaVersion","type","deviceId","createdAt","updatedAt"],"if":{"properties":{"_deleted":{"const":true}},"required":["_deleted"]},"else":{"required":["envelope"]},"allOf":[{"if":{"properties":{"_deleted":{"const":true}},"required":["_deleted"]},"then":{"allOf":[{"not":{"required":["envelope"]}}]}}]},
+    "activity": {"type":"object","additionalProperties":false,"properties":{"_id":{"type":"string","pattern":"^activity:[a-z0-9][a-z0-9-]{0,63}$"},"schemaVersion":{"type":"string","pattern":"^v[0-9]+\\.[0-9]+$"},"type":{"const":"activity"},"deviceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},"_deleted":{"type":"boolean"},"createdAt":{"type":"string","format":"date-time","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"},"updatedAt":{"type":"string","format":"date-time","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"},"activityId":{"type":"string","pattern":"^[a-z0-9][a-z0-9-]{0,63}$"},"_rev":{"type":"string","pattern":"^[1-9][0-9]{0,9}-[0-9a-f]{32}$"},"_revisions":{"type":"object"}},"required":["_id","schemaVersion","type","deviceId","createdAt","updatedAt"],"if":{"properties":{"_deleted":{"const":true}},"required":["_deleted"]},"else":{"required":["activityId"]},"allOf":[{"if":{"properties":{"_deleted":{"const":true}},"required":["_deleted"]},"then":{"allOf":[{"not":{"required":["activityId"]}}]}}]},
+    "interest": {"type":"object","additionalProperties":false,"properties":{"_id":{"type":"string","pattern":"^interest:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"schemaVersion":{"type":"string","pattern":"^v[0-9]+\\.[0-9]+$"},"type":{"const":"interest"},"deviceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},"_deleted":{"type":"boolean"},"createdAt":{"type":"string","format":"date-time","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"},"updatedAt":{"type":"string","format":"date-time","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"},"envelope":{"type":"object","additionalProperties":false,"properties":{"protected":{"type":"string","pattern":"^[A-Za-z0-9_-]+$","minLength":52,"maxLength":200},"aad":{"type":"string","pattern":"^[A-Za-z0-9_-]+$","minLength":1,"maxLength":320},"iv":{"type":"string","pattern":"^[A-Za-z0-9_-]{16}$"},"ciphertext":{"type":"string","pattern":"^[A-Za-z0-9_-]+$","minLength":3,"maxLength":32768},"tag":{"type":"string","pattern":"^[A-Za-z0-9_-]{22}$"}},"required":["protected","aad","iv","ciphertext","tag"]},"_rev":{"type":"string","pattern":"^[1-9][0-9]{0,9}-[0-9a-f]{32}$"},"_revisions":{"type":"object"}},"required":["_id","schemaVersion","type","deviceId","createdAt","updatedAt"],"if":{"properties":{"_deleted":{"const":true}},"required":["_deleted"]},"else":{"required":["envelope"]},"allOf":[{"if":{"properties":{"_deleted":{"const":true}},"required":["_deleted"]},"then":{"allOf":[{"not":{"required":["envelope"]}}]}}]},
+    "engagementEvent": {"type":"object","additionalProperties":false,"properties":{"_id":{"type":"string","pattern":"^engagementEvent:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"schemaVersion":{"type":"string","pattern":"^v[0-9]+\\.[0-9]+$"},"type":{"const":"engagementEvent"},"deviceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},"_deleted":{"type":"boolean"},"createdAt":{"type":"string","format":"date-time","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"},"updatedAt":{"type":"string","format":"date-time","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"},"envelope":{"type":"object","additionalProperties":false,"properties":{"protected":{"type":"string","pattern":"^[A-Za-z0-9_-]+$","minLength":52,"maxLength":200},"aad":{"type":"string","pattern":"^[A-Za-z0-9_-]+$","minLength":1,"maxLength":320},"iv":{"type":"string","pattern":"^[A-Za-z0-9_-]{16}$"},"ciphertext":{"type":"string","pattern":"^[A-Za-z0-9_-]+$","minLength":3,"maxLength":32768},"tag":{"type":"string","pattern":"^[A-Za-z0-9_-]{22}$"}},"required":["protected","aad","iv","ciphertext","tag"]},"_rev":{"type":"string","pattern":"^[1-9][0-9]{0,9}-[0-9a-f]{32}$"},"_revisions":{"type":"object"}},"required":["_id","schemaVersion","type","deviceId","createdAt","updatedAt"],"if":{"properties":{"_deleted":{"const":true}},"required":["_deleted"]},"else":{"required":["envelope"]},"allOf":[{"if":{"properties":{"_deleted":{"const":true}},"required":["_deleted"]},"then":{"allOf":[{"not":{"required":["envelope"]}}]}}]},
+    "historyEntry": {"type":"object","additionalProperties":false,"properties":{"_id":{"type":"string","pattern":"^historyEntry:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"schemaVersion":{"type":"string","pattern":"^v[0-9]+\\.[0-9]+$"},"type":{"const":"historyEntry"},"deviceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},"_deleted":{"type":"boolean"},"createdAt":{"type":"string","format":"date-time","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"},"updatedAt":{"type":"string","format":"date-time","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"},"envelope":{"type":"object","additionalProperties":false,"properties":{"protected":{"type":"string","pattern":"^[A-Za-z0-9_-]+$","minLength":52,"maxLength":200},"aad":{"type":"string","pattern":"^[A-Za-z0-9_-]+$","minLength":1,"maxLength":320},"iv":{"type":"string","pattern":"^[A-Za-z0-9_-]{16}$"},"ciphertext":{"type":"string","pattern":"^[A-Za-z0-9_-]+$","minLength":3,"maxLength":32768},"tag":{"type":"string","pattern":"^[A-Za-z0-9_-]{22}$"}},"required":["protected","aad","iv","ciphertext","tag"]},"_rev":{"type":"string","pattern":"^[1-9][0-9]{0,9}-[0-9a-f]{32}$"},"_revisions":{"type":"object"}},"required":["_id","schemaVersion","type","deviceId","createdAt","updatedAt"],"if":{"properties":{"_deleted":{"const":true}},"required":["_deleted"]},"else":{"required":["envelope"]},"allOf":[{"if":{"properties":{"_deleted":{"const":true}},"required":["_deleted"]},"then":{"allOf":[{"not":{"required":["envelope"]}}]}}]},
+    "deviceNote": {"type":"object","additionalProperties":false,"properties":{"_id":{"type":"string","pattern":"^deviceNote:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},"schemaVersion":{"type":"string","pattern":"^v[0-9]+\\.[0-9]+$"},"type":{"const":"deviceNote"},"deviceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},"_deleted":{"type":"boolean"},"createdAt":{"type":"string","format":"date-time","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"},"updatedAt":{"type":"string","format":"date-time","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"},"envelope":{"type":"object","additionalProperties":false,"properties":{"protected":{"type":"string","pattern":"^[A-Za-z0-9_-]+$","minLength":52,"maxLength":200},"aad":{"type":"string","pattern":"^[A-Za-z0-9_-]+$","minLength":1,"maxLength":320},"iv":{"type":"string","pattern":"^[A-Za-z0-9_-]{16}$"},"ciphertext":{"type":"string","pattern":"^[A-Za-z0-9_-]+$","minLength":3,"maxLength":32768},"tag":{"type":"string","pattern":"^[A-Za-z0-9_-]{22}$"}},"required":["protected","aad","iv","ciphertext","tag"]},"_rev":{"type":"string","pattern":"^[1-9][0-9]{0,9}-[0-9a-f]{32}$"},"_revisions":{"type":"object"}},"required":["_id","schemaVersion","type","deviceId","createdAt","updatedAt"],"if":{"properties":{"_deleted":{"const":true}},"required":["_deleted"]},"else":{"required":["envelope"]},"allOf":[{"if":{"properties":{"_deleted":{"const":true}},"required":["_deleted"]},"then":{"allOf":[{"not":{"required":["envelope"]}}]}}]}
+  };
+  var PROTECTED = {"type":"object","additionalProperties":false,"properties":{"alg":{"type":"string","enum":["dir"]},"enc":{"type":"string","enum":["A256GCM"]},"kid":{"type":"string","pattern":"^[A-Za-z0-9_-]{1,64}$"}},"required":["alg","enc","kid"]};
+  var KEYS = {"preference": "preferenceKey", "savedPlace": null, "activity": "activityId", "interest": null, "engagementEvent": null, "historyEntry": null, "deviceNote": "deviceId"};
+  var B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+  function reject(why) { throw({forbidden: why}); }
+  function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+  function isObject(v) { return v !== null && typeof v === "object" && !(v instanceof Array); }
+  function inList(list, v) {
+    for (var i = 0; i < list.length; i++) { if (list[i] === v) { return true; } }
+    return false;
+  }
+  // JSON Schema counts characters, not UTF-16 units.
+  function chars(s) { return s.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, "_").length; }
+
+  // base64url of an ASCII string (the _id), without padding.
+  function b64uEncode(s) {
+    var out = "", i, n;
+    for (i = 0; i < s.length; i += 3) {
+      n = (s.charCodeAt(i) << 16) | (i + 1 < s.length ? s.charCodeAt(i + 1) << 8 : 0) | (i + 2 < s.length ? s.charCodeAt(i + 2) : 0);
+      out += B64.charAt((n >> 18) & 63) + B64.charAt((n >> 12) & 63);
+      if (i + 1 < s.length) { out += B64.charAt((n >> 6) & 63); }
+      if (i + 2 < s.length) { out += B64.charAt(n & 63); }
+    }
+    return out;
+  }
+  // base64url, without padding, to a string of bytes (one character each); null when it is not base64url.
+  function b64uDecode(s) {
+    var out = "", n = 0, bits = 0, i, v;
+    for (i = 0; i < s.length; i++) {
+      v = B64.indexOf(s.charAt(i));
+      if (v < 0) { return null; }
+      n = (n << 6) | v;
+      bits += 6;
+      if (bits >= 8) { bits -= 8; out += String.fromCharCode((n >> bits) & 255); n = n & ((1 << bits) - 1); }
+    }
+    return out;
+  }
+
+  // The subset of JSON Schema 2020-12 the generator emits. Returns null when the
+  // value is valid, else a short reason that never repeats the value.
+  function check(s, v, p) {
+    var e, k, i;
+    if (has(s, "const") && v !== s["const"]) { return p + " has the wrong constant"; }
+    if (s["enum"] && !inList(s["enum"], v)) { return p + " is not an allowed value"; }
+    if (s.type === "string" && typeof v !== "string") { return p + " must be a string"; }
+    if (s.type === "boolean" && typeof v !== "boolean") { return p + " must be true or false"; }
+    if (s.type === "object" && !isObject(v)) { return p + " must be an object"; }
+    if (s.type === "integer" && !(typeof v === "number" && isFinite(v) && Math.floor(v) === v)) { return p + " must be an integer"; }
+    if (s.type === "number" && !(typeof v === "number" && isFinite(v))) { return p + " must be a number"; }
+    if (typeof v === "string") {
+      if (has(s, "minLength") && chars(v) < s.minLength) { return p + " is too short"; }
+      if (has(s, "maxLength") && chars(v) > s.maxLength) { return p + " is too long"; }
+      if (s.pattern && !(new RegExp(s.pattern)).test(v)) { return p + " is not in its form"; }
+      if (s.format === "date-time" && isNaN(Date.parse(v))) { return p + " is not a date and time"; }
+      if (s.format === "date" && isNaN(Date.parse(v + "T00:00:00Z"))) { return p + " is not a date"; }
+    }
+    if (typeof v === "number") {
+      if (has(s, "minimum") && v < s.minimum) { return p + " is too small"; }
+      if (has(s, "maximum") && v > s.maximum) { return p + " is too large"; }
+    }
+    if (isObject(v)) {
+      var names = [];
+      for (k in v) { if (has(v, k)) { names.push(k); } }
+      if (has(s, "maxProperties") && names.length > s.maxProperties) { return p + " has too many entries"; }
+      if (s.required) {
+        for (i = 0; i < s.required.length; i++) {
+          if (!has(v, s.required[i])) { return p + "." + s.required[i] + " is required"; }
+        }
+      }
+      for (i = 0; i < names.length; i++) {
+        k = names[i];
+        if (s.propertyNames && s.propertyNames.pattern && !(new RegExp(s.propertyNames.pattern)).test(k)) {
+          return p + " has a name that is not in its form";
+        }
+        if (s.properties && has(s.properties, k)) {
+          e = check(s.properties[k], v[k], p + "." + k);
+          if (e !== null) { return e; }
+        } else if (s.additionalProperties === false) {
+          return p + "." + k + " is not allowed";
+        } else if (isObject(s.additionalProperties)) {
+          e = check(s.additionalProperties, v[k], p + "." + k);
+          if (e !== null) { return e; }
+        }
+      }
+    }
+    if (s.allOf) {
+      for (i = 0; i < s.allOf.length; i++) {
+        e = check(s.allOf[i], v, p);
+        if (e !== null) { return e; }
+      }
+    }
+    if (s["not"] && check(s["not"], v, p) === null) { return p + " is not allowed here"; }
+    if (s["if"]) {
+      if (check(s["if"], v, p) === null) {
+        if (s["then"]) { e = check(s["then"], v, p); if (e !== null) { return e; } }
+      } else if (s["else"]) {
+        e = check(s["else"], v, p);
+        if (e !== null) { return e; }
+      }
+    }
+    return null;
+  }
+
+  var id = newDoc._id;
+
+  // A design document is written by a server admin only. This is also how this
+  // function replaces itself: the old one runs against the new design document.
+  if (typeof id === "string" && id.indexOf("_design/") === 0) {
+    if (userCtx && userCtx.roles && inList(userCtx.roles, "_admin")) { return; }
+    reject("only a server admin writes a design document");
+  }
+
+  // 1. Owner only. There is no admin exception for data: the gateway holds the only
+  // admin credential, and it never writes a person's documents.
+  if (!userCtx || !userCtx.name) { throw({unauthorized: "sign in"}); }
+  if (userCtx.db !== DB_PREFIX + userCtx.name) { reject("this database belongs to someone else"); }
+
+  // 2. A listed type, and the id starts with it.
+  var type = newDoc.type;
+  if (typeof id !== "string" || typeof type !== "string" || !has(SCHEMAS, type)) { reject("unknown document type"); }
+  if (id.indexOf(type + ":") !== 0) { reject("_id must start with the type and a colon"); }
+
+  // 6. Size, in bytes of UTF-8 JSON.
+  var bytes;
+  try { bytes = unescape(encodeURIComponent(JSON.stringify(newDoc))).length; }
+  catch (err) { reject("the document is not valid Unicode text"); }
+  if (bytes > MAX_BYTES) { reject("the document is larger than the limit"); }
+
+  // 3. The type's schema.
+  var why = check(SCHEMAS[type], newDoc, "doc");
+  if (why !== null) { reject(why); }
+
+  // 4. A natural key equals the field it stands for.
+  var keyField = KEYS[type];
+  if (keyField && has(newDoc, keyField) && String(newDoc[keyField]) !== id.substring(type.length + 1)) {
+    reject("_id does not match " + keyField);
+  }
+
+  // 5. An envelope is a JWE of the profile. The schema has fixed its members; here the
+  // protected header is decoded and held to alg, enc and kid, and the aad to this _id.
+  if (has(newDoc, "envelope")) {
+    var raw = b64uDecode(newDoc.envelope.protected), header = null;
+    try { header = JSON.parse(decodeURIComponent(escape(raw))); } catch (err2) { header = null; }
+    if (header === null) { reject("doc.envelope.protected is not a JSON header"); }
+    why = check(PROTECTED, header, "doc.envelope.protected");
+    if (why !== null) { reject(why); }
+    if (newDoc.envelope.aad !== b64uEncode(id)) { reject("doc.envelope.aad does not name this document"); }
+  }
+
+  // 7. A far-future updatedAt would win every conflict until then.
+  if (Date.parse(newDoc.updatedAt) > Date.now() + FUTURE_MS) { reject("updatedAt is too far ahead"); }
+}

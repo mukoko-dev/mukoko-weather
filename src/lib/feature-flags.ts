@@ -58,6 +58,14 @@ export const FLAGS = {
    * localStorage.setItem("ff:model_map_layers", "true").
    */
   model_map_layers: false,
+  /**
+   * Replicate the person's own preferences and activities with their CouchDB
+   * database (`user_<personId>`) through the Nyuchi API (#396, web slice).
+   * Off until the gateway can give this site a credential and the owner turns
+   * on CouchDB's JWT handler; with it off nothing is imported or requested.
+   * Try it locally with localStorage.setItem("ff:couch_sync", "true").
+   */
+  couch_sync: false,
   /** Vector semantic search for locations */
   vector_search: false,
   /** Multi-language support (Shona, Ndebele) */
