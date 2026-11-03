@@ -21,6 +21,9 @@
  *     issuer);
  *   - the site must be set up for sync (503 `couch_unavailable`), checked
  *     BEFORE the limit so that an unconfigured site writes nothing to Mongo;
+ *   - the issuer's local checks (`precheck`: no I/O) next, also before either
+ *     counter: an access token that is missing, ended or too short to make a
+ *     grant from is 503 `couch_unavailable` and spends nothing;
  *   - a per-user limit (Mongo, `checkUserRateLimit`, 120 an hour: the
  *     credential lives five minutes at most and the page renews it a minute
  *     before, so one visible tab asks about fifteen times an hour and a few
@@ -124,6 +127,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const apiOrigin = gatewayOrigin();
   const issuer = couchSessionIssuer();
   if (!apiOrigin || !issuer) return errorResponse(503, "couch_unavailable");
+
+  // Then the issuer's own LOCAL checks (an access token that is missing, ended
+  // or too short to make a grant from), before either counter: such a request
+  // can only be refused, retrying at once does not cure it, and it must not
+  // spend the person's hourly allowance (a Mongo write) or one of the site's
+  // exchanges, which a person stuck with such a token would otherwise burn on
+  // every retry of every tab.
+  const unissuable = issuer.precheck({ userId, accessToken });
+  if (unissuable) {
+    return errorResponse(
+      unissuable.status,
+      unissuable.code,
+      unissuable.retryAfterSeconds,
+    );
+  }
 
   const [max, window] = COUCH_SESSION_LIMIT;
   const limit = await checkUserRateLimit("couch-session", userId, max, window);

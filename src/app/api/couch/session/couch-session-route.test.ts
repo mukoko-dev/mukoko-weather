@@ -36,6 +36,7 @@ vi.mock("@/lib/observability", () => ({
 
 const issuerMock = vi.hoisted(() => vi.fn());
 const issueMock = vi.hoisted(() => vi.fn());
+const precheckMock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/couch-session-issuer", async () => {
   const actual = await vi.importActual<
     typeof import("@/lib/couch-session-issuer")
@@ -70,6 +71,7 @@ beforeEach(() => {
     warnMock,
     issuerMock,
     issueMock,
+    precheckMock,
     budgetMock.spend,
     budgetMock.noteGatewayRateLimit,
   ])
@@ -83,7 +85,9 @@ beforeEach(() => {
     user: { id: "user_1" },
     accessToken: ACCESS,
   });
-  issuerMock.mockReturnValue({ issue: issueMock });
+  // The issuer's local checks pass unless a test says otherwise.
+  precheckMock.mockReturnValue(null);
+  issuerMock.mockReturnValue({ issue: issueMock, precheck: precheckMock });
   issueMock.mockResolvedValue({
     token: CREDENTIAL,
     expiresInSeconds: 300,
@@ -259,7 +263,7 @@ describe("the site-wide budget (the gateway's 30 exchanges a minute for this sit
     await noSecrets(res);
   });
 
-  it("is asked after sign-in, the configuration and the person's own limit, and before the exchange", async () => {
+  it("is asked after sign-in, the configuration, the issuer's local checks and the person's own limit, and before the exchange", async () => {
     const order: string[] = [];
     withAuthMock.mockImplementation(async () => {
       order.push("auth");
@@ -267,7 +271,11 @@ describe("the site-wide budget (the gateway's 30 exchanges a minute for this sit
     });
     issuerMock.mockImplementation(() => {
       order.push("configured");
-      return { issue: issueMock };
+      return { issue: issueMock, precheck: precheckMock };
+    });
+    precheckMock.mockImplementation(() => {
+      order.push("precheck");
+      return null;
     });
     rateLimitMock.mockImplementation(async () => {
       order.push("person");
@@ -287,7 +295,14 @@ describe("the site-wide budget (the gateway's 30 exchanges a minute for this sit
     });
     const { POST } = await import("./route");
     expect((await POST(post())).status).toBe(200);
-    expect(order).toEqual(["auth", "configured", "person", "site", "exchange"]);
+    expect(order).toEqual([
+      "auth",
+      "configured",
+      "precheck",
+      "person",
+      "site",
+      "exchange",
+    ]);
   });
 
   it("an anonymous visitor, an unconfigured site and a person over their own limit never touch it", async () => {
@@ -336,6 +351,55 @@ describe("the site-wide budget (the gateway's 30 exchanges a minute for this sit
     issueMock.mockRejectedValue(new Error("boom"));
     await POST(post());
     expect(budgetMock.noteGatewayRateLimit).not.toHaveBeenCalled();
+  });
+});
+
+// The issuer's cheap LOCAL checks (an access token that is missing, ended or
+// too short to make a grant from) cannot be passed by retrying at once, so a
+// request that fails them must not spend the person's hourly allowance (a Mongo
+// write) or one of the site's exchanges, which a person stuck with such a token
+// would otherwise burn on every retry of every tab.
+describe("the issuer's local checks come before any counter", () => {
+  it("a failed check is 503 couch_unavailable and spends neither the person's allowance nor the site's budget", async () => {
+    precheckMock.mockReturnValue(new CouchIssueError("couch_unavailable"));
+    const { POST } = await import("./route");
+    const res = await POST(post());
+    expect(res.status).toBe(503);
+    expect(await res.clone().json()).toMatchObject({
+      error: "couch_unavailable",
+    });
+    expect(rateLimitMock).not.toHaveBeenCalled();
+    expect(budgetMock.spend).not.toHaveBeenCalled();
+    expect(issueMock).not.toHaveBeenCalled();
+    expect(budgetMock.noteGatewayRateLimit).not.toHaveBeenCalled();
+    await noSecrets(res);
+  });
+
+  it("is given who is asking: the user and the access token, and nothing else", async () => {
+    const { POST } = await import("./route");
+    await POST(post());
+    expect(precheckMock).toHaveBeenCalledWith({
+      userId: "user_1",
+      accessToken: ACCESS,
+    });
+  });
+
+  it("is never reached by an anonymous visitor, a session cookie without a user or an unconfigured site", async () => {
+    const { POST } = await import("./route");
+    withAuthMock.mockResolvedValueOnce({ user: null });
+    await POST(post());
+    issuerMock.mockReturnValueOnce(null);
+    await POST(post());
+    expect(precheckMock).not.toHaveBeenCalled();
+  });
+
+  it("when the check passes, both counters are spent once and the exchange runs", async () => {
+    const { POST } = await import("./route");
+    expect((await POST(post())).status).toBe(200);
+    expect(precheckMock).toHaveBeenCalledTimes(1);
+    expect(rateLimitMock).toHaveBeenCalledTimes(1);
+    expect(budgetMock.spend).toHaveBeenCalledTimes(1);
+    expect(issueMock).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -628,6 +692,23 @@ describe("end to end: the real issuer, the exchange rules of nyuchi-api, a fake 
     expect(res.status).toBe(503);
     expect(await res.json()).toMatchObject({ error: "couch_unavailable" });
     expect(gateway.requests).toEqual([]);
+    // ...and it cost the person and the site nothing.
+    expect(rateLimitMock).not.toHaveBeenCalled();
+    expect(budgetMock.spend).not.toHaveBeenCalled();
+  });
+
+  it("a missing access token (AuthKit's refresh failed) is 503 too, and spends nothing", async () => {
+    withAuthMock.mockResolvedValue({
+      user: { id: WORKOS_USER },
+      accessToken: undefined,
+    });
+    const { POST } = await import("./route");
+    const res = await POST(post());
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ error: "couch_unavailable" });
+    expect(gateway.requests).toEqual([]);
+    expect(rateLimitMock).not.toHaveBeenCalled();
+    expect(budgetMock.spend).not.toHaveBeenCalled();
   });
 
   it("nobody signed in is still 401", async () => {
@@ -763,6 +844,17 @@ describe("end to end: the real issuer, the exchange rules of nyuchi-api, a fake 
     expect(res.status).toBe(503);
     expect(await res.json()).toMatchObject({ error: "couch_unavailable" });
     expect(gateway.requests).toEqual([]);
+    expect(rateLimitMock).not.toHaveBeenCalled();
+    expect(budgetMock.spend).not.toHaveBeenCalled();
+  });
+
+  it("an access token that is long enough is exchanged, and then both counters are spent", async () => {
+    const { POST } = await import("./route");
+    const res = await POST(post());
+    expect(res.status).toBe(200);
+    expect(rateLimitMock).toHaveBeenCalledTimes(1);
+    expect(budgetMock.spend).toHaveBeenCalledTimes(1);
+    expect(gateway.requests).toHaveLength(1);
   });
 
   it("without this app's key or the gateway origin the gateway is never called", async () => {

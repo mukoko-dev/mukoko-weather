@@ -622,6 +622,79 @@ describe("a token that does not leave the server", () => {
     expect(gateway.requests).toHaveLength(1);
   });
 
+  describe("precheck: the local checks alone, for a caller that spends something per request", () => {
+    const check = (token: string | undefined, userId = WORKOS_USER) =>
+      make().precheck({ userId, accessToken: token });
+
+    it("is null for an access token with enough life, and sends nothing", () => {
+      const floor = COUCH_MIN_ACCESS_TOKEN_LIFE_MS / 1000;
+      expect(check(accessToken(300))).toBeNull();
+      expect(check(accessToken(floor))).toBeNull();
+      expect(gateway.requests).toEqual([]);
+    });
+
+    it("refuses a missing, empty, ended or too-short access token as couch_unavailable (503), never 'signed out'", () => {
+      const floor = COUCH_MIN_ACCESS_TOKEN_LIFE_MS / 1000;
+      for (const token of [
+        undefined,
+        "",
+        accessToken(-5),
+        accessToken(0),
+        accessToken(1),
+        accessToken(floor - 1),
+      ]) {
+        const refused = check(token);
+        expect(refused, String(token).slice(0, 12)).toBeInstanceOf(
+          CouchIssueError,
+        );
+        expect(refused).toMatchObject({
+          code: "couch_unavailable",
+          status: 503,
+        });
+      }
+      expect(gateway.requests).toEqual([]);
+    });
+
+    it("nobody signed in is the one 'signed out'", () => {
+      expect(check(accessToken(), "")).toMatchObject({
+        code: SIGNED_OUT_CODE,
+        status: 401,
+      });
+    });
+
+    it("returns the refusal, it does not throw, and it does the same again (no state)", () => {
+      const token = accessToken(-5);
+      expect(() => check(token)).not.toThrow();
+      expect(check(token)).toMatchObject({ code: "couch_unavailable" });
+      expect(check(token)).toMatchObject({ code: "couch_unavailable" });
+    });
+
+    it("agrees with issue(): whatever precheck refuses, issue refuses the same way, and exchanges nothing", async () => {
+      const bad = [undefined, accessToken(-5), accessToken(30)];
+      for (const token of bad) {
+        const pre = check(token);
+        const issued = await make()
+          .issue({ userId: WORKOS_USER, accessToken: token })
+          .then(
+            () => null,
+            (e: unknown) => e,
+          );
+        expect(issued).toMatchObject({ code: pre?.code, status: pre?.status });
+      }
+      expect(gateway.requests).toEqual([]);
+    });
+
+    it("an access token it lets through is one issue() exchanges", async () => {
+      const token = accessToken(300);
+      expect(check(token)).toBeNull();
+      const ok = await make().issue({
+        userId: WORKOS_USER,
+        accessToken: token,
+      });
+      expect(ok.expiresInSeconds).toBeGreaterThan(0);
+    });
+  });
+
   it("the floor leaves a grant that outlives the page's renewal lead", () => {
     // couch-schedule.ts REFRESH_LEAD_MS is 60 s: the grant must be longer.
     expect(COUCH_MIN_ACCESS_TOKEN_LIFE_MS).toBeGreaterThan(60_000);

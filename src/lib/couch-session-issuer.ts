@@ -18,7 +18,8 @@
  *     scope=couch:user                    <- requested ALONE, or it is refused
  *     client_id / client_secret           <- this app's internal key
  *
- * Verified against nyuchi-api `staging` (read 2026-11-03, after v0.53.0):
+ * As read in nyuchi-api `staging` (the source read on 2026-11-03, after
+ * v0.53.0; nothing here was run against the live gateway):
  *
  *   - Scope alone, and only for an allow-listed client: `check_sync_request`
  *     (`gateway/lib/token_exchange.py` l.614-632) refuses anything but exactly
@@ -62,6 +63,7 @@
  */
 
 import {
+  PENDING_DELETION_CODE,
   SIGNED_OUT_CODE,
   personIdFromDatabase,
 } from "./couch-session-contract";
@@ -106,13 +108,13 @@ export interface IssuedCouchCredential {
  */
 export type CouchIssueErrorCode =
   | typeof SIGNED_OUT_CODE
-  | "account_pending_deletion"
+  | typeof PENDING_DELETION_CODE
   | "rate_limited"
   | "couch_unavailable";
 
 const STATUS: Record<CouchIssueErrorCode, number> = {
   [SIGNED_OUT_CODE]: 401,
-  account_pending_deletion: 403,
+  [PENDING_DELETION_CODE]: 403,
   rate_limited: 429,
   couch_unavailable: 503,
 };
@@ -130,6 +132,20 @@ export class CouchIssueError extends Error {
 }
 
 export interface CouchSessionIssuer {
+  /**
+   * The issuer's LOCAL checks, and nothing else: no network, no counter, no
+   * state. Returns the refusal `issue` would give for them, or null when none
+   * applies. A caller that spends something per request (the person's hourly
+   * allowance, the site's exchange budget) asks this first, so that a request
+   * that can only be refused for a reason found without any I/O spends nothing:
+   * an access token that is missing, ended or too short to make a grant from is
+   * not cured by asking again at once. `issue` makes the same checks itself, so
+   * a caller that skips this is as safe, only less thrifty.
+   */
+  precheck(who: {
+    userId: string;
+    accessToken?: string;
+  }): CouchIssueError | null;
   issue(who: {
     userId: string;
     accessToken?: string;
@@ -174,7 +190,7 @@ function mapExchangeError(err: unknown): unknown {
   if (!(err instanceof PersonTokenError)) return err;
   switch (err.code) {
     case "account_pending_deletion":
-      return new CouchIssueError("account_pending_deletion");
+      return new CouchIssueError(PENDING_DELETION_CODE);
     case "rate_limited":
       return new CouchIssueError("rate_limited", err.retryAfterSeconds);
     default:
@@ -241,41 +257,56 @@ export function createCouchSessionIssuer(deps: {
   now?: () => number;
 }): CouchSessionIssuer {
   const now = deps.now ?? Date.now;
-  return {
-    async issue({ userId, accessToken }) {
-      // Nobody signed in is the only case that says the session has ended: the
-      // page treats 401 as "signed out" and removes its local copy of the
-      // person's settings, so it is never used for a doubt.
-      if (!userId) throw new CouchIssueError(SIGNED_OUT_CODE);
 
-      // A person IS signed in (the route has just seen them), so a missing or
-      // ended access token is AuthKit's refresh failing for a moment (WorkOS
-      // answering 5xx, say), not a session that ended: retry later.
-      if (!accessToken) {
+  function precheck({
+    userId,
+    accessToken,
+  }: {
+    userId: string;
+    accessToken?: string;
+  }): CouchIssueError | null {
+    // Nobody signed in is the only case that says the session has ended: the
+    // page treats 401 as "signed out" and removes its local copy of the
+    // person's settings, so it is never used for a doubt.
+    if (!userId) return new CouchIssueError(SIGNED_OUT_CODE);
+
+    // A person IS signed in (the route has just seen them), so a missing or
+    // ended access token is AuthKit's refresh failing for a moment (WorkOS
+    // answering 5xx, say), not a session that ended: retry later.
+    if (!accessToken) {
+      logWarn({
+        source: "nyuchi-gateway",
+        message: "No access token for a signed-in person; not exchanged",
+      });
+      return new CouchIssueError("couch_unavailable");
+    }
+
+    // A grant never outlives the access token it is made from. Below the
+    // floor it would be due for renewal on arrival (see couch-session-timing),
+    // so do not make one; the proxy refreshes the token on this route, so
+    // this is a refresh that failed for a moment. Back off, do not loop.
+    const subject = peekClaims(accessToken);
+    if (subject && typeof subject.exp === "number") {
+      const left = subject.exp * 1000 - now();
+      if (left < COUCH_MIN_ACCESS_TOKEN_LIFE_MS) {
         logWarn({
           source: "nyuchi-gateway",
-          message: "No access token for a signed-in person; not exchanged",
+          message:
+            "Access token ended or too short for a sync grant; not exchanged",
+          meta: { secondsLeft: Math.max(0, Math.floor(left / 1000)) },
         });
-        throw new CouchIssueError("couch_unavailable");
+        return new CouchIssueError("couch_unavailable");
       }
+    }
+    return null;
+  }
 
-      // A grant never outlives the access token it is made from. Below the
-      // floor it would be due for renewal on arrival (see couch-session-timing),
-      // so do not make one; the proxy refreshes the token on this route, so
-      // this is a refresh that failed for a moment. Back off, do not loop.
-      const subject = peekClaims(accessToken);
-      if (subject && typeof subject.exp === "number") {
-        const left = subject.exp * 1000 - now();
-        if (left < COUCH_MIN_ACCESS_TOKEN_LIFE_MS) {
-          logWarn({
-            source: "nyuchi-gateway",
-            message:
-              "Access token ended or too short for a sync grant; not exchanged",
-            meta: { secondsLeft: Math.max(0, Math.floor(left / 1000)) },
-          });
-          throw new CouchIssueError("couch_unavailable");
-        }
-      }
+  return {
+    precheck,
+
+    async issue({ userId, accessToken }) {
+      const refusal = precheck({ userId, accessToken });
+      if (refusal) throw refusal;
 
       let grant: PersonToken;
       try {
