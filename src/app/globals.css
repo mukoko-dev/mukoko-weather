@@ -250,6 +250,7 @@
   --chart-4: #b8860b; /* Gold — warmth/accent */
   --chart-5: #c1440e; /* Terracotta — earth/alert */
   --chart-6: #283593; /* Sodalite — ECMWF AIFS series */
+  --chart-7: #8a4b2a; /* Copper, deepened to stay apart from terracotta — Apple Weather series */
 
   /* Temperature range bar: the track behind each day's blended pill (the pill
      itself is the --wx-temp-* scale, see DailyForecast) */
@@ -484,6 +485,7 @@
   --chart-4: #ffd740; /* Gold light */
   --chart-5: #d4a574; /* Terracotta light */
   --chart-6: #3d5afe; /* Sodalite light */
+  --chart-7: #ff8a65; /* Copper light */
 
   /* Temperature range bar track (dark) */
   --color-temp-bar-track: rgba(255, 255, 255, 0.08);
@@ -763,6 +765,7 @@
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
   --color-chart-5: var(--chart-5);
+  --color-chart-7: var(--chart-7);
   --color-chart-6: var(--chart-6);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
