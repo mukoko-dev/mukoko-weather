@@ -1,5 +1,6 @@
 import type { WeatherData } from "./weather";
 import { fetchWeather } from "./weather";
+import { servedProviderFor } from "./forecast-sources";
 import {
   classifyTransportError,
   workerData,
@@ -131,7 +132,9 @@ export async function loadModelWeather(
   if (!isRenderableWeather(res.data)) {
     return { ok: false, failure: { kind: "invalid", status: res.status } };
   }
-  const servedModel = (res.provider ?? "") === `open-meteo:${model}`;
+  // `open-meteo:<model>` for an Open-Meteo model, the provider's own name for
+  // one it does not serve (Apple Weather).
+  const servedModel = (res.provider ?? "") === servedProviderFor(model);
   return {
     ok: true,
     data: res.data,

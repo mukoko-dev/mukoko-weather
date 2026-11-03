@@ -4,6 +4,10 @@ import { describe, expect, it } from "vitest";
 import { ACTIVITIES } from "../activities";
 import { ForecastModel } from "../weather";
 import {
+  OPEN_METEO_MODEL_OPTIONS,
+  modelOptions,
+} from "../forecast-model-options";
+import {
   ACTIVITY_ID_RE,
   COUCH_DOC_SCHEMA_VERSION,
   LOCAL_ONLY_FORECAST_MODELS,
@@ -150,24 +154,49 @@ describe("ids and vocabulary", () => {
       expect([...LOCAL_ONLY_FORECAST_MODELS].sort()).toEqual(
         [...notListed].sort(),
       );
-      // Today that is the Météo-France pick; a test that says so, so adding it
-      // to the data model (or removing the pick) is noticed.
-      expect(LOCAL_ONLY_FORECAST_MODELS).toEqual(["meteofrance_seamless"]);
+      // Today that is the Météo-France pick and Apple Weather (the validator's
+      // enum is the gateway's, and Apple is served by another provider, behind
+      // a feature flag); a test that says so, so adding either to the data model
+      // (or removing the pick) is noticed.
+      expect([...LOCAL_ONLY_FORECAST_MODELS].sort()).toEqual([
+        "apple_weatherkit",
+        "meteofrance_seamless",
+      ]);
     });
 
-    it("synced and local-only together are exactly what the picker's radio group renders", () => {
+    it("Apple Weather is never synced: not in the synced list, not in the validator's enum", () => {
+      expect(SYNCED_FORECAST_MODELS as readonly string[]).not.toContain(
+        ForecastModel.AppleWeatherKit,
+      );
+      expect(validatorForecastModels()).not.toContain(
+        ForecastModel.AppleWeatherKit,
+      );
+      expect(LOCAL_ONLY_FORECAST_MODELS).toContain(
+        ForecastModel.AppleWeatherKit,
+      );
+    });
+
+    it("synced and local-only together are exactly what the picker's radio group renders, Apple Weather's row (behind its flag) included", () => {
+      // The picker renders its rows from `modelOptions()`; the radio group in
+      // MyWeatherModal must keep doing so (the rows are not retyped there).
       const modal = read("src", "components", "weather", "MyWeatherModal.tsx");
-      const block = modal.slice(
-        modal.indexOf("const MODEL_OPTIONS"),
-        modal.indexOf("function ModelSelector"),
-      );
-      const offered = [...block.matchAll(/value: ForecastModel\.(\w+)/g)].map(
-        (m) => ForecastModel[m[1] as keyof typeof ForecastModel],
-      );
-      expect(offered.length).toBeGreaterThan(3);
-      expect(
+      expect(modal).toContain('from "@/lib/forecast-model-options"');
+      expect(modal).toContain("const options = modelOptions();");
+      expect(modal).toContain("options.map((option) =>");
+
+      const always = OPEN_METEO_MODEL_OPTIONS.map((o) => o.value as string);
+      const withApple = modelOptions(true).map((o) => o.value as string);
+      const withoutApple = modelOptions(false).map((o) => o.value as string);
+      expect(always.length).toBeGreaterThan(3);
+      // Flag off (the shipped state): every model but Apple's.
+      expect(withoutApple).toEqual(always);
+      expect(withoutApple).not.toContain(ForecastModel.AppleWeatherKit);
+      // Flag on: Apple Weather's row too, and then the rows are exactly the
+      // synced picks plus the local-only ones.
+      expect(withApple).toEqual([...always, ForecastModel.AppleWeatherKit]);
+      expect([...withApple].sort()).toEqual(
         [...SYNCED_FORECAST_MODELS, ...LOCAL_ONLY_FORECAST_MODELS].sort(),
-      ).toEqual([...offered].sort());
+      );
     });
 
     it("are each accepted by the device-profile allowlist of the Worker, so a synced pick never makes /v1/devices answer 400", () => {
@@ -181,13 +210,14 @@ describe("ids and vocabulary", () => {
       }
     });
 
-    it("the Worker's list (11) and the validator's (10) differ, and this is how (a follow-up, not something this client papers over)", () => {
+    it("the Worker's list (12) and the validator's (10) differ, and this is how (a follow-up, not something this client papers over)", () => {
       const worker = rustList(
         read("workers", "crates", "weather-core", "src", "community.rs"),
         "FORECAST_MODELS",
       );
       const validator = validatorForecastModels();
       expect(worker.filter((m) => !validator.includes(m)).sort()).toEqual([
+        "apple_weatherkit",
         "ecmwf_ifs025",
         "ecmwf_ifs04",
         "icon_seamless",
@@ -829,6 +859,44 @@ describe("state -> documents", () => {
       ).toEqual([]);
     });
 
+    it("the Apple Weather pick is never written or seeded, whether or not its flag is on (the gateway validator's enum has no such id)", () => {
+      expect(
+        planChangeOps(
+          state(),
+          state({ selectedForecastModel: "apple_weatherkit" }),
+          new Map(),
+          ctx(),
+        ),
+      ).toEqual([]);
+      expect(
+        planSeedOps(
+          state({ selectedForecastModel: "apple_weatherkit" }),
+          new Set(),
+          ctx(),
+        ),
+      ).toEqual([]);
+      // Moving to a synced pick from it writes that pick; moving to it from a
+      // synced pick writes nothing (the server keeps the last synced one).
+      expect(
+        upserts(
+          planChangeOps(
+            state({ selectedForecastModel: "apple_weatherkit" }),
+            state({ selectedForecastModel: "gfs_seamless" }),
+            new Map(),
+            ctx(),
+          ),
+        ).map((d) => d.preferenceValue),
+      ).toEqual(["gfs_seamless"]);
+      expect(
+        planChangeOps(
+          state({ selectedForecastModel: "gfs_seamless" }),
+          state({ selectedForecastModel: "apple_weatherkit" }),
+          new Map(),
+          ctx(),
+        ),
+      ).toEqual([]);
+    });
+
     it("moving to a synced pick from it writes that pick", () => {
       const docs = upserts(
         planChangeOps(
@@ -1010,6 +1078,16 @@ describe("documents -> state", () => {
       expect(patchFromDocs([model("meteofrance_seamless")], state())).toEqual(
         {},
       );
+    });
+
+    it("the Apple Weather pick is the person's own on this device too: no document replaces it, and none is applied for it", () => {
+      expect(
+        patchFromDocs(
+          [model("ecmwf_ifs")],
+          state({ selectedForecastModel: "apple_weatherkit" }),
+        ),
+      ).toEqual({});
+      expect(patchFromDocs([model("apple_weatherkit")], state())).toEqual({});
     });
   });
 

@@ -58,6 +58,7 @@ pub mod station;
 pub mod station_alert;
 pub mod status;
 pub mod tiles;
+pub mod weatherkit;
 pub mod wmo;
 
 pub use forecast::{ForecastDay, ForecastLocation, ForecastResponse, Source};

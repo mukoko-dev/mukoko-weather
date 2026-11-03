@@ -97,13 +97,18 @@ export type ThemeValue = (typeof THEME_VALUES)[number];
  *     delays everything pushed with it, so that pick stays on the device
  *     (`LOCAL_ONLY_FORECAST_MODELS`): it is never written, and a document from
  *     another device never replaces it;
+ *   - `apple_weatherkit` (Apple Weather, behind `FLAGS.apple_weatherkit`), for
+ *     the same reason: it is another provider's model, the validator's enum
+ *     (the gateway's) has no such id, so it is local-only whether or not the
+ *     picker offers it. It joins `LOCAL_ONLY_FORECAST_MODELS` through
+ *     `ForecastModel`, so nothing here has to list it;
  *   - the ids the validator lists that this app cannot show (`jma_gsm`,
  *     `ukmo_global_deterministic_10km`, `cma_grapes_global`, `gem_global`,
  *     `meteofrance_arpege_world`): a pick another client made with one of them
  *     is ignored, never applied, and never replaces what the person chose here.
  *
  * Every synced value is in the Worker's device-profile allowlist
- * (`FORECAST_MODELS` in `weather_core::community`, 11 ids, a different list from
+ * (`FORECAST_MODELS` in `weather_core::community`, 12 ids, a different list from
  * the validator's 10), so a synced pick cannot make `/v1/devices` answer 400.
  */
 export const SYNCED_FORECAST_MODELS = [
