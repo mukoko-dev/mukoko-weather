@@ -473,7 +473,7 @@ mukoko-weather/
 │   │   ├── weather-edge/          # Worker plumbing: secrets, budgets (D1), responses, timeouts
 │   │   ├── weather-mongo/         # Read-only MongoDB client (OP_MSG over worker::Socket)
 │   │   └── weather-webpush/       # Web Push protocol (RFC 8291/8292/8030), pure
-│   ├── forecast/ public-api/ places/ aviation/ ai/ internal-api/ stations/ tiles/ jobs/   # mukoko-weather-* Workers
+│   ├── forecast/ public-api/ places/ aviation/ ai/ internal-api/ stations/ tiles/ jobs/ push/   # mukoko-weather-* Workers (push is dark: /health only, not deployed)
 │   ├── mongo-bridge/              # TypeScript Worker: the one writer to MongoDB (device profiles, reports, history archive days)
 │   ├── d1/                        # D1 migrations (rate_events, place_daily, stations, observations, ...)
 │   └── scripts/                   # Generators for compiled-in reference data (seed places, seasons, activities, prompts)
