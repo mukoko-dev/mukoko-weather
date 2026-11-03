@@ -59,8 +59,13 @@ offline first (RxDB on the device).
   (soon after the leader pulled it, via the shared-database change events),
   never seeds, and asks for no credential of its own. A hidden leader does not
   poll, but it replicates when another tab wrote into the shared database, so a
-  visible follower's change is not stranded behind a background tab. When the
-  leader tab closes, the next cycle of another tab takes over. **Not verified
+  visible follower's change is not stranded behind a background tab. Leadership
+  is asked before the credential, which is possible because the database is
+  already open, so a follower makes no credential request at all (the route's
+  120 an hour per person and the gateway's 30 a minute per key are not spent by
+  it); only a browser with no database yet, a person's first session, has every
+  tab ask once before it can know. When the leader tab closes, the next cycle of
+  another tab takes over. **Not verified
   in a real browser**: two tabs cannot be started in this environment (RxDB
   refuses two databases of one name in one JavaScript process, and the memory
   storage has no second process); the options passed to RxDB are pinned
@@ -76,16 +81,60 @@ offline first (RxDB on the device).
   for it, and seeding after the first pull fills only ids that have no document
   at all. Conflicts: last writer wins by `updatedAt`, the revision CouchDB chose
   on a tie, and a delete from the server (which carries no time) wins.
-- **A change is written when the local database opens, stamped with when it was
-  made.** The baseline the engine compares against is taken at `start()`, not
-  when the database opens, so a setting changed while the page was offline,
-  hidden or backing off is still a change when the database opens, and its
-  document carries the time of the change (not of the connection), so it wins
-  against an older value on the server and loses against a newer one.
+- **The local database opens at start, with no network and no credential.**
+  It is purely on-device. When the browser already holds exactly one person's
+  database (the id record above), the engine opens it first thing
+  (`recordedPerson` in `couch-sync-start.ts`) and writes the person's changes to
+  it as soon as the 750 ms debounce ends, offline too. Which person's? The one
+  recorded; that is a guess until the credential says who is signed in, and if it
+  was wrong (another person signed in on this browser) the engine closes that
+  database, starts the right person's own, and writes what the person changed
+  since the page started to it. A browser with no database yet, or with several
+  recorded, opens it when the first credential arrives, as before.
+- **A change is never only in memory.** The moment a synced setting changes, the
+  engine records (synchronously, in `localStorage` through `safe-storage`,
+  `src/lib/rxdb/sync-pending.ts`, key `mukoko-sync-unwritten`) the state the
+  person started from and when they changed it: a time and the three
+  non-locational settings, no credential, no place, no name. The record is
+  cleared once the change is in a document, and on sign-out; an engine clears
+  only a record it wrote, so another tab's pending change is never forgotten. A
+  page that closes inside the debounce, before any local database exists (a
+  person's first session) or while the credential keeps failing leaves the
+  record behind, and the next page starts its comparison from it instead of from
+  the state it finds, so the change is still a change: written when the database
+  opens, stamped with when it was made, and ordered against the server's value
+  by that time. Before this the next page saw no difference, pulled the server's
+  older value and reverted the person's choice. `stop()` (`pagehide`) and
+  `flush()` (the page was hidden: mobile browsers often kill a hidden page
+  without a `pagehide`) also write at once. What the engine applies from the
+  server is not the person's change and is never recorded. Web storage that is
+  blocked costs only this second layer: the change is still written to the local
+  database after the debounce.
+- **The stamp is when the person made the change.** The baseline the engine
+  compares against is taken at `start()` (from the record when the last page left
+  one), not when the database opens, and a change is stamped with when it was
+  made, so it wins against an older value on the server and loses against a newer
+  one. A change made while the first replication runs is written before anything
+  is seeded or applied, from the state already written, and is pushed by the
+  second replication of that cycle; seeding never replaces the baseline with a
+  fresh read that includes an unwritten change.
 - **The person's own order of activities is kept.** The AI advice looks at the
   first three; a remote add is appended, a remote remove drops that id, and the
   order of the documents (oldest first, then by id) is used only for ids the
   device does not hold yet.
+- **Only what this app offers is applied.** The forecast models that sync are
+  the web app's own (`ForecastModel` in `weather.ts`, the My Weather picker; all
+  are in the Worker's device-profile allowlist), not the data model's wider list:
+  a model another client set that this app does not offer (`jma_gsm`,
+  `ukmo_global_deterministic_10km`, `cma_grapes_global`) is ignored and never
+  replaces the person's own pick here, and the Météo-France pick the picker
+  offers (`meteofrance_seamless`, which data-infra's schema does not list; the
+  deployed validator does not check values) syncs. Activities from another
+  client are applied only if the app knows the id (`src/lib/activities.ts`, equal
+  to the Worker's allowlist) and only up to 30, the device profile's limit,
+  after the ones the person already holds; nothing they hold is dropped to make
+  room. An unknown activity document is left in the local database and never
+  applied.
 - **Failures are silent and bounded.** 401 from the session route means nobody
   is signed in: the engine goes idle until the next page load, with no failure
   count, no timer and no second request (see "Own database" for what it removes).
@@ -96,8 +145,9 @@ offline first (RxDB on the device).
   credential fetches are never closer than 5 s (`src/lib/couch-session-timing.ts`),
   so a short-lived grant cannot make a loop.
 - **Teardown.** `pagehide` stops the engine (timers, listeners, the credential
-  and the open database go); a page restored from the back/forward cache starts
-  it again.
+  and the open database go; a change still inside the debounce is written
+  first, best effort); a page restored from the back/forward cache starts it
+  again. A hidden page writes its pending change at once (`visibilitychange`).
 - **Document shape follows the validator that runs in CouchDB, not the
   generated schema.** nyuchi-api `gateway/lib/couch_validate_personal.js` (pinned
   in `src/lib/rxdb/__fixtures__/`, executed by the tests) requires an integer
@@ -169,6 +219,23 @@ token or the key.
   `POST /api/couch/session` answers `503 couch_unavailable` without calling
   anything. The same 503 is what the page sees until the owner steps below are
   done. **No new secret and no new environment variable.**
+- **401 means signed out, and only that.** The page answers a 401 from the
+  session route by removing its local copy of the person's settings, so the
+  route gives 401 only when nobody is signed in (`401 unauthorized`, ahead of the
+  configuration check and the limiter) or the gateway itself refuses the
+  person's WorkOS token. A person who IS signed in whose access token is missing or has ended
+  (AuthKit's refresh failing for a moment, WorkOS answering 5xx) is
+  `503 couch_unavailable`: the page keeps its local database and retries after
+  the back-off. The gateway's own refusal of the subject token is still
+  `401 reauth_required` (it is the same mapping `/api/app-keys` has); that one
+  can in principle also come from an expired token the gateway saw before this
+  server did, which is not changed here. The route checks that sync is set up
+  here (`NYUCHI_API_URL`, the app's key, `WORKOS_CLIENT_ID`) before it spends
+  the person's hourly allowance, so an unconfigured site answers 503 without a
+  Mongo write. The route's address is defined once, in
+  `src/lib/couch-session-timing.ts` (`COUCH_SESSION_PATH`), which the page's
+  client and the proxy import; a test pins it to the folder the route lives in
+  and to there being no second spelling.
 - **Errors.** A session that ended is `401 reauth_required`; a scheduled
   deletion is `403 account_pending_deletion` (the only wire difference from an
   ended session is the gateway's sentence, so the match is a convenience: if the
@@ -274,7 +341,16 @@ Also not verified, because the test storage cannot show it:
   tests removes cleanly.
 - **`pagehide` and the back/forward cache.** The engine stops on `pagehide` and
   starts again on a persisted `pageshow`; real browsers differ in whether they
-  fire these for every kind of unload.
+  fire these for every kind of unload. Whether an IndexedDB write begun in
+  `pagehide` or `visibilitychange` completes before the page is killed also
+  differs; that is what the synchronous record in `localStorage` is for, and it
+  too has only been run against a stubbed `localStorage`.
+- **Opening the local database before the credential in a real browser**:
+  that a browser which holds one person's database really opens it offline at
+  start, that RxDB's multi-instance and the leader election then behave with the
+  database opened at start by every tab, and that the guess "the one recorded
+  person" is right in practice. The engine tests use an in-memory store and the
+  end-to-end tests RxDB's memory storage; neither is IndexedDB.
 - **IndexedDB being blocked or missing** (private windows, some webviews). The
   sync is skipped silently and the index still records the person; the browser
   paths were simulated, not run.
