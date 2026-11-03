@@ -56,10 +56,10 @@
 //! ([`Skip::Stale`]); a night or offset that is not usable gives
 //! [`Skip::InvalidPlace`].
 //!
-//! **Not here, on purpose.** Severe-weather alerts (frost only), the
-//! delivery-log claim itself, the guard that a batch in which every send is
-//! `Expired` deactivates nothing, and every call to the Nyuchi API or a push
-//! service.
+//! **Not here, on purpose.** Severe-weather alerts (frost only), and every call
+//! to the Nyuchi API or a push service. How to read the answer to a claim, and
+//! the guard that a batch in which every send is `Expired` deactivates nothing,
+//! are in [`crate::alert_delivery`].
 //!
 //! The two bounds below are ours, untuned: no standard names them, and they
 //! should follow the Worker's subrequest budget once the tick exists.
@@ -259,7 +259,7 @@ impl FrostPlan {
     }
 }
 
-fn is_target_id(id: &str) -> bool {
+pub(crate) fn is_target_id(id: &str) -> bool {
     (1..=MAX_TARGET_ID_LEN).contains(&id.len())
         && id
             .bytes()
