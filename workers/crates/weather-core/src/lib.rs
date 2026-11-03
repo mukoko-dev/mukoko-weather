@@ -15,6 +15,7 @@ mod ag_calendar_tables;
 pub mod agriculture;
 pub mod ai;
 pub mod air_quality;
+pub mod alert_plan;
 pub mod aq_grid;
 pub mod auth;
 pub mod aviation;
