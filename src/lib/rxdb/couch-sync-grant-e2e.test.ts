@@ -436,16 +436,22 @@ describe("when the gateway says no, or is away", () => {
   it("a person whose deletion is scheduled syncs nothing: no database prepared, nothing replicated", async () => {
     const w = world({ deletionScheduled: true, initial: { theme: "dark" } });
     await w.start();
-    expect(w.engine.status()).toBe("backing_off");
+    // A scheduled deletion does not pass by itself: the page stops asking.
+    expect(w.engine.status()).toBe("account_closing");
     expect(w.couch.calls).toEqual([]);
     expect(w.gateway.requests[0]).toMatchObject({
       status: 400,
       error: "invalid_grant",
     });
-    // And it does not retry in a loop while the deletion is pending.
-    await w.advance(10 * 60_000);
-    expect(w.gateway.requests.length).toBeLessThanOrEqual(5);
+    // And it does not retry, in a loop or on a timer, for the life of the page:
+    // one exchange, then nothing, however long it waits or whatever the person does.
+    expect(w.gateway.requests).toHaveLength(1);
+    await w.advance(60 * 60_000);
+    w.bridge.change({ theme: "light" });
+    await w.advance(60 * 60_000);
+    expect(w.gateway.requests).toHaveLength(1);
     expect(w.couch.calls).toEqual([]);
-    expect(w.bridge.state.theme).toBe("dark");
+    expect(w.bridge.state.theme).toBe("light");
+    expect(w.engine.status()).toBe("account_closing");
   });
 });

@@ -11,7 +11,10 @@ import {
   renewalDelayMs,
 } from "./couch-schedule";
 import { REFRESH_MIN_DELAY_MS as SHARED_MIN } from "../couch-session-timing";
-import { SIGNED_OUT_CODE } from "../couch-session-contract";
+import {
+  PENDING_DELETION_CODE,
+  SIGNED_OUT_CODE,
+} from "../couch-session-contract";
 
 const NOW = 1_000_000_000_000;
 const exact = () => 0.5; // spread factor 1.0
@@ -151,5 +154,41 @@ describe("failureAction", () => {
         "back_off",
       );
     }
+  });
+
+  describe("a scheduled deletion of the account", () => {
+    it("is terminal and keeps the data: only a 403 from the route that says so", () => {
+      expect(failureAction("route", 403, false, PENDING_DELETION_CODE)).toBe(
+        "stop_keep_data",
+      );
+      expect(failureAction("route", 403, true, PENDING_DELETION_CODE)).toBe(
+        "stop_keep_data",
+      );
+      // It is not a sign-out: nothing in it removes anything.
+      expect(
+        failureAction("route", 403, false, PENDING_DELETION_CODE),
+      ).not.toBe("stay_idle");
+    });
+
+    it("the code alone, or the status alone, or the database's own 403, backs off as before", () => {
+      for (const status of [400, 401, 404, 429, 503, 0, undefined]) {
+        expect(
+          failureAction("route", status, false, PENDING_DELETION_CODE),
+          `status ${status}`,
+        ).toBe("back_off");
+      }
+      for (const code of [undefined, "", "forbidden", "x", SIGNED_OUT_CODE]) {
+        expect(failureAction("route", 403, false, code), String(code)).toBe(
+          "back_off",
+        );
+      }
+      expect(failureAction("couch", 403, false, PENDING_DELETION_CODE)).toBe(
+        "back_off",
+      );
+    });
+
+    it("the code is the one the route and the issuer send", () => {
+      expect(PENDING_DELETION_CODE).toBe("account_pending_deletion");
+    });
   });
 });

@@ -12,7 +12,10 @@
  * the same shape as the device-profile sync (`device-profile.ts`).
  */
 
-import { SIGNED_OUT_CODE } from "../couch-session-contract";
+import {
+  PENDING_DELETION_CODE,
+  SIGNED_OUT_CODE,
+} from "../couch-session-contract";
 import { REFRESH_MIN_DELAY_MS as SHARED_REFRESH_MIN_DELAY_MS } from "../couch-session-timing";
 
 /** First wait after a failure. */
@@ -90,7 +93,8 @@ export function backoffDelayMs(
 export type FailureAction =
   | "refetch_token_once" // 401: the credential was refused; ask again once
   | "back_off" // everything else that may pass on its own
-  | "stay_idle"; // signed out: nothing to sync until sign-in
+  | "stay_idle" // signed out: nothing to sync until sign-in
+  | "stop_keep_data"; // account scheduled for deletion: stop for good, remove nothing
 
 /**
  * Decides what to do after a failure. `status` is the HTTP status when there
@@ -104,7 +108,14 @@ export type FailureAction =
  * answer is a 401 that says so with `SIGNED_OUT_CODE`: going idle removes the
  * local copy of their settings, which may hold the only record of a change made
  * offline, so a 401 without the code (and every other status) is a failure to
- * retry, never a sign-out. 403, 404, 429, 5xx and network errors all back off.
+ * retry, never a sign-out.
+ *
+ * A 403 from the route that says `PENDING_DELETION_CODE` is terminal like a
+ * sign-out as far as asking again goes (retrying a scheduled deletion every 15
+ * minutes for the life of a tab would only spend the gateway's and the site's
+ * budgets for an answer that does not change), but unlike one it removes
+ * nothing: the person is signed in and the deletion can be cancelled.
+ * 403 from anywhere else, 404, 429, 5xx and network errors all back off.
  */
 export function failureAction(
   source: "route" | "couch",
@@ -117,6 +128,9 @@ export function failureAction(
       return code === SIGNED_OUT_CODE ? "stay_idle" : "back_off";
     }
     return alreadyRefetched ? "back_off" : "refetch_token_once";
+  }
+  if (source === "route" && status === 403 && code === PENDING_DELETION_CODE) {
+    return "stop_keep_data";
   }
   return "back_off";
 }

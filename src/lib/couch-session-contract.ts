@@ -22,6 +22,16 @@
  */
 export const SIGNED_OUT_CODE = "signed_out";
 
+/**
+ * The `error` of the route's 403 when the person's account is scheduled for
+ * deletion (the gateway refuses to issue them a credential). Unlike a
+ * sign-out it will not pass by itself: the page stops asking for the rest of
+ * its life (no timers, no further calls), but it removes NOTHING, because the
+ * person is still signed in and the deletion can be cancelled; their local
+ * settings are theirs until it is carried out.
+ */
+export const PENDING_DELETION_CODE = "account_pending_deletion";
+
 /** `user_<personId>`: a CouchDB database name made of lower-case characters. */
 const PERSONAL_DB_RE = /^user_([a-z0-9][a-z0-9_-]{0,127})$/;
 
