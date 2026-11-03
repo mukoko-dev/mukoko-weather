@@ -299,7 +299,7 @@ The sync of preferences and activities with the person's own CouchDB database (#
 1. On the Fly app `nyuchi-api`, add the client id of this app's key to `COUCH_SYNC_CLIENT_IDS`. It is the `nyk_…` part of `NYUCHI_APP_KEYS_API_KEY` before the dot (a public identifier; the `nys_…` secret never goes in the list), not the WorkOS client id. Without it the exchange is refused with `400 invalid_scope` and the site logs "Token exchange refused this app's key".
 2. Enable CouchDB's JWT handler as described in nyuchi-api `docs/architecture/couchdb-sync.md`. Until then CouchDB refuses every forwarded request with `401`.
 
-Then run the live check in the doc (flag on in one signed-in browser, watch the Network tab) before anyone flips the flag in code. Taking the client id off the list stops outstanding grants within minutes and the app falls back to local-only.
+Then run the live check in the doc (flag on in one signed-in browser, watch the Network tab) before anyone flips the flag in code. Taking the client id off the list stops outstanding grants within minutes and the app falls back to local-only. Before the flag is turned on for more than a few people, read the limits note in the doc: the gateway allows 30 token exchanges a minute for this app's one key, which `/api/app-keys` shares, so roughly 120 tabs syncing at once is the ceiling until the gateway raises it.
 
 ## Reporting Issues
 

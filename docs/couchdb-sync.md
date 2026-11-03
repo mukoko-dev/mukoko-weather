@@ -137,7 +137,15 @@ token or the key.
   the default five minutes; with a much shorter lifetime the sync cannot run.
 - **Limits.** The route allows 120 requests an hour per person (a visible tab
   asks about every four minutes, 15 an hour); the gateway holds a person to 30
-  exchanges a minute on top.
+  exchanges a minute on top. **The gateway also limits `POST /v1/auth/token` to
+  30 a minute per key**, unless the key is on `CONSOLE_BACKEND_CLIENT_IDS` or
+  `WORKOS_USER_CLIENT_IDS` (1200 a minute): `gateway/lib/security.py`
+  `token_endpoint_limit`, l.214-223. This site has one key for every person, and
+  `/api/app-keys` uses it too. At one renewal per visible tab every four minutes
+  that is room for roughly 120 tabs syncing at once; beyond it exchanges answer
+  `429` (the page backs off and nothing breaks, but `/api/app-keys` shares the
+  ceiling). So a wide rollout of the flag needs a gateway decision about this
+  key's ceiling, which is not made here.
 - **The page** prepares the database once per person per run with
   `POST {api}/v1/couch/personal` (`ensurePersonalDatabase`,
   `src/lib/rxdb/couch-session.ts`), again after a 404 from the database, then
