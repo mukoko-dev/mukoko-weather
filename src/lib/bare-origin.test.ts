@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseBareOrigin } from "./bare-origin";
 import { gatewayOrigin } from "./nyuchi-gateway";
-import { parseApiOrigin } from "./rxdb/couch-session";
+import { parseSessionBody } from "./rxdb/couch-session";
 
 const ok: [string, string][] = [
   ["https://api.nyuchi.com", "https://api.nyuchi.com"],
@@ -57,7 +57,20 @@ describe("the server and the browser decide alike", () => {
     const server = gatewayOrigin({
       NYUCHI_API_URL: typeof input === "string" ? input : undefined,
     });
-    const browser = parseApiOrigin(input);
+    // What the page does with the origin the route hands it: it accepts the
+    // answer only if the origin passes the rule, and replicates there.
+    let browser: string | null = null;
+    try {
+      const s = parseSessionBody({
+        token: "credential-for-tests-0123456789",
+        expiresAt: "2026-11-02T10:05:00.000Z",
+        database: "user_0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+        apiOrigin: input,
+      });
+      browser = s.databaseUrl.replace(/\/v1\/couch\/db\/.*$/, "");
+    } catch {
+      browser = null;
+    }
     // The server trims the variable first (a trailing newline in a secret
     // store); apart from that they are one rule.
     const expected =

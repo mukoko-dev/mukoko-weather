@@ -10,6 +10,7 @@ import {
   workosAccessToken,
 } from "@/lib/test-support/fake-nyuchi-gateway";
 import { peekClaims } from "@/lib/gateway-person-token";
+import { COUCH_SESSION_PATH } from "@/lib/couch-session-timing";
 
 const withAuthMock = vi.hoisted(() => vi.fn());
 vi.mock("@workos-inc/authkit-nextjs", () => ({ withAuth: withAuthMock }));
@@ -46,7 +47,7 @@ const post = (
   },
   body: unknown = {},
 ) =>
-  new Request(`${SITE}/api/couch/session`, {
+  new Request(`${SITE}${COUCH_SESSION_PATH}`, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
@@ -161,6 +162,8 @@ describe("503 when the sync grant cannot be issued", () => {
     expect(res.status).toBe(503);
     await noSecrets(res);
     expect(await res.json()).toMatchObject({ error: "couch_unavailable" });
+    // Sync is not configured here: the answer costs the person nothing.
+    expect(rateLimitMock).not.toHaveBeenCalled();
   });
 
   it("503 when NYUCHI_API_URL is unset or not a bare https origin", async () => {
@@ -175,6 +178,23 @@ describe("503 when the sync grant cannot be issued", () => {
       expect(res.status, value).toBe(503);
     }
     expect(issueMock).not.toHaveBeenCalled();
+    // No Mongo write for a route that can do nothing.
+    expect(rateLimitMock).not.toHaveBeenCalled();
+  });
+
+  it("an unconfigured site still tells an anonymous visitor 401, and spends nothing either way", async () => {
+    issuerMock.mockReturnValue(null);
+    withAuthMock.mockResolvedValue({ user: null });
+    const { POST } = await import("./route");
+    expect((await POST(post())).status).toBe(401);
+    expect(rateLimitMock).not.toHaveBeenCalled();
+  });
+
+  it("a configured site spends the person's hourly allowance only once the answer needs the gateway", async () => {
+    const { POST } = await import("./route");
+    await POST(post());
+    expect(rateLimitMock).toHaveBeenCalledTimes(1);
+    expect(issueMock).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -219,23 +239,20 @@ describe("when a credential is issued", () => {
     expect(text).not.toContain("family_x");
   });
 
-  it("503 for a credential that is malformed, not a personal database, or unreadable", async () => {
+  // (That a credential is well formed, names a personal database and has not
+  // ended is the issuer's job and is tested there, once: `toCredential` in
+  // `couch-session-issuer.test.ts`. The route does not check it a second time;
+  // it still answers 503 if the issuer hands it something it cannot print.)
+  it("503 if the issuer hands over a time that cannot be written, and the text never carries the token", async () => {
     const { POST } = await import("./route");
-    for (const bad of [
-      { token: "short", expiresAtMs: 1, database: `user_${PERSON}` },
-      {
-        token: CREDENTIAL,
-        expiresAtMs: Number.NaN,
-        database: `user_${PERSON}`,
-      },
-      { token: CREDENTIAL, expiresAtMs: 1, database: "family_abc" },
-      { token: CREDENTIAL, expiresAtMs: 1, database: "user_" },
-    ]) {
-      issueMock.mockResolvedValue(bad);
-      const res = await POST(post());
-      expect(res.status, JSON.stringify(bad)).toBe(503);
-      expect(await res.text()).not.toContain(CREDENTIAL);
-    }
+    issueMock.mockResolvedValue({
+      token: CREDENTIAL,
+      expiresAtMs: Number.NaN,
+      database: `user_${PERSON}`,
+    });
+    const res = await POST(post());
+    expect(res.status).toBe(503);
+    expect(await res.text()).not.toContain(CREDENTIAL);
   });
 
   it("maps the issuer's own refusals to their status and code", async () => {
@@ -382,6 +399,25 @@ describe("end to end: the real issuer, the exchange rules of nyuchi-api, a fake 
     const second = (await (await POST(post())).json()) as { token: string };
     expect(second.token).not.toBe(first.token);
     expect(gateway.requests).toHaveLength(2);
+  });
+
+  it("a signed-in person whose WorkOS token has ended (a refresh that failed) is told to retry later, not that the session ended", async () => {
+    withAuthMock.mockResolvedValue({
+      user: { id: WORKOS_USER },
+      accessToken: freshAccessToken(-30),
+    });
+    const { POST } = await import("./route");
+    const res = await POST(post());
+    // 401 would make the page forget this person's settings on this device.
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ error: "couch_unavailable" });
+    expect(gateway.requests).toEqual([]);
+  });
+
+  it("nobody signed in is still 401", async () => {
+    withAuthMock.mockResolvedValue({ user: null });
+    const { POST } = await import("./route");
+    expect((await POST(post())).status).toBe(401);
   });
 
   it("the grant is never longer than the WorkOS token it came from", async () => {

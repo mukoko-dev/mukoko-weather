@@ -8,7 +8,13 @@
  *   - `Content-Type: application/json` and a same-origin `Origin` are
  *     required (415 / 403), checked before anything else, so a cross-site
  *     form costs nothing;
- *   - the visitor must be signed in (`withAuth()`; 401 otherwise);
+ *   - the visitor must be signed in (`withAuth()`; 401 otherwise). 401 is the
+ *     one answer that tells the page "signed out" (it then removes its local
+ *     copy of the person's settings), so it is given only for that: an access
+ *     token that is missing or ended while a person IS signed in is a refresh
+ *     that failed for a moment, and is 503 (the issuer);
+ *   - the site must be set up for sync (503 `couch_unavailable`), checked
+ *     BEFORE the limit so that an unconfigured site writes nothing to Mongo;
  *   - a per-user limit (Mongo, `checkUserRateLimit`, 120 an hour: the
  *     credential lives five minutes at most and the page renews it a minute
  *     before, so one visible tab asks about fifteen times an hour and a few
@@ -42,7 +48,6 @@ import {
   CouchIssueError,
   couchSessionIssuer,
 } from "@/lib/couch-session-issuer";
-import { personIdFromDatabase } from "@/lib/rxdb/couch-docs";
 import { gatewayOrigin } from "@/lib/nyuchi-gateway";
 import { checkUserRateLimit } from "@/lib/user-rate-limit";
 import { logWarn } from "@/lib/observability";
@@ -87,34 +92,32 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const { userId, accessToken } = await currentSession();
   if (!userId) return errorResponse(401, "unauthorized");
 
+  // Not configured here: answer without touching Mongo. The limiter below is
+  // a write per request, and a route that can do nothing must not spend the
+  // person's hourly allowance (or the database's time) to say so.
+  // Not configured here: answer without touching Mongo. The limiter below is
+  // a write per request, and a route that can do nothing must not spend the
+  // person's hourly allowance (or the database's time) to say so.
+  const apiOrigin = gatewayOrigin();
+  const issuer = couchSessionIssuer();
+  if (!apiOrigin || !issuer) return errorResponse(503, "couch_unavailable");
+
   const [max, window] = COUCH_SESSION_LIMIT;
   const limit = await checkUserRateLimit("couch-session", userId, max, window);
   if (!limit.allowed) {
     return errorResponse(429, "rate_limited", limit.retryAfterSeconds);
   }
 
-  const apiOrigin = gatewayOrigin();
-  const issuer = couchSessionIssuer();
-  if (!apiOrigin || !issuer) return errorResponse(503, "couch_unavailable");
-
   try {
+    // What the issuer returns is already checked (a sync grant for a personal
+    // database, not yet ended): `toCredential` in the issuer is the one place.
     const credential = await issuer.issue({ userId, accessToken });
-    const personId = personIdFromDatabase(credential.database);
-    const expiresAt = new Date(credential.expiresAtMs);
-    if (
-      !personId ||
-      typeof credential.token !== "string" ||
-      credential.token.length < 16 ||
-      Number.isNaN(expiresAt.getTime())
-    ) {
-      return errorResponse(503, "couch_unavailable");
-    }
     // An allow-list, not a pass-through: nothing the issuer returns beyond
     // these four fields can reach the browser.
     return NextResponse.json(
       {
         token: credential.token,
-        expiresAt: expiresAt.toISOString(),
+        expiresAt: new Date(credential.expiresAtMs).toISOString(),
         database: credential.database,
         apiOrigin,
       },

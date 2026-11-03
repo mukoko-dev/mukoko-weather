@@ -3,11 +3,11 @@ import {
   CouchSessionError,
   ensurePersonalDatabase,
   fetchCouchSession,
-  parseApiOrigin,
   parseSessionBody,
   personalDatabaseUrl,
 } from "./couch-session";
 import { CouchHttpError } from "./couch-fetch";
+import { COUCH_SESSION_PATH } from "../couch-session-timing";
 
 const PERSON = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
 const good = {
@@ -56,10 +56,13 @@ describe("parseSessionBody", () => {
   });
 
   it("accepts plain http only for localhost", () => {
-    expect(parseApiOrigin("http://localhost:8000")).toBe(
-      "http://localhost:8000",
-    );
-    expect(parseApiOrigin("http://example.com")).toBeNull();
+    expect(
+      parseSessionBody({ ...good, apiOrigin: "http://localhost:8000" })
+        .databaseUrl,
+    ).toBe(`http://localhost:8000/v1/couch/db/${good.database}/`);
+    expect(() =>
+      parseSessionBody({ ...good, apiOrigin: "http://example.com" }),
+    ).toThrow(CouchSessionError);
   });
 });
 
@@ -69,7 +72,7 @@ describe("fetchCouchSession", () => {
     await fetchCouchSession(f);
     const [url, init] = (f as unknown as ReturnType<typeof vi.fn>).mock
       .calls[0] as [string, RequestInit];
-    expect(url).toBe("/api/couch/session");
+    expect(url).toBe(COUCH_SESSION_PATH);
     expect(init.method).toBe("POST");
     expect(init.credentials).toBe("same-origin");
     expect(init.cache).toBe("no-store");

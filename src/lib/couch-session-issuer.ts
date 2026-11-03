@@ -221,7 +221,21 @@ export function createCouchSessionIssuer(deps: {
   const now = deps.now ?? Date.now;
   return {
     async issue({ userId, accessToken }) {
-      if (!userId || !accessToken) throw new CouchIssueError("reauth_required");
+      // Nobody signed in is the only case that says the session has ended: the
+      // page treats 401 as "signed out" and removes its local copy of the
+      // person's settings, so it is never used for a doubt.
+      if (!userId) throw new CouchIssueError("reauth_required");
+
+      // A person IS signed in (the route has just seen them), so a missing or
+      // ended access token is AuthKit's refresh failing for a moment (WorkOS
+      // answering 5xx, say), not a session that ended: retry later.
+      if (!accessToken) {
+        logWarn({
+          source: "nyuchi-gateway",
+          message: "No access token for a signed-in person; not exchanged",
+        });
+        throw new CouchIssueError("couch_unavailable");
+      }
 
       // A grant never outlives the access token it is made from. Below the
       // floor it would be due for renewal on arrival (see couch-session-timing),
@@ -230,11 +244,11 @@ export function createCouchSessionIssuer(deps: {
       const subject = peekClaims(accessToken);
       if (subject && typeof subject.exp === "number") {
         const left = subject.exp * 1000 - now();
-        if (left <= 0) throw new CouchIssueError("reauth_required");
         if (left < COUCH_MIN_ACCESS_TOKEN_LIFE_MS) {
           logWarn({
             source: "nyuchi-gateway",
-            message: "Access token too short for a sync grant; not exchanged",
+            message:
+              "Access token ended or too short for a sync grant; not exchanged",
             meta: { secondsLeft: Math.max(0, Math.floor(left / 1000)) },
           });
           throw new CouchIssueError("couch_unavailable");

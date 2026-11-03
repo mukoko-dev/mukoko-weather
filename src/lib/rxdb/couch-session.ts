@@ -23,6 +23,7 @@
  */
 
 import { parseBareOrigin } from "../bare-origin";
+import { COUCH_SESSION_PATH } from "../couch-session-timing";
 import { COUCH_REQUEST_TIMEOUT_MS, CouchHttpError } from "./couch-fetch";
 import { personIdFromDatabase } from "./couch-docs";
 
@@ -46,17 +47,7 @@ export class CouchSessionError extends Error {
   }
 }
 
-export const SESSION_ROUTE = "/api/couch/session";
 const CODE_RE = /^[a-z_]{1,48}$/;
-
-/**
- * A bare https origin (http only for localhost), else null: the same rule the
- * server applied to `NYUCHI_API_URL` before handing it over, from the one
- * dependency-free module both import (`lib/bare-origin.ts`).
- */
-export function parseApiOrigin(raw: unknown): string | null {
-  return parseBareOrigin(raw);
-}
 
 /** Validate a route answer into a session, or throw `CouchSessionError`. */
 export function parseSessionBody(body: unknown): CouchSession {
@@ -72,7 +63,9 @@ export function parseSessionBody(body: unknown): CouchSession {
   if (!Number.isFinite(expiresAtMs)) throw bad;
   const database = b.database;
   const personId = personIdFromDatabase(database);
-  const origin = parseApiOrigin(b.apiOrigin);
+  // The same rule the server applied to `NYUCHI_API_URL` before handing the
+  // origin over, from the one module both import.
+  const origin = parseBareOrigin(b.apiOrigin);
   if (typeof database !== "string" || !personId || !origin) throw bad;
   return {
     token,
@@ -89,7 +82,7 @@ export async function fetchCouchSession(
 ): Promise<CouchSession> {
   let response: Response;
   try {
-    response = await fetchImpl(SESSION_ROUTE, {
+    response = await fetchImpl(COUCH_SESSION_PATH, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",

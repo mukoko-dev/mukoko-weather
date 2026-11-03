@@ -485,27 +485,45 @@ describe("a token that does not leave the server", () => {
     expect(gateway.requests).toEqual([]);
   });
 
-  it("nothing is sent without a user and an access token, or for something that is no JWT", async () => {
-    const issuer = make();
-    for (const who of [
-      { userId: "", accessToken: accessToken() },
-      { userId: WORKOS_USER, accessToken: undefined },
-      { userId: WORKOS_USER, accessToken: "" },
-      { userId: WORKOS_USER, accessToken: "not-a-jwt" },
-    ]) {
-      const err = await issuer.issue(who).then(
+  it("nobody signed in is reauth_required: the one case that says the session has ended", async () => {
+    const err = await make()
+      .issue({ userId: "", accessToken: accessToken() })
+      .then(
         () => null,
         (e: unknown) => e,
       );
-      expect(err).toMatchObject({ code: "reauth_required", status: 401 });
-    }
+    expect(err).toMatchObject({ code: "reauth_required", status: 401 });
     expect(gateway.requests).toEqual([]);
   });
 
-  it("an access token that has ended is reauth_required, not sent", async () => {
-    expect(await failure(make(), accessToken(-5))).toMatchObject({
-      code: "reauth_required",
-    });
+  it("nothing is sent for something that is no JWT", async () => {
+    const err = await make()
+      .issue({ userId: WORKOS_USER, accessToken: "not-a-jwt" })
+      .then(
+        () => null,
+        (e: unknown) => e,
+      );
+    expect(err).toMatchObject({ code: "reauth_required", status: 401 });
+    expect(gateway.requests).toEqual([]);
+  });
+
+  // The route has already answered 401 for a request with no user, so a user
+  // here whose access token is missing or ended is an AuthKit refresh that
+  // failed for a moment. The page treats 401 as "signed out" and removes its
+  // local copy, so this must be a retry-later answer, never a 401.
+  it("a signed-in person whose access token is missing or has ended is couch_unavailable, not 'signed out'", async () => {
+    for (const token of [undefined, "", accessToken(-5), accessToken(0)]) {
+      const err = await make()
+        .issue({ userId: WORKOS_USER, accessToken: token })
+        .then(
+          () => null,
+          (e: unknown) => e,
+        );
+      expect(err, String(token).slice(0, 12)).toMatchObject({
+        code: "couch_unavailable",
+        status: 503,
+      });
+    }
     expect(gateway.requests).toEqual([]);
   });
 
