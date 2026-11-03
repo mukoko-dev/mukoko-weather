@@ -260,9 +260,9 @@ describe("one tab replicates", () => {
 describe("knownIds (the seeding guard: defaults never win)", () => {
   it("names the ids that have a document, live or deleted, and only those", async () => {
     const store = await open();
-    expect(
-      [...(await store.knownIds(["preference:theme", "activity:a"]))],
-    ).toEqual([]);
+    expect([
+      ...(await store.knownIds(["preference:theme", "activity:a"])),
+    ]).toEqual([]);
 
     await store.upsert(theme("dark"));
     await store.upsert(activity("a"));

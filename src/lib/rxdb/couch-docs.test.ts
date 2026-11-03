@@ -533,7 +533,9 @@ describe("documents -> state", () => {
     it("an add and a remove together keep the local order of what stays", () => {
       const patch = patchFromDocs(
         docsFor(["crop-farming", "livestock", "braai"]),
-        state({ selectedActivities: ["livestock", "gardening", "crop-farming"] }),
+        state({
+          selectedActivities: ["livestock", "gardening", "crop-farming"],
+        }),
       );
       expect(patch.selectedActivities).toEqual([
         "livestock",
@@ -564,7 +566,9 @@ describe("documents -> state", () => {
     it("new ids go after the local ones and unsyncable ids keep their place", () => {
       const patch = patchFromDocs(
         docsFor(["livestock", "soccer"]),
-        state({ selectedActivities: ["Legacy_Id", "livestock", "Other_Legacy"] }),
+        state({
+          selectedActivities: ["Legacy_Id", "livestock", "Other_Legacy"],
+        }),
       );
       expect(patch.selectedActivities).toEqual([
         "Legacy_Id",
@@ -583,7 +587,11 @@ describe("documents -> state", () => {
     });
 
     it("the same members in any order is never a patch", () => {
-      for (const order of [ids, [...ids].reverse(), [ids[2], ids[0], ...ids.slice(3), ids[1]]]) {
+      for (const order of [
+        ids,
+        [...ids].reverse(),
+        [ids[2], ids[0], ...ids.slice(3), ids[1]],
+      ]) {
         expect(
           patchFromDocs(docsFor(ids), state({ selectedActivities: order })),
         ).toEqual({});

@@ -349,9 +349,10 @@ describe("a short-lived credential never makes a hot loop", () => {
       let last = h.sessions.fetched;
       for (let minute = 0; minute < 10; minute++) {
         await h.clock.advance(60_000, settleWith(engine));
-        expect(h.sessions.fetched - last, `minute ${minute}`).toBeLessThanOrEqual(
-          4,
-        );
+        expect(
+          h.sessions.fetched - last,
+          `minute ${minute}`,
+        ).toBeLessThanOrEqual(4);
         last = h.sessions.fetched;
       }
       expect(h.sessions.fetched).toBeLessThan(20);
@@ -400,7 +401,9 @@ describe("a short-lived credential never makes a hot loop", () => {
   });
 
   it("every grant the issuer lets through is long enough for the page, and the page's floor is above its own renewal lead", () => {
-    expect(COUCH_MIN_GRANT_LIFE_MS).toBeLessThan(COUCH_MIN_ACCESS_TOKEN_LIFE_MS);
+    expect(COUCH_MIN_GRANT_LIFE_MS).toBeLessThan(
+      COUCH_MIN_ACCESS_TOKEN_LIFE_MS,
+    );
     expect(COUCH_MIN_GRANT_LIFE_MS).toBeGreaterThan(REFRESH_LEAD_MS);
   });
 
@@ -782,7 +785,8 @@ describe("failures", () => {
       await h.clock.advance(20_000, settleWith(engine));
       h.triggers.forEach((t) => t("focus"));
       if (i % 60 === 0) h.triggers.forEach((t) => t("online"));
-      if (i % 90 === 0) h.bridge.change({ theme: i % 180 === 0 ? "dark" : "light" });
+      if (i % 90 === 0)
+        h.bridge.change({ theme: i % 180 === 0 ? "dark" : "light" });
       await engine.idle();
     }
     expect(h.sessions.fetched).toBe(1);

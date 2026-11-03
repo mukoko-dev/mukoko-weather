@@ -325,10 +325,15 @@ describe("settings follow the person", () => {
     // sort in (same creation time, so by id: gardening, then livestock).
     const b = device("b", { selectedActivities: ["livestock", "gardening"] });
     await startDevice(b);
-    expect(b.bridge.state.selectedActivities).toEqual(["livestock", "gardening"]);
+    expect(b.bridge.state.selectedActivities).toEqual([
+      "livestock",
+      "gardening",
+    ]);
 
     a.clock.now = START + 120_000;
-    a.bridge.change({ selectedActivities: ["livestock", "gardening", "soccer"] });
+    a.bridge.change({
+      selectedActivities: ["livestock", "gardening", "soccer"],
+    });
     await flush(a);
     await b.sync();
     expect(b.bridge.state.selectedActivities).toEqual([

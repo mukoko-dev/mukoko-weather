@@ -362,7 +362,10 @@ export function patchFromDocs(
 }
 
 function sameMembers(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && [...a].sort().join("\n") === [...b].sort().join("\n");
+  return (
+    a.length === b.length &&
+    [...a].sort().join("\n") === [...b].sort().join("\n")
+  );
 }
 
 // ---------------------------------------------------------------------------
