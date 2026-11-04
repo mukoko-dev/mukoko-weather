@@ -91,6 +91,12 @@ npm run build && npx next start -p 3100 &
 BASE=http://localhost:3100 node scripts/browser-check/pwa-check.mjs
 ```
 
+A change that adds something to a place page or the map (a section, a chart, a map, a canvas, a script) also gets the memory budget, `scripts/browser-check/memory-budget.mjs` (#476). It is a manual, real-browser check, run before a release that touches the place page or the map; it is not a CI gate (Playwright is not a dependency of this repo, and it needs the production build and about eight minutes). It loads the page in a phone-sized Chromium, scrolls it, switches places, opens the detail sheets, plays the map and moves between pages, and fails with the number it reached when something holds more than the budget or keeps anything after the visitor has left it. It does not say how much a real phone allows a tab. A card the visitor cannot pan or zoom is a picture, not a MapLibre map:
+
+```bash
+BASE=http://localhost:3100 node scripts/browser-check/memory-budget.mjs
+```
+
 ## Architecture Guidelines
 
 ### Frontend / backend split
