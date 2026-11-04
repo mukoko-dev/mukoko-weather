@@ -17,6 +17,13 @@ function respond(provider: string, init: { status?: number } = {}) {
   } as unknown as Response;
 }
 
+// The host of a URL, compared whole: "open-meteo.com" itself or one of its
+// sub-domains (the dot matters: "evil-open-meteo.com" is not Open-Meteo).
+function isProviderHost(url: string): boolean {
+  const host = new URL(url).hostname;
+  return host === "open-meteo.com" || host.endsWith(".open-meteo.com");
+}
+
 function failing(status: number, headers: Record<string, string> = {}) {
   return new Response("nope", { status, headers });
 }
@@ -247,9 +254,7 @@ describe("fetchWorkerWeatherOnce (the background read for a place not yet asked 
     expect(
       urls.every((u) => new URL(u).hostname === "weather-api.mukoko.com"),
     ).toBe(true);
-    expect(
-      urls.some((u) => new URL(u).hostname.endsWith("open-meteo.com")),
-    ).toBe(false);
+    expect(urls.some(isProviderHost)).toBe(false);
   });
 
   it("never goes to the provider when the Worker cannot be reached either", async () => {
@@ -260,9 +265,7 @@ describe("fetchWorkerWeatherOnce (the background read for a place not yet asked 
     await expect(fetchWorkerWeatherOnce(-17.83, 31.05)).rejects.toThrow();
     expect(
       fetchMock.mock.calls.some((c) =>
-        new URL(String((c as unknown[])[0])).hostname.endsWith(
-          "open-meteo.com",
-        ),
+        isProviderHost(String((c as unknown[])[0])),
       ),
     ).toBe(false);
   });
