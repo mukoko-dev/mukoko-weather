@@ -354,6 +354,23 @@ describe("map overlay sources (satellite, model fields, timeline)", () => {
     }
   });
 
+  it("says how coarse the model fields and the air-quality grid really are", async () => {
+    const { MODEL_CHIPS } = await import("./map-layers");
+    // The picture is smoothed between samples: it must not read as sharper than
+    // the data. The Worker's model grid is 7 x 7 over +-120 km, 40 km apart.
+    for (const chip of MODEL_CHIPS) {
+      expect(chip.legend.note, chip.id).toMatch(/^Points 40 km apart/);
+    }
+    expect(
+      MODEL_CHIPS.find((c) => c.id === "modelPrecipitation")!.legend.note,
+    ).toContain("below 0.1 mm/h is left clear");
+    // CAMS: about 44 km worldwide, about 11 km over Europe; the grid samples
+    // it every 13 km.
+    expect(MAP_CHIPS.find((c) => c.id === "airQuality")!.legend.note).toBe(
+      "CAMS model, grid of about 10 to 40 km",
+    );
+  });
+
   it("gives every model legend band a token and an ascending start value", async () => {
     const { MODEL_CHIPS } = await import("./map-layers");
     for (const chip of MODEL_CHIPS) {

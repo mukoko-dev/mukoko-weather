@@ -6,9 +6,9 @@ import { MapSkeleton } from "./map/MapSkeleton";
 import {
   AQI_BAND_BG_CLASS,
   AQI_BAND_LABELS,
+  aqFieldRaster,
   aqiBand,
   fetchAirQualityGrid,
-  gridToGeoJSON,
   type AqGridResponse,
   type AqiBand,
 } from "@/lib/aq-grid";
@@ -73,10 +73,7 @@ export function AirQualityMapCard({
   }, [lat, lon]);
 
   const overlay = useMemo(
-    () =>
-      state.status === "ready"
-        ? gridToGeoJSON(state.data.points, state.data.cellKm)
-        : null,
+    () => (state.status === "ready" ? aqFieldRaster(state.data) : null),
     [state],
   );
 
