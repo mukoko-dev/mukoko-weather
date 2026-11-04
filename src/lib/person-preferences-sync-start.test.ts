@@ -39,7 +39,7 @@ import {
   parseSyncState,
   startPersonPreferencesSync,
 } from "./person-preferences-sync-start";
-import { ACT, ACT2, activity } from "./person-preferences-fixtures";
+import { ACT, ACT2, T2, activity } from "./person-preferences-fixtures";
 
 const fetchMock = vi.fn();
 const storage = new Map<string, string>();
@@ -184,6 +184,66 @@ describe("startPersonPreferencesSync", () => {
   });
 });
 
+describe("when storage cannot keep the view (a private window, a full quota)", () => {
+  it("keeps it in memory for the page, so a re-added item is a revive, not a brand-new add", async () => {
+    // The profile removed ACT. This device has no view yet.
+    const removed = activity({
+      activityId: ACT,
+      updatedAt: T2,
+      tombstone: true,
+    });
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {
+      const sent = init.body ? JSON.parse(String(init.body)).activities : [];
+      const items = [removed];
+      for (const s of sent) {
+        const i = items.findIndex((x) => x.activityId === s.activityId);
+        if (i < 0) items.push(s);
+        else if (s.updatedAt > items[i].updatedAt) items[i] = s;
+      }
+      return new Response(
+        JSON.stringify({
+          schemaVersion: "v3.1",
+          settings: {},
+          activities: items,
+          savedPlaces: [],
+        }),
+      );
+    });
+    // Storage throws on every write; the store stand-in applies what it is told.
+    vi.stubGlobal("localStorage", {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("QuotaExceededError");
+      },
+      removeItem: () => undefined,
+    });
+    applySynced.mockImplementation((p: { selectedActivities: string[] }) => {
+      storeState.selectedActivities = p.selectedActivities;
+    });
+    storeState.selectedActivities = [ACT];
+
+    stop = startPersonPreferencesSync("user_1");
+    await vi.advanceTimersByTimeAsync(3_100);
+    // First pass: nothing on this device saw the removal, so it stands.
+    expect(storeState.selectedActivities).toEqual([]);
+
+    // The person picks it again.
+    fetchMock.mockClear();
+    const prev = { selectedActivities: [] as string[] };
+    storeState.selectedActivities = [ACT];
+    for (const l of storeState.listeners) {
+      l({ selectedActivities: [ACT] }, prev);
+    }
+    await vi.advanceTimersByTimeAsync(2_100);
+    const put = fetchMock.mock.calls.find((c) => c[1].method === "PUT");
+    expect(put).toBeDefined();
+    expect(JSON.parse(String(put?.[1].body)).activities).toEqual([
+      expect.objectContaining({ activityId: ACT, tombstone: false }),
+    ]);
+    expect(storeState.selectedActivities).toEqual([ACT]);
+  });
+});
+
 describe("parseSyncState", () => {
   it("reads what the module wrote and nothing else", () => {
     const good = JSON.stringify({ owner: "user_1", activities: [activity()] });
@@ -203,6 +263,20 @@ describe("parseSyncState", () => {
       ),
     ).toBeNull();
     expect(parseSyncState("x".repeat(70_000))).toBeNull();
+  });
+
+  it("keeps a well-formed syncedAt and drops any other", () => {
+    const at = "2026-11-04T09:00:00.000Z";
+    expect(
+      parseSyncState(
+        JSON.stringify({ owner: "u", activities: [], syncedAt: at }),
+      )?.syncedAt,
+    ).toBe(at);
+    expect(
+      parseSyncState(
+        JSON.stringify({ owner: "u", activities: [], syncedAt: "yesterday" }),
+      ),
+    ).toEqual({ owner: "u", activities: [] });
   });
 
   it("drops entries that are not activities", () => {

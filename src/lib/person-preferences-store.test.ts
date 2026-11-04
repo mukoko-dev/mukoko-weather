@@ -423,6 +423,23 @@ describe("merge: activities", () => {
     );
   });
 
+  it("asks for the purge only when it read a tombstone past its 30 days", async () => {
+    const fresh = new FakePersons(
+      person({ activities: [storedActivity("recent-gone", T1, true)] }),
+    );
+    await storeOver(fresh).merge(ME, stored({ activities: [activity()] }), NOW);
+    expect(JSON.stringify(fresh.writes)).not.toContain("$pull");
+
+    const old = new Date(
+      NOW.getTime() - TOMBSTONE_RETENTION_MS - 60_000,
+    ).toISOString();
+    const stale = new FakePersons(
+      person({ activities: [storedActivity("old-gone", old, true)] }),
+    );
+    await storeOver(stale).merge(ME, stored({ activities: [activity()] }), NOW);
+    expect(JSON.stringify(stale.writes)).toContain("$pull");
+  });
+
   it("writes nothing for an empty request", async () => {
     const col = new FakePersons(
       person({ activities: [storedActivity(ACT, T1)] }),

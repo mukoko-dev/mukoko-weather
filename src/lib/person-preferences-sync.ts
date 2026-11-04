@@ -10,7 +10,7 @@
  * nothing is sent. Anonymous visitors store nothing on the server.
  *
  * Pure with injected dependencies (the fetch, the clock, storage, the store),
- * so every rule is tested in node. `use-person-preferences-sync.ts` supplies
+ * so every rule is tested in node. `person-preferences-sync-start.ts` supplies
  * the browser ones.
  *
  * THE RULES
@@ -19,10 +19,10 @@
  *      the person did since is the difference between the list on the device
  *      and that view: an id added now is a live item stamped now (a removed
  *      one revives; one already live on the profile is left as it is), an id
- *      gone is a tombstone stamped now. The stamp is the
- *      time of the pass that noticed the change, which can be later than the
- *      edit; the cost is that a removal noticed late can beat a newer add on
- *      another device.
+ *      gone is a tombstone stamped now. The stamp is the time of the pass that
+ *      noticed the change, which can be later than the edit; the cost is that
+ *      a removal noticed late can beat a newer add on another device. The
+ *      device list is taken as the person's, whoever wrote it on this device.
  *   2. Merge per item with the server's items: the later `updatedAt` wins, a
  *      tie leaves the server's item. An item is never dropped only because the
  *      other side lacks it, so an empty profile never empties the device and an
@@ -32,29 +32,41 @@
  *   4. The view is tagged with the person who last synced it. A DIFFERENT
  *      person signing in on the same browser does not merge the previous
  *      person's selections into their profile: the device list becomes their
- *      profile (which may be empty). A device that was never synced is
- *      anonymous, and its selections are the first person's to take.
+ *      profile (which may be empty). A device with no view at all (never
+ *      synced, or storage that cannot keep one) is anonymous: its selections
+ *      are the first person's to take, except that an item the profile
+ *      already removed stays removed, because nothing on the device says it
+ *      saw that removal.
  *   5. Only catalogue activity ids are sent or applied (`isKnownActivity`).
  *      Ids from a newer app stay in the view, untouched, and are never shown.
  *   6. Sign-out leaves the view and the stored profile alone.
  *   7. One retry schedule: a failure backs off 30 s doubling to 15 min,
  *      a 429 waits for `Retry-After`, and a refusal that will not change
- *      (signed out, not ready, not found) stops for the page. Changes made
- *      while a run is in flight are folded into one more run.
+ *      (signed out, not ready, not found, a request this code should not have
+ *      made) stops for the page. A 422 does not stop it: one refused item
+ *      must not silence every later edit, and the backoff bounds the traffic.
+ *      Changes made while a run is in flight are folded into one more run.
  *   8. The first pass of a page load that finds the device list EMPTY while
  *      the last view had activities does not read that as the person removing
  *      everything: it is far more likely storage that was lost (Safari's
  *      seven-day wipe, a private window), and the profile must survive it. The
  *      profile's items come back instead. Later passes, which watch the person
- *      edit, treat an emptied list as the removal it is.
+ *      edit, treat an emptied list as the removal it is. The cost: removing
+ *      the last activity and closing the page inside the two-second debounce
+ *      brings it back once.
+ *   9. A view older than the tombstone retention (30 days) cannot vouch for an
+ *      item the profile no longer has: the removal may have been purged since.
+ *      Such an item is treated as removed elsewhere, not pushed back.
  *
  * Saved places are not here: they are encrypted on the device (ADR-0002) and
  * the key that would encrypt them has no home yet.
  */
 
 import {
+  ACTIVITY_ID_RE,
   MAX_PERSON_ACTIVITIES,
   TOMBSTONE_RETENTION_MS,
+  UTC_TIMESTAMP_RE,
   activityIdOf,
   mergeById,
   type ActivityItem,
@@ -66,6 +78,8 @@ export const PERSON_PREFERENCES_URL = "/api/profile/preferences";
 export interface SyncState {
   owner: string;
   activities: ActivityItem[];
+  /** When this view was last confirmed by the server (RFC 3339). */
+  syncedAt?: string;
 }
 
 export interface SyncDeps {
@@ -84,19 +98,14 @@ export interface SyncDeps {
 
 export type SyncOutcome =
   | { kind: "synced" }
-  /** Try again later: the network, a 5xx or a 429. */
+  /** Try again later: the network, a 5xx, a 429 or a refused batch (422). */
   | { kind: "retry"; afterMs?: number }
   /** Will not change by waiting: stop for this page load. */
   | { kind: "stopped"; reason: string };
 
-const RETENTION_ISO_MS = TOMBSTONE_RETENTION_MS;
-
 // ---------------------------------------------------------------------------
 // Shapes read back from the server or from storage (never trusted)
 // ---------------------------------------------------------------------------
-
-const ISO_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-const ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 /** The activities of a document or a stored view; entries that do not fit are dropped. */
 export function readActivities(raw: unknown): ActivityItem[] {
@@ -107,11 +116,11 @@ export function readActivities(raw: unknown): ActivityItem[] {
     const r = v as Record<string, unknown>;
     if (
       typeof r.activityId === "string" &&
-      ID_RE.test(r.activityId) &&
+      ACTIVITY_ID_RE.test(r.activityId) &&
       typeof r.createdAt === "string" &&
-      ISO_RE.test(r.createdAt) &&
+      UTC_TIMESTAMP_RE.test(r.createdAt) &&
       typeof r.updatedAt === "string" &&
-      ISO_RE.test(r.updatedAt) &&
+      UTC_TIMESTAMP_RE.test(r.updatedAt) &&
       typeof r.tombstone === "boolean"
     ) {
       out.push({
@@ -139,42 +148,50 @@ export interface Reconciled {
 }
 
 /** Rule 1: the device's list as items, on top of the last merged view. */
-function deviceView(
-  base: readonly ActivityItem[],
-  local: readonly string[],
-  remote: readonly ActivityItem[],
-  nowIso: string,
-  isKnown: (id: string) => boolean,
-  guardEmpty: boolean,
-): ActivityItem[] {
+function deviceView(args: {
+  base: readonly ActivityItem[];
+  /** Whether the device has a view of its own at all (rule 4). */
+  hasView: boolean;
+  local: readonly string[];
+  remote: readonly ActivityItem[];
+  nowIso: string;
+  isKnown: (id: string) => boolean;
+  guardEmpty: boolean;
+  /** Rule 9: ids the profile no longer has, that a stale view cannot vouch for. */
+  lost: ReadonlySet<string>;
+}): ActivityItem[] {
+  const { base, hasView, remote, nowIso, isKnown, lost } = args;
   const byId = new Map(base.map((i) => [i.activityId, i]));
   const onServer = new Map(remote.map((i) => [i.activityId, i]));
-  const known = local.filter(isKnown);
+  const known = args.local.filter(isKnown);
   // Rule 8: an empty list on a first pass is storage lost, not a removal.
   const present = new Set(
-    guardEmpty && known.length === 0
+    args.guardEmpty && known.length === 0
       ? base
           .filter((i) => !i.tombstone && isKnown(i.activityId))
           .map(activityIdOf)
       : known,
   );
+  for (const id of lost) present.delete(id);
   for (const id of present) {
     const item = byId.get(id);
     if (!item || item.tombstone) {
       const there = onServer.get(id);
-      // Already live on the profile: nothing to say, so no new stamp (a stamp
-      // would only reorder it against another device's later removal).
-      byId.set(
-        id,
-        there && !there.tombstone
-          ? there
-          : {
-              activityId: id,
-              createdAt: item?.createdAt ?? there?.createdAt ?? nowIso,
-              updatedAt: nowIso,
-              tombstone: false,
-            },
-      );
+      if (there && !there.tombstone) {
+        // Already live on the profile: nothing to say, so no new stamp (a
+        // stamp would only reorder it against another device's later removal).
+        byId.set(id, there);
+      } else if (!item && !hasView && there?.tombstone) {
+        // Rule 4: nothing on this device saw that removal, so it stands.
+        byId.set(id, there);
+      } else {
+        byId.set(id, {
+          activityId: id,
+          createdAt: item?.createdAt ?? there?.createdAt ?? nowIso,
+          updatedAt: nowIso,
+          tombstone: false,
+        });
+      }
     }
   }
   for (const [id, item] of byId) {
@@ -199,16 +216,34 @@ export function reconcile(args: {
   const { remote } = args;
   // Rule 4: a view that belongs to someone else is not this person's.
   const foreign = args.state !== null && args.state.owner !== args.ownerId;
+  const own = args.state !== null && !foreign ? args.state : null;
+
+  // Rule 9: a view this old cannot vouch for an item the profile lacks.
+  const lost = new Set<string>();
+  if (
+    own?.syncedAt !== undefined &&
+    Date.parse(args.nowIso) - Date.parse(own.syncedAt) > TOMBSTONE_RETENTION_MS
+  ) {
+    const onProfile = new Set(remote.map(activityIdOf));
+    for (const item of own.activities) {
+      if (!item.tombstone && !onProfile.has(item.activityId)) {
+        lost.add(item.activityId);
+      }
+    }
+  }
+
   const view = foreign
     ? []
-    : deviceView(
-        args.state?.activities ?? [],
-        args.local,
+    : deviceView({
+        base: own?.activities ?? [],
+        hasView: own !== null,
+        local: args.local,
         remote,
-        args.nowIso,
-        args.isKnown,
-        args.first,
-      );
+        nowIso: args.nowIso,
+        isKnown: args.isKnown,
+        guardEmpty: args.first,
+        lost,
+      });
 
   // Rule 2: per item, the later wins and a tie leaves the server's item.
   let merged = mergeById(remote, view, activityIdOf);
@@ -291,7 +326,7 @@ export function projectLocal(args: {
   return out;
 }
 
-const sameList = (a: readonly string[], b: readonly string[]) =>
+export const sameList = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((id, i) => id === b[i]);
 
 // ---------------------------------------------------------------------------
@@ -358,10 +393,12 @@ async function call(
           : { kind: "retry" },
     };
   }
-  if (res.status >= 500 || res.status === 408) {
+  // A 422 is one refused item (rule 7): back off, but do not go silent.
+  if (res.status >= 500 || res.status === 408 || res.status === 422) {
     return { ok: false, outcome: { kind: "retry" } };
   }
-  // 401 (signed out), 403, 404 (no record), 4xx (our request): will not change.
+  // 401 (signed out), 403, 404 (no record), other 4xx (a request this code
+  // should not have made): will not change by waiting.
   return {
     ok: false,
     outcome: { kind: "stopped", reason: String(res.status) },
@@ -395,10 +432,11 @@ export async function syncOnce(
     items = put.activities;
   }
 
-  const cutoff = new Date(deps.now() - RETENTION_ISO_MS).toISOString();
+  const cutoff = new Date(deps.now() - TOMBSTONE_RETENTION_MS).toISOString();
   deps.writeState({
     owner: deps.ownerId,
     activities: items.filter((i) => !(i.tombstone && i.updatedAt < cutoff)),
+    syncedAt: nowIso,
   });
 
   // The device may have changed while the requests were in the air: judge the

@@ -175,6 +175,24 @@ describe("first sign-in on a device", () => {
     expect(live(server.items)).toEqual([ACT]);
   });
 
+  it("keeps an item the profile removed removed, for a device with no view of its own", async () => {
+    // Nothing on this device saw that removal, so it stands: the profile wins.
+    const removed = activity({
+      activityId: ACT,
+      updatedAt: T2,
+      tombstone: true,
+    });
+    const server = fakeServer([removed]);
+    const d = device(ME, [ACT, ACT2], null, server);
+    await syncOnce(d.deps, { first: true });
+    expect(byId(server.items, ACT)).toMatchObject({
+      tombstone: true,
+      updatedAt: T2,
+    });
+    expect(d.local).toEqual([ACT2]);
+    expect(live(server.items)).toEqual([ACT2]);
+  });
+
   it("makes no write when there is nothing to send", async () => {
     const server = fakeServer([activity({ activityId: ACT })]);
     const d = device(ME, [ACT], null, server);
@@ -338,6 +356,56 @@ describe("a different person signs in on this browser", () => {
   });
 });
 
+// --- a view that is too old to vouch for anything --------------------------------
+
+describe("a view older than the tombstone retention (rule 9)", () => {
+  const longAgo = new Date(NOW_MS - 40 * 24 * 60 * 60 * 1000).toISOString();
+  const recently = new Date(NOW_MS - 24 * 60 * 60 * 1000).toISOString();
+  const view = (syncedAt: string | undefined): SyncState => ({
+    owner: ME,
+    activities: [activity({ activityId: ACT }), activity({ activityId: ACT2 })],
+    ...(syncedAt ? { syncedAt } : {}),
+  });
+
+  it("does not push back an item the profile no longer has: the removal may have been purged", async () => {
+    // ACT2 was removed on another device and its tombstone is gone.
+    const server = fakeServer([activity({ activityId: ACT })]);
+    const d = device(ME, [ACT, ACT2], view(longAgo), server);
+    await syncOnce(d.deps);
+    expect(server.puts()).toHaveLength(0);
+    expect(live(server.items)).toEqual([ACT]);
+    expect(d.local).toEqual([ACT]);
+  });
+
+  it("still sends what the person changed since", async () => {
+    const server = fakeServer([activity({ activityId: ACT })]);
+    const d = device(ME, [ACT, ACT3], view(longAgo), server);
+    await syncOnce(d.deps);
+    expect(live(server.items).sort()).toEqual([ACT, ACT3].sort());
+  });
+
+  it("restores a profile that lost items, when the view is recent (the server does not forget)", async () => {
+    const server = fakeServer([]);
+    const d = device(ME, [ACT, ACT2], view(recently), server);
+    await syncOnce(d.deps);
+    expect(live(server.items).sort()).toEqual([ACT, ACT2].sort());
+  });
+
+  it("treats a view with no age as recent", async () => {
+    const server = fakeServer([]);
+    const d = device(ME, [ACT, ACT2], view(undefined), server);
+    await syncOnce(d.deps);
+    expect(live(server.items).sort()).toEqual([ACT, ACT2].sort());
+  });
+
+  it("stamps the view with the time of the pass", async () => {
+    const server = fakeServer();
+    const d = device(ME, [ACT], null, server);
+    await syncOnce(d.deps, { first: true });
+    expect(d.state?.syncedAt).toBe(NOW);
+  });
+});
+
 // --- storage that was lost -----------------------------------------------------
 
 describe("storage lost on the device (Safari's wipe, a private window)", () => {
@@ -480,7 +548,18 @@ describe("failures", () => {
     expect((await run(make)).outcome.kind).toBe("retry");
   });
 
-  it.each([401, 403, 404, 400, 413, 415, 422])(
+  it("422 (one refused item): retry with the backoff, never silence the sync", async () => {
+    const { outcome, d } = await run((method) =>
+      method === "PUT"
+        ? Response.json({ code: "activity_not_allowed" }, { status: 422 })
+        : undefined,
+    );
+    expect(outcome).toEqual({ kind: "retry" });
+    expect(d.writes).toHaveLength(0);
+    expect(d.local).toEqual([ACT]);
+  });
+
+  it.each([401, 403, 404, 400, 413, 415])(
     "%i: stop for the page",
     async (status) => {
       const { outcome } = await run(() => new Response("{}", { status }));

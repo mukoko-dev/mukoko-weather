@@ -68,7 +68,7 @@ export const MAX_CLOCK_AHEAD_MS = 24 * 60 * 60 * 1000;
 export const MAX_ENVELOPE_CIPHERTEXT = 1024;
 
 /** An RFC 3339 UTC time with exactly three fraction digits (`UtcTimestamp`). */
-const UTC_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+export const UTC_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 /** `activityId` in `userdb.yaml`. */
 export const ACTIVITY_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 /** The key of `savedPlace:<UUIDv7>`. */

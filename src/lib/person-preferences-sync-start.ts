@@ -14,9 +14,11 @@
  */
 
 import { getActivityById } from "./activities";
+import { UTC_TIMESTAMP_RE } from "./person-preferences";
 import {
   createPersonSyncController,
   readActivities,
+  sameList,
   syncOnce,
   type SyncDeps,
   type SyncState,
@@ -46,20 +48,30 @@ export function parseSyncState(raw: string | null): SyncState | null {
     ) {
       return null;
     }
-    return { owner: v.owner, activities: readActivities(v.activities) };
+    const syncedAt = (v as { syncedAt?: unknown }).syncedAt;
+    return {
+      owner: v.owner,
+      activities: readActivities(v.activities),
+      ...(typeof syncedAt === "string" && UTC_TIMESTAMP_RE.test(syncedAt)
+        ? { syncedAt }
+        : {}),
+    };
   } catch {
     return null;
   }
 }
 
-const sameIds = (a: readonly string[], b: readonly string[]) =>
-  a.length === b.length && a.every((id, i) => id === b[i]);
-
-/** `applying` is true while this module is writing the device's own list. */
+/**
+ * `applying` is true while this module is writing the device's own list.
+ * Where storage cannot keep the view (a private window, a full quota) it is
+ * kept in memory for this page, so a re-added item is not mistaken for a
+ * brand-new one on the next pass; a new page starts without it (rule 4).
+ */
 function browserDeps(
   ownerId: string,
   applying: { current: boolean },
 ): SyncDeps {
+  let inMemory: SyncState | null = null;
   return {
     ownerId,
     now: () => Date.now(),
@@ -74,8 +86,10 @@ function browserDeps(
         applying.current = false;
       }
     },
-    readState: () => parseSyncState(readStorage(PERSON_SYNC_STATE_KEY)),
+    readState: () =>
+      parseSyncState(readStorage(PERSON_SYNC_STATE_KEY)) ?? inMemory,
     writeState: (state) => {
+      inMemory = state;
       writeStorage(PERSON_SYNC_STATE_KEY, JSON.stringify(state));
     },
     isKnownActivity: (id) => getActivityById(id) !== undefined,
@@ -108,7 +122,7 @@ export function startPersonPreferencesSync(ownerId: string): () => void {
 
     const unsubscribe = useAppStore.subscribe((state, prev) => {
       if (applying.current) return;
-      if (!sameIds(state.selectedActivities, prev.selectedActivities)) {
+      if (!sameList(state.selectedActivities, prev.selectedActivities)) {
         controller.localChanged();
       }
     });

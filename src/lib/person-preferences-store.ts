@@ -214,19 +214,22 @@ function operations(
   workosUserId: string,
   patch: PersonPreferencesPatch,
   now: Date,
+  purge: boolean,
 ) {
   const person = personFilter(workosUserId);
   const cutoff = new Date(now.getTime() - TOMBSTONE_RETENTION_MS);
   const old = { tombstone: true, updatedAt: { $lt: cutoff } };
-  const ops: { updateOne: { filter: Doc; update: Doc } }[] = [
-    // Tombstones past their 30 days go first, so they do not count.
-    {
+  const ops: { updateOne: { filter: Doc; update: Doc } }[] = [];
+  // Tombstones past their 30 days go first, so they do not count. Only asked
+  // when the read just made saw one.
+  if (purge) {
+    ops.push({
       updateOne: {
         filter: person,
         update: { $pull: { activities: old, savedPlaces: old } },
       },
-    },
-  ];
+    });
+  }
   for (const a of patch.activities) {
     const updatedAt = new Date(a.updatedAt);
     const entry = {
@@ -319,6 +322,9 @@ export function createIdentityPersonsStore(
         activities: kept(stored.activities),
         savedPlaces: kept(stored.savedPlaces),
       };
+      const purge =
+        before.activities.length < stored.activities.length ||
+        before.savedPlaces.length < stored.savedPlaces.length;
       const merged = {
         activities: mergeById(
           before.activities,
@@ -334,11 +340,11 @@ export function createIdentityPersonsStore(
       const problem = capProblem(before, merged);
       if (problem) return { kind: "refused", problem };
 
-      // An empty request writes nothing (not even the purge of old tombstones).
+      // An empty request writes nothing (not even a purge of old tombstones).
       if (patch.activities.length + patch.savedPlaces.length === 0) {
         return { kind: "ok", stored };
       }
-      await col.bulkWrite(operations(workosUserId, patch, now), {
+      await col.bulkWrite(operations(workosUserId, patch, now, purge), {
         ordered: true,
       });
       const after = await readStored(col, workosUserId);

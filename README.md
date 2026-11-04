@@ -174,7 +174,7 @@ nyuchi/nyuchi-api#483, so the route can later become a thin forward. Saved
 places are ciphertext only (data-infra ADR-0002) behind their own switch, and
 nothing in the app writes one yet: the key that would encrypt them has no home.
 Both switches (`PERSON_PREFERENCES_READY`, `PERSON_SAVED_PLACES_READY` in
-`src/lib/person-preferences.ts`) are off, so the route answers
+`src/lib/person-preferences-switches.ts`) are off, so the route answers
 `503 preferences_unavailable` and the app sends nothing. This is the interim
 home; the truth moves to the person's CouchDB database. All storage is the one
 file `src/lib/person-preferences-store.ts`. The fields and what nyuchi must

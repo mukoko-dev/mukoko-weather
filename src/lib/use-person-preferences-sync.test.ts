@@ -13,6 +13,11 @@ vi.mock("./person-preferences-switches", () => ({
   PERSON_SAVED_PLACES_READY: false,
 }));
 
+const couch = vi.hoisted(() => ({ on: false }));
+vi.mock("./feature-flags", () => ({
+  getFeatureFlag: (name: string) => (name === "couch_sync" ? couch.on : false),
+}));
+
 let cleanup: (() => void) | void;
 vi.mock("react", () => ({
   useEffect: (fn: () => (() => void) | void) => {
@@ -35,6 +40,7 @@ const settle = () => new Promise((r) => setTimeout(r, 0));
 
 beforeEach(() => {
   flags.ready = true;
+  couch.on = false;
   cleanup = undefined;
   stopMock.mockReset();
   startMock.mockReset();
@@ -53,6 +59,14 @@ describe("usePersonPreferencesSync", () => {
 
   it("does nothing while the platform is not ready, even signed in", async () => {
     flags.ready = false;
+    usePersonPreferencesSync("user_1");
+    await settle();
+    expect(moduleLoaded).not.toHaveBeenCalled();
+    expect(startMock).not.toHaveBeenCalled();
+  });
+
+  it("stands down while the CouchDB sync owns the same activities", async () => {
+    couch.on = true;
     usePersonPreferencesSync("user_1");
     await settle();
     expect(moduleLoaded).not.toHaveBeenCalled();
