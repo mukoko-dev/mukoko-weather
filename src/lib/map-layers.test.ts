@@ -1,4 +1,6 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
+import { readFileSync } from "fs";
+import { resolve } from "path";
 import {
   MAP_LAYERS,
   DEFAULT_LAYER,
@@ -19,6 +21,8 @@ import {
   timelineLabel,
   TIMELINE_STEPS,
   MAP_LAYER_STORAGE_KEY,
+  MAP_MAX_PIXEL_RATIO,
+  mapPixelRatioOverride,
   readStoredMapLayer,
   writeStoredMapLayer,
 } from "./map-layers";
@@ -482,5 +486,36 @@ describe("MapTiler key and style ids (#266)", () => {
     expect(m.MAPTILER_STYLE_DARK).toContain(
       `/maps/${m.MAPTILER_STYLE_ID_DARK}/`,
     );
+  });
+});
+
+describe("mapPixelRatioOverride (#476)", () => {
+  it("caps a screen above 2x at 2x: a 3x phone's canvas would be 2.25x the memory", () => {
+    expect(MAP_MAX_PIXEL_RATIO).toBe(2);
+    expect(mapPixelRatioOverride(3)).toBe(2);
+    expect(mapPixelRatioOverride(4)).toBe(2);
+    expect(mapPixelRatioOverride(2.75)).toBe(2);
+  });
+
+  it("passes no option at or below 2x, so MapLibre keeps following the screen (a map made at 1x must not stay blurry on a retina display)", () => {
+    for (const ratio of [0.75, 1, 1.5, 2])
+      expect(mapPixelRatioOverride(ratio)).toBeUndefined();
+  });
+
+  it("passes no option for a screen that reports nothing usable", () => {
+    for (const ratio of [undefined, Number.NaN, Number.POSITIVE_INFINITY])
+      expect(mapPixelRatioOverride(ratio)).toBeUndefined();
+  });
+
+  it("is spread into the Map options only when it is set (an undefined key would still override)", () => {
+    const map = readFileSync(
+      resolve(__dirname, "../components/weather/map/MapLibreMap.tsx"),
+      "utf-8",
+    );
+    expect(map).toContain("mapPixelRatioOverride(");
+    expect(map).toMatch(
+      /\.\.\.\(pixelRatioOverride !== undefined && \{\s*pixelRatio: pixelRatioOverride,\s*\}\)/,
+    );
+    expect(map).not.toMatch(/^\s*pixelRatio: mapPixelRatio/m);
   });
 });

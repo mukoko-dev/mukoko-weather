@@ -11,6 +11,7 @@ import {
   AQI_BAND_LABELS,
   AQI_BAND_TOKEN,
   AQI_BAND_BG_CLASS,
+  AQI_BAND_FILL_CLASS,
   aqBubbles,
   type AqGridPoint,
   type AqGridResponse,
@@ -194,6 +195,19 @@ describe("AQI bubbles (full-screen map)", () => {
     }
     expect(AQI_BAND_BG_CLASS.good).toBe("bg-wx-aqi-1");
     expect(AQI_BAND_BG_CLASS.hazardous).toBe("bg-wx-aqi-6");
+  });
+});
+
+describe("AQI_BAND_FILL_CLASS (the static map's SVG fills)", () => {
+  it("names the same --wx-aqi token as the scale, band for band", () => {
+    for (const band of AQI_BANDS) {
+      // "--wx-aqi-3" -> "fill-wx-aqi-3": derived from the scale band's `fill`,
+      // which is spelled out in weather-scales.ts (Tailwind only generates what
+      // it finds); this keeps the map and the token in step.
+      expect(AQI_BAND_FILL_CLASS[band]).toBe(
+        `fill${AQI_BAND_TOKEN[band].replace(/^-/, "")}`,
+      );
+    }
   });
 });
 
