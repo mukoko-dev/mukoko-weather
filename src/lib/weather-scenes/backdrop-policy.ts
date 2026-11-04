@@ -56,21 +56,22 @@ export function shouldAnimateBackdrop(h: BackdropDeviceHints): boolean {
 }
 
 /** How the sky moves. */
-export type BackdropMode = "webgl" | "css" | "static";
+export type BackdropMode = "webgl" | "canvas" | "static";
 
 /**
  * Which layer moves the sky on this device:
  * - `webgl`: the Three.js scene ([`shouldAnimateBackdrop`]).
- * - `css`: iPhone and iPad, which never get WebGL here (see [`isIosWebKit`]),
- *   move the rain and storm sky with a CSS-only layer instead: one composited
- *   element, no WebGL context, no extra script. It follows the same rules as
- *   the scene otherwise (never under reduced motion, Save-Data or a low-memory
- *   report), so a person who asked for less motion or less data gets none.
+ * - `canvas`: iPhone and iPad, which never get WebGL here (see
+ *   [`isIosWebKit`]), run the 2D effects instead (`canvas/`): a random,
+ *   bounded particle effect for every weather scene, on one small canvas with
+ *   no WebGL context. It follows the same rules as the scene otherwise (never
+ *   under reduced motion, Save-Data or a low-memory report), so a person who
+ *   asked for less motion or less data gets none.
  * - `static`: the still sky and its faint texture.
  */
 export function backdropMode(h: BackdropDeviceHints): BackdropMode {
   if (!motionAllowed(h)) return "static";
-  return h.ios ? "css" : "webgl";
+  return h.ios ? "canvas" : "webgl";
 }
 
 /**

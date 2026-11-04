@@ -10,6 +10,7 @@ import {
 } from "@/lib/weather-scenes";
 import { skyFamily, skyReachCss, skyTexture } from "@/lib/hero";
 import { WeatherSky } from "@/components/weather/WeatherSky";
+import { createCanvasScene } from "@/lib/weather-scenes/canvas/create-canvas-scene";
 import {
   backdropMode,
   readBackdropHints,
@@ -55,8 +56,10 @@ interface Props {
  * - `prefers-reduced-motion`, Save-Data or ≤ 2 GB RAM skip
  *   Three.js entirely and show only the static sky gradient
  *   (backdropMode). iPhone and iPad never get WebGL here; unless the person
- *   asked for less motion or less data they get the rain and storm sky moved
- *   in CSS only (SkyRain), one composited layer and no WebGL context.
+ *   asked for less motion or less data they get the 2D effects instead
+ *   (lib/weather-scenes/canvas): a random, bounded particle effect for every
+ *   weather scene on one small canvas, paused by the same tab-hidden, scroll
+ *   and scrolled-away rules as the 3D scene.
  *
  * Colour: the static gradient is the page sky (`.kestrel-*`, `--sky-*` tokens
  * in globals.css, family from src/lib/hero.ts): the owner's night and rain
@@ -79,6 +82,7 @@ export function WeatherBackdrop({
   sunset,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const effectsRef = useRef<HTMLDivElement>(null);
   const skyRef = useRef<HTMLDivElement>(null);
 
   // Extend the sky with its content: it always reaches past the Conditions
@@ -128,8 +132,8 @@ export function WeatherBackdrop({
     const id = requestAnimationFrame(() => {
       try {
         // prefers-reduced-motion: reduce, Save-Data and low-end devices
-        // keep the static sky; iPhone and iPad move it in CSS (see
-        // backdrop-policy.ts).
+        // keep the static sky; iPhone and iPad get the 2D canvas effects
+        // (see backdrop-policy.ts).
         update();
         setIsMobile(
           window.matchMedia("(hover: none), (pointer: coarse)").matches,
@@ -154,8 +158,9 @@ export function WeatherBackdrop({
   const phase = skyPhase(isDay, currentTime, sunrise, sunset);
 
   useEffect(() => {
-    if (!animate) return;
-    const el = containerRef.current;
+    if (mode === "static") return;
+    // The 3D scene fills the sky box; the 2D effects fill the bounded hero region.
+    const el = (mode === "webgl" ? containerRef : effectsRef).current;
     if (!el) return;
 
     let disposed = false;
@@ -201,10 +206,14 @@ export function WeatherBackdrop({
       phase,
       isMobile,
       windSpeed,
-      maxPixelRatio: 1,
+      // WebGL fills the whole sky box, so it stays at 1. The 2D effects are one
+      // bounded box of plain strokes and soft sprites, which stay crisp on a
+      // retina screen at 2 for a small fraction of the cost.
+      maxPixelRatio: mode === "webgl" ? 1 : 2,
     };
 
-    createWeatherScene(el, config)
+    const create = mode === "webgl" ? createWeatherScene : createCanvasScene;
+    create(el, config)
       .then((result) => {
         if (disposed) {
           result.dispose();
@@ -225,14 +234,15 @@ export function WeatherBackdrop({
       window.clearTimeout(scrollTimer);
       handle?.dispose();
     };
-  }, [animate, isMobile, isDay, phase, sceneType, windSpeed]);
+  }, [mode, isMobile, isDay, phase, sceneType, windSpeed]);
 
   return (
     <WeatherSky
       ref={skyRef}
       family={family}
-      texture={texture}
-      moveRain={mode === "css"}
+      // The 2D effects draw their own rain and stars, so the still streaks and
+      // stars would show twice under them.
+      texture={mode === "canvas" ? null : texture}
     >
       {/* Three.js particle layer (transparent) — only when motion is allowed. */}
       {animate && (
@@ -240,6 +250,10 @@ export function WeatherBackdrop({
           ref={containerRef}
           className="absolute inset-0 opacity-30 dark:opacity-20"
         />
+      )}
+      {/* The 2D effects (iPhone and iPad): a bounded box, faded at its foot. */}
+      {mode === "canvas" && (
+        <div ref={effectsRef} className="kestrel-effects" />
       )}
     </WeatherSky>
   );
