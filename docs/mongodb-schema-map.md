@@ -96,6 +96,19 @@ Browser → /auth/signin → getSignInUrl() → WorkOS hosted sign-in
 
 The implementation lives in `src/lib/auth.ts`. Dedup is enforced in code (Phase 0E lesson) — `upsertPlatformPerson` never creates a second persons doc for the same WorkOS user, and never creates a second `(workos, oauth_token)` credential for the same person. See `CLAUDE.md` → "Authentication" for the full breakdown.
 
+##### Activities and saved places on the person record (proposed, off)
+
+The owner's rule (2026-11-04) is that what a signed-in person chose follows the person, not the device. Until the person's own CouchDB database (data-infra ADR-0002) is live, the interim home is the person's OWN `identity.persons` record, written like `updateMyName` (matched on the verified WorkOS user id from the session, an allowlist of two fields, no upsert, through the shared `identityDb()` accessor). **Nothing is written until nyuchi has applied the change below**: `PERSON_PREFERENCES_READY` and `PERSON_SAVED_PLACES_READY` in `src/lib/person-preferences.ts` are `false`, and the route `/api/profile/preferences` answers `503 preferences_unavailable`.
+
+| Field (proposed `Person` slot) | Shape of one entry (one per `userdb.yaml` document)                                                    | Cap (live)                      | Who writes it                                    |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------ | ------------------------------- | ------------------------------------------------ |
+| `activities`                   | `{activityId, createdAt, updatedAt, tombstone}`: the `activity:<activityId>` document, plaintext       | 20 (100 stored, tombstones too) | the person, through `/api/profile/preferences`   |
+| `savedPlaces`                  | `{savedPlaceId, createdAt, updatedAt, tombstone, envelope}`: the `savedPlace:<UUIDv7>` document, a JWE | 10 (30 stored)                  | nothing yet (own switch, no client; key custody) |
+
+The `envelope` is the JWE of ADR-0002 section 5 (`protected`, `aad`, `iv`, `ciphertext`, `tag`); the server never sees the place, its position in the list or the person's label for it. A tombstone keeps the common fields and drops the envelope, and is dropped itself after 30 days (on the next write). Two devices merge per entry: the later `updatedAt` wins, a tie leaves the stored entry, a later live write revives a tombstone. Each entry is one `$push` (if absent) and one conditional `$set` (if older), atomic on the document. The code is `src/lib/person-preferences-store.ts`; nothing else names these fields.
+
+**Dead when the CouchDB sync goes live** (the move is a copy of each entry into a `user_<personId>` document; then remove these): the `activities` and `savedPlaces` fields on `identity.persons` and their two lines in the `Person` model; `src/lib/person-preferences-store.ts`; `src/app/api/profile/preferences/`; `src/lib/person-preferences.ts` (its switches and wire types; the item rules move into the sync), `person-preferences-sync.ts`, `use-person-preferences-sync.ts` and `src/components/profile/PersonPreferencesSync.tsx`; their tests (`person-preferences*.test.ts`, `use-person-preferences-sync.test.ts`, `preferences-route*.test.ts`); the `<PersonPreferencesSync />` line in `src/app/layout.tsx`; the localStorage key `mukoko-person-prefs` (a device-side view, harmless to leave). `device.device_profiles` and its `activities` copy are a separate record and are not touched by this.
+
 #### `places` — Locations / geography (P0 dependency, replaces our `locations`)
 
 Far richer than our local `LOCATIONS`. Includes conservation, hospitality, commerce, accessibility, content completeness, ubuntu trust signals.

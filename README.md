@@ -136,8 +136,9 @@ All data, AI, and CRUD work runs in the **Rust Cloudflare Workers** in
 Python FastAPI backend that used to sit under `api/py/` was deleted in #333.
 Vercel serves the Next.js app, not the data backend. A few routes remain in TypeScript on Vercel:
 OG image generation, DB init, the public embed API, the auth-gated `/api/ai`
-proxy, developer API-key and device management, and the session credential of
-the (flagged) CouchDB sync, `POST /api/couch/session`. A request to `/api/py/...`
+proxy, developer API-key and device management, a signed-in person's saved
+preferences (`/api/profile/preferences`, off for now) and the session credential
+of the (flagged) CouchDB sync, `POST /api/couch/session`. A request to `/api/py/...`
 is a 404 problem document (`src/app/api/retired`), except the weather-station
 upload URL `/api/py/stations/ingest` that consoles in the field are configured
 with: `vercel.json` rewrites that one path to the stations Worker, and the
@@ -159,6 +160,25 @@ route answers `503` and the app stays local-only. See
 [docs/couchdb-sync.md](docs/couchdb-sync.md) for the design, the gateway facts
 it was checked against and the steps. The existing `/v1/devices` sync is
 unchanged.
+
+**Activities follow the person (built, off until nyuchi applies one change,
+[#484](https://github.com/mukoko-dev/mukoko-weather/issues/484)).** `GET` and
+`PUT /api/profile/preferences` keep a signed-in person's selected activities on
+their own `identity.persons` record, so a new phone, a cleared browser or
+Safari's seven-day wipe no longer loses them. The browser merges item by item:
+the later `updatedAt` wins, a removal is a tombstone, an empty profile never
+empties the device and an empty device never empties the profile, and a
+different person signing in on the same browser does not inherit the last
+person's list. The JSON follows the contract asked of the Nyuchi API in
+nyuchi/nyuchi-api#483, so the route can later become a thin forward. Saved
+places are ciphertext only (data-infra ADR-0002) behind their own switch, and
+nothing in the app writes one yet: the key that would encrypt them has no home.
+Both switches (`PERSON_PREFERENCES_READY`, `PERSON_SAVED_PLACES_READY` in
+`src/lib/person-preferences.ts`) are off, so the route answers
+`503 preferences_unavailable` and the app sends nothing. This is the interim
+home; the truth moves to the person's CouchDB database. All storage is the one
+file `src/lib/person-preferences-store.ts`. The fields and what nyuchi must
+apply are in [docs/mongodb-schema-map.md](docs/mongodb-schema-map.md).
 
 **Missing files 404.** A top-level path containing a dot that isn't a real
 public file or static route, such as a deleted `/favicon-48.png`, is rewritten

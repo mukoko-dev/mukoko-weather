@@ -344,6 +344,16 @@ Then run the live check in the doc (flag on in one signed-in browser, watch the 
 
 The documents the page writes are judged by the validator nyuchi-api installs in every person's database. A copy is pinned in `src/lib/rxdb/__fixtures__/` and the tests execute it on everything the client writes; re-pin it whenever nyuchi-api's `couch_validate_personal.js` changes (the steps and the exact `curl` line are in the doc, "Re-pinning the validator").
 
+## Turning on activities that follow the person
+
+A signed-in person's selected activities are kept on their own `identity.persons` record, so a new phone or a cleared browser does not lose them (#484). It ships dark: `PERSON_PREFERENCES_READY` and `PERSON_SAVED_PLACES_READY` in `src/lib/person-preferences.ts` are `false`, and `/api/profile/preferences` answers `503 preferences_unavailable` without touching storage. The interim home is one file, `src/lib/person-preferences-store.ts`; the truth moves to the person's CouchDB database, and the fields that die then are listed in [docs/mongodb-schema-map.md](docs/mongodb-schema-map.md). To turn activities on, in this order:
+
+1. nyuchi adds the `activities` and `savedPlaces` slots to `Person` in `nyuchi/data-infra` (`schemas/model/identity.yaml`, then `generate.py`) and applies the regenerated `identity.persons` validator. Neither is done from this repository, and no weather code creates a collection, a validator or an index.
+2. Check it on staging with a throwaway test person, never a real one: sign in, add an activity, reload on a second browser, remove it, and watch the Network tab (`GET` then `PUT /api/profile/preferences`, nothing on a signed-out page).
+3. Flip `PERSON_PREFERENCES_READY` in code, and in the same change update `preferences-route-off.test.ts`, which pins the shipped state.
+
+Saved places stay off. They say where a person lives, so data-infra ADR-0002 keeps them encrypted on the device, and nothing here writes one until the key that would encrypt them has a home and the owner has chosen between ciphertext and a readable catalogue slug (the open question in the pull request for #484).
+
 ## Reporting Issues
 
 Use the [GitHub Issues](https://github.com/nyuchitech/mukoko-weather/issues) page. We have templates for:
