@@ -11,10 +11,11 @@ import {
 import { skyFamily, skyReachCss, skyTexture } from "@/lib/hero";
 import { WeatherSky } from "@/components/weather/WeatherSky";
 import {
+  backdropMode,
   readBackdropHints,
   SCROLL_IDLE_MS,
-  shouldAnimateBackdrop,
   shouldRunBackdrop,
+  type BackdropMode,
 } from "@/lib/weather-scenes/backdrop-policy";
 
 interface Props {
@@ -53,7 +54,9 @@ interface Props {
  * - Everything is disposed on unmount, and the WebGL context is released.
  * - `prefers-reduced-motion`, Save-Data or ≤ 2 GB RAM skip
  *   Three.js entirely and show only the static sky gradient
- *   (shouldAnimateBackdrop).
+ *   (backdropMode). iPhone and iPad never get WebGL here; unless the person
+ *   asked for less motion or less data they get the rain and storm sky moved
+ *   in CSS only (SkyRain), one composited layer and no WebGL context.
  *
  * Colour: the static gradient is the page sky (`.kestrel-*`, `--sky-*` tokens
  * in globals.css, family from src/lib/hero.ts): the owner's night and rain
@@ -116,22 +119,33 @@ export function WeatherBackdrop({
   }, [weatherCode, isDay]);
 
   // Client-only media queries. Default to SSR-safe values, resolve on mount.
-  const [animate, setAnimate] = useState(false);
+  const [mode, setMode] = useState<BackdropMode>("static");
+  const animate = mode === "webgl";
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
+    let reduced: MediaQueryList | null = null;
+    const update = () => setMode(backdropMode(readBackdropHints()));
     const id = requestAnimationFrame(() => {
       try {
         // prefers-reduced-motion: reduce, Save-Data and low-end devices
-        // keep the static sky (see backdrop-policy.ts).
-        setAnimate(shouldAnimateBackdrop(readBackdropHints()));
+        // keep the static sky; iPhone and iPad move it in CSS (see
+        // backdrop-policy.ts).
+        update();
         setIsMobile(
           window.matchMedia("(hover: none), (pointer: coarse)").matches,
         );
+        // Turning Reduce Motion on or off while the page is open stops or
+        // starts the sky without a reload.
+        reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+        reduced.addEventListener("change", update);
       } catch {
         // matchMedia unavailable — keep the static gradient only.
       }
     });
-    return () => cancelAnimationFrame(id);
+    return () => {
+      cancelAnimationFrame(id);
+      reduced?.removeEventListener("change", update);
+    };
   }, []);
 
   const sceneType = resolveScene(weatherCode, windSpeed);
@@ -214,7 +228,12 @@ export function WeatherBackdrop({
   }, [animate, isMobile, isDay, phase, sceneType, windSpeed]);
 
   return (
-    <WeatherSky ref={skyRef} family={family} texture={texture}>
+    <WeatherSky
+      ref={skyRef}
+      family={family}
+      texture={texture}
+      moveRain={mode === "css"}
+    >
       {/* Three.js particle layer (transparent) — only when motion is allowed. */}
       {animate && (
         <div
