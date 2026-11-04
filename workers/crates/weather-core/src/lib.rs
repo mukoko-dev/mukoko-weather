@@ -54,6 +54,7 @@ pub mod query;
 pub mod reference;
 pub mod resolve;
 pub mod secrets;
+pub mod severe_alert;
 pub mod sg_air;
 pub mod slug;
 pub mod station;

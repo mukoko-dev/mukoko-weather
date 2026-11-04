@@ -214,7 +214,7 @@ impl Skip {
 /// An alert a sender may attempt to claim and send.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PlannedSend {
-    /// `{cell}:frost:{night}` (`push::dedupe_key`).
+    /// `{cell}:frost:{night}` (`push::dedupe_key`), three parts: the cell without its `cell:` prefix.
     pub dedupe_key: String,
     pub payload: Payload,
     /// The `TTL`, `Urgency` and `Topic` of the push ([`push::frost_push_options`]):
@@ -491,7 +491,7 @@ mod tests {
     /// Harare is UTC+2 all year.
     const HARARE_OFFSET: i32 = 2 * 3600;
     const CELL: &str = "cell:-17.85_31.05";
-    const KEY_JUL10: &str = "cell:-17.85_31.05:frost:2026-07-10";
+    const KEY_JUL10: &str = "-17.85_31.05:frost:2026-07-10";
 
     /// 2026-07-10 18:00 to 2026-07-11 09:00 local, one value per hour. Frost
     /// hours (22:00 to 08:00 at or below 3 C): 22:00 3.0, 23:00 2.5, 00:00 2.0,
@@ -713,6 +713,11 @@ mod tests {
         );
         let (_, s) = at_2130.sends().next().unwrap();
         assert_eq!(s.dedupe_key, KEY_JUL10);
+        // The delivery log requires exactly three non-empty `:` parts, the kind in the middle.
+        assert_eq!(
+            push::split_dedupe_key(&s.dedupe_key),
+            Some(("-17.85_31.05", "frost", "2026-07-10"))
+        );
         assert_eq!(
             s.payload.body,
             "Frost risk tonight, down to 2°C. Cover sensitive plants."
@@ -961,7 +966,7 @@ mod tests {
             let key = plan.sends().next().map(|(_, s)| s.dedupe_key.clone());
             key
         };
-        let night1 = Some("cell:-17.85_31.05:frost:2026-07-10".to_string());
+        let night1 = Some("-17.85_31.05:frost:2026-07-10".to_string());
         // 15-minute ticks through the evening and the small hours of one night:
         // `start` of the alert moves as hours pass, the key does not.
         for local in [
@@ -975,7 +980,7 @@ mod tests {
             assert_eq!(key_at(local), night1, "{local}");
         }
         // after dawn on the 11th the next frost ahead is the night of the 11th
-        let night2 = Some("cell:-17.85_31.05:frost:2026-07-11".to_string());
+        let night2 = Some("-17.85_31.05:frost:2026-07-11".to_string());
         assert_eq!(key_at("2026-07-11T09:15"), night2);
         assert_eq!(key_at("2026-07-11T18:15"), night2);
     }
@@ -1066,7 +1071,7 @@ mod tests {
                 .clone()
         };
         assert_ne!(key(&a), key(&b));
-        assert_eq!(key(&b), "cell:-20.15_28.60:frost:2026-07-10");
+        assert_eq!(key(&b), "-20.15_28.60:frost:2026-07-10");
     }
 
     #[test]

@@ -376,8 +376,28 @@ pub fn evaluate_frost(
 }
 
 /// The dedupe key for one alert: one per cell, kind and local night.
+///
+/// The Nyuchi API's delivery log requires EXACTLY three non-empty parts split
+/// on `:`, with the kind in the middle (`validate_delivery` in
+/// `nyuchi-api/gateway/lib/web_push.py`; its tests use
+/// `-17.85_31.05:frost:2026-11-03`). [`crate::geo::cell_key`] is
+/// `cell:-17.85_31.05`, so the `cell:` prefix is dropped: with it the key had
+/// four parts and every claim would have been refused as `delivery_invalid`
+/// (found in code review of the severe-alert rules, 2026-11-04). The cell is
+/// then the coordinate half only, and a slug or other label with no colon is
+/// used as it is.
 pub fn dedupe_key(cell: &str, kind: &str, night: &str) -> String {
-    format!("{cell}:{kind}:{night}")
+    let place = cell.strip_prefix("cell:").unwrap_or(cell);
+    format!("{place}:{kind}:{night}")
+}
+
+/// The API's reading of a dedupe key, for the tests that pin the contract:
+/// exactly three non-empty parts, `(cell, kind, night-or-token)`.
+#[cfg(test)]
+pub(crate) fn split_dedupe_key(key: &str) -> Option<(&str, &str, &str)> {
+    let mut parts = key.split(':');
+    let (a, b, c) = (parts.next()?, parts.next()?, parts.next()?);
+    (parts.next().is_none() && !a.is_empty() && !b.is_empty() && !c.is_empty()).then_some((a, b, c))
 }
 
 /// What to do with one alert for one person.
@@ -945,8 +965,27 @@ mod tests {
     fn dedupe_key_is_cell_kind_night() {
         assert_eq!(
             dedupe_key("cell:-17.85_31.05", "frost", "2026-07-10"),
-            "cell:-17.85_31.05:frost:2026-07-10"
+            "-17.85_31.05:frost:2026-07-10"
         );
+        // A label with no prefix is used as it is.
+        assert_eq!(
+            dedupe_key("-17.85_31.05", "frost", "2026-07-10"),
+            "-17.85_31.05:frost:2026-07-10"
+        );
+    }
+
+    #[test]
+    fn a_real_cell_key_gives_the_three_parts_the_api_requires() {
+        // Four parts (the shape before the fix) is refused by the delivery log.
+        for (lat, lon) in [(-17.83, 31.05), (51.5, -0.12), (0.0, 0.0), (-33.9, 151.2)] {
+            let key = dedupe_key(&crate::geo::cell_key(lat, lon), "frost", "2026-07-10");
+            let (cell, kind, night) = split_dedupe_key(&key).unwrap_or_else(|| panic!("{key}"));
+            assert_eq!((kind, night), ("frost", "2026-07-10"), "{key}");
+            assert!(!cell.contains(':') && !cell.starts_with("cell"), "{key}");
+        }
+        assert_eq!(split_dedupe_key("cell:-17.85_31.05:frost:2026-07-10"), None);
+        assert_eq!(split_dedupe_key("a::c"), None);
+        assert_eq!(split_dedupe_key("a:frost"), None);
     }
 
     fn input<'a>(prefs: &'a AlertPrefs) -> DecisionInput<'a> {
