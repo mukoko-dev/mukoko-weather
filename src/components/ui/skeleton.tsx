@@ -8,16 +8,24 @@ import { cn } from "@/lib/utils";
  * Renders a pulsing block that matches the shape/size of the content
  * it replaces. Use Tailwind classes for width, height, and border-radius.
  *
+ * The default corner is `--radius-sm`, the same as the `.okapi` bar, so a
+ * text line, an icon or a number reads as a bar. A block that stands in for a
+ * surface passes that surface's own token (`--radius-input` for an input,
+ * `--radius-card` for a card), never a Tailwind size such as `rounded-lg`.
+ *
  * @example
  * <Skeleton className="h-4 w-32" />           // text line
- * <Skeleton className="h-10 w-full rounded-lg" /> // input
- * <Skeleton className="h-48 w-full rounded-xl" /> // card
+ * <Skeleton className="h-10 w-full rounded-[var(--radius-input)]" /> // input
+ * <Skeleton className="h-48 w-full rounded-[var(--radius-card)]" /> // card
  */
 function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="skeleton"
-      className={cn("animate-pulse rounded-md bg-text-tertiary/10", className)}
+      className={cn(
+        "animate-pulse rounded-[var(--radius-sm)] bg-text-tertiary/10",
+        className,
+      )}
       {...props}
     />
   );
@@ -122,8 +130,8 @@ function ChatSkeleton({ className }: { className?: string }) {
       {/* Input area */}
       <div className="shrink-0 border-t border-border px-4 py-3">
         <div className="flex gap-2">
-          <Skeleton className="h-11 flex-1 rounded-md" />
-          <Skeleton className="h-11 w-11 rounded-md" />
+          <Skeleton className="h-11 flex-1 rounded-[var(--radius-input)]" />
+          <Skeleton className="h-11 w-11 rounded-[var(--radius-input)]" />
         </div>
       </div>
     </div>

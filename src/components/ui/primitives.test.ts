@@ -91,11 +91,11 @@ describe("Alert", () => {
 // ---------------------------------------------------------------------------
 
 describe("Dialog", () => {
-  it("exports Dialog, DialogContent, DialogSheetHandle and other parts", async () => {
+  it("exports Dialog, DialogContent, DialogBar and other parts", async () => {
     const mod = await import("./dialog");
     expect(mod.Dialog).toBeDefined();
     expect(mod.DialogContent).toBeDefined();
-    expect(mod.DialogSheetHandle).toBeDefined();
+    expect(mod.DialogBar).toBeDefined();
     expect(mod.DialogClose).toBeDefined();
     expect(mod.DialogHeader).toBeDefined();
     expect(mod.DialogFooter).toBeDefined();
@@ -114,24 +114,26 @@ describe("Dialog", () => {
     expect(src).toContain("bottom-0");
     expect(src).toContain("animate-slide-up");
     expect(src).toContain("animate-slide-down");
-    expect(src).toContain("rounded-t-[var(--radius-card)]");
+    // The phone sheet's corners follow the screen (issue #482).
+    expect(src).toContain("rounded-t-[var(--radius-screen)]");
     // Desktop: centered
     expect(src).toContain("sm:top-[50%]");
     expect(src).toContain("sm:left-[50%]");
     expect(src).toContain("sm:rounded-[var(--radius-card)]");
   });
 
-  it("DialogSheetHandle includes grab handle and minerals accent", async () => {
+  it("DialogBar includes the grab handle, the minerals accent and Close", async () => {
     const { readFileSync } = await import("fs");
     const { resolve } = await import("path");
     const src = readFileSync(resolve(__dirname, "dialog.tsx"), "utf-8");
-    expect(src).toContain("dialog-sheet-handle");
+    expect(src).toContain("dialog-bar");
     expect(src).toContain("minerals-accent");
     expect(src).toContain("sm:hidden"); // grab handle only on mobile
+    expect(src).toContain('aria-label="Close"');
   });
 
-  it("DialogSheetHandle stays pinned to the top of the scrollable sheet", async () => {
-    // DialogContent is the overflow-y-auto scroll container, so the handle
+  it("DialogBar stays pinned to the top of the scrollable sheet", async () => {
+    // DialogContent is the overflow-y-auto scroll container, so the bar
     // needs `sticky top-0` (with a matching background) or it scrolls away
     // with the rest of a tall sheet's content instead of staying reachable.
     const { readFileSync } = await import("fs");
@@ -151,6 +153,7 @@ describe("Dialog", () => {
       expect(cls).toMatch(/rounded-(?:t-)?(?:\[var\(--radius-|full)/);
     }
     expect(src).toContain("var(--radius-card)");
+    expect(src).toContain("var(--radius-screen)");
   });
 });
 

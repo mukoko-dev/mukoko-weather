@@ -2,6 +2,16 @@
 
 This document describes the key architectural patterns in mukoko weather. For the full project context (routes, components, styling, testing), see [CLAUDE.md](CLAUDE.md).
 
+## Platform direction (decided 2026-11-04)
+
+These are owner decisions, not proposals. Nothing in this repo should read as if they were open.
+
+- **The web app moves to Astro.** The owner's words: "It is not an open decision. It is decided this is how we build our entire platform." Today the app is Next.js 16 on Vercel; the target is Astro with React islands on Cloudflare, next to the Workers. The plan and its phases are in [#475](https://github.com/mukoko-dev/mukoko-weather/issues/475). Until it is done: no new `next/*` import outside a thin adapter, decisions in pure modules (`src/lib`, `weather-core`) and policy as data (as `src/lib/security-headers.ts` already is), and new pages and components written so they move unchanged.
+- **Speed, one global layout and simplicity are the product.** They decide whether people stay on the app and come back. Work that simplifies the layout, the page frame or a page-to-page switch is in scope, not scope creep.
+- **Low-memory crashes are fixed at the root, not worked around.** The mount queue below, the `deviceMemory` and Save-Data gates and the memory-pressure hook limit what is alive at once; they do not say why a phone runs out. Measure (heap after garbage collection, DOM nodes, WebGL contexts, repeated place switches), name what is retained and remove it ([#476](https://github.com/mukoko-dev/mukoko-weather/issues/476)).
+- **Extra background requests are an accepted cost.** Warming the next saved places while a place is read (up to four extra forecast requests per place view, through the shared Worker read) is approved.
+- **Apple's design principles, applied through Mzizi.** Clarity, deference to content, consistent spacing, safe areas and large touch targets across the whole app, built from Mzizi tokens, fauna classes and registry components, never hand-rolled sizes, radii or colours.
+
 ## Search Architecture
 
 ### Atlas Search (Fuzzy Text Search)
@@ -102,12 +112,15 @@ CLOSED ──(failures >= threshold)──> OPEN ──(cooldown expires)──>
 | Breaker      | Providers                                                      | Failure Threshold | Cooldown | Window |
 | ------------ | -------------------------------------------------------------- | :---------------: | :------: | :----: |
 | `TOMORROW`   | Tomorrow.io (insights enrichment, map tiles)                   |         3         |  2 min   | 5 min  |
+| `MET_NO`     | MET Norway Locationforecast (the failover forecast)            |         3         |  5 min   | 5 min  |
 | `OPEN_METEO` | Open-Meteo (forecast, grids, air quality, haze, history, ERA5) |         5         |  5 min   | 5 min  |
 | `NASA_POWER` | NASA POWER (history archive)                                   |         3         |  2 min   | 5 min  |
 | `SOILGRIDS`  | ISRIC SoilGrids                                                |         3         |  15 min  | 10 min |
 | `DEFAULT`    | NOAA CPC, NEA data.gov.sg, Aviation Weather Center             |         3         |  2 min   | 5 min  |
 
 The AI Worker has no breaker: a model call is bounded by the D1 budgets, a timeout and the gateway's own limits.
+
+`MET_NO` is the one breaker that can be tripped at once: MET Norway's terms say to stop traffic immediately when it answers `429` (and a `403` means the client is blocked), so either opens the circuit for the full cooldown (`Breaker::trip`).
 
 AI runs only in the AI Worker, `mukoko-weather-ai`: Workers AI GLM through the `shamwari` AI Gateway with the native `env.AI` binding, the Nyuchi guardrails first in every prompt. No Cloudflare AI token exists on Vercel. The signed-in app reaches it through its own server: the Next.js `/api/ai` proxy checks the WorkOS session (`withAuth()`), then calls `{WEATHER_SERVICE_URL}/internal/ai/summary` with `Authorization: Bearer WEATHER_SERVICE_API_KEY` and the person's id and address. `mukoko-weather-internal` checks the key and forwards over a service binding; the AI Worker caches the answer in KV (30/60/120 min by tag) and counts only the calls that reach the model against the person's hour in D1 (`weather_core::budget`). No Python calls a model any more: the report wizard's follow-up questions, the last Python AI route, are `POST /v1/reports/clarify` on the AI Worker.
 
@@ -116,9 +129,9 @@ AI runs only in the AI Worker, `mukoko-weather-ai`: Workers AI GLM through the `
 The forecast Worker's chain always ends in an answer, and says which stage served it (`X-Weather-Provider`):
 
 ```
-1. KV cache (wx:v2:<lat>_<lon>, 15 min; 5 min for a best_match answer)
-    |── hit ──> return cached data
-    |── miss
+1. KV cache (wx:v2:<lat>_<lon>, fresh 15 min; 5 min for a best_match answer; kept 24 h)
+    |── fresh hit ──> return cached data
+    |── miss, or past its fresh lifetime (kept as the last resort)
     v
 2. Open-Meteo Africa-weighted blend of nine global models (served only when at least four return data)
     |── success ──> cache + return (Tomorrow.io enrichment merged on top when its budget allows)
@@ -126,9 +139,16 @@ The forecast Worker's chain always ends in an answer, and says which stage serve
     v
 3. Open-Meteo best_match (labelled as not a blend)
     |── success ──> cache + return
-    |── error
+    |── error, or the breaker is open
     v
-4. Seasonal estimate (labelled `fallback`)
+4. MET Norway Locationforecast (`met-no`, keyless failover, converted at the edge; only reached here)
+    |── success ──> cache 15 min + return (the blend is asked first again after that)
+    |── error, throttled or breaker open
+    v
+5. The stored forecast past its fresh lifetime, if any (`X-Cache: STALE`)
+    |── none
+    v
+6. Seasonal estimate (labelled `fallback`, added by the public API)
     |── always succeeds ──> return
 ```
 
@@ -182,6 +202,8 @@ Scroll direction ──>
 ```
 
 Sections also UNMOUNT when scrolled 1500px past the viewport (bidirectional), reclaiming memory on long pages.
+
+This queue is a workaround for memory pressure, not the design (see Platform direction above). The Astro move replaces it: below-the-fold sections become islands that load when visible.
 
 ## Database Schema
 

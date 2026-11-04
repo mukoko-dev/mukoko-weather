@@ -98,7 +98,7 @@ export function MinutelyNowcast({ minutely }: MinutelyNowcastProps) {
           {rows.map((r) => (
             <div key={r.t} className="flex flex-1 flex-col items-center gap-1">
               <div
-                className="h-8 w-full rounded-sm bg-surface-base"
+                className="h-8 w-full rounded-[var(--radius-sm)] bg-surface-base"
                 aria-hidden="true"
               />
               <span className="text-sm text-text-tertiary">{r.t}</span>

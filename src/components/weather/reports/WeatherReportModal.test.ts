@@ -22,10 +22,11 @@ describe("WeatherReportModal structure", () => {
     expect(source).toContain("export function WeatherReportModal");
   });
 
-  it("uses shadcn Dialog with sheet handle", () => {
+  it("uses shadcn Dialog; the shared content brings the top bar and Close", () => {
     expect(source).toContain("<Dialog");
     expect(source).toContain("DialogContent");
-    expect(source).toContain("DialogSheetHandle");
+    expect(source).toContain("heading={");
+    expect(source).not.toContain("DialogSheetHandle");
   });
 
   it("reads reportModalOpen from store", () => {

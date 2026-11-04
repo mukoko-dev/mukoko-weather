@@ -3,9 +3,12 @@
 // adds a service binding to this Worker for consumer reuse:
 //   "services": [{ "binding": "WEATHER", "service": "mukoko-weather-api" }]
 //
-// No secrets: a developer's own Nyuchi API key is forwarded to the Nyuchi
-// API (GET /v1/weather/key), which checks it. Vars: ENVIRONMENT,
-// CORS_ORIGINS, NYUCHI_API_URL.
+// Secrets: only the optional Open-Meteo key (the store secret
+// OPEN_METEO_API_KEY, bound as MUKOKO_WEATHER_OPEN_METEO_API_KEY below), so
+// the /v1/status probe asks the Open-Meteo host the forecast Worker really
+// uses. A developer's own Nyuchi API key is forwarded to the Nyuchi API
+// (GET /v1/weather/key), which checks it. Vars: ENVIRONMENT, CORS_ORIGINS,
+// NYUCHI_API_URL.
 {
   "name": "mukoko-weather-api",
   "main": "build/index.js",
@@ -21,6 +24,15 @@
     "traces": { "enabled": true },
   },
   "routes": [{ "pattern": "weather-api.mukoko.com", "custom_domain": true }],
+  // The account's Cloudflare Secrets Store (the store id is not a credential);
+  // the secret needs the "workers" scope. Read through weather_edge::secret.
+  "secrets_store_secrets": [
+    {
+      "binding": "MUKOKO_WEATHER_OPEN_METEO_API_KEY",
+      "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
+      "secret_name": "OPEN_METEO_API_KEY",
+    },
+  ],
   "vars": {
     "ENVIRONMENT": "production",
     "CORS_ORIGINS": "https://weather.mukoko.com,https://weatherstations.nyuchi.com",

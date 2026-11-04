@@ -2,7 +2,6 @@
 
 import { roundCoord } from "@/lib/location-privacy";
 import { useEffect } from "react";
-import type { WeatherData } from "@/lib/weather";
 import type { AirQualityResponse } from "@/components/weather/AirQualityCard";
 import { isSgAir, type SgAirResponse } from "@/lib/sg-air";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
@@ -43,7 +42,6 @@ export interface DisplayLocation {
 
 interface Props {
   location: DisplayLocation;
-  initialWeather: WeatherData | null;
   layer: string;
   theme: DisplayTheme | null;
 }
@@ -53,13 +51,13 @@ interface Props {
  * monitor on a wall. Landscape puts the radar map beside the readings;
  * portrait stacks them. Every panel has its own error boundary and keeps its
  * last good data on a failed refresh, so the screen never goes blank.
+ *
+ * The server sends the frame and the place, never weather (issue 452): each
+ * panel shows its skeleton and fills in as the screen's own reads return, and
+ * a read that fails before there is any data is asked again within seconds
+ * (`usePolledJson`).
  */
-export function DisplayDashboard({
-  location,
-  initialWeather,
-  layer,
-  theme,
-}: Props) {
+export function DisplayDashboard({ location, layer, theme }: Props) {
   useWakeLock();
   usePeriodicReload();
   const hydrated = useHydrated();
@@ -74,7 +72,6 @@ export function DisplayDashboard({
     workerUrl("weather", coords),
     DISPLAY_REFRESH_MS.weather,
     isDisplayWeather,
-    initialWeather ?? undefined,
   );
   const airState = usePolledJson<AirQualityResponse>(
     workerUrl("air-quality", coords),
@@ -95,6 +92,9 @@ export function DisplayDashboard({
   );
   const sg = sgState.status === "loading" ? null : (sgState.data ?? null);
   const stale = weatherState.status === "error" && weather !== null;
+  // The first read failed and nothing is on screen yet: it is being asked
+  // again (usePolledJson), so say so instead of sitting silently on a skeleton.
+  const waiting = weatherState.status === "error" && weather === null;
   const updatedAt =
     weatherState.status !== "loading" ? weatherState.updatedAt : undefined;
 
@@ -174,12 +174,14 @@ export function DisplayDashboard({
         className="flex flex-wrap items-center justify-between gap-2 text-sm text-text-tertiary"
         role="contentinfo"
       >
-        <span>
+        <span aria-live="polite">
           {stale
             ? "Showing the last reading — reconnecting…"
-            : hydrated && updatedAt
-              ? `Updated ${formatTime(new Date(updatedAt))}`
-              : " "}
+            : waiting
+              ? "Still trying to reach the weather service…"
+              : hydrated && updatedAt
+                ? `Updated ${formatTime(new Date(updatedAt))}`
+                : " "}
         </span>
         <span>weather.mukoko.com/display · Air quality: Open-Meteo (CAMS)</span>
       </footer>

@@ -97,6 +97,12 @@ export interface ScaleBand {
   bg: string;
   stroke: string;
   border: string;
+  /**
+   * Static Tailwind SVG fill class, for a scale drawn as SVG polygons (the air
+   * quality cells on the static map card). Written out in full on the band
+   * because Tailwind only generates a class it finds spelled in the source.
+   */
+  fill?: string;
   /** Static foreground class that passes 4.5:1 on this band's fill. */
   on: string;
 }
@@ -450,6 +456,7 @@ export const AQI_SCALE: WeatherScale = {
       token: "--wx-aqi-1",
       bg: "bg-wx-aqi-1",
       stroke: "stroke-wx-aqi-1",
+      fill: "fill-wx-aqi-1",
       border: "border-wx-aqi-1",
       on: "text-wx-fg-dark",
     },
@@ -460,6 +467,7 @@ export const AQI_SCALE: WeatherScale = {
       token: "--wx-aqi-2",
       bg: "bg-wx-aqi-2",
       stroke: "stroke-wx-aqi-2",
+      fill: "fill-wx-aqi-2",
       border: "border-wx-aqi-2",
       on: "text-wx-fg-dark",
     },
@@ -470,6 +478,7 @@ export const AQI_SCALE: WeatherScale = {
       token: "--wx-aqi-3",
       bg: "bg-wx-aqi-3",
       stroke: "stroke-wx-aqi-3",
+      fill: "fill-wx-aqi-3",
       border: "border-wx-aqi-3",
       on: "text-wx-fg-dark",
     },
@@ -480,6 +489,7 @@ export const AQI_SCALE: WeatherScale = {
       token: "--wx-aqi-4",
       bg: "bg-wx-aqi-4",
       stroke: "stroke-wx-aqi-4",
+      fill: "fill-wx-aqi-4",
       border: "border-wx-aqi-4",
       on: "text-wx-fg-dark",
     },
@@ -490,6 +500,7 @@ export const AQI_SCALE: WeatherScale = {
       token: "--wx-aqi-5",
       bg: "bg-wx-aqi-5",
       stroke: "stroke-wx-aqi-5",
+      fill: "fill-wx-aqi-5",
       border: "border-wx-aqi-5",
       on: "text-wx-fg-light",
     },
@@ -500,6 +511,7 @@ export const AQI_SCALE: WeatherScale = {
       token: "--wx-aqi-6",
       bg: "bg-wx-aqi-6",
       stroke: "stroke-wx-aqi-6",
+      fill: "fill-wx-aqi-6",
       border: "border-wx-aqi-6",
       on: "text-wx-fg-light",
     },

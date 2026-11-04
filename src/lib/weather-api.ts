@@ -5,9 +5,10 @@
  * Vercel is frontend only. Every route the Worker serves is called there and
  * nowhere else: there is no Python backend to fall back to (`api/py` is deleted,
  * #333; owner decision). A call retries once on a network error or a 5xx, and
- * every call carries a timeout; what the Worker itself falls back to (the
- * seasonal estimate, `X-Weather-Provider: fallback`) is the only degraded
- * answer a page shows.
+ * every call carries a timeout; when Open-Meteo refuses the Worker answers
+ * from MET Norway (`X-Weather-Provider: met-no`, a live forecast), and only
+ * what it falls back to after that (the seasonal estimate,
+ * `X-Weather-Provider: fallback`) is a degraded answer a page shows.
  *
  * The production origin is the default, so nothing has to be configured for
  * the app to work; `NEXT_PUBLIC_WEATHER_API_URL` overrides it (staging

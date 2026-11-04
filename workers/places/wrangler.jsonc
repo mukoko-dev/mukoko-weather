@@ -6,8 +6,18 @@
 // Names only, never values:
 //   secrets: NYUCHI_API_KEY (internal key; places read), the same key as
 //            mukoko-weather-forecast, from the Secrets Store as
-//            MUKOKO_WEATHER_NYUCHI_API_KEY (below)
+//            MUKOKO_WEATHER_NYUCHI_API_KEY (below); OPEN_METEO_API_KEY
+//            (optional: the paid Open-Meteo plan, the history archive), the
+//            store secret OPEN_METEO_API_KEY bound as
+//            MUKOKO_WEATHER_OPEN_METEO_API_KEY
 //   vars:    NYUCHI_API_URL
+//   optional vars, NOT declared here (keep_vars keeps one set in the
+//   dashboard; see workers/README.md "Open-Meteo paid plan"):
+//            OPEN_METEO_ARCHIVE_LICENSED=1 once the plan includes the
+//            historical weather API (Professional and up): the history
+//            archive then uses the paid archive host. Without it history
+//            stays on the free archive host even with the key.
+//            HISTORY_PROVIDERS, HISTORY_COMMERCIAL_ONLY
 // OWNER: replace the placeholder ids below with the created resources' ids
 // (workers/README.md, "Owner steps"). Both are the stores forecast uses.
 {
@@ -39,6 +49,12 @@
       "binding": "MUKOKO_WEATHER_NYUCHI_API_KEY",
       "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
       "secret_name": "MUKOKO_WEATHER_NYUCHI_API_KEY",
+    },
+    {
+      // The paid Open-Meteo plan's key (see mukoko-weather-forecast).
+      "binding": "MUKOKO_WEATHER_OPEN_METEO_API_KEY",
+      "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
+      "secret_name": "OPEN_METEO_API_KEY",
     },
   ],
   "vars": { "NYUCHI_API_URL": "https://api.nyuchi.com" },

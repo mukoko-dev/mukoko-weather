@@ -72,10 +72,11 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
   });
 
   it("floats like mukoko-news's island: inset from the edges, lifted, max-w-md, pill, token border, shadow, blur", () => {
-    expect(bottomNav).toContain("fixed inset-x-4");
+    // The same inset on the sides and the bottom, from the one float grid.
     expect(bottomNav).toContain(
-      "bottom-[calc(env(safe-area-inset-bottom,0px)+var(--mobile-nav-inset))]",
+      "fixed left-[var(--float-left)] right-[var(--float-right)]",
     );
+    expect(bottomNav).toContain("bottom-[var(--float-bottom)]");
     expect(bottomNav).toContain("z-50 mx-auto");
     expect(bottomNav).toContain("max-w-md");
     // Never docked: no full-width edge-to-edge bar, no top-border-only bar.
@@ -88,13 +89,90 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
     expect(bottomNav).toContain("backdrop-blur-xl");
   });
 
-  it("is 4rem tall; --mobile-nav-clearance is the bar plus the lift, the safe area and a breath", () => {
+  it("is 4.5rem tall; --mobile-nav-clearance is the bar plus the lift, the safe area and a breath", () => {
     expect(bottomNav).toContain("h-[var(--mobile-nav-bar-height)]");
-    expect(css).toContain("--mobile-nav-bar-height: 4rem;");
-    expect(css).toContain("--mobile-nav-inset: 0.75rem;");
-    expect(css).toMatch(
-      /--mobile-nav-clearance: calc\(\s*env\(safe-area-inset-bottom, 0px\) \+ var\(--mobile-nav-inset\) \+\s*var\(--mobile-nav-bar-height\) \+ 0\.5rem\s*\);/,
+    expect(css).toContain("--mobile-nav-bar-height: 4.5rem;");
+    // The lift is the grid's bottom (inset plus the safe area), so the bar
+    // sits as far from the bottom edge as from the sides, and there is no
+    // second token for it.
+    expect(css).not.toContain("--mobile-nav-inset");
+    expect(css).toContain("--float-inset: 1rem;");
+    // The inset plus a small lift (owner, 2026-11-04), safe area included.
+    expect(css.replace(/\s+/g, " ")).toContain(
+      "--float-bottom: calc( env(safe-area-inset-bottom, 0px) + var(--float-inset) + var(--float-lift) );",
     );
+    expect(css.replace(/\s+/g, " ")).toContain(
+      "--mobile-nav-clearance: calc( var(--float-bottom) + var(--mobile-nav-bar-height) + 0.5rem );",
+    );
+  });
+
+  it("gives the pinned items one preset width, wide enough for the longest label (owner, 2026-11-05)", () => {
+    expect(css).toContain("--mobile-nav-item-width: 6rem;");
+    expect(bottomNav).toContain("w-[var(--mobile-nav-item-width)]");
+    // Rem, so it follows the label's text size; the real browser check
+    // (scripts/browser-check/bottom-bar.mjs) measures that "Locations" fits.
+    expect(css).toMatch(/--mobile-nav-item-width:\s*[\d.]+rem;/);
+  });
+
+  it("is in proportion (owner, 2026-11-04): 14px labels, 18px icons, pill-sized targets, 8px between them", () => {
+    // At 16px labels and 21px icons the content filled the 64px bar edge to
+    // edge: 56px of item in 64px, and chips 48px in 64px, with 4px between.
+    expect(css).toContain("--text-nav-label: 0.875rem;");
+    expect(css).not.toContain("--text-nav-label: 1rem;");
+    expect(bottomNav).toContain("size-[18px]");
+    expect(bottomNav).not.toContain("size-[21px]");
+    // A pinned item is a pill about as tall as a chip, not a bar-high oval
+    // (its focus ring and hover follow its shape); the bar-high part is the
+    // tappable area, from .plover.
+    const link = bottomNav.match(/"(plover [^"]*)",\s*hasLane/);
+    expect(link).not.toBeNull();
+    expect(link?.[1]).toContain("min-h-[var(--touch-target-min)]");
+    expect(link?.[1]).not.toMatch(/(^|\s)h-full(\s|$)/);
+    expect(bottomNav).toContain(
+      '"gap-[var(--float-gap)] px-[var(--float-gap)]"',
+    );
+  });
+
+  it("every target's tappable area is the bar's height, derived from the token, and fits inside the bar", () => {
+    // One rule serves the pinned items (.plover) and the lane's chips (.lark).
+    const hit = css.match(/\.plover::after,\s*\.lark::after\s*\{([^}]*)\}/);
+    expect(hit).not.toBeNull();
+    const body = hit?.[1] ?? "";
+    // Stretched to exactly the bar, centred on the link: no hard-coded px or
+    // rem guess at the bar's size, so changing the token moves the area too.
+    expect(body).toContain(
+      "inset-block: calc((100% - var(--mobile-nav-bar-height)) / 2);",
+    );
+    expect(body).toMatch(/inset-inline:\s*0;/);
+    // The link's own box is a touch target tall and its content fits the bar,
+    // so the area is an extension and never a shrink.
+    const bar = css.match(/--mobile-nav-bar-height:\s*([\d.]+)rem;/);
+    const touch = css.match(/--target-floor:\s*(\d+)px;/);
+    expect(bar).not.toBeNull();
+    expect(touch).not.toBeNull();
+    expect(Number(bar?.[1]) * 16).toBeGreaterThan(Number(touch?.[1]));
+    expect(rule("lark")).toContain("min-h-[var(--touch-target-min)]");
+    // Both kinds of target carry it.
+    expect(bottomNav).toMatch(/"plover relative /);
+  });
+
+  it("the current item is a soft pill fill (Apple's tab bars), not a line on the bar's top edge", () => {
+    // No accent bar span and no hand-set colour: the look is one shared rule.
+    const code = bottomNav.replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(code).not.toContain("h-[2.5px]");
+    expect(code).not.toContain("text-[var(--brand-accent");
+    expect(bottomNav).not.toContain("-top-[3px]");
+    // The rule serves a pinned item and a lane chip alike: ONE "you are here".
+    const at = css.indexOf(
+      '.plover:is([aria-current]:not([aria-current="false"])),',
+    );
+    expect(at).toBeGreaterThan(-1);
+    const rule = css.slice(at, css.indexOf("}", at));
+    expect(rule).toContain(
+      '.lark:is([aria-current]:not([aria-current="false"]))',
+    );
+    expect(rule).toContain("bg-container-cobalt");
+    expect(rule).toContain("text-on-container-cobalt");
   });
 
   it("is ONE surface: the nav landmark is the pill, with no second pill and no leftover tokens", () => {
@@ -160,7 +238,7 @@ describe("MobileNav — pinned items and the places lane", () => {
     expect(rule("lark")).toContain("min-h-[var(--touch-target-min)]");
   });
 
-  it("labels use the 16px --text-nav-label token, not upstream's 10px", () => {
+  it("labels use the 14px (Mzizi body-sm) --text-nav-label token, not upstream's 10px or the 16px that read as too large", () => {
     expect(bottomNav).toContain("text-[length:var(--text-nav-label)]");
     expect(bottomNav).not.toContain("text-[10px]");
   });
@@ -475,8 +553,11 @@ describe("PhoneMenu — one menu, two homes", () => {
   it("is the header's phone menu and the hero's, from one component", () => {
     expect(source).toContain("<PhoneMenu");
     expect(hero).toContain("<PhoneMenu");
-    expect(hero).toContain('buttonClassName="kestrel-round"');
-    expect(hero).toContain('trigger="profile"');
+    // In the hero it is the profile trigger, a round card-surface control in
+    // the fixed phone icon group (.hadeda) beside Share.
+    expect(hero).toContain(
+      '<PhoneMenu trigger="profile" buttonClassName="duiker" />',
+    );
   });
 
   it("lists the account (Account when signed in, Sign in otherwise)", () => {

@@ -44,6 +44,32 @@ export function maptilerStyleId(isDark: boolean): string {
   return isDark ? MAPTILER_STYLE_ID_DARK : MAPTILER_STYLE_ID_LIGHT;
 }
 
+/**
+ * The most device pixels per CSS pixel the interactive map draws at (#476).
+ * A WebGL canvas costs width x height x 4 bytes, twice (the drawing buffer
+ * and the one on screen) plus the GPU's own copies, so a full-screen map on a
+ * 3x phone (an iPhone Pro: 1179 x 2556 pixels) held 46 MB in Chrome's
+ * accounting of the renderer; at 2x it holds 20 MB. Tiles and labels stay
+ * sharp at 2x, which is what most phones are anyway (2 to 2.6).
+ */
+export const MAP_MAX_PIXEL_RATIO = 2;
+
+/**
+ * The `pixelRatio` option to create the map with, or undefined for none. MapLibre
+ * treats a set ratio as an override of `devicePixelRatio` that it keeps for the
+ * map's life (only null turns it off), so a map made at 1x would stay blurry
+ * after moving to a retina display. The option is therefore passed ONLY on a
+ * screen above the cap, where the cap is the point; everywhere else MapLibre
+ * keeps following the screen's own ratio.
+ */
+export function mapPixelRatioOverride(
+  devicePixelRatio: number | undefined,
+): number | undefined {
+  const ratio = devicePixelRatio;
+  if (typeof ratio !== "number" || !Number.isFinite(ratio)) return undefined;
+  return ratio > MAP_MAX_PIXEL_RATIO ? MAP_MAX_PIXEL_RATIO : undefined;
+}
+
 export const MAPTILER_STYLE_LIGHT = `https://api.maptiler.com/maps/${MAPTILER_STYLE_ID_LIGHT}/style.json?key=${MAPTILER_KEY}`;
 export const MAPTILER_STYLE_DARK = `https://api.maptiler.com/maps/${MAPTILER_STYLE_ID_DARK}/style.json?key=${MAPTILER_KEY}`;
 
@@ -143,21 +169,41 @@ export function getMapLayerById(id: string): MapLayer | undefined {
 /**
  * Tomorrow.io weather overlay tiles are only served for zoom levels 1–12
  * (see the tiles Worker, which rejects z<1 or z>12 with HTTP 400).
- * Pinning the raster source to this range makes MapLibre overzoom the z12 tile
- * when the user zooms in past 12 instead of requesting z13+ tiles the proxy
+ * Pinning the raster source's maxzoom makes MapLibre overzoom the last tile
+ * when the user zooms in further instead of requesting tiles the Worker
  * rejects — which would otherwise make the overlay vanish when zoomed in.
+ *
+ * The cap is 8 (#266 set it to 10; lowered 2026-11-04). The forecast grids
+ * behind the tiles are kilometres wide, so tiles deeper than z8 are assumed to
+ * repeat the same values (not measured against the provider's data), while
+ * every tile of a deeper level is a request to the provider's small shared
+ * quota, one hour of cache at a time: a screen one zoom level deeper needs up
+ * to four times the tiles. Zooming from 8 to 10 now asks for nothing new:
+ * MapLibre enlarges the z8 tile, so a zoom cannot leave a patch of the map
+ * without its overlay. The price is a coarser overlay at city zoom, an owner
+ * call that the provider's capacity decides (see the tile-source decision).
  */
 export const WEATHER_OVERLAY_MIN_ZOOM = 1;
-export const WEATHER_OVERLAY_MAX_ZOOM = 12;
+export const WEATHER_OVERLAY_MAX_ZOOM = 8;
+
+/**
+ * Display size of one overlay tile, in CSS pixels. Tomorrow.io tiles are
+ * 256 px images; drawing them at 512 makes MapLibre fetch tiles one zoom level
+ * shallower, about a quarter as many per screen (a phone view at zoom 8 needs
+ * ~4 instead of ~10). At z8 one source pixel is still ~0.6 km, finer than the
+ * forecast data, so nothing visible is lost; the quota and the wait both drop.
+ */
+export const WEATHER_OVERLAY_TILE_SIZE = 512;
 
 /**
  * Where the browser loads MapLibre's web worker from. maplibre-gl v6 ships
  * its worker as a separate ES module and, by default, looks for it next to
  * the bundled chunk, where webpack never puts it, so the worker fails to load
  * and every map renders blank. scripts/copy-maplibre-worker.mjs copies the
- * worker (and the shared module it imports) into a per-version folder before
- * every build/dev run; MapLibreMap passes `maplibreWorkerUrl(getVersion())` to
- * setWorkerUrl() before creating a map. Keying the path by version keeps an
+ * worker, and any module the worker imports (6.12 splits it from a shared
+ * module; 6.13 and later ship it self-contained), into a per-version folder
+ * before every build/dev run; MapLibreMap passes `maplibreWorkerUrl(getVersion())`
+ * to setWorkerUrl() before creating a map. Keying the path by version keeps an
  * old tab's bundle paired with its own worker across deploys.
  */
 export function maplibreWorkerUrl(version: string): string {
@@ -188,8 +234,8 @@ export function weatherOverlayTileUrl(
 
 /**
  * Raster source spec for a weather overlay layer, with minzoom/maxzoom pinned
- * to the Tomorrow.io tile availability range so the overlay keeps rendering
- * (via overzoom) at high map zooms instead of silently disappearing.
+ * to the useful tile range so the overlay keeps rendering (via overzoom) at
+ * high map zooms instead of silently disappearing.
  */
 export function buildWeatherOverlaySource(layerId: string, timestamp?: string) {
   const gibs = getGibsLayer(layerId);
@@ -206,7 +252,7 @@ export function buildWeatherOverlaySource(layerId: string, timestamp?: string) {
   return {
     type: "raster" as const,
     tiles: [weatherOverlayTileUrl(layerId, timestamp)],
-    tileSize: 256,
+    tileSize: WEATHER_OVERLAY_TILE_SIZE,
     minzoom: WEATHER_OVERLAY_MIN_ZOOM,
     maxzoom: WEATHER_OVERLAY_MAX_ZOOM,
     attribution: attributionHtml(overlayAttribution(layerId)),
@@ -385,12 +431,19 @@ export function timelineLabel(step: number): string {
 
 /**
  * Legend for US AQI: the six official EPA categories (weather-scales.ts), the
- * same colours the grid fill, the bubbles and the gauge use.
+ * same colours the grid fill, the bubbles and the gauge use. The note says how
+ * fine the data really is: CAMS is a 0.4 degree (about 44 km) model worldwide
+ * and 0.1 degree (about 11 km) over Europe, so the 13 km sample grid
+ * oversamples it, and the picture is smoothed between samples, not sharper.
  */
 export const AQI_LEGEND: LayerLegend = {
   unit: "US AQI",
   segments: legendSegmentsFor(AQI_SCALE),
+  note: "CAMS model, grid of about 10 to 40 km",
 };
+
+/** Spacing of the model-field sample points (the Worker's 7 x 7 over +-120 km). */
+const MODEL_GRID_NOTE = "Points 40 km apart, smoothed between";
 
 /**
  * Caption for the layers painted by Tomorrow.io raster tiles (rain, temperature,
@@ -449,7 +502,7 @@ export const MAP_CHIPS: readonly MapChip[] = [
     legend: {
       unit: "true colour",
       segments: [],
-      note: "NOAA-20 VIIRS, one pass a day",
+      note: "NOAA-20 VIIRS, about 250 m detail, one pass a day",
     },
   },
   {
@@ -458,7 +511,8 @@ export const MAP_CHIPS: readonly MapChip[] = [
     legend: {
       unit: "mm/h",
       segments: [],
-      note: "NASA IMERG, about 4–6 hours behind",
+      // \u2060 (word joiner) keeps "4–6" from breaking after the dash on a narrow sheet.
+      note: "NASA IMERG, about 10 km grid, 4–\u20606 hours behind",
     },
   },
 ];
@@ -477,6 +531,7 @@ export const MODEL_CHIPS: readonly MapChip[] = [
     legend: {
       unit: "°C",
       segments: legendSegmentsFor(TEMP_SCALE, { withBounds: true }),
+      note: MODEL_GRID_NOTE,
     },
   },
   {
@@ -485,7 +540,7 @@ export const MODEL_CHIPS: readonly MapChip[] = [
     legend: {
       unit: "mm/h",
       segments: legendSegmentsFor(RAIN_SCALE, { withBounds: true }),
-      note: "Below 0.1 mm/h is left clear",
+      note: `${MODEL_GRID_NOTE}; below 0.1 mm/h is left clear`,
     },
   },
   {
@@ -494,6 +549,7 @@ export const MODEL_CHIPS: readonly MapChip[] = [
     legend: {
       unit: "km/h",
       segments: legendSegmentsFor(WIND_SCALE, { withBounds: true }),
+      note: MODEL_GRID_NOTE,
     },
   },
 ];

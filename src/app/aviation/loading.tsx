@@ -23,8 +23,8 @@ export default function AviationLoading() {
           </div>
           {/* Route selection card */}
           <div className="baobab p-5 space-y-4">
-            <Skeleton className="h-11 w-full" />
-            <Skeleton className="h-11 w-full" />
+            <Skeleton className="h-11 w-full rounded-[var(--radius-input)]" />
+            <Skeleton className="h-11 w-full rounded-[var(--radius-input)]" />
             <Skeleton className="h-9 w-48" />
           </div>
           {/* Briefing result placeholders */}

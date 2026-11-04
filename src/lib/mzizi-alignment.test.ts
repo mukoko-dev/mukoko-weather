@@ -336,12 +336,17 @@ describe("Mzizi alignment guard — every button", () => {
     }
   });
 
-  it("the hero's Share is a Mzizi sky control (the activities call lives in ActivityInsights)", () => {
-    const hero = FOUND.filter((f) => f.file.endsWith("CurrentConditions.tsx"));
-    expect(hero.length).toBe(1);
-    for (const f of hero) {
-      expect(classTokens(f.tag).some((t) => t === "kestrel-round")).toBe(true);
-    }
+  it("the hero's Share is a Mzizi control: kestrel-round on the sky, duiker in the phone icon group", () => {
+    // The hero itself holds no button of its own; its Share is ShareControl's
+    // one button, and the profile menu's trigger is PhoneMenu's.
+    expect(
+      FOUND.filter((f) => f.file.endsWith("CurrentConditions.tsx")),
+    ).toHaveLength(0);
+    const share = FOUND.filter((f) => f.file.endsWith("ShareControl.tsx"));
+    expect(share.length).toBe(1);
+    const tokens = classTokens(share[0].tag);
+    expect(tokens).toContain("kestrel-round");
+    expect(tokens).toContain("duiker");
   });
 });
 

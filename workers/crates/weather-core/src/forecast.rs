@@ -25,6 +25,10 @@ pub enum Source {
     Tomorrow,
     #[serde(rename = "open-meteo")]
     OpenMeteo,
+    /// MET Norway Locationforecast, the failover forecast served while
+    /// Open-Meteo refuses (`met_no`).
+    #[serde(rename = "met-no")]
+    MetNo,
     /// Seasonal estimates. Never served by the internal API.
     #[serde(rename = "fallback")]
     Fallback,
@@ -36,6 +40,7 @@ impl Source {
             Source::StationKit => "stationkit",
             Source::Tomorrow => "tomorrow",
             Source::OpenMeteo => "open-meteo",
+            Source::MetNo => "met-no",
             Source::Fallback => "fallback",
         }
     }
@@ -45,6 +50,7 @@ impl Source {
             "stationkit" => Some(Source::StationKit),
             "tomorrow" => Some(Source::Tomorrow),
             "open-meteo" => Some(Source::OpenMeteo),
+            "met-no" => Some(Source::MetNo),
             "fallback" => Some(Source::Fallback),
             _ => None,
         }
@@ -58,6 +64,7 @@ impl Source {
             }
             Source::Tomorrow => "Powered by Tomorrow.io.",
             Source::OpenMeteo => "Weather data by Open-Meteo.com (CC BY 4.0).",
+            Source::MetNo => crate::met_no::ATTRIBUTION,
             Source::Fallback => {
                 "Seasonal estimate by Mukoko Weather; no live forecast was available."
             }
@@ -263,6 +270,7 @@ mod tests {
             Source::StationKit,
             Source::Tomorrow,
             Source::OpenMeteo,
+            Source::MetNo,
             Source::Fallback,
         ] {
             assert_eq!(Source::parse(s.as_str()), Some(s));

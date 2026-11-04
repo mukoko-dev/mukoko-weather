@@ -2,13 +2,17 @@
 
 import { lazy, Suspense } from "react";
 import { PageShell } from "@/components/layout/PageShell";
-import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import { LazySection } from "@/components/weather/LazySection";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { SectionSkeleton } from "@/components/weather/SectionSkeleton";
+import { PageWeatherNotice } from "@/components/weather/PageWeatherNotice";
+import { SubRouteHeader } from "@/components/weather/SubRouteHeader";
+import { ForecastBodySkeleton } from "@/components/weather/SubRouteSkeletons";
+import { UpdatedAgo } from "@/components/weather/UpdatedAgo";
+import { usePageWeather } from "@/lib/use-page-weather";
 import { FrostAlertBanner } from "../FrostAlertBanner";
 import { WeatherUnavailableBanner } from "../WeatherUnavailableBanner";
-import type { WeatherData, FrostAlert, Season } from "@/lib/weather";
+import type { Season } from "@/lib/weather";
 import type { WeatherLocation } from "@/lib/locations";
 
 const HourlyForecast = lazy(() =>
@@ -28,20 +32,26 @@ const SunTimes = lazy(() =>
 );
 
 interface Props {
-  weather: WeatherData;
+  /** The place and its season. The server sends NO weather (issue #452). */
   location: WeatherLocation;
-  usingFallback: boolean;
-  frostAlert: FrostAlert | null;
   season: Season;
 }
 
-export function ForecastDashboard({
-  weather,
-  location,
-  usingFallback,
-  frostAlert,
-  season,
-}: Props) {
+/**
+ * The forecast page. The server sends the heading, the place line and the
+ * skeleton; the forecast is the visitor's own request, painted over the copy
+ * stored on the device (`usePageWeather`). Render with `key={location.slug}`.
+ */
+export function ForecastDashboard({ location: seedLocation, season }: Props) {
+  const { state, view, retry } = usePageWeather({
+    location: seedLocation,
+    season,
+    countryName: "",
+  });
+  // The forecast corrects a placeholder height and a borrowed country.
+  const location = view?.location ?? seedLocation;
+  const weather = view?.weather;
+
   return (
     <PageShell
       width="wide"
@@ -53,50 +63,60 @@ export function ForecastDashboard({
         { label: "Forecast" },
       ]}
     >
-      <h1 className="elephant">{location.name} Forecast</h1>
-      <p className="mt-1 text-base text-text-secondary">
-        {location.province} &middot; {location.elevation}m &middot;{" "}
-        {season.localName} ({season.name})
-      </p>
+      <SubRouteHeader
+        title={`${location.name} Forecast`}
+        location={location}
+        season={season}
+      />
 
-      <div className="mt-4 mb-4">
-        <SeasonBadge season={season} />
-      </div>
+      {view && state.device && (
+        <UpdatedAgo
+          fetchedAt={state.device.fetchedAt}
+          freshness={state.device.freshness}
+          weather={view.weather}
+          placeName={location.name}
+        />
+      )}
+      {view?.usingFallback && <WeatherUnavailableBanner onRetry={retry} />}
+      {view?.frostAlert && <FrostAlertBanner alert={view.frostAlert} />}
 
-      {usingFallback && <WeatherUnavailableBanner />}
-      {frostAlert && <FrostAlertBanner alert={frostAlert} />}
-
-      {/* Forecast charts — 2-column grid on desktop, stacked on mobile */}
-      <div className="mt-6 grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
-        {/* Hourly forecast (24h) */}
-        <ChartErrorBoundary name="hourly forecast">
-          <Suspense fallback={<SectionSkeleton />}>
-            <HourlyForecast
-              hourly={weather.hourly}
-              utcOffsetSeconds={weather.utc_offset_seconds}
-            />
-          </Suspense>
-        </ChartErrorBoundary>
-
-        {/* 7-day daily forecast */}
-        <ChartErrorBoundary name="daily forecast">
-          <Suspense fallback={<SectionSkeleton />}>
-            <DailyForecast daily={weather.daily} />
-          </Suspense>
-        </ChartErrorBoundary>
-
-        {/* Sunrise & sunset — spans both columns */}
-        <LazySection label="sun-times" className="lg:col-span-2">
-          <ChartErrorBoundary name="sun times">
+      {weather ? (
+        /* Forecast charts — 2-column grid on desktop, stacked on mobile */
+        <div className="mt-6 grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+          {/* Hourly forecast (24h) */}
+          <ChartErrorBoundary name="hourly forecast">
             <Suspense fallback={<SectionSkeleton />}>
-              <SunTimes
-                daily={weather.daily}
+              <HourlyForecast
+                hourly={weather.hourly}
                 utcOffsetSeconds={weather.utc_offset_seconds}
               />
             </Suspense>
           </ChartErrorBoundary>
-        </LazySection>
-      </div>
+
+          {/* 7-day daily forecast */}
+          <ChartErrorBoundary name="daily forecast">
+            <Suspense fallback={<SectionSkeleton />}>
+              <DailyForecast daily={weather.daily} />
+            </Suspense>
+          </ChartErrorBoundary>
+
+          {/* Sunrise & sunset — spans both columns */}
+          <LazySection label="sun-times" className="lg:col-span-2">
+            <ChartErrorBoundary name="sun times">
+              <Suspense fallback={<SectionSkeleton />}>
+                <SunTimes
+                  daily={weather.daily}
+                  utcOffsetSeconds={weather.utc_offset_seconds}
+                />
+              </Suspense>
+            </ChartErrorBoundary>
+          </LazySection>
+        </div>
+      ) : (
+        <ForecastBodySkeleton />
+      )}
+
+      <PageWeatherNotice state={state} retry={retry} />
     </PageShell>
   );
 }

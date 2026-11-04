@@ -150,6 +150,28 @@ describe("LocationSkeleton — accessibility", () => {
   });
 });
 
+describe("LocationSkeleton — the hero's top row matches the loaded hero", () => {
+  it("draws the phone icon group where the real one will be: fixed, two round placeholders", () => {
+    const group = html.match(/<div class="hadeda sm:hidden">([\s\S]*?)<\/div>/);
+    expect(group).not.toBeNull();
+    expect(
+      group![1].match(/size-\[var\(--touch-target-min\)\] rounded-full/g),
+    ).toHaveLength(2);
+  });
+
+  it("draws one round placeholder for Share from `sm` up, none on phones", () => {
+    expect(html).toMatch(
+      /class="[^"]*hidden size-\[var\(--touch-target-min\)\][^"]* sm:block"/,
+    );
+  });
+
+  it("leaves the breadcrumb the same room for the group, and the row the same 48px", () => {
+    expect(heroSrc).toContain("min-h-[var(--touch-target-min)]");
+    expect(heroSrc).toContain("pr-[var(--hadeda-reserve)]");
+    expect(heroSrc).toContain("sm:pr-0");
+  });
+});
+
 describe("LocationSkeleton — tokens only", () => {
   it("has no hex, rgba, inline style or shadow", () => {
     for (const src of [skeletonSrc, heroSrc, shimmerSrc]) {

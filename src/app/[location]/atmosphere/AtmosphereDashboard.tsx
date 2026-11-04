@@ -3,13 +3,17 @@
 import { lazy, Suspense } from "react";
 import { PageShell } from "@/components/layout/PageShell";
 import { AtmosphericSummary } from "@/components/weather/AtmosphericSummary";
-import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import { LazySection } from "@/components/weather/LazySection";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { SectionSkeleton } from "@/components/weather/SectionSkeleton";
+import { PageWeatherNotice } from "@/components/weather/PageWeatherNotice";
+import { SubRouteHeader } from "@/components/weather/SubRouteHeader";
+import { AtmosphereBodySkeleton } from "@/components/weather/SubRouteSkeletons";
+import { UpdatedAgo } from "@/components/weather/UpdatedAgo";
+import { usePageWeather } from "@/lib/use-page-weather";
 import { FrostAlertBanner } from "../FrostAlertBanner";
 import { WeatherUnavailableBanner } from "../WeatherUnavailableBanner";
-import type { WeatherData, FrostAlert, Season } from "@/lib/weather";
+import type { Season } from "@/lib/weather";
 import type { WeatherLocation } from "@/lib/locations";
 
 const AtmosphericDetails = lazy(() =>
@@ -25,20 +29,27 @@ const AirQualityDetails = lazy(() =>
 );
 
 interface Props {
-  weather: WeatherData;
+  /** The place and its season. The server sends NO weather (issue #452). */
   location: WeatherLocation;
-  usingFallback: boolean;
-  frostAlert: FrostAlert | null;
   season: Season;
 }
 
-export function AtmosphereDashboard({
-  weather,
-  location,
-  usingFallback,
-  frostAlert,
-  season,
-}: Props) {
+/**
+ * The atmosphere page. The server sends the heading, the place line and the
+ * skeleton; the forecast is the visitor's own request, painted over the copy
+ * stored on the device (`usePageWeather`). Air quality has its own read and
+ * does not wait for the forecast. Render with `key={location.slug}`.
+ */
+export function AtmosphereDashboard({ location: seedLocation, season }: Props) {
+  const { state, view, retry } = usePageWeather({
+    location: seedLocation,
+    season,
+    countryName: "",
+  });
+  // The forecast corrects a placeholder height and a borrowed country.
+  const location = view?.location ?? seedLocation;
+  const weather = view?.weather;
+
   return (
     <PageShell
       width="wide"
@@ -50,46 +61,57 @@ export function AtmosphereDashboard({
         { label: "Atmosphere" },
       ]}
     >
-      <h1 className="elephant">{location.name} Atmosphere</h1>
-      <p className="mt-1 text-base text-text-secondary">
-        {location.province} &middot; {location.elevation}m &middot;{" "}
-        {season.localName} ({season.name})
-      </p>
+      <SubRouteHeader
+        title={`${location.name} Atmosphere`}
+        location={location}
+        season={season}
+      />
 
-      <div className="mt-4 mb-4">
-        <SeasonBadge season={season} />
-      </div>
+      {view && state.device && (
+        <UpdatedAgo
+          fetchedAt={state.device.fetchedAt}
+          freshness={state.device.freshness}
+          weather={view.weather}
+          placeName={location.name}
+        />
+      )}
+      {view?.usingFallback && <WeatherUnavailableBanner onRetry={retry} />}
+      {view?.frostAlert && <FrostAlertBanner alert={view.frostAlert} />}
 
-      {usingFallback && <WeatherUnavailableBanner />}
-      {frostAlert && <FrostAlertBanner alert={frostAlert} />}
-
-      {/* Current conditions summary cards */}
-      <div className="mt-6">
-        <ChartErrorBoundary name="atmospheric conditions">
-          <AtmosphericSummary
-            current={weather.current}
-            weather={weather}
-            lat={location.lat}
-            lon={location.lon}
-          />
-        </ChartErrorBoundary>
-      </div>
-
-      {/* 24-hour atmospheric charts */}
-      <div className="mt-8">
-        <LazySection label="atmospheric-details">
-          <ChartErrorBoundary name="atmospheric details charts">
-            <Suspense fallback={<SectionSkeleton />}>
-              <AtmosphericDetails
-                hourly={weather.hourly}
-                utcOffsetSeconds={weather.utc_offset_seconds}
+      {weather ? (
+        <>
+          {/* Current conditions summary cards */}
+          <div className="mt-6">
+            <ChartErrorBoundary name="atmospheric conditions">
+              <AtmosphericSummary
+                current={weather.current}
+                weather={weather}
+                lat={location.lat}
+                lon={location.lon}
               />
-            </Suspense>
-          </ChartErrorBoundary>
-        </LazySection>
-      </div>
+            </ChartErrorBoundary>
+          </div>
 
-      {/* Air quality — full pollutant breakdown with WHO comparison */}
+          {/* 24-hour atmospheric charts */}
+          <div className="mt-8">
+            <LazySection label="atmospheric-details">
+              <ChartErrorBoundary name="atmospheric details charts">
+                <Suspense fallback={<SectionSkeleton />}>
+                  <AtmosphericDetails
+                    hourly={weather.hourly}
+                    utcOffsetSeconds={weather.utc_offset_seconds}
+                  />
+                </Suspense>
+              </ChartErrorBoundary>
+            </LazySection>
+          </div>
+        </>
+      ) : (
+        <AtmosphereBodySkeleton />
+      )}
+
+      {/* Air quality — full pollutant breakdown with WHO comparison. It reads
+          its own data, so it does not wait for the forecast. */}
       <div className="mt-8">
         <LazySection label="air-quality-details">
           <ChartErrorBoundary name="air quality details">
@@ -99,6 +121,8 @@ export function AtmosphereDashboard({
           </ChartErrorBoundary>
         </LazySection>
       </div>
+
+      <PageWeatherNotice state={state} retry={retry} />
     </PageShell>
   );
 }

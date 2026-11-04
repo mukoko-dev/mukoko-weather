@@ -1,5 +1,6 @@
 import type { WeatherData } from "./weather";
 import { fetchWeather } from "./weather";
+import { servedProviderFor } from "./forecast-sources";
 import { roundCoord } from "./location-privacy";
 import {
   classifyTransportError,
@@ -65,12 +66,22 @@ async function fetchDirect(
  * page and isn't at the mercy of the browser's own Open-Meteo quota (a 429
  * there used to surface as "Could not detect location"). Open-Meteo is called
  * directly in two cases: the Worker is unreachable, or it answered with the
- * seasonal estimate. The second is the Workers' shared egress being refused
- * (HTTP 429, the free API's limit): a point that is not already in the Worker's
- * cache then has no forecast, so a place stayed on a days-old copy kept on the
- * device with "the forecast service is slow". The visitor's own browser has
- * its own address and allowance, so it asks before settling for the estimate,
- * and falls back to the Worker's estimate only if that fails too.
+ * seasonal estimate.
+ *
+ * The Worker only answers the estimate (`X-Weather-Provider: fallback`) once
+ * its whole chain has failed: Open-Meteo's blend and `best_match`, the MET
+ * Norway failover (`met-no`, a live forecast, shown as it is), and a stored
+ * forecast for the point (served stale, up to a day old, before the estimate).
+ * That is a point nothing has stored yet while both providers refuse the
+ * Workers' shared address, or a forecast Worker that cannot be reached. The
+ * visitor's own browser has its own address and allowance, so it asks
+ * Open-Meteo before settling for the estimate (otherwise a place stays on a
+ * days-old copy kept on the device with "the forecast service is slow"), and
+ * falls back to the Worker's estimate only if that fails too.
+ *
+ * Only this foreground read does it: a visitor asked for the place and it is
+ * their allowance. `fetchWorkerWeatherOnce` (a place got ready in the
+ * background) never goes to the provider.
  */
 export async function fetchHomeWeather(
   lat: number,
@@ -105,6 +116,30 @@ export async function fetchHomeWeather(
     // Unreachable / timed out — fall through to the direct provider.
   }
   return { weather: await fetchWeather(lat, lon), usingFallback: false };
+}
+
+/**
+ * Our Worker's forecast for a place the visitor has not asked for yet (the
+ * next saved place, got ready in the background): one attempt through the
+ * shared read, and NEVER a direct call to the provider. A background request
+ * must not spend the visitor's own Open-Meteo allowance, go round the Worker's
+ * budgets or use the free, non-commercial host; when the Worker cannot answer,
+ * the place is simply not warmed and the visitor's own switch asks as usual.
+ * Throws when the Worker does not give a renderable forecast.
+ */
+export async function fetchWorkerWeatherOnce(
+  lat: number,
+  lon: number,
+): Promise<{ weather: WeatherData; usingFallback: boolean }> {
+  const res = await workerData.read<unknown>(
+    "weather",
+    { lat, lon },
+    { retries: 0, signal: AbortSignal.timeout(HOME_WEATHER_TIMEOUT_MS) },
+  );
+  if (res.ok && isRenderableWeather(res.data)) {
+    return { weather: res.data, usingFallback: res.provider === "fallback" };
+  }
+  throw new Error("the Worker has no forecast for this place");
 }
 
 /** What `loadModelWeather` hands the dashboard: the forecast, or why not. */
@@ -175,7 +210,9 @@ export async function loadModelWeather(
   if (!isRenderableWeather(res.data)) {
     return { ok: false, failure: { kind: "invalid", status: res.status } };
   }
-  const servedModel = (res.provider ?? "") === `open-meteo:${model}`;
+  // `open-meteo:<model>` for an Open-Meteo model, the provider's own name for
+  // one it does not serve (Apple Weather).
+  const servedModel = (res.provider ?? "") === servedProviderFor(model);
   return {
     ok: true,
     data: res.data,

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { preconnect } from "react-dom";
 import { notFound } from "next/navigation";
 import { resolveLocationParam } from "@/lib/load-location";
 import { breadcrumbJsonLd } from "@/lib/json-ld";
@@ -41,6 +42,11 @@ export default async function MapPage({
 }) {
   const location = await resolveLocationParam(params);
   if (!location) notFound();
+
+  // Open the MapTiler connection while the page's JavaScript downloads, so
+  // the style, sprite, glyph and tile requests do not each wait for DNS + TLS
+  // after MapLibre boots (#266). MapLibre fetches them CORS-anonymous.
+  preconnect("https://api.maptiler.com", { crossOrigin: "anonymous" });
 
   const breadcrumbSchema = breadcrumbJsonLd([
     { name: `${location.name} Weather`, path: `/${location.slug}` },

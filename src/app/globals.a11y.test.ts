@@ -190,12 +190,12 @@ describe("button fauna focus-visible rings (WCAG 2.4.7)", () => {
     }
   });
 
-  it("forces a pill radius back on focus (global :focus-visible forces 4px)", () => {
+  it("forces a pill radius back on focus (global :focus-visible forces --radius-sm)", () => {
     expect(groups.find((g) => g.selectors.includes("kudu"))!.body).toContain(
       "border-radius: var(--radius-button)",
     );
     expect(groups.find((g) => g.selectors.includes("bee"))!.body).toContain(
-      "border-radius: 9999px",
+      "border-radius: var(--radius-full)",
     );
   });
 
@@ -248,6 +248,14 @@ describe("focus on the sky (WCAG 1.4.11, 3:1)", () => {
     ).toMatch(/--focus-ring:\s*var\(--exp-storm\)\s*;/);
   });
 
+  it("gives the phone icon group (a light card pill inside the hero) the page ring too", () => {
+    // The ring var is inherited from the sky scope (white); on the group's card
+    // surface that would be invisible.
+    expect(declsFor("[data-sky-hero] .hadeda")).toMatch(
+      /--focus-ring:\s*var\(--exp-storm\)\s*;/,
+    );
+  });
+
   it(".kestrel-round has an unlayered :focus-visible ring on the sky foreground that keeps the round shape", () => {
     const group = focusVisibleGroups(css).find((g) =>
       g.selectors.includes("kestrel-round"),
@@ -258,8 +266,8 @@ describe("focus on the sky (WCAG 1.4.11, 3:1)", () => {
     ).toBeDefined();
     expect(group!.body).toContain("solid var(--sky-fg)");
     expect(group!.body).toContain("var(--focus-ring-width");
-    // The global rule forces border-radius: 4px on focus.
-    expect(group!.body).toContain("border-radius: 9999px");
+    // The global rule forces border-radius: var(--radius-sm) on focus.
+    expect(group!.body).toContain("border-radius: var(--radius-full)");
   });
 
   it("keeps no .kestrel-round:focus-visible rule inside @layer (it would lose to the global rule)", () => {

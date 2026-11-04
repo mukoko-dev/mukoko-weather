@@ -158,13 +158,18 @@ export function DailyForecast({ daily }: Props) {
                   {precipMm > 0 && <span>{precipMm.toFixed(1)} mm</span>}
                   <span>Wind {windMax} km/h</span>
                   {gustMax > windMax && <span>Gusts {gustMax}</span>}
-                  <span className="inline-flex items-center gap-1">
-                    <span
-                      aria-hidden="true"
-                      className={`size-2.5 rounded-full ring-1 ring-wx-outline ${uvInfo.swatch}`}
-                    />
-                    UV {uvMax} {uvInfo.label}
-                  </span>
+                  {/* A provider can have no UV maximum for a day (the
+                      failover forecast has none past its hourly steps): say
+                      nothing rather than "UV  Low". */}
+                  {uvMax != null && (
+                    <span className="inline-flex items-center gap-1">
+                      <span
+                        aria-hidden="true"
+                        className={`size-2.5 rounded-full ring-1 ring-wx-outline ${uvInfo.swatch}`}
+                      />
+                      UV {uvMax} {uvInfo.label}
+                    </span>
+                  )}
                 </div>
               </div>
             );

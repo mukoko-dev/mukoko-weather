@@ -7,6 +7,8 @@ use std::time::Duration;
 
 pub mod budget;
 pub mod cors;
+pub mod feed_transport;
+pub mod open_meteo;
 pub mod responses;
 pub mod service;
 
@@ -158,20 +160,60 @@ pub enum FetchError {
     Network(worker::Error),
 }
 
+/// A failed call, with the Open-Meteo key (if the error text quotes the URL)
+/// masked. An error that carries no key is returned as it was.
+fn network_error(e: worker::Error) -> FetchError {
+    let text = e.to_string();
+    let clean = open_meteo::scrub(&text);
+    if clean == text {
+        FetchError::Network(e)
+    } else {
+        FetchError::Network(worker::Error::RustError(clean))
+    }
+}
+
 /// `GET` a URL, giving up after `timeout`. The request is aborted on timeout
 /// so it does not keep a subrequest slot.
+///
+/// A URL on a free Open-Meteo host the plan covers is requested from the
+/// customer host with the subscription key (`open_meteo`); every other URL is
+/// requested as given. The key never appears in a returned error.
 pub async fn get_with_timeout(
     url: &str,
     headers: Option<Headers>,
     timeout: Duration,
 ) -> std::result::Result<Response, FetchError> {
-    let parsed = Url::parse(url).map_err(|e| FetchError::Network(e.into()))?;
+    let upgraded = open_meteo::url(url);
+    if upgraded == url {
+        return send(url, headers, timeout).await;
+    }
+    // A covered host, requested with the subscription key. If the key is
+    // refused, repeat the call once on the free host rather than fail every
+    // place: the subscription is an upgrade, never a new way to break.
+    let retry_headers = headers.clone();
+    let resp = send(&upgraded, headers, timeout).await?;
+    if open_meteo::key_rejected(resp.status_code()) {
+        console_warn!(
+            "open-meteo: the subscription key was refused (HTTP {}); using the free host",
+            resp.status_code()
+        );
+        return send(url, retry_headers, timeout).await;
+    }
+    Ok(resp)
+}
+
+/// One `GET`, aborted on timeout, with the key masked in any error.
+async fn send(
+    url: &str,
+    headers: Option<Headers>,
+    timeout: Duration,
+) -> std::result::Result<Response, FetchError> {
+    let parsed = Url::parse(url).map_err(|e| network_error(e.into()))?;
     let fetch = match headers {
         Some(h) => {
             let mut init = worker::RequestInit::new();
             init.with_headers(h);
-            let req =
-                Request::new_with_init(parsed.as_str(), &init).map_err(FetchError::Network)?;
+            let req = Request::new_with_init(parsed.as_str(), &init).map_err(network_error)?;
             Fetch::Request(req)
         }
         None => Fetch::Url(parsed),
@@ -185,7 +227,7 @@ pub async fn get_with_timeout(
         Either::Right(_) => None,
     };
     match outcome {
-        Some(result) => result.map_err(FetchError::Network),
+        Some(result) => result.map_err(network_error),
         None => {
             controller.abort();
             Err(FetchError::Timeout)

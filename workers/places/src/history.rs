@@ -57,7 +57,7 @@ use weather_core::history::{
     MAX_FETCHES_PER_CALL, RUN_MERGE_GAP_DAYS, SOURCE_NASA_POWER, SOURCE_OPEN_METEO_ARCHIVE,
 };
 use weather_core::locations::{self, LocationDoc};
-use weather_edge::{config, error, get_with_timeout, json, now_ms, secret, FetchError};
+use weather_edge::{config, error, get_with_timeout, json, now_ms, FetchError};
 use worker::{Context, Env, Method, Request, Response, Result};
 
 use crate::bridge;
@@ -70,11 +70,6 @@ const CACHE: &str = "CACHE";
 const CHUNK_TTL_S: u64 = 3 * 3600;
 /// No new upstream call is started after this long into a request.
 const TIME_BUDGET_MS: u64 = 20_000;
-/// The optional Open-Meteo commercial key (a paid plan). Not bound as a Secrets
-/// Store secret on purpose: a binding to a store secret that does not exist
-/// fails the deploy.
-const OPEN_METEO_KEY: &str = "OPEN_METEO_API_KEY";
-
 thread_local! {
     static NASA: RefCell<Breaker> = const { RefCell::new(Breaker::new(breaker::NASA_POWER)) };
     static OPEN_METEO: RefCell<Breaker> = const { RefCell::new(Breaker::new(breaker::OPEN_METEO)) };
@@ -198,6 +193,9 @@ pub async fn serve(
         end,
         ..
     } = params;
+    // The paid Open-Meteo plan, when there is one: the provider chain below
+    // reads it, and get_with_timeout applies it to the archive call.
+    weather_edge::open_meteo::init(env).await;
     // A lookup ERROR is 503 even with coordinates: falling back to the cell
     // would hide the place's recorded days and fetch a duplicate set.
     let target = match found {
@@ -547,7 +545,7 @@ async fn backfill(env: &Env, caller: &Caller, t: &Target, missing: &[String]) ->
                         if spec.id == SOURCE_OPEN_METEO_ARCHIVE {
                             om_units += units;
                         }
-                        match fetch(env, spec, t.lat, t.lon, &c_start, &c_end).await {
+                        match fetch(spec, t.lat, t.lon, &c_start, &c_end).await {
                             Ok(d) => {
                                 with_breaker(spec.id, Breaker::record_success);
                                 store_days(env, &cache_key, &d).await;
@@ -558,9 +556,8 @@ async fn backfill(env: &Env, caller: &Caller, t: &Target, missing: &[String]) ->
                                     with_breaker(spec.id, |b| b.record_failure(now_ms()));
                                 }
                                 worker::console_warn!(
-                                    "history: {} failed for {c_start}..{c_end}: {}",
-                                    spec.id,
-                                    e.what
+                                    "{}",
+                                    h::failure_line(spec.id, &c_start, &c_end, &e.what)
                                 );
                                 degraded = true;
                                 unusable.insert(spec.id);
@@ -618,29 +615,29 @@ async fn save(env: &Env, key: &str, docs: &[Value]) -> std::result::Result<(), S
 
 fn chain(env: &Env) -> Vec<&'static ProviderSpec> {
     let commercial_only = config(env, "HISTORY_COMMERCIAL_ONLY")
-        .is_some_and(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes"));
-    let paid = config(env, OPEN_METEO_KEY).is_some();
+        .is_some_and(|v| weather_core::open_meteo::truthy(&v));
+    // Open-Meteo's archive is commercial only with a key AND a plan that
+    // includes the archive API (OPEN_METEO_ARCHIVE_LICENSED): a key alone
+    // (the Standard plan) leaves it on the free, non-commercial host.
     h::provider_chain(
         config(env, "HISTORY_PROVIDERS").as_deref(),
         commercial_only,
-        paid,
+        weather_edge::open_meteo::archive_is_paid(),
     )
 }
 
 async fn fetch(
-    env: &Env,
     spec: &ProviderSpec,
     lat: f64,
     lon: f64,
     start: &str,
     end: &str,
 ) -> std::result::Result<Vec<Day>, ProviderError> {
+    // Open-Meteo's URL is always the free one here: with a key and a plan that
+    // includes the archive, get_with_timeout requests it from the customer host.
     let url = match spec.id {
         SOURCE_NASA_POWER => h::nasa_power_url(lat, lon, start, end),
-        SOURCE_OPEN_METEO_ARCHIVE => {
-            let key = secret(env, OPEN_METEO_KEY).await;
-            h::open_meteo_archive_url(lat, lon, start, end, key.as_deref())
-        }
+        SOURCE_OPEN_METEO_ARCHIVE => h::open_meteo_archive_url(lat, lon, start, end),
         _ => {
             return Err(ProviderError {
                 transient: false,
@@ -651,7 +648,8 @@ async fn fetch(
     let timeout = std::time::Duration::from_secs(spec.timeout_s);
     let mut resp = match get_with_timeout(&url, None, timeout).await {
         Ok(r) => r,
-        // Never log the URL: it can carry a key.
+        // Never log the URL: it can carry a key (and get_with_timeout masks
+        // the key in an error that quotes it).
         Err(FetchError::Timeout) => {
             return Err(ProviderError {
                 transient: true,

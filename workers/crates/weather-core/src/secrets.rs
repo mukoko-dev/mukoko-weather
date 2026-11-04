@@ -4,11 +4,14 @@
 //! Each key is ONE secret in the account's shared Secrets Store, bound by
 //! every Worker that needs it (the Tomorrow.io key by forecast and tiles,
 //! the Nyuchi API key by forecast, places and ai): no per-Worker copies.
-//! The store names carry `MUKOKO_WEATHER_` because each of these keys is
-//! this app's own (see `ALL`), so they cannot collide with another app's
-//! secret in the shared store. A Worker binds a secret as a
-//! `secrets_store_secrets` binding named after the store secret; the
-//! binding is an object whose async `get()` returns the value.
+//! The binding names carry `MUKOKO_WEATHER_` because each of these keys is
+//! this app's own (see `ALL`), so they cannot collide with another binding
+//! on the Worker. A Worker binds a secret as a `secrets_store_secrets`
+//! binding; the binding is an object whose async `get()` returns the value.
+//! The store secret is usually named like its binding (`secret_name`), except
+//! where the owner created it under another name (the Open-Meteo key is the
+//! store secret `OPEN_METEO_API_KEY`, bound as
+//! `MUKOKO_WEATHER_OPEN_METEO_API_KEY`).
 //!
 //! The code asks for a secret by its plain name (`TOMORROW_API_KEY`), the
 //! name the Workers have always used. The store binding cannot reuse that
@@ -48,6 +51,10 @@ pub const NYUCHI_API_KEY: &str = "NYUCHI_API_KEY";
 pub const WEATHER_SERVICE_API_KEY: &str = "WEATHER_SERVICE_API_KEY";
 /// CheckWX API key: the METAR fallback when the Aviation Weather Center fails.
 pub const CHECKWX_API_KEY: &str = "CHECKWX_API_KEY";
+/// The Open-Meteo subscription key (a paid plan: the commercial licence and
+/// the customer hosts, `weather_core::open_meteo`). Optional: without it every
+/// Worker calls the free hosts exactly as before.
+pub const OPEN_METEO_API_KEY: &str = "OPEN_METEO_API_KEY";
 
 /// The MongoDB seed-list connection string (`mongodb://user:pass@host,host/db`)
 /// the read-only Mongo client (`weather-mongo`) uses. Not bound by any Worker
@@ -58,52 +65,68 @@ pub const CHECKWX_API_KEY: &str = "CHECKWX_API_KEY";
 pub const MONGODB_URI: &str = "MONGODB_URI";
 
 /// A secret: its plain name (what the code asks for, and the transition
-/// fallback), its one store secret name (also the binding name), and the
+/// fallback), its binding name, the secret's name in the store, and the
 /// Workers (by directory under `workers/`) that bind it.
 #[derive(Debug, Clone, Copy)]
 pub struct SecretSpec {
     pub name: &'static str,
+    /// The `secrets_store_secrets` binding name on the Worker.
     pub store: &'static str,
+    /// The secret's name in the Secrets Store (`secret_name`).
+    pub secret_name: &'static str,
     pub required: bool,
     pub workers: &'static [&'static str],
 }
 
 /// Every secret the Workers read.
-pub const ALL: [SecretSpec; 5] = [
+pub const ALL: [SecretSpec; 6] = [
     SecretSpec {
         name: TOMORROW_API_KEY,
         store: "MUKOKO_WEATHER_TOMORROW_API_KEY",
+        secret_name: "MUKOKO_WEATHER_TOMORROW_API_KEY",
         required: true,
         workers: &["forecast", "tiles"],
     },
     SecretSpec {
         name: NYUCHI_API_KEY,
         store: "MUKOKO_WEATHER_NYUCHI_API_KEY",
+        secret_name: "MUKOKO_WEATHER_NYUCHI_API_KEY",
         required: true,
         workers: &["ai", "forecast", "places"],
     },
     SecretSpec {
         name: WEATHER_SERVICE_API_KEY,
         store: "MUKOKO_WEATHER_SERVICE_API_KEY",
+        secret_name: "MUKOKO_WEATHER_SERVICE_API_KEY",
         required: true,
         workers: &["internal-api"],
     },
     SecretSpec {
         name: CHECKWX_API_KEY,
         store: "MUKOKO_WEATHER_CHECKWX_API_KEY",
+        secret_name: "MUKOKO_WEATHER_CHECKWX_API_KEY",
         required: false,
         workers: &["aviation"],
     },
     SecretSpec {
         name: MONGODB_URI,
         store: "MUKOKO_WEATHER_MONGODB_URI",
+        secret_name: "MUKOKO_WEATHER_MONGODB_URI",
         required: false,
         workers: &[],
     },
+    // The store secret was created as `OPEN_METEO_API_KEY` (owner,
+    // 2026-11-02); only the binding carries the app prefix.
+    SecretSpec {
+        name: OPEN_METEO_API_KEY,
+        store: "MUKOKO_WEATHER_OPEN_METEO_API_KEY",
+        secret_name: "OPEN_METEO_API_KEY",
+        required: false,
+        workers: &["forecast", "places", "public-api"],
+    },
 ];
 
-/// The store secret name (also the binding name) for a plain name; `None`
-/// for a name that is not a secret.
+/// The binding name for a plain name; `None` for a name that is not a secret.
 pub fn store_name(name: &str) -> Option<&'static str> {
     ALL.iter().find(|s| s.name == name).map(|s| s.store)
 }
@@ -367,12 +390,26 @@ mod tests {
             Some("MUKOKO_WEATHER_SERVICE_API_KEY")
         );
         assert_eq!(store_name("NYUCHI_API_URL"), None);
+        assert_eq!(
+            store_name(OPEN_METEO_API_KEY),
+            Some("MUKOKO_WEATHER_OPEN_METEO_API_KEY")
+        );
         for (i, spec) in ALL.iter().enumerate() {
             assert!(spec.store.starts_with("MUKOKO_WEATHER_"), "{}", spec.name);
             // The binding can never collide with the plain fallback secret.
             assert_ne!(spec.store, spec.name);
-            // One store secret per key.
+            // One binding and one store secret per key.
             assert!(ALL[i + 1..].iter().all(|o| o.store != spec.store));
+            assert!(ALL[i + 1..]
+                .iter()
+                .all(|o| o.secret_name != spec.secret_name));
+            // The store secret is the binding name, or the plain name (the
+            // Open-Meteo key was created under it).
+            assert!(
+                spec.secret_name == spec.store || spec.secret_name == spec.name,
+                "{}",
+                spec.name
+            );
         }
     }
 
@@ -410,7 +447,7 @@ mod tests {
             for spec in ALL {
                 let store = spec.store;
                 let binding = format!("\"binding\": \"{store}\"");
-                let secret = format!("\"secret_name\": \"{store}\"");
+                let secret = format!("\"secret_name\": \"{}\"", spec.secret_name);
                 let want = usize::from(spec.workers.contains(&worker));
                 assert_eq!(cfg.matches(&binding).count(), want, "{worker}: {store}");
                 assert_eq!(cfg.matches(&secret).count(), want, "{worker}: {store}");

@@ -78,9 +78,46 @@ describe("MziziBottomNav — leading, lane, trailing", () => {
     expect(html).not.toContain("justify-around");
   });
 
-  it("keeps pinned items from shrinking and tightens them to keep the lane wide", () => {
-    expect(html).toContain("min-w-[var(--touch-target-min)] shrink-0 px-2");
-    expect(html).not.toContain("min-w-[60px]");
+  it("gives every pinned item the same preset width, never one taken from its label", () => {
+    const widths = [...html.matchAll(/<a\b[^>]*class="([^"]*)"/g)].map(
+      (m) => m[1],
+    );
+    expect(widths).toHaveLength(2);
+    for (const cls of widths) {
+      expect(cls).toContain("w-[var(--mobile-nav-item-width)]");
+      expect(cls).toContain("max-[359px]:w-[var(--touch-target-min)]");
+      expect(cls).toContain("shrink-0");
+      expect(cls).toContain("px-[var(--inset-floor)]");
+      // the only minimum is the Bundu floor itself (49px), which a preset
+      // width never falls under; a label-sized minimum would let a long label
+      // widen the button
+      expect(cls).toContain("min-w-[var(--touch-target-min)]");
+      expect(cls).not.toMatch(/(^|\s)min-w-(?!\[var\(--touch-target-min\)\])/);
+    }
+    // the same classes for "one" and "two", so their widths cannot differ
+    const sizing = (cls: string) =>
+      cls
+        .split(" ")
+        .filter((c) => /(^|:)(w|min-w|max-w|shrink|px)-/.test(c))
+        .sort();
+    expect(sizing(widths[0])).toEqual(sizing(widths[1]));
+  });
+
+  it("cuts a label longer than the preset instead of widening the button", () => {
+    const wide = renderToStaticMarkup(
+      createElement(MziziBottomNav, {
+        leading: [{ ...item("one"), label: "A much longer label" }],
+        lane: createElement("div"),
+        trailing: [{ ...item("two"), label: "Hi" }],
+      }),
+    );
+    const classes = [...wide.matchAll(/<a\b[^>]*class="([^"]*)"/g)].map(
+      (m) => m[1],
+    );
+    expect(classes[0]).toContain("w-[var(--mobile-nav-item-width)]");
+    expect(classes[1]).toContain("w-[var(--mobile-nav-item-width)]");
+    expect(wide).toContain("min-w-0 max-w-full truncate");
+    expect(wide).not.toContain("min-w-[60px]");
   });
 
   it("collapses the pinned labels to screen-reader-only on a very small phone, keeping the name", () => {
