@@ -131,7 +131,8 @@
      2026-11-02): inset 1rem from both screen edges, lifted --mobile-nav-inset
      (0.75rem) above the bottom edge plus the safe area, max-w-md, pill
      (rounded-full), 0.5px token border, shadow-lg, backdrop-blur-xl, 4.5rem
-     tall (72px; 64px before 2026-11-04, when the content filled it edge to edge). Map and Locations are pinned at its ends and the places lane
+     tall (72px; 64px before 2026-11-04, when the content filled it edge to
+     edge). Map and Locations are pinned at its ends and the places lane
      (My Location first, then the saved places) scrolls between them; there is
      no second pill above it. --mobile-nav-clearance is the space page content
      must leave at the bottom so nothing sits under the nav (bar, lift and safe
@@ -1773,16 +1774,21 @@ body {
        of being clipped at the lane's edges. */
     max-width: min(10rem, calc(100cqw - 0.5rem));
   }
-  /* A chip is 48px tall inside a 72px bar; the link's tappable area runs the
-     bar's height (8px above and below), so a thumb that lands a little high
-     or low still counts. Stays inside the lane (its scroller is the bar's
-     height), so nothing is clipped, and never reaches the next chip: the gap
-     between chips is wider than the 0.125rem it adds either side. */
+  /* .plover — a target in the phone bottom bar (a pinned item, or a .lark
+     chip) keeps the look of a pill about one touch target tall, but its
+     tappable area runs the bar's whole height: the ::after is stretched to
+     exactly --mobile-nav-bar-height, centred on the link (the bar centres its
+     targets). A thumb that lands a little high or low still counts, no number
+     here is a guess at the bar, and a change to the bar's token moves it.
+     Horizontally it is the link's own width, so it never reaches the next
+     target. It stays inside the bar (and the lane's scroller, which is the
+     bar's height), so nothing is clipped. */
+  .plover::after,
   .lark::after {
     content: "";
     position: absolute;
-    inset-block: -0.5rem;
-    inset-inline: -0.125rem;
+    inset-inline: 0;
+    inset-block: calc((100% - var(--mobile-nav-bar-height)) / 2);
   }
   .lark:is([aria-current]:not([aria-current="false"])) {
     @apply border-on-container-cobalt/25 bg-container-cobalt
