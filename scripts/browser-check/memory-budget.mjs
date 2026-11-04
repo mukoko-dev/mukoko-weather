@@ -35,7 +35,7 @@ const QUICK = process.env.QUICK === "1";
 const SWITCHES = QUICK ? 12 : 30;
 const SHEET_CYCLES = QUICK ? 8 : 20;
 const CHIP_ROUNDS = QUICK ? 1 : 3;
-const NAV_ROUNDS = QUICK ? 2 : 4;
+const NAV_ROUNDS = QUICK ? 3 : 4;
 /** The Android sky is Three.js, so one WebGL context is the page's own; the iPhone sky is 2D. */
 const SKY_WEBGL = PROFILE === "pixel" ? 1 : 0;
 
@@ -368,11 +368,13 @@ run(async () => {
       await sleep(2500);
       rows.push(await reading(env, `navigation round ${round}`));
     }
-    const steady = rows.slice(1);
+    // Round 1 loads the code of every page it visits (warm-up); growth is
+    // measured from round 2.
+    const steady = rows.slice(2);
     const first = steady[0];
     const last = steady.at(-1);
     console.log(
-      `navigation ${NAV_ROUNDS} rounds: ${show(first)}  ->  ${show(last)}`,
+      `navigation rounds 2 to ${NAV_ROUNDS}: ${show(first)}  ->  ${show(last)}`,
     );
     note("every link was there", missing.length === 0, missing.join(" "));
     within(
