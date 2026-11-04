@@ -75,6 +75,14 @@ export const AQI_BAND_BG_CLASS: Record<AqiBand, string> = Object.fromEntries(
   AQI_BANDS.map((b) => [b, scaleBandOf(b).bg]),
 ) as Record<AqiBand, string>;
 
+/**
+ * Static Tailwind SVG fill classes for a band (the static air quality map's
+ * cells), from the scale band's own `fill`.
+ */
+export const AQI_BAND_FILL_CLASS: Record<AqiBand, string> = Object.fromEntries(
+  AQI_BANDS.map((b) => [b, scaleBandOf(b).fill ?? ""]),
+) as Record<AqiBand, string>;
+
 /** Foreground class that passes 4.5:1 on the band's fill (bubble numbers). */
 export const AQI_BAND_FG_CLASS: Record<AqiBand, string> = Object.fromEntries(
   AQI_BANDS.map((b) => [b, scaleBandOf(b).on]),

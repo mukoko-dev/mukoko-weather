@@ -44,6 +44,32 @@ export function maptilerStyleId(isDark: boolean): string {
   return isDark ? MAPTILER_STYLE_ID_DARK : MAPTILER_STYLE_ID_LIGHT;
 }
 
+/**
+ * The most device pixels per CSS pixel the interactive map draws at (#476).
+ * A WebGL canvas costs width x height x 4 bytes, twice (the drawing buffer
+ * and the one on screen) plus the GPU's own copies, so a full-screen map on a
+ * 3x phone (an iPhone Pro: 1179 x 2556 pixels) held 46 MB in Chrome's
+ * accounting of the renderer; at 2x it holds 20 MB. Tiles and labels stay
+ * sharp at 2x, which is what most phones are anyway (2 to 2.6).
+ */
+export const MAP_MAX_PIXEL_RATIO = 2;
+
+/**
+ * The `pixelRatio` option to create the map with, or undefined for none. MapLibre
+ * treats a set ratio as an override of `devicePixelRatio` that it keeps for the
+ * map's life (only null turns it off), so a map made at 1x would stay blurry
+ * after moving to a retina display. The option is therefore passed ONLY on a
+ * screen above the cap, where the cap is the point; everywhere else MapLibre
+ * keeps following the screen's own ratio.
+ */
+export function mapPixelRatioOverride(
+  devicePixelRatio: number | undefined,
+): number | undefined {
+  const ratio = devicePixelRatio;
+  if (typeof ratio !== "number" || !Number.isFinite(ratio)) return undefined;
+  return ratio > MAP_MAX_PIXEL_RATIO ? MAP_MAX_PIXEL_RATIO : undefined;
+}
+
 export const MAPTILER_STYLE_LIGHT = `https://api.maptiler.com/maps/${MAPTILER_STYLE_ID_LIGHT}/style.json?key=${MAPTILER_KEY}`;
 export const MAPTILER_STYLE_DARK = `https://api.maptiler.com/maps/${MAPTILER_STYLE_ID_DARK}/style.json?key=${MAPTILER_KEY}`;
 

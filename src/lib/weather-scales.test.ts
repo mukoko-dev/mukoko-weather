@@ -84,8 +84,21 @@ describe("weather scales", () => {
         expect(band.bg).toBe(`bg-${name}`);
         expect(band.stroke).toBe(`stroke-${name}`);
         expect(band.border).toBe(`border-${name}`);
+        // The SVG fill class exists only where a scale is drawn as SVG.
+        if (band.fill !== undefined) expect(band.fill).toBe(`fill-${name}`);
       }
     }
+  });
+
+  it("gives every air quality band an SVG fill class (the static map card's cells)", () => {
+    expect(AQI_SCALE.bands.map((b) => b.fill)).toEqual([
+      "fill-wx-aqi-1",
+      "fill-wx-aqi-2",
+      "fill-wx-aqi-3",
+      "fill-wx-aqi-4",
+      "fill-wx-aqi-5",
+      "fill-wx-aqi-6",
+    ]);
   });
 
   it("prints a label and a name for every band (colour is never the only signal)", () => {
