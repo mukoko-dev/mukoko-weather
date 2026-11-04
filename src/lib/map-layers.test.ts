@@ -1,4 +1,6 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
+import { readFileSync } from "fs";
+import { resolve } from "path";
 import {
   MAP_LAYERS,
   DEFAULT_LAYER,
@@ -19,6 +21,8 @@ import {
   timelineLabel,
   TIMELINE_STEPS,
   MAP_LAYER_STORAGE_KEY,
+  MAP_MAX_PIXEL_RATIO,
+  mapPixelRatio,
   readStoredMapLayer,
   writeStoredMapLayer,
 } from "./map-layers";
@@ -464,5 +468,37 @@ describe("MapTiler key and style ids (#266)", () => {
     expect(m.MAPTILER_STYLE_DARK).toContain(
       `/maps/${m.MAPTILER_STYLE_ID_DARK}/`,
     );
+  });
+});
+
+describe("mapPixelRatio (#476)", () => {
+  it("never draws the map above 2x: a 3x phone's canvas would be 2.25x the memory", () => {
+    expect(MAP_MAX_PIXEL_RATIO).toBe(2);
+    expect(mapPixelRatio(3)).toBe(2);
+    expect(mapPixelRatio(4)).toBe(2);
+    expect(mapPixelRatio(2.75)).toBe(2);
+  });
+
+  it("leaves the common ratios alone", () => {
+    expect(mapPixelRatio(1)).toBe(1);
+    expect(mapPixelRatio(1.5)).toBe(1.5);
+    expect(mapPixelRatio(2)).toBe(2);
+  });
+
+  it("falls back to 1 for a screen that reports nothing usable", () => {
+    expect(mapPixelRatio(undefined)).toBe(1);
+    expect(mapPixelRatio(0)).toBe(1);
+    expect(mapPixelRatio(-1)).toBe(1);
+    expect(mapPixelRatio(Number.NaN)).toBe(1);
+    expect(mapPixelRatio(Number.POSITIVE_INFINITY)).toBe(1);
+  });
+
+  it("is the one thing the interactive map's pixel ratio comes from", () => {
+    // Without it MapLibre uses devicePixelRatio as is (3 on an iPhone Pro).
+    const map = readFileSync(
+      resolve(__dirname, "../components/weather/map/MapLibreMap.tsx"),
+      "utf-8",
+    );
+    expect(map).toContain("pixelRatio: mapPixelRatio(window.devicePixelRatio)");
   });
 });
