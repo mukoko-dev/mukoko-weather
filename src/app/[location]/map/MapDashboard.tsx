@@ -29,9 +29,9 @@ import { detectUserLocation } from "@/lib/geolocation";
 import {
   AQI_BAND_LABELS,
   aqBubbles,
+  aqFieldRaster,
   aqiBand,
   fetchAirQualityGrid,
-  gridToGeoJSON,
   type AqGridResponse,
 } from "@/lib/aq-grid";
 import {
@@ -63,8 +63,7 @@ import {
 } from "@/lib/map-sources";
 import {
   fetchModelGrid,
-  modelGridToGeoJSON,
-  modelLegendTokens,
+  modelFieldRaster,
   type ModelGridResponse,
 } from "@/lib/model-grid";
 import { getFeatureFlag } from "@/lib/feature-flags";
@@ -346,11 +345,10 @@ export function MapDashboard({ location }: MapDashboardProps) {
     const seriesIndex =
       modelGridData?.times.indexOf(frames[step]?.timestamp ?? "") ?? -1;
     if (seriesIndex < 0) return null;
-    const data = modelGridToGeoJSON(modelGridData, activeLayer, seriesIndex);
-    if (!data) return null;
+    const raster = modelFieldRaster(modelGridData, activeLayer, seriesIndex);
+    if (!raster) return null;
     return {
-      data,
-      tokens: modelLegendTokens(getMapChip(activeLayer)?.legend),
+      raster,
       attribution: attributionHtml(
         overlayAttribution(activeLayer, activeModel),
       ),
@@ -388,10 +386,8 @@ export function MapDashboard({ location }: MapDashboardProps) {
       ? "ready"
       : "error";
 
-  const aqFill = useMemo(
-    () => (grid?.available ? gridToGeoJSON(grid.points, grid.cellKm) : null),
-    [grid],
-  );
+  // The grid as one smooth, banded picture (interpolated between the samples).
+  const aqRaster = useMemo(() => aqFieldRaster(grid), [grid]);
   const bubbles = useMemo(() => (grid ? aqBubbles(grid) : null), [grid]);
   const centerAqi = grid?.center?.aqi ?? null;
   const centerBand = centerAqi === null ? null : aqiBand(centerAqi);
@@ -464,7 +460,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
         weatherTimestamp={weatherTimestamp}
         weatherPrefetchTimestamp={prefetchTimestamp}
         onWeatherFrameLoaded={setLoadedTimestamp}
-        aqiOverlay={aqOn ? aqFill : null}
+        aqiOverlay={aqOn ? aqRaster : null}
         fieldOverlay={fieldOverlay}
         aqiBubbles={aqOn ? bubbles : null}
         navigationControl={false}
@@ -473,9 +469,10 @@ export function MapDashboard({ location }: MapDashboardProps) {
       />
 
       {/* Top-left: close (back to the location) and the shared breadcrumb
-          trail as a compact overlay pill. The column stops 7rem short of the
-          right edge, so neither can run under the control stack. */}
-      <div className="pointer-events-none absolute left-4 top-[max(1rem,env(safe-area-inset-top))] z-10 flex w-[min(20rem,calc(100%-7rem))] min-w-0 items-center gap-2">
+          trail as a compact overlay pill. The column's width is the screen
+          minus the float grid's side insets, one control and one gap, so
+          neither can run under the control stack. */}
+      <div className="pointer-events-none absolute left-[var(--float-left)] top-[var(--float-top)] z-10 flex w-[min(20rem,calc(100%-var(--float-left)-var(--float-right)-var(--touch-target-min)-var(--float-gap)))] min-w-0 items-center gap-[var(--float-gap)]">
         <Link
           href={`/${location.slug}`}
           aria-label={`Close map and return to ${location.name}`}
@@ -494,8 +491,8 @@ export function MapDashboard({ location }: MapDashboardProps) {
       </div>
 
       {/* Top-right: stacked controls (layer sheet, my location) and the list. */}
-      <div className="pointer-events-none absolute right-4 top-[max(1rem,env(safe-area-inset-top))] z-10 flex flex-col items-end gap-2">
-        <div className="serval pointer-events-auto flex flex-col overflow-hidden p-0.5">
+      <div className="pointer-events-none absolute right-[var(--float-right)] top-[var(--float-top)] z-10 flex flex-col items-end gap-[var(--float-gap)]">
+        <div className="serval pointer-events-auto flex flex-col rounded-full">
           <button
             type="button"
             onClick={toggleSheet}
@@ -506,7 +503,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
           >
             <Layers className={ICON_CLASS} aria-hidden="true" />
           </button>
-          <span aria-hidden="true" className="mx-2 h-px bg-border" />
+          <span aria-hidden="true" className="mx-3 h-px bg-border" />
           <button
             type="button"
             onClick={handleLocate}
@@ -545,13 +542,10 @@ export function MapDashboard({ location }: MapDashboardProps) {
       <section
         aria-labelledby="map-legend-title"
         data-slot="map-sheet"
-        className="serval absolute inset-x-3 bottom-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] z-10 mx-auto flex max-h-[calc(100dvh-6rem)] max-w-xl flex-col overflow-y-auto px-4 pb-2 pt-3 [@media(max-height:500px)]:mr-auto [@media(max-height:500px)]:max-w-md"
+        className="serval absolute left-[var(--float-left)] right-[var(--float-right)] bottom-[var(--float-bottom)] z-10 mx-auto flex max-h-[calc(100dvh-var(--float-top)-var(--touch-target-min)-var(--float-gap)-var(--float-bottom))] max-w-xl flex-col overflow-y-auto p-[var(--space-card)] [@media(max-height:500px)]:mr-auto [@media(max-height:500px)]:max-w-md"
       >
         <div className="flex items-start gap-3">
-          <span
-            aria-hidden="true"
-            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
-          >
+          <span aria-hidden="true" className="hoopoe-lg mt-0.5 text-primary">
             <LayerIcon id={activeLayer} className={ICON_CLASS} />
           </span>
           <div className="min-w-0 flex-1">

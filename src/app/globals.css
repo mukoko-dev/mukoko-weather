@@ -127,23 +127,69 @@
   /* Touch & Interaction — 56px optimal (Material Design 3 recommended) */
   --touch-target-min: 48px;
 
+  /* One grid for everything that floats over a page or a map (owner,
+     2026-11-04, from Apple's Find My: every control sits the same distance
+     from the screen edge and the same distance from its neighbour).
+     --float-inset is the distance from any screen edge, --float-gap the space
+     between two floating things (and between neighbouring targets in a bar,
+     and from a bar's edge to its first target), --float-pad the padding
+     inside a capsule around its controls. --float-top, -bottom, -left and
+     -right add the safe area, so nothing floats under a notch, a status bar,
+     the home indicator or a landscape notch (today the app does not set
+     viewport-fit=cover, where the insets are 0). The bottom bar, the phone
+     hero's icon group (.hadeda) and the map's controls and sheet all read
+     these; none of them keeps an edge distance or a safe-area expression of
+     its own. */
+  --float-inset: 1rem;
+  --float-gap: 0.5rem;
+  --float-pad: 0.25rem;
+  --float-top: max(var(--float-inset), env(safe-area-inset-top, 0px));
+  --float-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--float-inset));
+  --float-left: max(var(--float-inset), env(safe-area-inset-left, 0px));
+  --float-right: max(var(--float-inset), env(safe-area-inset-right, 0px));
+
   /* Mobile bottom nav geometry — ONE floating bar (option B, owner
-     2026-11-02): inset 1rem from both screen edges, lifted --mobile-nav-inset
-     (0.75rem) above the bottom edge plus the safe area, max-w-md, pill
-     (rounded-full), 0.5px token border, shadow-lg, backdrop-blur-xl, 4rem
-     tall. Map and Locations are pinned at its ends and the places lane
+     2026-11-02): inset --float-inset (1rem) from the screen edges (the sides
+     and the bottom alike), max-w-md, pill
+     (rounded-full), 0.5px token border, shadow-lg, backdrop-blur-xl, 4.5rem
+     tall (72px; 64px before 2026-11-04, when the content filled it edge to
+     edge). Map and Locations are pinned at its ends and the places lane
      (My Location first, then the saved places) scrolls between them; there is
      no second pill above it. --mobile-nav-clearance is the space page content
      must leave at the bottom so nothing sits under the nav (bar, lift and safe
      area, plus a 0.5rem breath). Floating controls above the nav (e.g.
      reorder "Done") use it too. Header.test.ts keeps these in step with the
      component. */
-  --mobile-nav-inset: 0.75rem;
-  --mobile-nav-bar-height: 4rem;
+  --mobile-nav-bar-height: 4.5rem;
   --mobile-nav-clearance: calc(
-    env(safe-area-inset-bottom, 0px) + var(--mobile-nav-inset) +
-      var(--mobile-nav-bar-height) + 0.5rem
+    var(--float-bottom) + var(--mobile-nav-bar-height) + 0.5rem
   );
+
+  /* The phone hero's icon group (.hadeda): Share and the profile menu in ONE
+     round pill fixed to the top of the screen, inset 1rem from the top and
+     right edges (the hero's own gutter). Its size comes from these tokens and
+     from nothing else: --hadeda-width is the controls (48px each) plus the
+     gaps between them plus the padding around them, and --hadeda-reserve is
+     what the breadcrumb at the left of the hero's top row leaves free for it
+     (the pill plus a 0.75rem gap), so the trail wraps before it reaches the
+     group. Change a gap, a padding or the number of controls here and the
+     reserve follows. Header.test.ts and viewport-layout.test.ts keep them in
+     step with the component.
+
+     The inset is the float grid's 1rem, the same as the hero's own top
+     margin, so the group is level with the top row at the top of the page. Its
+     top and right are --float-top and --float-right, which add the safe area
+     so the pill is never under a notch or status bar; today the app does not
+     set viewport-fit=cover, where those insets are 0. If it ever does, the
+     hero's top row needs the same inset. */
+  --hadeda-controls: 2;
+  --hadeda-gap: var(--float-gap);
+  --hadeda-pad: var(--float-pad);
+  --hadeda-width: calc(
+    var(--hadeda-controls) * var(--touch-target-min) +
+      (var(--hadeda-controls) - 1) * var(--hadeda-gap) + 2 * var(--hadeda-pad)
+  );
+  --hadeda-reserve: calc(var(--hadeda-width) + 0.75rem);
 
   /* Mzizi border rule: a solid border on ALL four sides, 0.5px at rest and
      1px on hover, active/selected (aria-current, aria-pressed, aria-selected,
@@ -156,8 +202,10 @@
   --text-body: 1rem; /* 16px — base body/footer text */
   --text-body-lg: 1.125rem; /* 18px — larger body text variant */
   --text-body-leading: 1.6;
-  /* 1rem (16px) — minimum font size per app-wide hard rule. */
-  --text-nav-label: 1rem;
+  /* 0.875rem (14px) — the Mzizi body-sm size. The nav bar's labels and place
+     chips (owner, 2026-11-04: at 16px they read as out of proportion in the
+     bar). The 16px minimum applies to reading text, not to a bar's labels. */
+  --text-nav-label: 0.875rem;
   /* Mzizi type scale (mzizi_get_tokens typography.scale) — the ONLY sizes the
      hero, the Conditions card and the skeleton may use. Weights are 400, 600
      and 700 only (Tailwind font-normal / font-semibold / font-bold). */
@@ -946,7 +994,7 @@ body {
 /* ===== Minerals Accent — Horizontal gradient for dialogs (7 minerals, ring order) ===== */
 .minerals-accent {
   height: 3px;
-  border-radius: 9999px;
+  border-radius: var(--radius-full);
   background: linear-gradient(
     to right,
     var(--mineral-tanzanite) 0%,
@@ -1294,6 +1342,39 @@ body {
            aria-pressed:bg-primary/10 aria-pressed:text-primary
            focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary
            disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* .hadeda — the phone hero's icon group (the hadeda ibis: always on the high
+     perch). Share and the profile menu, two .duiker controls in one round pill
+     FIXED to the top of the screen, so they stay in reach while the page
+     scrolls. A card surface like the bottom bar's island, so it reads over the
+     dark sky and over the cards that scroll under it: 0.5px token border,
+     shadow-lg, a 90% card fill. The blur is on a pseudo-element, never on the
+     group itself: a backdrop-filter makes its element the containing block of
+     fixed descendants, and the profile menu's panel is fixed. Phones only (the
+     caller adds sm:hidden); from `sm` the site header is the top chrome. */
+  .hadeda {
+    position: fixed;
+    top: var(--float-top);
+    right: var(--float-right);
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: var(--hadeda-gap);
+    padding: var(--hadeda-pad);
+    border-radius: var(--radius-full);
+    border: var(--border-width-rest) solid var(--border);
+    background-color: color-mix(in srgb, var(--card) 90%, transparent);
+    box-shadow: var(--shadow-lg);
+  }
+  .hadeda::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(24px);
   }
 
   /* .duiker-solid — the one primary round control in a group (map timeline
@@ -1712,9 +1793,31 @@ body {
        of being clipped at the lane's edges. */
     max-width: min(10rem, calc(100cqw - 0.5rem));
   }
+  /* .plover — a target in the phone bottom bar (a pinned item, or a .lark
+     chip) keeps the look of a pill about one touch target tall, but its
+     tappable area runs the bar's whole height: the ::after is stretched to
+     exactly --mobile-nav-bar-height, centred on the link (the bar centres its
+     targets). A thumb that lands a little high or low still counts, no number
+     here is a guess at the bar, and a change to the bar's token moves it.
+     Horizontally it is the link's own width, so it never reaches the next
+     target. It stays inside the bar (and the lane's scroller, which is the
+     bar's height), so nothing is clipped. */
+  .plover::after,
+  .lark::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    inset-block: calc((100% - var(--mobile-nav-bar-height)) / 2);
+  }
+  /* The current target wears one look wherever it is: a soft rounded fill
+     (the cobalt container) and its readable text colour. A pinned item gets
+     only that; a chip also takes the active border below. */
+  .plover:is([aria-current]:not([aria-current="false"])),
   .lark:is([aria-current]:not([aria-current="false"])) {
-    @apply border-on-container-cobalt/25 bg-container-cobalt
-           text-on-container-cobalt;
+    @apply bg-container-cobalt text-on-container-cobalt;
+  }
+  .lark:is([aria-current]:not([aria-current="false"])) {
+    @apply border-on-container-cobalt/25;
     border-width: var(--border-width-active);
     /* The thicker border comes out of the padding, so the chip keeps its
        outer width and a place switch does not nudge the row. */
@@ -1843,7 +1946,7 @@ body {
 :focus-visible {
   outline: var(--focus-ring-width, 3px) solid var(--focus-ring);
   outline-offset: var(--focus-ring-offset, 2px);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 /* Remove default focus ring for mouse users, keep for keyboard */
@@ -1857,7 +1960,7 @@ body {
    @layer components could never win over it. Keyboard focus only — mouse users
    keep the ring-free look.
 
-   The global rule also forces `border-radius: 4px` on every focused element,
+   The global rule also forces `border-radius: var(--radius-sm)` on every focused element,
    which squares off the pill buttons (--radius-button) on keyboard focus, so
    each button rule restores its own radius. */
 .kudu:focus-visible,
@@ -1872,13 +1975,23 @@ body {
 }
 
 /* .lark (a place chip in the bottom bar's lane) — unlayered like the fauna
-   rules above, so the global :focus-visible radius of 4px does not square the
+   rules above, so the global :focus-visible radius (--radius-sm) does not square the
    pill on keyboard focus. The ring is inset: the lane's scroller clips
    anything drawn outside it. */
 .lark:focus-visible {
   outline: var(--focus-ring-width, 3px) solid var(--focus-ring);
   outline-offset: -3px;
-  border-radius: 9999px;
+  border-radius: var(--radius-full);
+}
+
+/* The round map and nav controls (.duiker, .duiker-solid) and the bottom bar's
+   pinned items (.plover) are circles and pills, so their keyboard focus ring
+   follows that shape instead of the global rounded square. Only the radius is
+   restored; the ring itself is the global rule's. */
+.duiker:focus-visible,
+.duiker-solid:focus-visible,
+.plover:focus-visible {
+  border-radius: var(--radius-full);
 }
 
 /* .bee sits on the bg-primary header action pill. The cobalt ring is the same
@@ -1890,7 +2003,7 @@ body {
   /* No offset: the pill only pads its buttons by 2px, so a zero-offset ring
      stays on the cobalt pill instead of spilling onto the light header. */
   outline-offset: 0px;
-  border-radius: 9999px;
+  border-radius: var(--radius-full);
 }
 
 /* Focus on the sky (WCAG 1.4.11, 3:1). The page sky is a saturated gradient
@@ -1911,17 +2024,18 @@ body {
 .kestrel-card {
   --focus-ring: var(--sky-fg);
 }
-[data-sky-hero] [data-slot="account-menu-panel"] {
+[data-sky-hero] [data-slot="account-menu-panel"],
+[data-sky-hero] .hadeda {
   --focus-ring: var(--exp-storm);
 }
 
 /* .kestrel-round (Share, the ⋯ trigger) — unlayered like the fauna rules above:
    the global :focus-visible rule would otherwise square the round control to a
-   4px radius on keyboard focus. */
+   --radius-sm radius on keyboard focus. */
 .kestrel-round:focus-visible {
   outline: var(--focus-ring-width, 3px) solid var(--sky-fg);
   outline-offset: var(--focus-ring-offset, 2px);
-  border-radius: 9999px;
+  border-radius: var(--radius-full);
 }
 
 /* Loading-skeleton shimmer (.okapi). Only when motion is welcome; otherwise
@@ -2283,6 +2397,19 @@ body {
       transparent 1px 14px
     );
     opacity: 0.12;
+  }
+
+  /* .kestrel-effects — the boundary of the 2D weather effects (iPhone and iPad,
+     see backdropMode): a box over the hero region, one canvas inside it. The
+     canvas is clipped to it, so no effect is ever drawn outside; its foot fades
+     into the page like the sky box's own. No animation here: the canvas draws
+     its own frames, and is not rendered at all under reduced motion. */
+  .kestrel-effects {
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: min(100%, 40rem);
+    overflow: hidden;
+    mask-image: linear-gradient(to bottom, black 65%, transparent);
   }
 
   /* .kestrel-ink — re-points the text, accent and surface tokens at the sky

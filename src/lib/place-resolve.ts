@@ -8,22 +8,19 @@
  *   3. a spot slug (`{name}--{geohash}`), which carries its own coordinate.
  * Null means "not a place I can show in place": the caller falls back to a
  * normal navigation, where the server resolves it (or answers a real 404).
+ *
+ * The first and last steps need no lookup and live in `local-place.ts`, which
+ * the server render shares (issue #452); this module re-exports them.
  */
 
-import { LOCATIONS, type WeatherLocation } from "@/lib/locations";
+import type { WeatherLocation } from "@/lib/locations";
 import { getDefaultSeason } from "@/lib/weather";
 import { countryDisplayName } from "@/lib/location-country";
 import { workerData } from "@/lib/worker-data";
-import {
-  coordinateLabel,
-  isCoordinateNameSlug,
-  parseSmartSlug,
-} from "@/lib/smart-slug";
+import { catalogueLocation, spotLocation } from "@/lib/local-place";
 import type { PlaceSeed } from "@/lib/place-controller";
 
-const CATALOGUE = new Map<string, WeatherLocation>(
-  LOCATIONS.map((loc) => [loc.slug, loc]),
-);
+export { catalogueLocation, spotLocation };
 
 /** The seed for a location: season by hemisphere, country name by code. */
 export function seedFor(location: WeatherLocation): PlaceSeed {
@@ -31,36 +28,6 @@ export function seedFor(location: WeatherLocation): PlaceSeed {
     location,
     season: getDefaultSeason(new Date(), location.lat),
     countryName: countryDisplayName(location.country),
-  };
-}
-
-/** A shipped seed place, or null. */
-export function catalogueLocation(slug: string): WeatherLocation | null {
-  return CATALOGUE.get(slug) ?? null;
-}
-
-/**
- * The place a spot slug encodes: its own coordinate, the name in the URL, no
- * elevation or region of its own (the forecast fills both in).
- */
-export function spotLocation(slug: string): WeatherLocation | null {
-  const parsed = parseSmartSlug(slug);
-  if (!parsed || parsed.ref.kind !== "spot") return null;
-  const { lat, lon } = parsed;
-  if (typeof lat !== "number" || typeof lon !== "number") return null;
-  const name = isCoordinateNameSlug(parsed.nameSlug)
-    ? coordinateLabel(lat, lon)
-    : parsed.name;
-  return {
-    slug,
-    name: name || "Selected location",
-    province: "",
-    lat,
-    lon,
-    elevation: 0,
-    elevationApproximate: true,
-    tags: ["city"],
-    source: "geolocation",
   };
 }
 
@@ -154,4 +121,51 @@ export async function resolvePlaceSeed(
 
   const spot = spotLocation(slug);
   return spot ? seedFor(spot) : null;
+}
+
+/**
+ * What the browser learned about a slug the server did not name (issue #452).
+ *
+ * - `found`: a place to show;
+ * - `missing`: the Worker answered and holds no such place (HTTP 404, or an
+ *   answer with no usable coordinate): the not-found view is right;
+ * - `unavailable`: nothing answered (offline, slow, refused, a server error).
+ *   That says nothing about the place, so it is never shown as "not found":
+ *   the caller offers to try again.
+ */
+export type PlaceLookup =
+  | { kind: "found"; seed: PlaceSeed }
+  | { kind: "missing" }
+  | { kind: "unavailable" };
+
+/**
+ * Resolve a slug in the browser: the lookups that need no request first
+ * (shipped place, spot), then the Worker through the shared read. Unlike
+ * `resolvePlaceSeed`, it keeps "no such place" apart from "could not ask".
+ * Never throws.
+ */
+export async function lookupPlace(
+  slug: string,
+  signal?: AbortSignal,
+  options: { force?: boolean } = {},
+): Promise<PlaceLookup> {
+  const known = catalogueLocation(slug) ?? spotLocation(slug);
+  if (known) return { kind: "found", seed: seedFor(known) };
+  try {
+    const res = await workerData.read<{ location?: WorkerLocation }>(
+      "locations",
+      { slug },
+      { signal, force: options.force },
+    );
+    if (res.ok) {
+      const location = locationFromWorker(slug, res.data?.location);
+      return location
+        ? { kind: "found", seed: seedFor(location) }
+        : { kind: "missing" };
+    }
+    return res.status === 404 ? { kind: "missing" } : { kind: "unavailable" };
+  } catch {
+    // The caller stopped waiting, or the read could not be made.
+    return { kind: "unavailable" };
+  }
 }

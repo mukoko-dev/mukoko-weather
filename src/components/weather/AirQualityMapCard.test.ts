@@ -25,7 +25,9 @@ describe("AirQualityMapCard structure", () => {
   it("uses a non-interactive map with the AQI overlay", () => {
     expect(source).toContain("interactive={false}");
     expect(source).toContain("aqiOverlay={overlay}");
-    expect(source).toContain("gridToGeoJSON(");
+    // One smooth banded picture, not a square per sample.
+    expect(source).toContain("aqFieldRaster(state.data)");
+    expect(source).not.toContain("gridToGeoJSON");
   });
 
   it("shows a centred '{aqi} · My Location' bubble, hidden from AT", () => {

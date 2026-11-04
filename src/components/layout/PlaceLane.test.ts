@@ -196,7 +196,8 @@ describe("PlaceLane — styling comes from tokens", () => {
   });
 
   it("the current chip keeps its outer width: the thicker border comes out of the padding", () => {
-    const at = css.indexOf(
+    // The chip's own rule is the second one with this selector.
+    const at = css.lastIndexOf(
       '.lark:is([aria-current]:not([aria-current="false"])) {',
     );
     const r = css.slice(at, css.indexOf("}", at + 200));
@@ -224,13 +225,25 @@ describe("PlaceLane — styling comes from tokens", () => {
   });
 
   it("the current chip takes the cobalt container fill and the active border width", () => {
-    const at = css.indexOf(
-      '.lark:is([aria-current]:not([aria-current="false"])) {',
+    // The fill and text colour are the shared "you are here" rule (a pinned
+    // item wears the same); the thicker border is the chip's own.
+    const shared = css.indexOf(
+      '.plover:is([aria-current]:not([aria-current="false"])),',
     );
-    expect(at).toBeGreaterThan(-1);
-    const r = css.slice(at, css.indexOf("}", at));
-    expect(r).toContain("bg-container-cobalt");
-    expect(r).toContain("text-on-container-cobalt");
+    expect(shared).toBeGreaterThan(-1);
+    const fill = css.slice(shared, css.indexOf("}", shared));
+    expect(fill).toContain(
+      '.lark:is([aria-current]:not([aria-current="false"]))',
+    );
+    expect(fill).toContain("bg-container-cobalt");
+    expect(fill).toContain("text-on-container-cobalt");
+    // The chip's own rule is the one with this selector that sets a border.
+    const rules = [
+      ...css.matchAll(
+        /\.lark:is\(\[aria-current\]:not\(\[aria-current="false"\]\)\) \{([^}]*)\}/g,
+      ),
+    ].map((m) => m[1] ?? "");
+    const r = rules.find((body) => body.includes("border-width")) ?? "";
     expect(r).toContain("border-width: var(--border-width-active);");
   });
 
@@ -238,7 +251,7 @@ describe("PlaceLane — styling comes from tokens", () => {
     const at = css.indexOf(".lark:focus-visible {");
     expect(at).toBeGreaterThan(-1);
     const r = css.slice(at, css.indexOf("}", at));
-    expect(r).toContain("border-radius: 9999px;");
+    expect(r).toContain("border-radius: var(--radius-full);");
     // Inset: the lane's scroller clips anything drawn outside it.
     expect(r).toContain("outline-offset: -3px;");
   });
@@ -260,6 +273,6 @@ describe("PlaceLane — styling comes from tokens", () => {
 
   it("gives the scroller room so a chip's focus ring and ends are not clipped", () => {
     expect(source).toContain("p-0 px-1");
-    expect(source).toContain("gap-1.5");
+    expect(source).toContain("gap-2");
   });
 });

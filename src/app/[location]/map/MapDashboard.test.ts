@@ -119,8 +119,15 @@ describe("MapDashboard — timeline", () => {
 describe("MapDashboard — bottom sheet", () => {
   it("is a floating .serval card lifted off the edge by the safe area", () => {
     expect(source).toContain('data-slot="map-sheet"');
+    // The same inset from the side and bottom edges as the controls above,
+    // and the bar on other pages: the one float grid in globals.css.
     expect(source).toMatch(
-      /serval absolute inset-x-3 bottom-\[calc\(env\(safe-area-inset-bottom,0px\)\+0\.75rem\)\]/,
+      /serval absolute left-\[var\(--float-left\)\] right-\[var\(--float-right\)\] bottom-\[var\(--float-bottom\)\]/,
+    );
+    // Its height cap leaves room for the top controls and the grid's gaps, so
+    // it never runs under them, with the safe area counted on both sides.
+    expect(source).toContain(
+      "max-h-[calc(100dvh-var(--float-top)-var(--touch-target-min)-var(--float-gap)-var(--float-bottom))]",
     );
     expect(source).toContain("max-w-xl");
   });
@@ -139,7 +146,10 @@ describe("MapDashboard — bottom sheet", () => {
   });
 
   it("caps its height so a landscape phone still sees the map", () => {
-    expect(source).toContain("max-h-[calc(100dvh-6rem)]");
+    // The cap is derived from the float grid (the top row of controls, a gap
+    // and the safe areas), never a literal such as 6rem.
+    expect(source).toMatch(/max-h-\[calc\(100dvh-var\(--float-top\)/);
+    expect(source).not.toContain("100dvh-6rem");
     expect(source).toContain("overflow-y-auto");
     expect(source).toContain("[@media(max-height:500px)]:mr-auto");
   });
@@ -168,7 +178,8 @@ describe("MapDashboard — bottom sheet", () => {
   it("uses one icon size for every control, and keeps top controls clear of the notch", () => {
     expect(source).toContain('const ICON_CLASS = "h-5 w-5";');
     expect(source).not.toMatch(/className="h-5 w-5"/);
-    expect(source).toContain("top-[max(1rem,env(safe-area-inset-top))]");
+    expect(source).toContain("top-[var(--float-top)]");
+    expect(source).not.toContain("env(safe-area-inset-top)");
   });
 });
 
@@ -208,10 +219,19 @@ describe("MapDashboard — timeline load speed (#266)", () => {
 });
 
 describe("MapDashboard — air quality", () => {
-  it("fetches the grid and feeds both the fill and the bubbles", () => {
+  it("fetches the grid and feeds both the smooth picture and the bubbles", () => {
     expect(source).toContain("fetchAirQualityGrid");
-    expect(source).toContain("aqiOverlay={aqOn ? aqFill : null}");
+    // The same 7 x 7 samples: interpolated for the picture, one bubble each.
+    expect(source).toContain("aqFieldRaster(grid)");
+    expect(source).toContain("aqiOverlay={aqOn ? aqRaster : null}");
     expect(source).toContain("aqiBubbles={aqOn ? bubbles : null}");
+    expect(source).not.toContain("gridToGeoJSON");
+  });
+
+  it("never asks for more grid points to look smoother", () => {
+    // Open-Meteo is rate limited and a grid miss already costs 49 locations:
+    // the smoothness is interpolation in the browser, not a bigger request.
+    expect(source).not.toMatch(/fetchAirQualityGrid\(\{[^}]*\b(n|radiusKm):/);
   });
 });
 
@@ -253,5 +273,13 @@ describe("MapDashboard — overlay sources and credits", () => {
       "modelGridData?.times.indexOf(frames[step]?.timestamp",
     );
     expect(source).toContain("fieldOverlay={fieldOverlay}");
+  });
+
+  it("paints a model step as one interpolated picture of the same grid", () => {
+    expect(source).toContain(
+      "modelFieldRaster(modelGridData, activeLayer, seriesIndex)",
+    );
+    expect(source).not.toContain("modelGridToGeoJSON");
+    expect(source).toContain("fetchModelGrid({");
   });
 });

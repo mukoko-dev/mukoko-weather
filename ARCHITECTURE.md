@@ -2,6 +2,16 @@
 
 This document describes the key architectural patterns in mukoko weather. For the full project context (routes, components, styling, testing), see [CLAUDE.md](CLAUDE.md).
 
+## Platform direction (decided 2026-11-04)
+
+These are owner decisions, not proposals. Nothing in this repo should read as if they were open.
+
+- **The web app moves to Astro.** The owner's words: "It is not an open decision. It is decided this is how we build our entire platform." Today the app is Next.js 16 on Vercel; the target is Astro with React islands on Cloudflare, next to the Workers. The plan and its phases are in [#475](https://github.com/mukoko-dev/mukoko-weather/issues/475). Until it is done: no new `next/*` import outside a thin adapter, decisions in pure modules (`src/lib`, `weather-core`) and policy as data (as `src/lib/security-headers.ts` already is), and new pages and components written so they move unchanged.
+- **Speed, one global layout and simplicity are the product.** They decide whether people stay on the app and come back. Work that simplifies the layout, the page frame or a page-to-page switch is in scope, not scope creep.
+- **Low-memory crashes are fixed at the root, not worked around.** The mount queue below, the `deviceMemory` and Save-Data gates and the memory-pressure hook limit what is alive at once; they do not say why a phone runs out. Measure (heap after garbage collection, DOM nodes, WebGL contexts, repeated place switches), name what is retained and remove it ([#476](https://github.com/mukoko-dev/mukoko-weather/issues/476)).
+- **Extra background requests are an accepted cost.** Warming the next saved places while a place is read (up to four extra forecast requests per place view, through the shared Worker read) is approved.
+- **Apple's design principles, applied through Mzizi.** Clarity, deference to content, consistent spacing, safe areas and large touch targets across the whole app, built from Mzizi tokens, fauna classes and registry components, never hand-rolled sizes, radii or colours.
+
 ## Search Architecture
 
 ### Atlas Search (Fuzzy Text Search)
@@ -192,6 +202,8 @@ Scroll direction ──>
 ```
 
 Sections also UNMOUNT when scrolled 1500px past the viewport (bidirectional), reclaiming memory on long pages.
+
+This queue is a workaround for memory pressure, not the design (see Platform direction above). The Astro move replaces it: below-the-fold sections become islands that load when visible.
 
 ## Database Schema
 

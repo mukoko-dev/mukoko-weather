@@ -1,22 +1,14 @@
-import { cache } from "react";
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import { getCountryByCode } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
 import { breadcrumbJsonLd } from "@/lib/json-ld";
 import { buildPageMetadata } from "@/lib/metadata";
 import { resolveLocationParam } from "@/lib/load-location";
-import { getCachedSeason, seasonWithinBudget } from "@/lib/place-seed-server";
+import { localPlaceForSlug } from "@/lib/local-place";
+import { localSeason } from "@/lib/season-local";
 import { JsonLd } from "@/components/layout/JsonLd";
+import { PlaceResolver } from "@/components/weather/PlaceResolver";
 import { PlaceStage } from "@/components/weather/PlaceStage";
 import { SITE_URL } from "@/lib/site";
 import { countryDisplayName, placeLine } from "@/lib/location-country";
-
-// Location lookups go through the shared loadLocation (./load-location) so the
-// layout, generateMetadata and the page share one DB round-trip per request.
-const loadCountry = cache((code: string) =>
-  getCountryByCode(code).catch(() => null),
-);
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata({
@@ -24,7 +16,12 @@ export async function generateMetadata({
 }: {
   params: Promise<{ location: string }>;
 }): Promise<Metadata> {
-  const stored = await resolveLocationParam(params);
+  // A shipped place or a spot needs no lookup. Only another slug asks the
+  // store, and metadata streams after the shell for a browser (a crawler
+  // still gets it with the page), so that wait never holds a visitor.
+  const { location: slug } = await params;
+  const stored =
+    localPlaceForSlug(slug) ?? (await resolveLocationParam(params));
   if (!stored) return buildPageMetadata({ notFound: true });
   // Metadata has no forecast to reconcile against, so a region borrowed from
   // a seed (possibly across a border) is left out rather than indexed.
@@ -33,25 +30,21 @@ export async function generateMetadata({
     : stored;
 
   const countryCode = loc.country ?? "";
-  const country = countryCode ? await loadCountry(countryCode) : null;
-  const countryName = country?.name ?? countryDisplayName(countryCode);
+  const countryName = countryDisplayName(countryCode);
 
   const title = `${loc.name} Weather Today — Forecast & Conditions`;
   const description = `Current weather conditions, 7-day forecast, and hourly predictions for ${placeLine(loc.name, loc.province, countryName)}. Weather intelligence with frost alerts, farming insights, and accurate temperature data from mukoko weather.`;
 
-  // Build dynamic OG image URL with location-specific season from database.
-  // Note: the OG route accepts `temp` and `condition` params, but we
-  // intentionally omit them here — fetching weather data purely for OG
-  // metadata would add a DB round-trip to every SSR render.
-  // Wrapped in try/catch — if DB is unavailable, season is simply omitted
-  // from OG params rather than breaking all metadata for the page.
-  let seasonName = "";
-  try {
-    const season = await getCachedSeason(loc.country ?? "", loc.lat ?? 0);
-    seasonName = season.name;
-  } catch {
-    // Season unavailable — omit from OG params
-  }
+  // Build dynamic OG image URL with the location-specific season, from the
+  // prebuilt season table (no database read). Note: the OG route accepts
+  // `temp` and `condition` params, but we intentionally omit them here —
+  // fetching weather data purely for OG metadata would add a round-trip to
+  // every SSR render.
+  const seasonName = localSeason(
+    new Date(),
+    loc.country ?? "",
+    loc.lat ?? 0,
+  ).name;
   const ogParams = new URLSearchParams({
     title: `${loc.name} Weather`,
     subtitle: `Live forecast for ${placeLine(loc.province, countryName) || loc.name}`,
@@ -102,10 +95,20 @@ export async function generateMetadata({
 
 /**
  * The place page: the shell, the place and its structured data. It makes NO
- * weather call (issue #414). The forecast is fetched by the visitor's own
- * browser and painted over the copy stored on the device, so the first byte
- * never waits on the Worker or Open-Meteo, and Vercel's shared egress
- * addresses can no longer be rate-limited into a seasonal-estimate page.
+ * weather call (issue #414) and waits for no data at all (issue #452): the
+ * forecast is fetched by the visitor's own browser and painted over the copy
+ * stored on the device, and everything the server sends is known without a
+ * lookup:
+ *
+ * - the place: a shipped place from the seed, a spot from its own slug
+ *   (`localPlaceForSlug`). Any other slug is resolved by the browser
+ *   (`PlaceResolver`), which shows the not-found view there when the Worker
+ *   holds no such place; the edge proxy still answers a real 404 for the
+ *   slugs it can tell are unknown;
+ * - the season: the prebuilt table (`localSeason`), not a database read;
+ * - the country name: the static country list;
+ * - the signed-in person: not sent at all; the client reads it from
+ *   AuthKit's provider (`useAiUser`).
  *
  * Structured data: Place, BreadcrumbList and FAQPage need no forecast and
  * stay. The Observation block (current temperature, humidity, wind, …) is
@@ -118,25 +121,13 @@ export default async function LocationPage({
 }: {
   params: Promise<{ location: string }>;
 }) {
-  const rawLocation = await resolveLocationParam(params);
-  if (!rawLocation) notFound();
-  // Strip MongoDB _id (ObjectId with .toJSON()) before passing to Client Components
-  const { _id: _removed, ...location } = rawLocation as typeof rawLocation & {
-    _id?: unknown;
-  };
+  const { location: slug } = await params;
+  const location = localPlaceForSlug(slug);
+  if (!location) return <PlaceResolver slug={slug} />;
 
   const countryCode = (location.country ?? "").toUpperCase();
-  const [season, currentUser] = await Promise.all([
-    seasonWithinBudget(countryCode, location.lat ?? 0),
-    getCurrentUser().catch(() => null),
-  ]);
-  const countryDoc = countryCode ? await loadCountry(countryCode) : null;
-  const countryName = countryDoc?.name ?? countryDisplayName(countryCode);
-  // Strip AuthKit-specific fields before crossing the server/client boundary.
-  // AISummary/AISummaryChat only need id + email to decide signed-in vs CTA.
-  const aiUser = currentUser
-    ? { id: currentUser.id, email: currentUser.email ?? null }
-    : null;
+  const season = localSeason(new Date(), countryCode, location.lat ?? 0);
+  const countryName = countryDisplayName(countryCode);
   const now = new Date().toISOString();
 
   // Structured data states only what the page knows for certain. A country
@@ -226,7 +217,7 @@ export default async function LocationPage({
       <JsonLd data={[pageSchema, breadcrumbSchema, faqSchema]} />
 
       {/* The shell and the place; the weather arrives in the browser. */}
-      <PlaceStage seed={{ location, season, countryName }} user={aiUser} />
+      <PlaceStage seed={{ location, season, countryName }} />
     </>
   );
 }

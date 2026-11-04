@@ -1,22 +1,27 @@
 /**
- * #237 — an unknown slug must answer a real 404, not a streamed 200
- * "Location not found".
+ * #237 and #452 — who answers "no such place", and with what status.
  *
- * Next.js can only send a non-200 status before the first byte of the shell
- * is flushed. Any Suspense boundary above the code that calls notFound()
- * flushes that shell early, so these tests pin the two things that keep the
- * status real:
- *   1. `[location]/layout.tsx` resolves the slug and calls notFound() itself,
- *      above `[location]/loading.tsx`'s boundary.
- *   2. There is no root `src/app/loading.tsx` — a root boundary wraps every
- *      route, the `[location]` layout included. The home page carries its own
- *      Suspense instead.
+ * #237 made an unknown slug a real 404: Next.js can only send a non-200
+ * status before the first byte of the shell is flushed, so a `notFound()`
+ * thrown under `[location]/loading.tsx`'s Suspense boundary arrives as a 200.
+ * The fix was a layout that resolved the slug above that boundary, which put
+ * a place lookup (the database, or the Worker) in front of the first byte of
+ * EVERY place page.
+ *
+ * #452 (owner: "an app, a page, a layout, a container has never depended on
+ * data") takes it off the critical path. The real 404 for an unknown slug is
+ * the edge proxy's (`src/proxy.ts` and `src/lib/location-gate.ts`, tested in
+ * proxy.test.ts and location-gate.test.ts), which rewrites it to a
+ * server-rendered 404 before any page renders. What is given up, on purpose:
+ * a slug the proxy let through (its lookup failed or timed out, or the place
+ * lookup only the Worker can make) is no longer 404'd by a layout; its page
+ * sends the shell and the BROWSER resolves it, rendering the not-found view
+ * with a 200 status and `noindex` when the Worker holds no such place. These
+ * tests pin both halves.
  */
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-const NOT_FOUND = new Error("NEXT_NOT_FOUND");
 
 const mockGetLocationFromDb = vi.fn();
 vi.mock("@/lib/db", () => ({
@@ -24,82 +29,49 @@ vi.mock("@/lib/db", () => ({
 }));
 vi.mock("next/navigation", () => ({
   notFound: () => {
-    throw NOT_FOUND;
+    throw new Error("NEXT_NOT_FOUND");
   },
 }));
 
 const appDir = resolve(__dirname, "..");
 const read = (p: string) => readFileSync(resolve(appDir, p), "utf-8");
 
-const HARARE = {
-  slug: "harare",
-  name: "Harare",
-  province: "Harare",
-  lat: -17.83,
-  lon: 31.05,
-  elevation: 1490,
+const STORED = {
+  slug: "sembawang-sg",
+  name: "Sembawang",
+  province: "Singapore",
+  lat: 1.45,
+  lon: 103.82,
+  elevation: 15,
   tags: ["city"],
-  country: "ZW",
+  country: "SG",
 };
 
 beforeEach(() => {
   mockGetLocationFromDb.mockReset();
 });
 
-describe("[location] layout — real 404 for unknown slugs", () => {
-  async function render(slug: string) {
-    const { default: LocationLayout } = await import("./layout");
-    return LocationLayout({
-      children: "page",
-      params: Promise.resolve({ location: slug }),
-    });
-  }
-
-  it("calls notFound() when the slug does not resolve", async () => {
-    mockGetLocationFromDb.mockResolvedValue(null);
-    await expect(render("zzzz-not-a-place")).rejects.toBe(NOT_FOUND);
-    await expect(render("pricing")).rejects.toBe(NOT_FOUND);
+describe("[location] has no layout in front of the shell", () => {
+  it("has no layout.tsx: no await sits above loading.tsx's boundary", () => {
+    expect(existsSync(resolve(appDir, "[location]/layout.tsx"))).toBe(false);
   });
 
-  it("renders the page for a resolvable slug (seed or smart slug)", async () => {
-    mockGetLocationFromDb.mockResolvedValue(HARARE);
-    await expect(render("harare")).resolves.toBe("page");
-    await expect(render("some-place--ksy4dd7")).resolves.toBe("page");
+  it("the place page never calls notFound(): it resolves in the browser instead", () => {
+    const page = read("[location]/page.tsx");
+    expect(page).not.toContain("notFound(");
+    expect(page).toContain("<PlaceResolver slug={slug} />");
   });
 
-  it("a resolver error never crashes the route: a shipped slug still renders (#414)", async () => {
-    mockGetLocationFromDb.mockRejectedValue(new Error("mongo down"));
-    await expect(render("harare")).resolves.toBe("page");
-    await expect(render("nairobi-ke")).resolves.toBe("page");
-  });
-
-  it("a resolver error for a slug nobody ships is a real 404, not a crash", async () => {
-    mockGetLocationFromDb.mockRejectedValue(new Error("mongo down"));
-    await expect(render("zzzz-not-a-place")).rejects.toBe(NOT_FOUND);
-  });
-
-  it("a shipped slug renders even when the resolver says it is not found", async () => {
-    mockGetLocationFromDb.mockResolvedValue(null);
-    await expect(render("harare")).resolves.toBe("page");
-  });
-
-  it("checks the slug before rendering children, outside loading.tsx", () => {
-    const layout = read("[location]/layout.tsx");
-    expect(layout).toMatch(/resolveLocationParam\(params\)/);
-    expect(layout).toMatch(/notFound\(\)/);
-    expect(layout).not.toMatch(/<Suspense/);
+  it("the edge proxy is still the real 404 for an unknown slug", () => {
+    const proxy = read("../proxy.ts");
+    expect(proxy).toContain("LOCATION_NOT_FOUND_REWRITE");
+    expect(proxy).toContain("isRenderableLocation(");
+    expect(existsSync(resolve(appDir, "[location]/loading.tsx"))).toBe(true);
   });
 });
 
 describe("shared per-request location loader", () => {
-  it("is the one loadLocation the layout and page both reach, via resolveLocationParam", () => {
-    expect(read("[location]/layout.tsx")).toMatch(
-      /import \{ resolveLocationParam \} from "@\/lib\/load-location"/,
-    );
-    const page = read("[location]/page.tsx");
-    expect(page).toMatch(
-      /import \{ resolveLocationParam \} from "@\/lib\/load-location"/,
-    );
+  it("is what the sub-routes and the place page's metadata reach, via resolveLocationParam", () => {
     const shared = readFileSync(
       resolve(appDir, "../lib/load-location.ts"),
       "utf-8",
@@ -107,11 +79,15 @@ describe("shared per-request location loader", () => {
     expect(shared).toMatch(
       /import \{ loadLocation \} from "@\/app\/\[location\]\/load-location"/,
     );
-    // A second local cache() wrapper would not dedupe with the layout's.
+    const page = read("[location]/page.tsx");
+    expect(page).toMatch(
+      /import \{ resolveLocationParam \} from "@\/lib\/load-location"/,
+    );
+    // A second local cache() wrapper would not dedupe with the shared one.
     expect(page).not.toMatch(/const loadLocation = cache/);
   });
 
-  it("is used by every sub-route too, so the layout's lookup is reused", () => {
+  it("is used by every sub-route too, and none of them calls the store itself", () => {
     for (const sub of ["atmosphere", "forecast", "map"]) {
       const src = read(`[location]/${sub}/page.tsx`);
       expect(src).toMatch(
@@ -121,10 +97,22 @@ describe("shared per-request location loader", () => {
     }
   });
 
-  it("passes the resolver result through", async () => {
-    mockGetLocationFromDb.mockResolvedValue(HARARE);
+  it("passes the store's answer through for a slug that needs a lookup", async () => {
+    mockGetLocationFromDb.mockResolvedValue(STORED);
     const { loadLocation } = await import("./load-location");
-    await expect(loadLocation("harare")).resolves.toEqual(HARARE);
+    await expect(loadLocation("sembawang-sg")).resolves.toEqual(STORED);
+  });
+
+  it("answers a shipped place and a spot without asking the store at all", async () => {
+    mockGetLocationFromDb.mockRejectedValue(new Error("must not be asked"));
+    const { loadLocation } = await import("./load-location");
+    await expect(loadLocation("harare")).resolves.toMatchObject({
+      slug: "harare",
+    });
+    await expect(loadLocation("some-place--ksy4dd7")).resolves.toMatchObject({
+      slug: "some-place--ksy4dd7",
+    });
+    expect(mockGetLocationFromDb).not.toHaveBeenCalled();
   });
 });
 
@@ -158,7 +146,24 @@ describe("not-found UI", () => {
       "utf-8",
     );
     expect(view).toMatch(/Location not found/);
-    expect(view).toMatch(/Try one of these cities/);
+    expect(view).toMatch(/<CitySuggestions/);
     expect(view).toMatch(/getLocationsForContext\(20\)/);
+    const list = readFileSync(
+      resolve(appDir, "../components/layout/CitySuggestions.tsx"),
+      "utf-8",
+    );
+    expect(list).toMatch(/Try one of these cities/);
+  });
+
+  it("the browser's not-found view has the same copy and list, marks itself noindex and reads no database", () => {
+    const view = readFileSync(
+      resolve(appDir, "../components/weather/PlaceNotFound.tsx"),
+      "utf-8",
+    );
+    expect(view).toMatch(/Location not found/);
+    expect(view).toMatch(/We don't have weather data for that location yet\./);
+    expect(view).toMatch(/<CitySuggestions/);
+    expect(view).toContain('<meta name="robots" content="noindex" />');
+    expect(view).not.toMatch(/@\/lib\/db|getLocationsForContext/);
   });
 });
