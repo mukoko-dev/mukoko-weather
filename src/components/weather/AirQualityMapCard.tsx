@@ -1,10 +1,11 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { useEffect, useId, useMemo, useState } from "react";
-import { MapSkeleton } from "./map/MapSkeleton";
+import { MapCredits } from "./map/MapCredits";
+import { StaticMapTiles, useStaticTileMap } from "./map/StaticTileMap";
 import {
   AQI_BAND_BG_CLASS,
+  AQI_BAND_FILL_CLASS,
   AQI_BAND_LABELS,
   aqiBand,
   fetchAirQualityGrid,
@@ -12,11 +13,8 @@ import {
   type AqGridResponse,
   type AqiBand,
 } from "@/lib/aq-grid";
-
-const MapLibreMap = dynamic(
-  () => import("./map/MapLibreMap").then((m) => ({ default: m.MapLibreMap })),
-  { ssr: false, loading: () => <MapSkeleton fill /> },
-);
+import { aqStaticCells } from "@/lib/aq-static-cells";
+import { attributionForLayer } from "@/lib/map-sources";
 
 /** Grid shape requested from the API: 7×7 points across ±40 km. */
 const GRID_RADIUS_KM = 40;
@@ -37,16 +35,23 @@ interface AirQualityMapCardProps {
 }
 
 /**
- * Apple-Weather-style "AIR QUALITY MAP": a non-interactive map painted with the
- * AQI grid, plus a centred "{aqi} · My Location" bubble. Renders nothing when
- * the grid is unavailable so a provider outage never shows an empty card.
+ * Apple-Weather-style "AIR QUALITY MAP": a picture of the AQI grid around the
+ * place, plus a centred "{aqi} · My Location" bubble. Renders nothing when the
+ * grid is unavailable so a provider outage never shows an empty card.
+ *
+ * The picture is four MapTiler raster tiles with the grid's cells drawn over
+ * them as SVG polygons (src/lib/static-map.ts, src/lib/aq-static-cells.ts), not
+ * a MapLibre map (#476). The card cannot be panned or zoomed, and as a map it
+ * cost a WebGL context, web workers, about 1.2 MB of script and 40 to 50 MB
+ * of the tab's memory (measured: scripts/browser-check/memory-budget.mjs), the
+ * single largest thing on the place page. The full, interactive map is
+ * `/[location]/map`.
  */
 export function AirQualityMapCard({
   lat,
   lon,
   placeName,
 }: AirQualityMapCardProps) {
-  const headingId = useId();
   const [state, setState] = useState<CardState>({ status: "loading" });
 
   useEffect(() => {
@@ -72,14 +77,6 @@ export function AirQualityMapCard({
     return () => controller.abort();
   }, [lat, lon]);
 
-  const overlay = useMemo(
-    () =>
-      state.status === "ready"
-        ? gridToGeoJSON(state.data.points, state.data.cellKm)
-        : null,
-    [state],
-  );
-
   if (state.status === "unavailable") return null;
 
   if (state.status === "loading") {
@@ -92,7 +89,41 @@ export function AirQualityMapCard({
     );
   }
 
-  const { aqi, band } = state;
+  return (
+    <AirQualityMapView
+      lat={lat}
+      lon={lon}
+      placeName={placeName}
+      data={state.data}
+      aqi={state.aqi}
+      band={state.band}
+    />
+  );
+}
+
+/** The card once the grid has arrived (exported for the rendered tests). */
+export function AirQualityMapView({
+  lat,
+  lon,
+  placeName,
+  data,
+  aqi,
+  band,
+}: AirQualityMapCardProps & {
+  data: AqGridResponse;
+  aqi: number;
+  band: AqiBand;
+}) {
+  const headingId = useId();
+  const { picture, tilesShown, onTileError } = useStaticTileMap({
+    lat,
+    lon,
+    zoom: MAP_ZOOM,
+  });
+  const cells = useMemo(
+    () => aqStaticCells(gridToGeoJSON(data.points, data.cellKm), MAP_ZOOM),
+    [data],
+  );
   const summary = `Air quality around ${placeName}: ${AQI_BAND_LABELS[band].toLowerCase()} (${aqi}) at your location`;
 
   return (
@@ -101,22 +132,36 @@ export function AirQualityMapCard({
         <h2 id={headingId} className="giraffe">
           Air Quality Map
         </h2>
-        <span className="dove text-xs">{state.data.source}</span>
+        <span className="dove text-xs">{data.source}</span>
       </div>
 
       <div
         role="img"
         aria-label={summary}
-        className="relative mx-auto aspect-square max-h-[28rem] w-full"
+        className="relative mx-auto aspect-square max-h-[28rem] w-full bg-surface-base"
       >
-        <MapLibreMap
-          lat={lat}
-          lon={lon}
-          zoom={MAP_ZOOM}
-          interactive={false}
-          aqiOverlay={overlay}
-          className="h-full w-full"
-        />
+        <svg
+          viewBox={picture.viewBox}
+          preserveAspectRatio="xMidYMid slice"
+          className="absolute inset-0 h-full w-full"
+          aria-hidden="true"
+        >
+          {tilesShown && (
+            <StaticMapTiles picture={picture} onTileError={onTileError} />
+          )}
+          {/* One square per grid point, in its EPA band's colour; the outline
+              carries the contrast the official fills cannot (see the full map). */}
+          {cells.map((cell) => (
+            <polygon
+              key={cell.id}
+              points={cell.points}
+              className={`${AQI_BAND_FILL_CLASS[cell.band]} stroke-wx-outline`}
+              fillOpacity={0.55}
+              strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+        </svg>
         <div
           aria-hidden="true"
           className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-button)] border border-border bg-surface-card/95 px-3 py-1.5 text-sm font-medium text-text-primary shadow-lg backdrop-blur-sm"
@@ -131,6 +176,13 @@ export function AirQualityMapCard({
           <span>· My Location</span>
         </div>
       </div>
+      {/* Credits outside the picture (they are links), generated from
+          map-sources.ts like the full map's: the base map and the air quality
+          data. */}
+      <MapCredits
+        credits={attributionForLayer("airQuality")}
+        className="mt-0 px-[var(--space-card)] py-2 text-xs"
+      />
     </section>
   );
 }

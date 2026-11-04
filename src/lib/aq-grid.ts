@@ -69,6 +69,21 @@ export const AQI_BAND_BG_CLASS: Record<AqiBand, string> = Object.fromEntries(
   AQI_BANDS.map((b) => [b, scaleBandOf(b).bg]),
 ) as Record<AqiBand, string>;
 
+/**
+ * Static Tailwind SVG fill classes for a band (the static air quality map's
+ * cells). Written out in full, not derived from `scaleBandOf(b).stroke`,
+ * because Tailwind only generates a class it finds spelled in the source;
+ * aq-grid.test.ts pins each one to the same `--wx-aqi-N` token as the scale.
+ */
+export const AQI_BAND_FILL_CLASS: Record<AqiBand, string> = {
+  good: "fill-wx-aqi-1",
+  moderate: "fill-wx-aqi-2",
+  usg: "fill-wx-aqi-3",
+  unhealthy: "fill-wx-aqi-4",
+  very_unhealthy: "fill-wx-aqi-5",
+  hazardous: "fill-wx-aqi-6",
+};
+
 /** Foreground class that passes 4.5:1 on the band's fill (bubble numbers). */
 export const AQI_BAND_FG_CLASS: Record<AqiBand, string> = Object.fromEntries(
   AQI_BANDS.map((b) => [b, scaleBandOf(b).on]),

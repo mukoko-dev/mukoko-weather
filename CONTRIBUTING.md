@@ -83,6 +83,12 @@ npm run build && npx next start -p 3100 &
 BASE=http://localhost:3100 node scripts/browser-check/pwa-check.mjs
 ```
 
+A change that adds something to a place page (a section, a chart, a map, a canvas, a script) also runs the memory budget, `scripts/browser-check/memory-budget.mjs` (#476). It loads the page in a phone-sized Chromium, scrolls it, switches places, opens the detail sheets, plays the map and moves between pages, and fails with the number it reached when something holds more than the budget, or keeps anything after the visitor has left it. A card the visitor cannot pan or zoom is a picture, not a MapLibre map:
+
+```bash
+BASE=http://localhost:3100 node scripts/browser-check/memory-budget.mjs
+```
+
 ## Architecture Guidelines
 
 ### Frontend / backend split

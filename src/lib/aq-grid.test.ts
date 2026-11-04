@@ -8,6 +8,7 @@ import {
   AQI_BAND_LABELS,
   AQI_BAND_TOKEN,
   AQI_BAND_BG_CLASS,
+  AQI_BAND_FILL_CLASS,
   aqBubbles,
   type AqGridResponse,
 } from "./aq-grid";
@@ -300,5 +301,17 @@ describe("AQI bubbles (full-screen map)", () => {
     }
     expect(AQI_BAND_BG_CLASS.good).toBe("bg-wx-aqi-1");
     expect(AQI_BAND_BG_CLASS.hazardous).toBe("bg-wx-aqi-6");
+  });
+});
+
+describe("AQI_BAND_FILL_CLASS (the static map's SVG fills)", () => {
+  it("names the same --wx-aqi token as the scale, band for band", () => {
+    for (const band of AQI_BANDS) {
+      // "--wx-aqi-3" -> "fill-wx-aqi-3": the class is spelled out in aq-grid.ts
+      // (Tailwind only generates what it finds), so this is what keeps it honest.
+      expect(AQI_BAND_FILL_CLASS[band]).toBe(
+        `fill${AQI_BAND_TOKEN[band].replace(/^-/, "")}`,
+      );
+    }
   });
 });
