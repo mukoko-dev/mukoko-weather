@@ -68,6 +68,21 @@ describe("service worker map-tile caching", () => {
     expect(tilesWorker).toContain('set("X-Map-Tile", "empty")');
     expect(tilesWorker).toContain('set("X-Cache", "STALE")');
   });
+
+  it("never lets a browser keep the empty tile, which only says the provider could not be asked", () => {
+    // Kept for five minutes (`max-age=300`), a request that failed during a
+    // quota or breaker window stayed a blank patch of the map after the
+    // provider had recovered, and every zoom back to that area re-used it.
+    const body = tilesWorker.match(
+      /fn empty_response\(\)[^{]*\{([\s\S]*?)\n\}/,
+    );
+    expect(body).not.toBeNull();
+    expect(body?.[1]).toContain("tiles::EMPTY_CACHE_CONTROL");
+    expect(body?.[1]).not.toContain("FALLBACK_CACHE_CONTROL");
+    // A stale tile, a real image, is still kept briefly.
+    const stale = tilesWorker.match(/fn stale_response\([^{]*\{([\s\S]*?)\n\}/);
+    expect(stale?.[1]).toContain("tiles::FALLBACK_CACHE_CONTROL");
+  });
 });
 
 describe("MapLibre worker caching", () => {

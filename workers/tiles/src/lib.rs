@@ -9,7 +9,9 @@
 //! GET /v1/map-tiles?…                  the same, under the API's prefix
 //! GET /health
 //! 200 image/png   X-Cache: HIT | MISS | STALE, X-Map-Layer; or the 1x1
-//!                 transparent tile (X-Map-Tile: empty) when nothing can be served
+//!                 transparent tile (X-Map-Tile: empty, Cache-Control: no-store:
+//!                 it says the provider could not be asked, nothing about the
+//!                 place) when nothing can be served
 //! 400 bad layer, zoom, tile or timestamp   422 missing or non-integer z/x/y/layer
 //! 429 over the per-IP limit                503 no Tomorrow.io key configured
 //! ```
@@ -116,10 +118,7 @@ fn stale_response(bytes: Vec<u8>, layer: &str) -> Result<Response> {
 }
 
 fn empty_response() -> Result<Response> {
-    let resp = png(
-        tiles::TRANSPARENT_PNG.to_vec(),
-        tiles::FALLBACK_CACHE_CONTROL,
-    )?;
+    let resp = png(tiles::TRANSPARENT_PNG.to_vec(), tiles::EMPTY_CACHE_CONTROL)?;
     resp.headers().set("X-Cache", "MISS")?;
     resp.headers().set("X-Map-Tile", "empty")?;
     Ok(resp)

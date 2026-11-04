@@ -29,9 +29,16 @@ pub const FRESH_SECONDS: u64 = 5_400;
 pub const TILE_CACHE_CONTROL: &str =
     "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800";
 
-/// Short caching for stale and empty tiles, so browsers recover soon after
-/// the provider's quota resets.
+/// Short caching for a stale tile (a real image, an hour or more old), so
+/// browsers pick up the fresh one soon after the provider recovers.
 pub const FALLBACK_CACHE_CONTROL: &str = "public, max-age=300";
+
+/// No caching at all for the empty tile. It says nothing about the place: only
+/// that the provider could not be asked at that moment. Kept for five minutes
+/// by a browser, a failed request during a quota or breaker window became a
+/// blank tile that stayed blank after the provider had recovered, and every
+/// zoom back to that area re-used it.
+pub const EMPTY_CACHE_CONTROL: &str = "no-store";
 
 /// A 1x1 fully transparent PNG (8-bit RGBA, one all-zero pixel), served
 /// (HTTP 200) when the provider fails and no cached tile exists, so the map
@@ -231,6 +238,16 @@ mod tests {
 
     fn ok(q: &[(&'static str, &'static str)]) -> TileRequest {
         parse(q).expect("valid")
+    }
+
+    #[test]
+    fn an_empty_tile_is_never_kept_by_a_cache_but_a_stale_one_is_kept_briefly() {
+        // The empty tile is a stand-in for "could not ask"; a stale tile is a
+        // real, older image. Only the second may be cached.
+        assert_eq!(EMPTY_CACHE_CONTROL, "no-store");
+        assert!(FALLBACK_CACHE_CONTROL.contains("max-age=300"));
+        assert!(!FALLBACK_CACHE_CONTROL.contains("no-store"));
+        assert!(TILE_CACHE_CONTROL.contains("max-age=3600"));
     }
 
     #[test]
