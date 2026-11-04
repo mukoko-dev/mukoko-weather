@@ -472,7 +472,7 @@ export function CommunityLane({
                     className={`flex h-full items-end ${cell.index === LANE_PAST_HOURS ? "shadow-[inset_2px_0_0_var(--color-text-primary)]" : ""} ${cell.isPast ? "opacity-60" : ""}`}
                   >
                     <span
-                      className={`w-full rounded-sm ${
+                      className={`w-full rounded-[var(--radius-sm)] ${
                         cell.level
                           ? `${fillFor(lane.activity.category, cell.level)} ${LEVEL_HEIGHT[cell.level]}`
                           : "h-1/4 bg-surface-dim"
@@ -495,7 +495,7 @@ export function CommunityLane({
           <li key={level} className="flex items-end gap-1.5">
             <span
               aria-hidden="true"
-              className={`inline-block w-3 rounded-sm bg-text-secondary ${LEGEND_HEIGHT[level]}`}
+              className={`inline-block w-3 rounded-[var(--radius-sm)] bg-text-secondary ${LEGEND_HEIGHT[level]}`}
             />
             <span className="text-base text-text-secondary">
               {LEVEL_WORDS[level]}

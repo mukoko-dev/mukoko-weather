@@ -52,11 +52,12 @@ export function run(main) {
  * handed back with a permissive header; every other method is refused.
  *
  * `failWeather()` makes `/v1/weather` answer 503 while it returns true;
- * `onCall(method, pathname)` sees every request.
+ * `onCall(method, pathname)` sees every request; `delayWeather` (ms) holds
+ * every `/v1/weather` answer back that long, to show what waiting looks like.
  */
 export async function proxyApi(
   context,
-  { failWeather = () => false, onCall = () => {} } = {},
+  { failWeather = () => false, onCall = () => {}, delayWeather = 0 } = {},
 ) {
   await context.route(`${API}/**`, async (route) => {
     const request = route.request();
@@ -84,6 +85,9 @@ export async function proxyApi(
         },
         body: JSON.stringify({ error: "unavailable" }),
       });
+    }
+    if (url.pathname === "/v1/weather" && delayWeather > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayWeather));
     }
     try {
       const response = await route.fetch({

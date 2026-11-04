@@ -208,10 +208,19 @@ describe("MapDashboard — timeline load speed (#266)", () => {
 });
 
 describe("MapDashboard — air quality", () => {
-  it("fetches the grid and feeds both the fill and the bubbles", () => {
+  it("fetches the grid and feeds both the smooth picture and the bubbles", () => {
     expect(source).toContain("fetchAirQualityGrid");
-    expect(source).toContain("aqiOverlay={aqOn ? aqFill : null}");
+    // The same 7 x 7 samples: interpolated for the picture, one bubble each.
+    expect(source).toContain("aqFieldRaster(grid)");
+    expect(source).toContain("aqiOverlay={aqOn ? aqRaster : null}");
     expect(source).toContain("aqiBubbles={aqOn ? bubbles : null}");
+    expect(source).not.toContain("gridToGeoJSON");
+  });
+
+  it("never asks for more grid points to look smoother", () => {
+    // Open-Meteo is rate limited and a grid miss already costs 49 locations:
+    // the smoothness is interpolation in the browser, not a bigger request.
+    expect(source).not.toMatch(/fetchAirQualityGrid\(\{[^}]*\b(n|radiusKm):/);
   });
 });
 
@@ -253,5 +262,13 @@ describe("MapDashboard — overlay sources and credits", () => {
       "modelGridData?.times.indexOf(frames[step]?.timestamp",
     );
     expect(source).toContain("fieldOverlay={fieldOverlay}");
+  });
+
+  it("paints a model step as one interpolated picture of the same grid", () => {
+    expect(source).toContain(
+      "modelFieldRaster(modelGridData, activeLayer, seriesIndex)",
+    );
+    expect(source).not.toContain("modelGridToGeoJSON");
+    expect(source).toContain("fetchModelGrid({");
   });
 });

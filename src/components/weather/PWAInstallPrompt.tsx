@@ -138,10 +138,10 @@ export function PWAInstallPrompt() {
         if (!v) handleDismiss();
       }}
     >
-      <DialogContent className="max-w-sm rounded-2xl p-6 sm:p-6">
+      <DialogContent className="max-w-sm rounded-[var(--radius-card)] p-6 sm:p-6">
         <DialogHeader className="items-center text-center gap-4">
           {/* App icon — full-color brand mark */}
-          <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-surface-dim">
+          <div className="flex items-center justify-center w-16 h-16 rounded-[var(--radius-card)] bg-surface-dim">
             <Image
               src="/favicon.svg"
               alt="mukoko weather"

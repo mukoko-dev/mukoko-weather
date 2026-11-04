@@ -975,7 +975,7 @@ body {
 /* ===== Minerals Accent — Horizontal gradient for dialogs (7 minerals, ring order) ===== */
 .minerals-accent {
   height: 3px;
-  border-radius: 9999px;
+  border-radius: var(--radius-full);
   background: linear-gradient(
     to right,
     var(--mineral-tanzanite) 0%,
@@ -1343,7 +1343,7 @@ body {
     align-items: center;
     gap: var(--hadeda-gap);
     padding: var(--hadeda-pad);
-    border-radius: 9999px;
+    border-radius: var(--radius-full);
     border: var(--border-width-rest) solid var(--border);
     background-color: color-mix(in srgb, var(--card) 90%, transparent);
     box-shadow: var(--shadow-lg);
@@ -1921,7 +1921,7 @@ body {
 :focus-visible {
   outline: var(--focus-ring-width, 3px) solid var(--focus-ring);
   outline-offset: var(--focus-ring-offset, 2px);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 /* Remove default focus ring for mouse users, keep for keyboard */
@@ -1935,7 +1935,7 @@ body {
    @layer components could never win over it. Keyboard focus only — mouse users
    keep the ring-free look.
 
-   The global rule also forces `border-radius: 4px` on every focused element,
+   The global rule also forces `border-radius: var(--radius-sm)` on every focused element,
    which squares off the pill buttons (--radius-button) on keyboard focus, so
    each button rule restores its own radius. */
 .kudu:focus-visible,
@@ -1950,13 +1950,13 @@ body {
 }
 
 /* .lark (a place chip in the bottom bar's lane) — unlayered like the fauna
-   rules above, so the global :focus-visible radius of 4px does not square the
+   rules above, so the global :focus-visible radius (--radius-sm) does not square the
    pill on keyboard focus. The ring is inset: the lane's scroller clips
    anything drawn outside it. */
 .lark:focus-visible {
   outline: var(--focus-ring-width, 3px) solid var(--focus-ring);
   outline-offset: -3px;
-  border-radius: 9999px;
+  border-radius: var(--radius-full);
 }
 
 /* .bee sits on the bg-primary header action pill. The cobalt ring is the same
@@ -1968,7 +1968,7 @@ body {
   /* No offset: the pill only pads its buttons by 2px, so a zero-offset ring
      stays on the cobalt pill instead of spilling onto the light header. */
   outline-offset: 0px;
-  border-radius: 9999px;
+  border-radius: var(--radius-full);
 }
 
 /* Focus on the sky (WCAG 1.4.11, 3:1). The page sky is a saturated gradient
@@ -1996,11 +1996,11 @@ body {
 
 /* .kestrel-round (Share, the ⋯ trigger) — unlayered like the fauna rules above:
    the global :focus-visible rule would otherwise square the round control to a
-   4px radius on keyboard focus. */
+   --radius-sm radius on keyboard focus. */
 .kestrel-round:focus-visible {
   outline: var(--focus-ring-width, 3px) solid var(--sky-fg);
   outline-offset: var(--focus-ring-offset, 2px);
-  border-radius: 9999px;
+  border-radius: var(--radius-full);
 }
 
 /* Loading-skeleton shimmer (.okapi). Only when motion is welcome; otherwise

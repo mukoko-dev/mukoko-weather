@@ -34,6 +34,14 @@ AI features are optional locally: without the AI env vars every AI endpoint uses
 - **Mobile-first** — design for mobile screens first, then scale up
 - **56px touch targets** — all interactive elements must meet the minimum touch target size
 
+### Commands that need care
+
+- **One test:** `npx vitest run src/lib/some.test.ts`, or `-t "name"` for one test in it.
+- **Formatting:** CI's `vite-plus / fmt` reads only the `fmt` block of `vite.config.ts` (print width 80, trailing commas `all`). A bare `npx oxfmt` ignores it and wants to reformat about 720 files, so write a throwaway JSON file with the same values and pass it: `npx oxfmt -c /tmp/oxfmt-repo.json --check src workers`. Markdown and JSON are checked by Prettier 3.9.4 (see the checklist below); `npx vp` is not a command.
+- **Dev server:** use `npx next dev --webpack`. Turbopack's `next dev` fails on a CSS parse error: Tailwind's automatic source scan reads the literal `rounded-[var(--radius-*)]` written in prose (a comment in `src/lib/mzizi-alignment.test.ts`) as a class, and Lightning CSS rejects the rule it generates (the webpack build only warns). It needs dummy WorkOS variables (`WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, a 32+ character `WORKOS_COOKIE_PASSWORD`, `NEXT_PUBLIC_WORKOS_REDIRECT_URI`) and writes an untracked `AGENTS.md` at the repo root, which must never be committed.
+- **Memory:** two `next build` processes at once on a 16 GB machine get killed; run one.
+- **`CLAUDE.md` is owner-only:** the `no agent-local files` check fails any pull request that adds or changes `CLAUDE.md` or `.claude/`, so a contributor's guidance for it goes to the owner as a patch, not in a PR.
+
 ### Data Standards
 
 All data models must align with **schema.org** vocabulary and **OpenAPI** standards. See the **Data Standards & Interoperability** section in `CLAUDE.md` for the full specification.

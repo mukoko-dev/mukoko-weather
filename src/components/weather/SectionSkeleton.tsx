@@ -153,7 +153,7 @@ export function AISummarySkeleton() {
     >
       {/* Header: icon + title */}
       <div className="flex items-center gap-2">
-        <Skeleton className="h-5 w-5 rounded" />
+        <Skeleton className="h-5 w-5 rounded-[var(--radius-sm)]" />
         <Skeleton className="h-6 w-56" />
       </div>
       {/* Markdown content lines */}
@@ -183,10 +183,10 @@ export function AISummaryChatSkeleton() {
       {/* Collapsed header */}
       <div className="flex items-center justify-between px-4 py-3 min-h-[var(--touch-target-min)]">
         <div className="flex items-center gap-2">
-          <Skeleton className="h-5 w-5 rounded" />
+          <Skeleton className="h-5 w-5 rounded-[var(--radius-sm)]" />
           <Skeleton className="h-5 w-48" />
         </div>
-        <Skeleton className="h-5 w-5 rounded" />
+        <Skeleton className="h-5 w-5 rounded-[var(--radius-sm)]" />
       </div>
     </div>
   );
@@ -228,7 +228,7 @@ export function AirQualityWideSkeleton() {
       aria-label="Loading air quality"
     >
       <Skeleton className="h-4 w-28" />
-      <Skeleton className="h-10 w-20" />
+      <Skeleton className="h-10 w-20 rounded-[var(--radius-sm)]" />
       <Skeleton className="h-2 w-full rounded-full" />
       <Skeleton className="h-4 w-3/4" />
     </div>
