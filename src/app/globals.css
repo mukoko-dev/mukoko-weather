@@ -199,6 +199,18 @@
      reorder "Done") use it too. Header.test.ts keeps these in step with the
      component. */
   --mobile-nav-bar-height: 4.5rem;
+  /* The width of every PINNED item in the bar (Map, Locations), one preset
+     for all of them (owner, 2026-11-05, from a screen recording: Map was 53pt
+     wide and Locations 85pt because each button took its label's width).
+     "Locations" is the longest label and measures 64px in Noto Sans at
+     --text-nav-label (scripts/browser-check/bottom-bar.mjs); with
+     --inset-floor on each side and the hairline that is 93px, so the preset is
+     6rem (96px) and the label fits whole. In rem so it grows with the label's
+     text size. A longer label is cut with an ellipsis and never widens its
+     button. Below 360px the labels are screen-reader-only and the items are
+     one touch target wide (mzizi-bottom-nav.tsx). Header.test.ts keeps it in
+     step with the component. */
+  --mobile-nav-item-width: 6rem;
   --mobile-nav-clearance: calc(
     var(--float-bottom) + var(--mobile-nav-bar-height) + 0.5rem
   );
