@@ -28,7 +28,11 @@
  *      other side lacks it, so an empty profile never empties the device and an
  *      empty device never empties the profile.
  *   3. Over the cap (`MAX_PERSON_ACTIVITIES`) the person's existing items come
- *      first; device-only extras stay on the device and are not sent.
+ *      first; device-only extras stay on the device and are not sent. They are
+ *      reported, not dropped quietly: the pass's result lists them as
+ *      `overflow` (and `person-preferences-state.ts` keeps the latest list).
+ *      Nothing on screen says so yet, and nothing stops the selection at the
+ *      cap; a limit at selection time is a separate UI change.
  *   4. The view is tagged with the person who last synced it. A DIFFERENT
  *      person signing in on the same browser does not merge the previous
  *      person's selections into their profile: the device list becomes their
@@ -66,11 +70,11 @@ import {
   ACTIVITY_ID_RE,
   MAX_PERSON_ACTIVITIES,
   TOMBSTONE_RETENTION_MS,
-  UTC_TIMESTAMP_RE,
   activityIdOf,
   mergeById,
   type ActivityItem,
 } from "./person-preferences";
+import { isWireTimestamp } from "./rxdb/couch-docs";
 
 export const PERSON_PREFERENCES_URL = "/api/profile/preferences";
 
@@ -97,7 +101,12 @@ export interface SyncDeps {
 }
 
 export type SyncOutcome =
-  | { kind: "synced" }
+  /**
+   * `overflow` is a known state, not a silent drop: the device's activities
+   * beyond the profile's cap (rule 3). They stay on this device and are not on
+   * the profile, so they do not follow the person. Empty when all fit.
+   */
+  | { kind: "synced"; overflow: string[] }
   /** Try again later: the network, a 5xx, a 429 or a refused batch (422). */
   | { kind: "retry"; afterMs?: number }
   /** Will not change by waiting: stop for this page load. */
@@ -117,10 +126,8 @@ export function readActivities(raw: unknown): ActivityItem[] {
     if (
       typeof r.activityId === "string" &&
       ACTIVITY_ID_RE.test(r.activityId) &&
-      typeof r.createdAt === "string" &&
-      UTC_TIMESTAMP_RE.test(r.createdAt) &&
-      typeof r.updatedAt === "string" &&
-      UTC_TIMESTAMP_RE.test(r.updatedAt) &&
+      isWireTimestamp(r.createdAt) &&
+      isWireTimestamp(r.updatedAt) &&
       typeof r.tombstone === "boolean"
     ) {
       out.push({
@@ -454,7 +461,7 @@ export async function syncOnce(
     removed: new Set(local.filter((id) => !after.has(id))),
   });
   if (!sameList(current, next)) deps.applyLocal(next);
-  return { kind: "synced" };
+  return { kind: "synced", overflow: [...r.overflow].sort() };
 }
 
 // ---------------------------------------------------------------------------

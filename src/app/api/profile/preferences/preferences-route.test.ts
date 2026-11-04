@@ -56,6 +56,10 @@ const put = (body: unknown, headers: Record<string, string> = JSON_ORIGIN) =>
     body: typeof body === "string" ? body : JSON.stringify(body),
   }) as never;
 
+const COOKIE = { cookie: "wos-session=sealed-session" };
+const get = (headers: Record<string, string> = {}, query = "") =>
+  new Request(`${URL}${query}`, { method: "GET", headers }) as never;
+
 async function json(res: Response) {
   return (await res.json()) as Record<string, unknown>;
 }
@@ -83,7 +87,7 @@ beforeEach(() => {
 describe("GET", () => {
   it("is 401 for an anonymous caller and touches nothing", async () => {
     withAuthMock.mockResolvedValue({ user: null });
-    const res = await GET();
+    const res = await GET(get());
     expect(res.status).toBe(401);
     expect(res.headers.get("content-type")).toBe("application/problem+json");
     expect(rateLimitMock).not.toHaveBeenCalled();
@@ -92,11 +96,11 @@ describe("GET", () => {
 
   it("is 401 when AuthKit cannot say who (a path it skipped)", async () => {
     withAuthMock.mockRejectedValue(new Error("no auth headers"));
-    expect((await GET()).status).toBe(401);
+    expect((await GET(get())).status).toBe(401);
   });
 
   it("answers the empty person of the contract", async () => {
-    const res = await GET();
+    const res = await GET(get());
     expect(res.status).toBe(200);
     expect(await json(res)).toEqual({
       schemaVersion: "v3.1",
@@ -108,10 +112,9 @@ describe("GET", () => {
 
   it("reads the SESSION's person, whatever the request says", async () => {
     store.read.mockResolvedValue(empty);
-    await GET();
+    await GET(get(COOKIE, "?userId=user_2&personId=p2"));
+    expect(store.read).toHaveBeenCalledTimes(1);
     expect(store.read).toHaveBeenCalledWith("user_1");
-    // GET takes no argument at all: there is nothing in the request to read.
-    expect(GET.length).toBe(0);
   });
 
   it("returns tombstones and the latest updatedAt, ordered", async () => {
@@ -122,7 +125,7 @@ describe("GET", () => {
       ],
       savedPlaces: [],
     });
-    const body = await json(await GET());
+    const body = await json(await GET(get()));
     expect(body.updatedAt).toBe(T2);
     expect(
       (body.activities as { tombstone: boolean }[])
@@ -133,19 +136,19 @@ describe("GET", () => {
 
   it("does not return saved places while their switch is off", async () => {
     store.read.mockResolvedValue({ activities: [], savedPlaces: [place()] });
-    expect((await json(await GET())).savedPlaces).toEqual([]);
+    expect((await json(await GET(get()))).savedPlaces).toEqual([]);
     flags.places = true;
-    expect((await json(await GET())).savedPlaces).toEqual([place()]);
+    expect((await json(await GET(get()))).savedPlaces).toEqual([place()]);
   });
 
   it("is private and never cached", async () => {
-    expect((await GET()).headers.get("cache-control")).toBe(
+    expect((await GET(get())).headers.get("cache-control")).toBe(
       "private, no-store",
     );
   });
 
   it("is limited per person: 60 a minute", async () => {
-    await GET();
+    await GET(get());
     expect(rateLimitMock).toHaveBeenCalledWith(
       "person-prefs-read",
       "user_1",
@@ -153,7 +156,7 @@ describe("GET", () => {
       60,
     );
     rateLimitMock.mockResolvedValue({ allowed: false, retryAfterSeconds: 17 });
-    const res = await GET();
+    const res = await GET(get());
     expect(res.status).toBe(429);
     expect(res.headers.get("retry-after")).toBe("17");
     expect(store.read).toHaveBeenCalledTimes(1);
@@ -161,7 +164,7 @@ describe("GET", () => {
 
   it("is 404 when the person has no record", async () => {
     store.read.mockResolvedValue(null);
-    const res = await GET();
+    const res = await GET(get());
     expect(res.status).toBe(404);
     expect((await json(res)).code).toBe("person_not_found");
   });
@@ -172,7 +175,7 @@ describe("GET", () => {
         name: "StoreError",
       }),
     );
-    const res = await GET();
+    const res = await GET(get());
     expect(res.status).toBe(503);
     expect((await json(res)).code).toBe("store_unavailable");
     expect(res.headers.get("retry-after")).toBe("30");
@@ -180,6 +183,49 @@ describe("GET", () => {
     expect(logged).toContain("StoreError");
     expect(logged).not.toContain("secret");
     expect(logged).not.toContain("scheme://");
+  });
+});
+
+describe("a session cookie with no resolved user is not 'signed out'", () => {
+  // AuthKit gives no user when its refresh failed (a WorkOS outage, a refresh
+  // token used twice) while the sealed cookie is intact. The client stops for
+  // the page on a 401 and retries on a 503, so this must be a 503.
+  it("is 503 session_unavailable, with a retry hint, when there is a cookie", async () => {
+    withAuthMock.mockResolvedValue({ user: null });
+    const res = await GET(get(COOKIE));
+    expect(res.status).toBe(503);
+    expect((await json(res)).code).toBe("session_unavailable");
+    expect(res.headers.get("retry-after")).toBe("30");
+    expect(store.read).not.toHaveBeenCalled();
+    expect(rateLimitMock).not.toHaveBeenCalled();
+  });
+
+  it("is 503 when AuthKit throws and there is a cookie, 401 when there is none", async () => {
+    withAuthMock.mockRejectedValue(new Error("no auth headers"));
+    expect((await GET(get(COOKIE))).status).toBe(503);
+    expect((await GET(get())).status).toBe(401);
+  });
+
+  it("is 401 only when there is no session cookie at all", async () => {
+    withAuthMock.mockResolvedValue({ user: null });
+    expect((await GET(get())).status).toBe(401);
+    // An empty cookie value is no session either.
+    expect((await GET(get({ cookie: "wos-session=" }))).status).toBe(401);
+    // Another cookie is not the session.
+    expect((await GET(get({ cookie: "theme=dark" }))).status).toBe(401);
+  });
+
+  it("is the same for PUT, after the cross-site guard", async () => {
+    withAuthMock.mockResolvedValue({ user: null });
+    const withCookie = put(
+      { activities: [activity()] },
+      { ...JSON_ORIGIN, ...COOKIE },
+    );
+    const res = await PUT(withCookie);
+    expect(res.status).toBe(503);
+    expect((await json(res)).code).toBe("session_unavailable");
+    expect((await PUT(put({ activities: [activity()] }))).status).toBe(401);
+    expect(store.merge).not.toHaveBeenCalled();
   });
 });
 
@@ -410,24 +456,60 @@ describe("PUT: merging", () => {
 describe("PUT: saved places have their own switch", () => {
   const body = { savedPlaces: [place()] };
 
-  it("is 503 saved_places_unavailable while it is off, applying nothing", async () => {
-    const res = await PUT(put(body));
-    expect(res.status).toBe(503);
-    expect((await json(res)).code).toBe("saved_places_unavailable");
+  it("applies the activities and reports saved places as not applied while the switch is off", async () => {
+    store.merge.mockResolvedValue({
+      kind: "ok",
+      stored: { activities: [activity()], savedPlaces: [] },
+    });
+    const res = await PUT(
+      put({ activities: [activity()], savedPlaces: [place()] }),
+    );
+    expect(res.status).toBe(200);
+    const [, patch] = store.merge.mock.calls[0];
+    expect(patch.activities).toEqual([activity()]);
+    expect(patch.savedPlaces).toEqual([]);
+    const answer = await json(res);
+    expect(answer.notApplied).toEqual(["savedPlaces"]);
+    expect(answer.activities).toEqual([activity()]);
+    expect(answer.savedPlaces).toEqual([]);
+  });
+
+  it("does not even read the saved places it ignores", async () => {
+    const res = await PUT(
+      put({ savedPlaces: [{ place: "nairobi-ke" }, "junk", 3] }),
+    );
+    expect(res.status).toBe(200);
+    expect((await json(res)).notApplied).toEqual(["savedPlaces"]);
+    expect(store.merge.mock.calls[0][1].savedPlaces).toEqual([]);
+  });
+
+  it("says nothing was left out when the request had no saved places", async () => {
+    for (const request of [
+      { activities: [activity()] },
+      { activities: [activity()], savedPlaces: [] },
+    ]) {
+      const res = await PUT(put(request));
+      expect(res.status).toBe(200);
+      expect(await json(res)).not.toHaveProperty("notApplied");
+    }
+  });
+
+  it("still refuses a savedPlaces that is not a list", async () => {
+    const res = await PUT(put({ savedPlaces: "nope" }));
+    expect(res.status).toBe(422);
+    expect((await json(res)).code).toBe("invalid_saved_place");
     expect(store.merge).not.toHaveBeenCalled();
   });
 
-  it("still takes activities while saved places are off", async () => {
-    expect((await PUT(put({ activities: [activity()] }))).status).toBe(200);
-  });
-
-  it("takes only ciphertext when it is on", async () => {
+  it("takes only ciphertext when it is on, and reports nothing left out", async () => {
     flags.places = true;
     store.merge.mockResolvedValue({
       kind: "ok",
       stored: { activities: [], savedPlaces: [place()] },
     });
-    expect((await PUT(put(body))).status).toBe(200);
+    const res = await PUT(put(body));
+    expect(res.status).toBe(200);
+    expect(await json(res)).not.toHaveProperty("notApplied");
     expect(store.merge).toHaveBeenCalledTimes(1);
 
     const readable = { savedPlaces: [{ ...place(), place: "nairobi-ke" }] };
@@ -441,5 +523,10 @@ describe("PUT: saved places have their own switch", () => {
     };
     expect((await PUT(put(badAad))).status).toBe(422);
     expect(store.merge).toHaveBeenCalledTimes(1);
+  });
+
+  it("GET is unchanged: saved places stay out of it while the switch is off", async () => {
+    store.read.mockResolvedValue({ activities: [], savedPlaces: [place()] });
+    expect((await json(await GET(get()))).savedPlaces).toEqual([]);
   });
 });

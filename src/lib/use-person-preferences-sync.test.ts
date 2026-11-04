@@ -35,6 +35,10 @@ vi.mock("./person-preferences-sync-start", () => {
 });
 
 import { usePersonPreferencesSync } from "./use-person-preferences-sync";
+import {
+  isPersonSyncActive,
+  setPersonSyncActive,
+} from "./person-preferences-state";
 
 const settle = () => new Promise((r) => setTimeout(r, 0));
 
@@ -46,6 +50,7 @@ beforeEach(() => {
   startMock.mockReset();
   startMock.mockReturnValue(stopMock);
   moduleLoaded.mockReset();
+  setPersonSyncActive(false);
 });
 
 describe("usePersonPreferencesSync", () => {
@@ -71,6 +76,29 @@ describe("usePersonPreferencesSync", () => {
     await settle();
     expect(moduleLoaded).not.toHaveBeenCalled();
     expect(startMock).not.toHaveBeenCalled();
+  });
+
+  it("fences the legacy device-profile pull from the moment it is signed in, until the person goes", async () => {
+    usePersonPreferencesSync("user_1");
+    // At once, before the sync code has arrived.
+    expect(isPersonSyncActive()).toBe(true);
+    await settle();
+    expect(isPersonSyncActive()).toBe(true);
+    cleanup?.();
+    expect(isPersonSyncActive()).toBe(false);
+  });
+
+  it("does not fence anything signed out, while off, or while the CouchDB sync is on", async () => {
+    usePersonPreferencesSync(null);
+    expect(isPersonSyncActive()).toBe(false);
+    flags.ready = false;
+    usePersonPreferencesSync("user_1");
+    expect(isPersonSyncActive()).toBe(false);
+    flags.ready = true;
+    couch.on = true;
+    usePersonPreferencesSync("user_1");
+    expect(isPersonSyncActive()).toBe(false);
+    await settle();
   });
 
   it("starts the sync for the signed-in person", async () => {

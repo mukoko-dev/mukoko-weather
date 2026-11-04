@@ -13,8 +13,8 @@
  * online after failing. Never throws into the app.
  */
 
-import { getActivityById } from "./activities";
-import { UTC_TIMESTAMP_RE } from "./person-preferences";
+import { setPersonSyncOverflow } from "./person-preferences-state";
+import { isKnownActivityId, isWireTimestamp } from "./rxdb/couch-docs";
 import {
   createPersonSyncController,
   readActivities,
@@ -52,9 +52,7 @@ export function parseSyncState(raw: string | null): SyncState | null {
     return {
       owner: v.owner,
       activities: readActivities(v.activities),
-      ...(typeof syncedAt === "string" && UTC_TIMESTAMP_RE.test(syncedAt)
-        ? { syncedAt }
-        : {}),
+      ...(isWireTimestamp(syncedAt) ? { syncedAt } : {}),
     };
   } catch {
     return null;
@@ -92,7 +90,7 @@ function browserDeps(
       inMemory = state;
       writeStorage(PERSON_SYNC_STATE_KEY, JSON.stringify(state));
     },
-    isKnownActivity: (id) => getActivityById(id) !== undefined,
+    isKnownActivity: isKnownActivityId,
     fetch: (url, init) => fetch(url, init),
   };
 }
@@ -111,7 +109,10 @@ export function startPersonPreferencesSync(ownerId: string): () => void {
     const controller = createPersonSyncController(
       async () => {
         const outcome = await syncOnce(deps, { first });
-        if (outcome.kind === "synced") first = false;
+        if (outcome.kind === "synced") {
+          first = false;
+          setPersonSyncOverflow(outcome.overflow);
+        }
         return outcome;
       },
       {

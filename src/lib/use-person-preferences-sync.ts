@@ -16,12 +16,16 @@
 
 import { useEffect } from "react";
 import { getFeatureFlag } from "./feature-flags";
+import { setPersonSyncActive } from "./person-preferences-state";
 import { PERSON_PREFERENCES_READY } from "./person-preferences-switches";
 
 export function usePersonPreferencesSync(ownerId: string | null): void {
   useEffect(() => {
     if (!PERSON_PREFERENCES_READY || !ownerId) return;
     if (getFeatureFlag("couch_sync")) return;
+    // At once, before the sync code arrives: from here the legacy device-profile
+    // pull leaves the device's activities alone (rxdb/replication.ts).
+    setPersonSyncActive(true);
     let disposed = false;
     let stop: (() => void) | null = null;
     void import("./person-preferences-sync-start")
@@ -33,6 +37,7 @@ export function usePersonPreferencesSync(ownerId: string | null): void {
     return () => {
       disposed = true;
       stop?.();
+      setPersonSyncActive(false);
     };
   }, [ownerId]);
 }

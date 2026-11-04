@@ -19,6 +19,7 @@ import {
   backoffMs,
   createPersonSyncController,
   projectLocal,
+  readActivities,
   reconcile,
   syncOnce,
   type Scheduler,
@@ -135,7 +136,10 @@ describe("first sign-in on a device", () => {
   it("sends the device's activities to an empty profile and keeps the device as it is", async () => {
     const server = fakeServer();
     const d = device(ME, [ACT, ACT2], null, server);
-    expect(await syncOnce(d.deps, { first: true })).toEqual({ kind: "synced" });
+    expect(await syncOnce(d.deps, { first: true })).toEqual({
+      kind: "synced",
+      overflow: [],
+    });
     expect(live(server.items).sort()).toEqual([ACT, ACT2].sort());
     expect(d.local).toEqual([ACT, ACT2]);
     expect(d.state?.owner).toBe(ME);
@@ -456,6 +460,29 @@ describe("the cap and unknown ids", () => {
     expect(byId(d.state!.activities, ACT)).toBeUndefined();
   });
 
+  it("reports the device's activities beyond the cap in the result, not silently", async () => {
+    const existing = ACTIVITIES.slice(3, 3 + MAX_PERSON_ACTIVITIES).map((a) =>
+      activity({ activityId: a.id, createdAt: T1, updatedAt: T1 }),
+    );
+    const server = fakeServer(existing);
+    const d = device(ME, [ACT, ACT2], null, server);
+    const outcome = await syncOnce(d.deps, { first: true });
+    expect(outcome).toEqual({
+      kind: "synced",
+      overflow: [ACT, ACT2].sort(),
+    });
+    // They stay on the device; they are not on the profile.
+    expect(d.local).toEqual(expect.arrayContaining([ACT, ACT2]));
+    expect(live(server.items)).not.toContain(ACT);
+  });
+
+  it("reports no overflow when everything fits", async () => {
+    const d = device(ME, [ACT], null, fakeServer());
+    expect(await syncOnce(d.deps, { first: true })).toMatchObject({
+      overflow: [],
+    });
+  });
+
   it("never sends an id the app does not offer, and never applies one it does not know", async () => {
     const server = fakeServer([activity({ activityId: "from-a-newer-app" })]);
     const d = device(ME, ["retired-activity", ACT], null, server);
@@ -605,6 +632,18 @@ describe("failures", () => {
 
 // --- the pure rules --------------------------------------------------------------
 
+describe("readActivities", () => {
+  it("drops an entry whose time is not a real instant", () => {
+    const real = activity();
+    const items = readActivities([
+      real,
+      activity({ activityId: ACT2, updatedAt: "2026-02-30T00:00:00.000Z" }),
+      activity({ activityId: ACT3, createdAt: "2026-04-31T00:00:00.000Z" }),
+    ]);
+    expect(items).toEqual([real]);
+  });
+});
+
 describe("reconcile and projectLocal", () => {
   const known = (id: string) => getActivityById(id) !== undefined;
 
@@ -682,7 +721,10 @@ describe("the controller", () => {
   const make = (outcomes: (SyncOutcome | "throw")[]) => {
     const sched = fakeScheduler();
     const run = vi.fn(async () => {
-      const next = outcomes.shift() ?? { kind: "synced" as const };
+      const next = outcomes.shift() ?? {
+        kind: "synced" as const,
+        overflow: [],
+      };
       if (next === "throw") throw new Error("boom");
       return next;
     });
@@ -714,7 +756,7 @@ describe("the controller", () => {
       retry,
       retry,
       retry,
-      { kind: "synced" },
+      { kind: "synced", overflow: [] },
       retry,
     ]);
     c.start(0);
@@ -791,7 +833,7 @@ describe("the controller", () => {
         release = r;
       });
       active -= 1;
-      return { kind: "synced" };
+      return { kind: "synced", overflow: [] };
     });
     const c = createPersonSyncController(run, sched.scheduler);
     c.start(0);

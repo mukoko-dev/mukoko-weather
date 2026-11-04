@@ -35,13 +35,26 @@
  * nyuchi has applied the `identity.persons` validator change.
  */
 
-import { getActivityById } from "./activities";
+import {
+  ACTIVITY_ID_RE,
+  MAX_SYNCED_ACTIVITIES,
+  isKnownActivityId,
+  isWireTimestamp,
+} from "./rxdb/couch-docs";
+
+// One definition of the activity-id pattern, the known-activity check, the
+// RFC 3339 form and the cap, shared with the CouchDB sync's model
+// (`rxdb/couch-docs.ts`); none is copied here.
+export { ACTIVITY_ID_RE };
 
 /** `schemaVersion` of the document, as `userdb.yaml` and #483 write it. */
 export const PERSON_PREFERENCES_SCHEMA_VERSION = "v3.1";
 
-/** Live activities a person can keep (tombstones do not count). */
-export const MAX_PERSON_ACTIVITIES = 20;
+/**
+ * Live activities a person can keep (tombstones do not count): the platform's
+ * number, 30 (`MAX_SYNCED_ACTIVITIES`, the device profile, nyuchi-api#483).
+ */
+export const MAX_PERSON_ACTIVITIES = MAX_SYNCED_ACTIVITIES;
 /** Live saved places (the same number as `MAX_SAVED_LOCATIONS` in `store.ts`). */
 export const MAX_PERSON_SAVED_PLACES = 10;
 /**
@@ -67,10 +80,6 @@ export const MAX_CLOCK_AHEAD_MS = 24 * 60 * 60 * 1000;
  */
 export const MAX_ENVELOPE_CIPHERTEXT = 1024;
 
-/** An RFC 3339 UTC time with exactly three fraction digits (`UtcTimestamp`). */
-export const UTC_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-/** `activityId` in `userdb.yaml`. */
-export const ACTIVITY_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 /** The key of `savedPlace:<UUIDv7>`. */
 export const SAVED_PLACE_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -131,8 +140,22 @@ export interface Problem {
 }
 
 export type ParseResult =
-  | { ok: true; patch: PersonPreferencesPatch }
+  | {
+      ok: true;
+      patch: PersonPreferencesPatch;
+      /** Parts of the request that were left out on purpose (`savedPlaces`). */
+      ignored: "savedPlaces"[];
+    }
   | { ok: false; problem: Problem };
+
+export interface ParseOptions {
+  /**
+   * Read the `savedPlaces` part. Off while saved places have no home: the part
+   * is then ignored (and reported in `ignored`) rather than failing a request
+   * that also carries activities.
+   */
+  savedPlaces?: boolean;
+}
 
 const refuse = (
   status: number,
@@ -152,8 +175,7 @@ function onlyKeys(obj: Record<string, unknown>, allowed: readonly string[]) {
 }
 
 function utcTimestamp(v: unknown): string | null {
-  if (typeof v !== "string" || !UTC_TIMESTAMP_RE.test(v)) return null;
-  return Number.isNaN(Date.parse(v)) ? null : v;
+  return isWireTimestamp(v) ? v : null;
 }
 
 function base64urlOfAscii(text: string): string {
@@ -232,7 +254,11 @@ function parseVersioned(
  * time more than a day ahead is refused and nothing is applied. Every refusal
  * is a fixed code; no value from the body is echoed back.
  */
-export function parsePatch(body: unknown, nowMs: number): ParseResult {
+export function parsePatch(
+  body: unknown,
+  nowMs: number,
+  options: ParseOptions = {},
+): ParseResult {
   if (!isRecord(body)) return refuse(400, "invalid_body");
   if (
     !onlyKeys(body, [
@@ -279,7 +305,7 @@ export function parsePatch(body: unknown, nowMs: number): ParseResult {
       if (typeof id !== "string" || !ACTIVITY_ID_RE.test(id)) {
         return refuse(422, "invalid_activity");
       }
-      if (!getActivityById(id)) return refuse(422, "activity_not_allowed");
+      if (!isKnownActivityId(id)) return refuse(422, "activity_not_allowed");
       if (seen.has(id)) return refuse(422, "duplicate_item");
       seen.add(id);
       const common = parseVersioned(raw, nowMs, "invalid_activity");
@@ -289,12 +315,18 @@ export function parsePatch(body: unknown, nowMs: number): ParseResult {
   }
 
   const savedPlaces: SavedPlaceItem[] = [];
+  const ignored: "savedPlaces"[] = [];
   if (body.savedPlaces !== undefined) {
     if (!Array.isArray(body.savedPlaces)) {
       return refuse(422, "invalid_saved_place");
     }
     if (body.savedPlaces.length > MAX_ITEMS_PER_REQUEST) {
       return refuse(422, "too_many_places");
+    }
+    if (options.savedPlaces === false) {
+      // Not read, not validated, not applied: reported instead.
+      if (body.savedPlaces.length > 0) ignored.push("savedPlaces");
+      return { ok: true, patch: { activities, savedPlaces }, ignored };
     }
     const seen = new Set<string>();
     for (const raw of body.savedPlaces) {
@@ -332,7 +364,7 @@ export function parsePatch(body: unknown, nowMs: number): ParseResult {
     }
   }
 
-  return { ok: true, patch: { activities, savedPlaces } };
+  return { ok: true, patch: { activities, savedPlaces }, ignored };
 }
 
 // ---------------------------------------------------------------------------

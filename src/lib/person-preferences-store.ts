@@ -17,13 +17,13 @@
  *
  * WHERE IT LIVES NOW. The signed-in person's OWN record in `identity.persons`
  * (owner decision, 2026-11-04: "the most logical and the easiest to migrate"),
- * written exactly like `updateMyName` in `profile.ts` and
- * `updateProfileAction`: matched on the verified WorkOS user id from the
- * session (never an id from the request), through the shared `identityDb()`
- * accessor of `mongo.ts`, an allowlist of two fields, no upsert (the record is
- * made at sign-in by `upsertPlatformPerson`; making one here could race that).
- * No new client, no new URL, and no collection or index is created from this
- * code.
+ * written like `updateMyName` in `profile.ts` and `updateProfileAction`:
+ * matched on the verified WorkOS user id from the session (never an id from
+ * the request), through the shared `identityDb()` accessor of `mongo.ts`, an
+ * allowlist of two fields (and the record's `updatedAt`), no upsert (the
+ * record is made at sign-in by `upsertPlatformPerson`; making one here could
+ * race that). No new client, no new URL, and no collection or index is created
+ * from this code.
  *
  *   activities:  [{ activityId, createdAt, updatedAt, tombstone }]
  *   savedPlaces: [{ savedPlaceId, createdAt, updatedAt, tombstone, envelope }]
@@ -33,18 +33,23 @@
  * off (`PERSON_PREFERENCES_READY`). Fields that become dead when the CouchDB
  * sync goes live are listed in docs/mongodb-schema-map.md.
  *
- * CONCURRENCY. Two devices write the same record, so a write never replaces a
- * list: each item is one `$push` (if the person has no such item) and one
- * conditional `$set` (if the stored item is older), each atomic on the
- * document, so two requests in any order give the same lists as the pure
- * {@link mergeById} (later `updatedAt` wins, a tie leaves the stored item).
+ * ONE WRITE PER SYNC. A merge reads the record, merges with the pure
+ * {@link mergeById} (later `updatedAt` wins, a tie leaves the stored item),
+ * and writes the changed list(s) and the record's `updatedAt` in ONE
+ * `updateOne`, guarded on the `updatedAt` it read. If something else wrote the
+ * record in between (another device, a name edit), the guard matches nothing:
+ * it reads and merges again, once, and then gives up with
+ * {@link PreferencesConflictError} (the route answers a retryable 503). So the
+ * caps are judged on exactly what is written, `updatedAt` moves once, a request
+ * that changes nothing writes nothing, and a field that is `null` or absent
+ * (the proposed validator allows null) is replaced whole instead of failing on
+ * an array operator. Entries this code cannot read (a newer writer's, extra
+ * fields on a known one) are written back as they were found.
  */
 
 import { identityDb } from "./mongo";
 import {
   ACTIVITY_ID_RE,
-  MAX_STORED_ACTIVITIES,
-  MAX_STORED_SAVED_PLACES,
   SAVED_PLACE_ID_RE,
   TOMBSTONE_RETENTION_MS,
   activityIdOf,
@@ -57,6 +62,7 @@ import {
   type PersonPreferencesPatch,
   type Problem,
   type SavedPlaceItem,
+  type Versioned,
 } from "./person-preferences";
 
 /** What a person has stored, tombstones included. */
@@ -77,7 +83,9 @@ export interface PersonPreferencesStore {
   read(workosUserId: string): Promise<StoredPreferences | null>;
   /**
    * Merge a patch item by item (later `updatedAt` wins). Atomic in effect:
-   * a refusal applies nothing. Throws when the store cannot be reached.
+   * a refusal applies nothing, and one request is one write. Throws when the
+   * store cannot be reached, or {@link PreferencesConflictError} when the
+   * record kept changing under it.
    */
   merge(
     workosUserId: string,
@@ -86,15 +94,20 @@ export interface PersonPreferencesStore {
   ): Promise<MergeResult>;
 }
 
+/** The record changed between the read and the write, twice running. */
+export class PreferencesConflictError extends Error {
+  constructor() {
+    super("The record changed while it was being written");
+    this.name = "PreferencesConflict";
+  }
+}
+
 type Doc = Record<string, unknown>;
 
 /** The few collection calls used, so a test can stand a fake in its place. */
 export interface PersonsCollectionLike {
   findOne(filter: Doc, options?: { projection?: Doc }): Promise<Doc | null>;
-  bulkWrite(
-    operations: { updateOne: { filter: Doc; update: Doc } }[],
-    options: { ordered: boolean },
-  ): Promise<unknown>;
+  updateOne(filter: Doc, update: Doc): Promise<{ matchedCount: number }>;
 }
 
 const isRecord = (v: unknown): v is Doc =>
@@ -137,9 +150,33 @@ function savedPlaceFromStored(raw: unknown): SavedPlaceItem | null {
   return envelope ? { ...base, envelope } : null;
 }
 
-function listFrom<T>(raw: unknown, read: (v: unknown) => T | null): T[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map(read).filter((v): v is T => v !== null);
+/** One stored list: what was read, and what must survive a write untouched. */
+interface Listed<T> {
+  items: T[];
+  /** The entry as found, by item id. */
+  raw: Map<string, Doc>;
+  /** Entries this code cannot read: written back as they are. */
+  foreign: unknown[];
+}
+
+function listFrom<T>(
+  stored: unknown,
+  read: (v: unknown) => T | null,
+  idOf: (t: T) => string,
+): Listed<T> {
+  const out: Listed<T> = { items: [], raw: new Map(), foreign: [] };
+  // `null` or absent (the validator allows null) is an empty list.
+  if (!Array.isArray(stored)) return out;
+  for (const entry of stored) {
+    const item = read(entry);
+    if (item === null) {
+      out.foreign.push(entry);
+      continue;
+    }
+    out.items.push(item);
+    out.raw.set(idOf(item), entry as Doc);
+  }
+  return out;
 }
 
 const personFilter = (workosUserId: string): Doc => ({
@@ -147,155 +184,97 @@ const personFilter = (workosUserId: string): Doc => ({
   isActive: { $ne: false },
 });
 
-async function readStored(
+interface Snapshot {
+  activities: Listed<ActivityItem>;
+  savedPlaces: Listed<SavedPlaceItem>;
+  /** The record's `updatedAt` as found: the guard of the write. */
+  version: unknown;
+  /** The same as a time, when it is one. */
+  versionMs: number;
+}
+
+async function snapshot(
   col: PersonsCollectionLike,
   workosUserId: string,
-): Promise<StoredPreferences | null> {
+): Promise<Snapshot | null> {
   const doc = await col.findOne(personFilter(workosUserId), {
-    projection: { activities: 1, savedPlaces: 1 },
+    projection: { activities: 1, savedPlaces: 1, updatedAt: 1 },
   });
   if (!doc) return null;
   return {
-    activities: listFrom(doc.activities, activityFromStored),
-    savedPlaces: listFrom(doc.savedPlaces, savedPlaceFromStored),
+    activities: listFrom(doc.activities, activityFromStored, activityIdOf),
+    savedPlaces: listFrom(
+      doc.savedPlaces,
+      savedPlaceFromStored,
+      savedPlaceIdOf,
+    ),
+    version: doc.updatedAt === undefined ? { $exists: false } : doc.updatedAt,
+    versionMs: validDate(doc.updatedAt)?.getTime() ?? 0,
   };
 }
 
-/** A push that is a no-op when the item exists or the list is at its bound. */
-function pushIfAbsent(
-  person: Doc,
-  field: "activities" | "savedPlaces",
-  idField: string,
-  id: string,
-  entry: Doc,
-  bound: number,
-  now: Date,
-) {
+const sameItem = (
+  a: Versioned & { envelope?: unknown },
+  b: Versioned & { envelope?: unknown },
+) =>
+  a.createdAt === b.createdAt &&
+  a.updatedAt === b.updatedAt &&
+  a.tombstone === b.tombstone &&
+  JSON.stringify(a.envelope) === JSON.stringify(b.envelope);
+
+/** Whether merging changed the list: another item, or one that differs. */
+function changed<T extends Versioned & { envelope?: unknown }>(
+  before: readonly T[],
+  merged: readonly T[],
+  idOf: (t: T) => string,
+): boolean {
+  const prev = new Map(before.map((i) => [idOf(i), i]));
+  return (
+    merged.length !== before.length ||
+    merged.some((m) => {
+      const p = prev.get(idOf(m));
+      return !p || !sameItem(p, m);
+    })
+  );
+}
+
+/** The entries to store: an unchanged one exactly as found, a changed one on top of it. */
+function entries<T extends Versioned & { envelope?: unknown }>(
+  merged: readonly T[],
+  before: readonly T[],
+  listed: Listed<T>,
+  idOf: (t: T) => string,
+  build: (item: T, prior: Doc | undefined) => Doc,
+): unknown[] {
+  const prev = new Map(before.map((i) => [idOf(i), i]));
+  const out: unknown[] = merged.map((item) => {
+    const prior = listed.raw.get(idOf(item));
+    const was = prev.get(idOf(item));
+    return prior && was && sameItem(was, item) ? prior : build(item, prior);
+  });
+  return [...out, ...listed.foreign];
+}
+
+const activityEntry = (item: ActivityItem, prior: Doc | undefined): Doc => ({
+  ...prior,
+  activityId: item.activityId,
+  createdAt: new Date(item.createdAt),
+  updatedAt: new Date(item.updatedAt),
+  tombstone: item.tombstone,
+});
+
+function savedPlaceEntry(item: SavedPlaceItem, prior: Doc | undefined): Doc {
+  const base: Doc = { ...prior };
+  // A tombstone keeps the common fields and drops the rest.
+  delete base.envelope;
   return {
-    updateOne: {
-      filter: {
-        ...person,
-        [`${field}.${idField}`]: { $ne: id },
-        $expr: { $lt: [{ $size: { $ifNull: [`$${field}`, []] } }, bound] },
-      },
-      update: { $push: { [field]: entry }, $set: { updatedAt: now } },
-    },
+    ...base,
+    savedPlaceId: item.savedPlaceId,
+    createdAt: new Date(item.createdAt),
+    updatedAt: new Date(item.updatedAt),
+    tombstone: item.tombstone,
+    ...(item.envelope ? { envelope: item.envelope } : {}),
   };
-}
-
-/** An overwrite that is a no-op unless the stored item is strictly older. */
-function setIfLater(
-  person: Doc,
-  field: "activities" | "savedPlaces",
-  idField: string,
-  id: string,
-  updatedAt: Date,
-  set: Doc,
-  unset: Doc | null,
-  now: Date,
-) {
-  return {
-    updateOne: {
-      filter: {
-        ...person,
-        [field]: {
-          $elemMatch: { [idField]: id, updatedAt: { $lt: updatedAt } },
-        },
-      },
-      update: {
-        $set: { ...set, [`${field}.$.updatedAt`]: updatedAt, updatedAt: now },
-        ...(unset ? { $unset: unset } : {}),
-      },
-    },
-  };
-}
-
-function operations(
-  workosUserId: string,
-  patch: PersonPreferencesPatch,
-  now: Date,
-  purge: boolean,
-) {
-  const person = personFilter(workosUserId);
-  const cutoff = new Date(now.getTime() - TOMBSTONE_RETENTION_MS);
-  const old = { tombstone: true, updatedAt: { $lt: cutoff } };
-  const ops: { updateOne: { filter: Doc; update: Doc } }[] = [];
-  // Tombstones past their 30 days go first, so they do not count. Only asked
-  // when the read just made saw one.
-  if (purge) {
-    ops.push({
-      updateOne: {
-        filter: person,
-        update: { $pull: { activities: old, savedPlaces: old } },
-      },
-    });
-  }
-  for (const a of patch.activities) {
-    const updatedAt = new Date(a.updatedAt);
-    const entry = {
-      activityId: a.activityId,
-      createdAt: new Date(a.createdAt),
-      updatedAt,
-      tombstone: a.tombstone,
-    };
-    ops.push(
-      pushIfAbsent(
-        person,
-        "activities",
-        "activityId",
-        a.activityId,
-        entry,
-        MAX_STORED_ACTIVITIES,
-        now,
-      ),
-      setIfLater(
-        person,
-        "activities",
-        "activityId",
-        a.activityId,
-        updatedAt,
-        { "activities.$.tombstone": a.tombstone },
-        null,
-        now,
-      ),
-    );
-  }
-  for (const p of patch.savedPlaces) {
-    const updatedAt = new Date(p.updatedAt);
-    const entry: Doc = {
-      savedPlaceId: p.savedPlaceId,
-      createdAt: new Date(p.createdAt),
-      updatedAt,
-      tombstone: p.tombstone,
-      ...(p.envelope ? { envelope: p.envelope } : {}),
-    };
-    ops.push(
-      pushIfAbsent(
-        person,
-        "savedPlaces",
-        "savedPlaceId",
-        p.savedPlaceId,
-        entry,
-        MAX_STORED_SAVED_PLACES,
-        now,
-      ),
-      setIfLater(
-        person,
-        "savedPlaces",
-        "savedPlaceId",
-        p.savedPlaceId,
-        updatedAt,
-        {
-          "savedPlaces.$.tombstone": p.tombstone,
-          ...(p.envelope ? { "savedPlaces.$.envelope": p.envelope } : {}),
-        },
-        // A tombstone keeps the common fields and drops the rest.
-        p.envelope ? null : { "savedPlaces.$.envelope": "" },
-        now,
-      ),
-    );
-  }
-  return ops;
 }
 
 /** The `identity.persons` implementation. */
@@ -304,51 +283,88 @@ export function createIdentityPersonsStore(
     identityDb().collection("persons") as unknown as PersonsCollectionLike,
 ): PersonPreferencesStore {
   return {
-    read: (workosUserId) => readStored(collection(), workosUserId),
+    async read(workosUserId) {
+      const snap = await snapshot(collection(), workosUserId);
+      return snap
+        ? {
+            activities: snap.activities.items,
+            savedPlaces: snap.savedPlaces.items,
+          }
+        : null;
+    },
 
     async merge(workosUserId, patch, now) {
       const col = collection();
-      const stored = await readStored(col, workosUserId);
-      if (!stored) return { kind: "no_person" };
-
-      // Judge the merge against what survives the purge of old tombstones.
       const cutoff = toWireTime(
         new Date(now.getTime() - TOMBSTONE_RETENTION_MS),
       );
-      const kept = <T extends { tombstone: boolean; updatedAt: string }>(
-        items: T[],
-      ) => items.filter((i) => !(i.tombstone && i.updatedAt < cutoff));
-      const before = {
-        activities: kept(stored.activities),
-        savedPlaces: kept(stored.savedPlaces),
-      };
-      const purge =
-        before.activities.length < stored.activities.length ||
-        before.savedPlaces.length < stored.savedPlaces.length;
-      const merged = {
-        activities: mergeById(
-          before.activities,
-          patch.activities,
-          activityIdOf,
-        ),
-        savedPlaces: mergeById(
-          before.savedPlaces,
-          patch.savedPlaces,
-          savedPlaceIdOf,
-        ),
-      };
-      const problem = capProblem(before, merged);
-      if (problem) return { kind: "refused", problem };
+      const alive = <T extends Versioned>(items: T[]) =>
+        items.filter((i) => !(i.tombstone && i.updatedAt < cutoff));
 
-      // An empty request writes nothing (not even a purge of old tombstones).
-      if (patch.activities.length + patch.savedPlaces.length === 0) {
-        return { kind: "ok", stored };
+      // Once, and once more if the record changed under the first attempt.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const snap = await snapshot(col, workosUserId);
+        if (!snap) return { kind: "no_person" };
+
+        // Judge the merge against what survives the purge of old tombstones.
+        const before = {
+          activities: alive(snap.activities.items),
+          savedPlaces: alive(snap.savedPlaces.items),
+        };
+        const merged = {
+          activities: mergeById(
+            before.activities,
+            patch.activities,
+            activityIdOf,
+          ),
+          savedPlaces: mergeById(
+            before.savedPlaces,
+            patch.savedPlaces,
+            savedPlaceIdOf,
+          ),
+        };
+        const problem = capProblem(before, merged);
+        if (problem) return { kind: "refused", problem };
+
+        // An empty request, or one that changes nothing, writes nothing.
+        const set: Doc = {};
+        if (
+          patch.activities.length + patch.savedPlaces.length > 0 &&
+          changed(snap.activities.items, merged.activities, activityIdOf)
+        ) {
+          set.activities = entries(
+            merged.activities,
+            snap.activities.items,
+            snap.activities,
+            activityIdOf,
+            activityEntry,
+          );
+        }
+        if (
+          patch.activities.length + patch.savedPlaces.length > 0 &&
+          changed(snap.savedPlaces.items, merged.savedPlaces, savedPlaceIdOf)
+        ) {
+          set.savedPlaces = entries(
+            merged.savedPlaces,
+            snap.savedPlaces.items,
+            snap.savedPlaces,
+            savedPlaceIdOf,
+            savedPlaceEntry,
+          );
+        }
+        if (Object.keys(set).length === 0) {
+          return { kind: "ok", stored: before };
+        }
+
+        // The record's updatedAt moves once, and always forward.
+        set.updatedAt = new Date(Math.max(now.getTime(), snap.versionMs + 1));
+        const result = await col.updateOne(
+          { ...personFilter(workosUserId), updatedAt: snap.version },
+          { $set: set },
+        );
+        if (result.matchedCount > 0) return { kind: "ok", stored: merged };
       }
-      await col.bulkWrite(operations(workosUserId, patch, now, purge), {
-        ordered: true,
-      });
-      const after = await readStored(col, workosUserId);
-      return after ? { kind: "ok", stored: after } : { kind: "no_person" };
+      throw new PreferencesConflictError();
     },
   };
 }

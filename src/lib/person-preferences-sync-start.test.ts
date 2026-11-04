@@ -39,7 +39,13 @@ import {
   parseSyncState,
   startPersonPreferencesSync,
 } from "./person-preferences-sync-start";
+import { ACTIVITIES } from "./activities";
+import { MAX_PERSON_ACTIVITIES } from "./person-preferences";
 import { ACT, ACT2, T2, activity } from "./person-preferences-fixtures";
+import {
+  getPersonSyncOverflow,
+  setPersonSyncActive,
+} from "./person-preferences-state";
 
 const fetchMock = vi.fn();
 const storage = new Map<string, string>();
@@ -181,6 +187,34 @@ describe("startPersonPreferencesSync", () => {
     windowListeners.get("online")?.();
     await vi.advanceTimersByTimeAsync(60 * 60_000);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the device's activities beyond the profile's cap", () => {
+  it("are kept as a known state, and forgotten when the sync stops", async () => {
+    const existing = ACTIVITIES.slice(3, 3 + MAX_PERSON_ACTIVITIES).map((a) =>
+      activity({ activityId: a.id }),
+    );
+    fetchMock.mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            schemaVersion: "v3.1",
+            settings: {},
+            activities: existing,
+            savedPlaces: [],
+          }),
+        ),
+    );
+    storeState.selectedActivities = [ACT, ACT2];
+    stop = startPersonPreferencesSync("user_1");
+    await vi.advanceTimersByTimeAsync(3_100);
+    expect([...getPersonSyncOverflow()].sort()).toEqual([ACT, ACT2].sort());
+    // No write went out for them.
+    expect(fetchMock.mock.calls.map((c) => c[1].method)).toEqual(["GET"]);
+    // The hook's cleanup clears the state with the flag.
+    setPersonSyncActive(false);
+    expect(getPersonSyncOverflow()).toEqual([]);
   });
 });
 

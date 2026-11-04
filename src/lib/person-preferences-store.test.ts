@@ -1,11 +1,16 @@
 /**
- * The storage module, against a stand-in for the `persons` collection that
- * understands exactly the operators the module uses ($push, $set, $unset,
- * $pull, $elemMatch, $ne, $lt, $expr/$size). No database is touched. The
- * stand-in encodes the documented MongoDB semantics of those operators, so
- * these tests prove the module's filters and updates add up to the pure merge
- * rules; the live behaviour is checked once, on staging, before the switch is
- * flipped (the PR says so).
+ * The storage module, against a stand-in for the `persons` collection. A merge
+ * is one read and at most one guarded `updateOne` of the changed list(s), so
+ * the stand-in only has to match a filter on three fields and apply a `$set`.
+ * No database is touched.
+ *
+ * What the stand-in can show: the module's merge, caps, scoping, "one write per
+ * sync", the version guard and its retry, and that nothing it cannot read is
+ * lost. What it cannot show: how a real server evaluates the guard under real
+ * concurrency (the interleaving here is staged by a hook between the read and
+ * the write), BSON date equality at the server, what the live `identity.persons`
+ * validator accepts, or the driver's date round trip. Those are checked once on
+ * staging with a throwaway person before the switch is flipped.
  */
 import { describe, it, expect, vi } from "vitest";
 import { ACTIVITIES } from "./activities";
@@ -17,6 +22,7 @@ import {
   type PersonPreferencesPatch,
 } from "./person-preferences";
 import {
+  PreferencesConflictError,
   createIdentityPersonsStore,
   type PersonsCollectionLike,
 } from "./person-preferences-store";
@@ -41,7 +47,6 @@ const ME = "user_me";
 
 // --- a stand-in for one collection ------------------------------------------
 
-const time = (v: unknown) => (v instanceof Date ? v.getTime() : NaN);
 const clone = <T>(v: T): T =>
   v instanceof Date
     ? (new Date(v.getTime()) as T)
@@ -53,111 +58,34 @@ const clone = <T>(v: T): T =>
           ) as T)
         : v;
 
-/** Values at a dotted path, looking through arrays. */
-function valuesAt(doc: unknown, path: string): unknown[] {
-  let cur: unknown[] = [doc];
-  for (const part of path.split(".")) {
-    cur = cur.flatMap((c) => {
-      const next = (c as Doc | undefined)?.[part];
-      return Array.isArray(next) ? next : next === undefined ? [] : [next];
-    });
-  }
-  return cur;
-}
+const sameValue = (a: unknown, b: unknown) =>
+  a instanceof Date && b instanceof Date
+    ? a.getTime() === b.getTime()
+    : a === b;
 
-function matchesCondition(value: unknown, cond: unknown): boolean {
-  if (cond && typeof cond === "object" && !(cond instanceof Date)) {
-    const c = cond as Doc;
-    if ("$lt" in c) return time(value) < time(c.$lt);
-    if ("$ne" in c) return value !== c.$ne;
-    throw new Error(`unsupported condition ${JSON.stringify(c)}`);
-  }
-  return value === cond;
-}
-
-interface Match {
-  ok: boolean;
-  /** Index of the array element an `$elemMatch` matched, for `$`. */
-  index: number | null;
-}
-
-function match(doc: Doc, filter: Doc): Match {
-  let index: number | null = null;
-  for (const [key, cond] of Object.entries(filter)) {
-    if (key === "$expr") {
-      const [{ $size }, bound] = (
-        cond as { $lt: [{ $size: { $ifNull: [string, unknown[]] } }, number] }
-      ).$lt;
-      const list = doc[$size.$ifNull[0].slice(1)];
-      const size = Array.isArray(list) ? list.length : 0;
-      if (!(size < bound)) return { ok: false, index };
-      continue;
+/** The three kinds of condition the module uses. */
+function matches(doc: Doc, filter: Doc): boolean {
+  return Object.entries(filter).every(([key, cond]) => {
+    if (cond && typeof cond === "object" && !(cond instanceof Date)) {
+      const c = cond as Doc;
+      if ("$ne" in c) return doc[key] !== c.$ne;
+      if ("$exists" in c) return key in doc === c.$exists;
+      throw new Error(`unsupported condition ${JSON.stringify(c)}`);
     }
-    const c = cond as Doc;
-    if (c && typeof c === "object" && "$elemMatch" in c) {
-      const list = (doc[key] as Doc[] | undefined) ?? [];
-      const found = list.findIndex((el) =>
-        Object.entries(c.$elemMatch as Doc).every(([k, v]) =>
-          matchesCondition(el[k], v),
-        ),
-      );
-      if (found < 0) return { ok: false, index };
-      index = found;
-      continue;
-    }
-    if (key.includes(".") && c && typeof c === "object" && "$ne" in c) {
-      // $ne on an array path: no element has the value.
-      if (valuesAt(doc, key).includes(c.$ne)) return { ok: false, index };
-      continue;
-    }
-    const values = key.includes(".") ? valuesAt(doc, key) : [doc[key]];
-    if (!values.some((v) => matchesCondition(v, cond))) {
-      return { ok: false, index };
-    }
-  }
-  return { ok: true, index };
-}
-
-function applyUpdate(doc: Doc, update: Doc, index: number | null) {
-  const target = (path: string): [Doc, string] => {
-    const parts = path.split(".");
-    if (parts.length === 3 && parts[1] === "$") {
-      if (index === null) throw new Error("positional $ without a match");
-      return [(doc[parts[0]] as Doc[])[index], parts[2]];
-    }
-    return [doc, path];
-  };
-  for (const [field, entry] of Object.entries((update.$push ?? {}) as Doc)) {
-    ((doc[field] ??= []) as unknown[]).push(clone(entry));
-  }
-  for (const [path, value] of Object.entries((update.$set ?? {}) as Doc)) {
-    const [obj, key] = target(path);
-    obj[key] = clone(value);
-  }
-  for (const path of Object.keys((update.$unset ?? {}) as Doc)) {
-    const [obj, key] = target(path);
-    delete obj[key];
-  }
-  for (const [field, cond] of Object.entries((update.$pull ?? {}) as Doc)) {
-    const list = doc[field];
-    if (!Array.isArray(list)) continue;
-    doc[field] = list.filter(
-      (el) =>
-        !Object.entries(cond as Doc).every(([k, v]) =>
-          matchesCondition((el as Doc)[k], v),
-        ),
-    );
-  }
+    return sameValue(doc[key], cond);
+  });
 }
 
 class FakePersons implements PersonsCollectionLike {
-  readonly writes: { filter: Doc; update: Doc }[][] = [];
+  readonly writes: { filter: Doc; update: Doc }[] = [];
   reads = 0;
+  /** Runs between a read and the write that follows it: another writer. */
+  beforeWrite: ((doc: Doc) => void) | null = null;
   constructor(public doc: Doc | null) {}
 
   async findOne(filter: Doc, options?: { projection?: Doc }) {
     this.reads += 1;
-    if (!this.doc || !match(this.doc, filter).ok) return null;
+    if (!this.doc || !matches(this.doc, filter)) return null;
     const out = clone(this.doc);
     const keep = Object.keys(options?.projection ?? {});
     return keep.length
@@ -167,18 +95,18 @@ class FakePersons implements PersonsCollectionLike {
       : out;
   }
 
-  async bulkWrite(
-    ops: { updateOne: { filter: Doc; update: Doc } }[],
-    options: { ordered: boolean },
-  ) {
-    expect(options.ordered).toBe(true);
-    this.writes.push(ops.map((o) => o.updateOne));
-    for (const { updateOne } of ops) {
-      if (!this.doc) continue;
-      const m = match(this.doc, updateOne.filter);
-      if (m.ok) applyUpdate(this.doc, updateOne.update, m.index);
+  async updateOne(filter: Doc, update: Doc) {
+    this.writes.push({ filter: clone(filter), update: clone(update) });
+    if (this.doc) this.beforeWrite?.(this.doc);
+    if (!this.doc || !matches(this.doc, filter)) return { matchedCount: 0 };
+    const keys = Object.keys(update);
+    if (keys.length !== 1 || keys[0] !== "$set") {
+      throw new Error(`unsupported update ${keys.join(",")}`);
     }
-    return {};
+    for (const [k, v] of Object.entries(update.$set as Doc)) {
+      this.doc[k] = clone(v);
+    }
+    return { matchedCount: 1 };
   }
 }
 
@@ -190,7 +118,7 @@ const person = (extra: Doc = {}): Doc => ({
   ...extra,
 });
 
-const stored = (
+const patch = (
   over: Partial<PersonPreferencesPatch> = {},
 ): PersonPreferencesPatch => ({
   activities: [],
@@ -211,11 +139,9 @@ const storedActivity = (
   tombstone,
 });
 
-function storeOver(col: FakePersons) {
-  return createIdentityPersonsStore(() => col);
-}
+const storeOver = (col: FakePersons) => createIdentityPersonsStore(() => col);
 
-// --- tests --------------------------------------------------------------------
+// --- read -----------------------------------------------------------------------
 
 describe("read", () => {
   it("is null when the person has no active record", async () => {
@@ -230,6 +156,16 @@ describe("read", () => {
 
   it("is empty for a person with nothing stored", async () => {
     expect(await storeOver(new FakePersons(person())).read(ME)).toEqual({
+      activities: [],
+      savedPlaces: [],
+    });
+  });
+
+  it("reads a null field as an empty list (the validator allows null)", async () => {
+    const col = new FakePersons(
+      person({ activities: null, savedPlaces: null }),
+    );
+    expect(await storeOver(col).read(ME)).toEqual({
       activities: [],
       savedPlaces: [],
     });
@@ -262,7 +198,7 @@ describe("read", () => {
             createdAt: d(T1),
             updatedAt: d(T1),
             tombstone: false,
-            envelope: { protected: "x" }, // not a valid envelope: dropped
+            envelope: { protected: "x" },
           },
           {
             savedPlaceId: placeId(2),
@@ -276,45 +212,42 @@ describe("read", () => {
     const read = await storeOver(col).read(ME);
     expect(read?.activities).toEqual([activity({ activityId: ACT })]);
     expect(read?.savedPlaces).toEqual([
-      place({
-        savedPlaceId: placeId(2),
-        updatedAt: T2,
-        tombstone: true,
-        envelope: undefined,
-      }),
+      without(
+        place({ savedPlaceId: placeId(2), updatedAt: T2, tombstone: true }),
+        "envelope",
+      ),
     ]);
-    expect(read?.savedPlaces[0]).not.toHaveProperty("envelope");
   });
 
-  it("reads only the two fields", async () => {
-    const col = new FakePersons(
-      person({ email: "a@example.com", activities: [] }),
-    );
+  it("reads only the two fields and the version", async () => {
+    const col = new FakePersons(person({ email: "a@example.com" }));
     const spy = vi.spyOn(col, "findOne");
     await storeOver(col).read(ME);
     expect(spy.mock.calls[0][1]).toEqual({
-      projection: { activities: 1, savedPlaces: 1 },
+      projection: { activities: 1, savedPlaces: 1, updatedAt: 1 },
     });
   });
 });
+
+// --- merging activities --------------------------------------------------------------
 
 describe("merge: activities", () => {
   it("is no_person, and writes nothing, without an active record", async () => {
     const col = new FakePersons(null);
     const r = await storeOver(col).merge(
       ME,
-      stored({ activities: [activity()] }),
+      patch({ activities: [activity()] }),
       NOW,
     );
     expect(r).toEqual({ kind: "no_person" });
     expect(col.writes).toHaveLength(0);
   });
 
-  it("adds items to an empty person and stamps the record's updatedAt", async () => {
+  it("adds items to an empty person", async () => {
     const col = new FakePersons(person());
     const r = await storeOver(col).merge(
       ME,
-      stored({
+      patch({
         activities: [
           activity({ activityId: ACT }),
           activity({ activityId: ACT2, createdAt: T2, updatedAt: T2 }),
@@ -325,7 +258,9 @@ describe("merge: activities", () => {
     expect(
       r.kind === "ok" && r.stored.activities.map((a) => a.activityId),
     ).toEqual([ACT, ACT2]);
-    expect(col.doc?.updatedAt).toEqual(NOW);
+    expect(await storeOver(col).read(ME)).toMatchObject({
+      activities: [{ activityId: ACT }, { activityId: ACT2 }],
+    });
   });
 
   it("takes a later write, keeps the first createdAt, ignores an earlier one and a tie", async () => {
@@ -336,7 +271,7 @@ describe("merge: activities", () => {
 
     await store.merge(
       ME,
-      stored({
+      patch({
         activities: [
           activity({ createdAt: T3, updatedAt: T3, tombstone: true }),
         ],
@@ -349,7 +284,7 @@ describe("merge: activities", () => {
 
     await store.merge(
       ME,
-      stored({ activities: [activity({ updatedAt: T1, tombstone: false })] }),
+      patch({ activities: [activity({ updatedAt: T1, tombstone: false })] }),
       NOW,
     );
     expect(await store.read(ME)).toMatchObject({
@@ -358,7 +293,7 @@ describe("merge: activities", () => {
 
     await store.merge(
       ME,
-      stored({ activities: [activity({ updatedAt: T3, tombstone: false })] }),
+      patch({ activities: [activity({ updatedAt: T3, tombstone: false })] }),
       NOW,
     );
     expect(await store.read(ME)).toMatchObject({
@@ -373,7 +308,7 @@ describe("merge: activities", () => {
     const store = storeOver(col);
     await store.merge(
       ME,
-      stored({ activities: [activity({ updatedAt: T3 })] }),
+      patch({ activities: [activity({ updatedAt: T3 })] }),
       NOW,
     );
     expect(await store.read(ME)).toMatchObject({
@@ -382,13 +317,13 @@ describe("merge: activities", () => {
   });
 
   it("two devices in either order give the same lists (union, later removal wins)", async () => {
-    const deviceA = stored({
+    const deviceA = patch({
       activities: [
         activity({ activityId: ACT, updatedAt: T1 }),
         activity({ activityId: ACT2, updatedAt: T1 }),
       ],
     });
-    const deviceB = stored({
+    const deviceB = patch({
       activities: [
         activity({ activityId: ACT, updatedAt: T2, tombstone: true }),
         activity({
@@ -423,43 +358,7 @@ describe("merge: activities", () => {
     );
   });
 
-  it("asks for the purge only when it read a tombstone past its 30 days", async () => {
-    const fresh = new FakePersons(
-      person({ activities: [storedActivity("recent-gone", T1, true)] }),
-    );
-    await storeOver(fresh).merge(ME, stored({ activities: [activity()] }), NOW);
-    expect(JSON.stringify(fresh.writes)).not.toContain("$pull");
-
-    const old = new Date(
-      NOW.getTime() - TOMBSTONE_RETENTION_MS - 60_000,
-    ).toISOString();
-    const stale = new FakePersons(
-      person({ activities: [storedActivity("old-gone", old, true)] }),
-    );
-    await storeOver(stale).merge(ME, stored({ activities: [activity()] }), NOW);
-    expect(JSON.stringify(stale.writes)).toContain("$pull");
-  });
-
-  it("writes nothing for an empty request", async () => {
-    const col = new FakePersons(
-      person({ activities: [storedActivity(ACT, T1)] }),
-    );
-    const r = await storeOver(col).merge(ME, stored(), NOW);
-    expect(r.kind === "ok" && r.stored.activities).toHaveLength(1);
-    expect(col.writes).toHaveLength(0);
-  });
-
-  it("is idempotent", async () => {
-    const col = new FakePersons(person());
-    const store = storeOver(col);
-    const patch = stored({ activities: [activity()] });
-    await store.merge(ME, patch, NOW);
-    const once = JSON.stringify(await store.read(ME));
-    await store.merge(ME, patch, NOW);
-    expect(JSON.stringify(await store.read(ME))).toBe(once);
-  });
-
-  it("refuses a 21st live activity and applies nothing", async () => {
+  it("refuses an activity over the cap and applies nothing", async () => {
     const col = new FakePersons(
       person({
         activities: ACTIVITIES.slice(0, MAX_PERSON_ACTIVITIES).map((a) =>
@@ -469,7 +368,7 @@ describe("merge: activities", () => {
     );
     const r = await storeOver(col).merge(
       ME,
-      stored({
+      patch({
         activities: [
           activity({ activityId: ACTIVITIES[MAX_PERSON_ACTIVITIES].id }),
           activity({
@@ -482,7 +381,7 @@ describe("merge: activities", () => {
       }),
       NOW,
     );
-    // 20 live - 1 removed + 2 added = 21: over.
+    // The cap live, minus one removed, plus two added: one over.
     expect(r).toEqual({
       kind: "refused",
       problem: { status: 422, code: "too_many_activities" },
@@ -503,7 +402,7 @@ describe("merge: activities", () => {
     );
     const r = await storeOver(col).merge(
       ME,
-      stored({
+      patch({
         activities: [
           activity({
             activityId: ACTIVITIES[0].id,
@@ -522,7 +421,7 @@ describe("merge: activities", () => {
     expect(r.kind).toBe("ok");
   });
 
-  it("drops tombstones older than 30 days on the next write, keeps recent ones", async () => {
+  it("drops tombstones older than 30 days on a write, keeps recent ones and live items", async () => {
     const old = new Date(
       NOW.getTime() - TOMBSTONE_RETENTION_MS - 60_000,
     ).toISOString();
@@ -534,58 +433,271 @@ describe("merge: activities", () => {
         activities: [
           storedActivity("old-gone", old, true),
           storedActivity("fresh-gone", fresh, true),
-          storedActivity(ACT, old, false), // a live item is never purged by age
+          storedActivity(ACT, old, false),
         ],
       }),
     );
     const store = storeOver(col);
     await store.merge(
       ME,
-      stored({ activities: [activity({ activityId: ACT2 })] }),
+      patch({ activities: [activity({ activityId: ACT2 })] }),
       NOW,
     );
     const ids = (await store.read(ME))?.activities.map((a) => a.activityId);
-    expect(ids).toEqual(expect.arrayContaining([ACT, ACT2]));
-    expect(ids).toContain("fresh-gone");
+    expect(ids).toEqual(expect.arrayContaining([ACT, ACT2, "fresh-gone"]));
     expect(ids).not.toContain("old-gone");
   });
+});
 
-  it("does not let a full list grow (the push is bounded in the database too)", async () => {
+// --- one write per sync ----------------------------------------------------------------
+
+describe("one write per sync", () => {
+  const many = patch({
+    activities: ACTIVITIES.slice(0, 8).map((a, i) =>
+      activity({ activityId: a.id, createdAt: T1, updatedAt: i % 2 ? T2 : T1 }),
+    ),
+    savedPlaces: [
+      place(),
+      place({ savedPlaceId: placeId(2), envelope: envelopeFor(placeId(2)) }),
+    ],
+  });
+
+  it("writes once, however many items, and moves updatedAt once", async () => {
+    const col = new FakePersons(person());
+    await storeOver(col).merge(ME, many, NOW);
+    expect(col.writes).toHaveLength(1);
+    expect(col.doc?.updatedAt).toEqual(NOW);
+    expect(col.reads).toBe(1);
+  });
+
+  it("writes only the lists that changed", async () => {
+    const col = new FakePersons(person());
+    await storeOver(col).merge(ME, patch({ activities: [activity()] }), NOW);
+    const set = col.writes[0].update.$set as Doc;
+    expect(Object.keys(set).sort()).toEqual(["activities", "updatedAt"]);
+    expect(col.doc).not.toHaveProperty("savedPlaces");
+  });
+
+  it("writes nothing, and leaves updatedAt alone, for a request that changes nothing", async () => {
+    const col = new FakePersons(person());
+    const store = storeOver(col);
+    await store.merge(ME, many, NOW);
+    const at = (col.doc?.updatedAt as Date).getTime();
+    const later = new Date(NOW.getTime() + 60_000);
+    const again = await store.merge(ME, many, later);
+    expect(again.kind).toBe("ok");
+    expect(col.writes).toHaveLength(1);
+    expect((col.doc?.updatedAt as Date).getTime()).toBe(at);
+  });
+
+  it("writes nothing for an empty request, and for one whose items all lose", async () => {
     const col = new FakePersons(
-      person({
-        activities: Array.from({ length: 100 }, (_, n) =>
-          storedActivity(`a-${n}`, T1, true),
-        ),
-      }),
+      person({ activities: [storedActivity(ACT, T3)] }),
     );
-    // Call the collection directly with a push, as a racing request would.
-    await col.bulkWrite(
-      [
-        {
-          updateOne: {
-            filter: {
-              workosUserId: ME,
-              "activities.activityId": { $ne: ACT },
-              $expr: {
-                $lt: [{ $size: { $ifNull: ["$activities", []] } }, 100],
-              },
-            },
-            update: { $push: { activities: storedActivity(ACT, T1) } },
-          },
-        },
-      ],
-      { ordered: true },
+    const store = storeOver(col);
+    const empty = await store.merge(ME, patch(), NOW);
+    expect(empty.kind === "ok" && empty.stored.activities).toHaveLength(1);
+    await store.merge(
+      ME,
+      patch({ activities: [activity({ updatedAt: T1 })] }),
+      NOW,
     );
-    expect((col.doc?.activities as unknown[]).length).toBe(100);
+    expect(col.writes).toHaveLength(0);
+  });
+
+  it("moves updatedAt forward even when the server's clock is behind the record", async () => {
+    const future = new Date(NOW.getTime() + 5_000);
+    const col = new FakePersons(person({ updatedAt: future }));
+    await storeOver(col).merge(ME, patch({ activities: [activity()] }), NOW);
+    expect((col.doc?.updatedAt as Date).getTime()).toBe(future.getTime() + 1);
+  });
+
+  it("asks for the purge only as part of a write that was going to happen", async () => {
+    const old = new Date(
+      NOW.getTime() - TOMBSTONE_RETENTION_MS - 60_000,
+    ).toISOString();
+    const col = new FakePersons(
+      person({ activities: [storedActivity("old-gone", old, true)] }),
+    );
+    await storeOver(col).merge(ME, patch(), NOW);
+    expect(col.writes).toHaveLength(0);
+    await storeOver(col).merge(ME, patch({ activities: [activity()] }), NOW);
+    expect(col.writes).toHaveLength(1);
   });
 });
+
+// --- null, absent and things this code cannot read --------------------------------------------
+
+describe("a field that is null, absent or holds entries this code did not write", () => {
+  it("merges into a null list instead of failing (the validator allows null)", async () => {
+    const col = new FakePersons(
+      person({ activities: null, savedPlaces: null }),
+    );
+    const r = await storeOver(col).merge(
+      ME,
+      patch({ activities: [activity()], savedPlaces: [place()] }),
+      NOW,
+    );
+    expect(r.kind).toBe("ok");
+    expect(Array.isArray(col.doc?.activities)).toBe(true);
+    expect(Array.isArray(col.doc?.savedPlaces)).toBe(true);
+    expect(await storeOver(col).read(ME)).toMatchObject({
+      activities: [{ activityId: ACT }],
+      savedPlaces: [{ savedPlaceId: place().savedPlaceId }],
+    });
+  });
+
+  it("merges into an absent list, and a purge of a null list is not an error", async () => {
+    const col = new FakePersons(person());
+    const r = await storeOver(col).merge(
+      ME,
+      patch({ activities: [activity()] }),
+      NOW,
+    );
+    expect(r.kind).toBe("ok");
+    expect(col.doc).not.toHaveProperty("savedPlaces");
+  });
+
+  it("keeps entries it cannot read, and fields it does not know on ones it can", async () => {
+    const foreign = { activityId: "from-a-newer-writer", surprise: { x: 1 } };
+    const known = { ...storedActivity(ACT, T1), deviceId: "install-1" };
+    const col = new FakePersons(
+      person({ activities: [known, foreign, "junk"] }),
+    );
+    await storeOver(col).merge(
+      ME,
+      patch({
+        activities: [
+          activity({ activityId: ACT2 }),
+          activity({ activityId: ACT, updatedAt: T2, tombstone: true }),
+        ],
+      }),
+      NOW,
+    );
+    const stored = col.doc?.activities as Doc[];
+    expect(stored).toContainEqual(foreign);
+    expect(stored).toContain("junk");
+    const updated = stored.find((e) => e.activityId === ACT);
+    expect(updated).toMatchObject({ deviceId: "install-1", tombstone: true });
+    expect(stored.find((e) => e.activityId === ACT2)).toBeDefined();
+  });
+
+  it("writes an entry it did not change exactly as it found it", async () => {
+    const known = { ...storedActivity(ACT, T1), deviceId: "install-1" };
+    const col = new FakePersons(person({ activities: [known] }));
+    await storeOver(col).merge(
+      ME,
+      patch({ activities: [activity({ activityId: ACT2 })] }),
+      NOW,
+    );
+    const stored = col.doc?.activities as Doc[];
+    expect(stored.find((e) => e.activityId === ACT)).toEqual(known);
+  });
+});
+
+// --- concurrent writers --------------------------------------------------------------------------
+
+describe("when the record changes between the read and the write", () => {
+  it("reads and merges again, once, and keeps the other writer's change", async () => {
+    const col = new FakePersons(person());
+    let interleaved = false;
+    col.beforeWrite = (doc) => {
+      if (interleaved) return;
+      interleaved = true;
+      // Another device writes first.
+      doc.activities = [storedActivity(ACT2, T2)];
+      doc.updatedAt = new Date(NOW.getTime() - 1_000);
+    };
+    const r = await storeOver(col).merge(
+      ME,
+      patch({ activities: [activity()] }),
+      NOW,
+    );
+    expect(
+      r.kind === "ok" && r.stored.activities.map((a) => a.activityId).sort(),
+    ).toEqual([ACT, ACT2].sort());
+    expect(col.writes).toHaveLength(2);
+    expect(col.reads).toBe(2);
+    expect(
+      (col.doc?.activities as Doc[]).map((e) => e.activityId).sort(),
+    ).toEqual([ACT, ACT2].sort());
+  });
+
+  it("judges the cap on what is written: two devices each adding the last slot cannot both succeed", async () => {
+    const full = ACTIVITIES.slice(0, MAX_PERSON_ACTIVITIES - 1).map((a) =>
+      storedActivity(a.id, T1),
+    );
+    const col = new FakePersons(person({ activities: full }));
+    const slotA = ACTIVITIES[MAX_PERSON_ACTIVITIES].id;
+    const slotB = ACTIVITIES[MAX_PERSON_ACTIVITIES + 1].id;
+    col.beforeWrite = (doc) => {
+      if (col.writes.length > 1) return;
+      doc.activities = [
+        ...(doc.activities as Doc[]),
+        storedActivity(slotB, T2),
+      ];
+      doc.updatedAt = new Date(NOW.getTime() - 1_000);
+    };
+    const r = await storeOver(col).merge(
+      ME,
+      patch({
+        activities: [
+          activity({ activityId: slotA, createdAt: T3, updatedAt: T3 }),
+        ],
+      }),
+      NOW,
+    );
+    expect(r).toEqual({
+      kind: "refused",
+      problem: { status: 422, code: "too_many_activities" },
+    });
+    expect((col.doc?.activities as Doc[]).length).toBe(MAX_PERSON_ACTIVITIES);
+  });
+
+  it("gives up with a conflict error, writing nothing of its own, if it keeps losing", async () => {
+    const col = new FakePersons(person());
+    let n = 0;
+    col.beforeWrite = (doc) => {
+      n += 1;
+      doc.updatedAt = new Date(NOW.getTime() - 10_000 + n);
+    };
+    await expect(
+      storeOver(col).merge(ME, patch({ activities: [activity()] }), NOW),
+    ).rejects.toBeInstanceOf(PreferencesConflictError);
+    expect(col.writes).toHaveLength(2);
+    expect(col.doc).not.toHaveProperty("activities");
+    expect(new PreferencesConflictError().name).toBe("PreferencesConflict");
+  });
+
+  it("guards the write on the updatedAt it read", async () => {
+    const at = new Date("2026-02-02T00:00:00.000Z");
+    const col = new FakePersons(person({ updatedAt: at }));
+    await storeOver(col).merge(ME, patch({ activities: [activity()] }), NOW);
+    expect(col.writes[0].filter.updatedAt).toEqual(at);
+  });
+
+  it("guards a record that has no updatedAt on its absence", async () => {
+    const doc = person();
+    delete doc.updatedAt;
+    const col = new FakePersons(doc);
+    const r = await storeOver(col).merge(
+      ME,
+      patch({ activities: [activity()] }),
+      NOW,
+    );
+    expect(r.kind).toBe("ok");
+    expect(col.writes[0].filter.updatedAt).toEqual({ $exists: false });
+  });
+});
+
+// --- saved places (ciphertext) -------------------------------------------------------------------------
 
 describe("merge: saved places (ciphertext)", () => {
   it("stores a place with its envelope and nothing readable", async () => {
     const col = new FakePersons(person());
     const r = await storeOver(col).merge(
       ME,
-      stored({ savedPlaces: [place()] }),
+      patch({ savedPlaces: [place()] }),
       NOW,
     );
     expect(r.kind === "ok" && r.stored.savedPlaces).toEqual([place()]);
@@ -598,19 +710,19 @@ describe("merge: saved places (ciphertext)", () => {
     const store = storeOver(col);
     await store.merge(
       ME,
-      stored({ savedPlaces: [place({ updatedAt: T1 })] }),
+      patch({ savedPlaces: [place({ updatedAt: T1 })] }),
       NOW,
     );
 
     const gone = without(place({ updatedAt: T2, tombstone: true }), "envelope");
-    await store.merge(ME, stored({ savedPlaces: [gone] }), NOW);
+    await store.merge(ME, patch({ savedPlaces: [gone] }), NOW);
     const afterTomb = (col.doc?.savedPlaces as Doc[])[0];
     expect(afterTomb.tombstone).toBe(true);
     expect(afterTomb).not.toHaveProperty("envelope");
 
     await store.merge(
       ME,
-      stored({ savedPlaces: [place({ updatedAt: T3 })] }),
+      patch({ savedPlaces: [place({ updatedAt: T3 })] }),
       NOW,
     );
     expect(await store.read(ME)).toMatchObject({
@@ -623,16 +735,11 @@ describe("merge: saved places (ciphertext)", () => {
   it("refuses an 11th live place", async () => {
     const col = new FakePersons(person());
     const places = Array.from({ length: MAX_PERSON_SAVED_PLACES + 1 }, (_, n) =>
-      place({
-        savedPlaceId: placeId(n),
-        envelope: envelopeFor(placeId(n)),
-        createdAt: T1,
-        updatedAt: T1,
-      }),
+      place({ savedPlaceId: placeId(n), envelope: envelopeFor(placeId(n)) }),
     );
     const r = await storeOver(col).merge(
       ME,
-      stored({ savedPlaces: places }),
+      patch({ savedPlaces: places }),
       NOW,
     );
     expect(r).toEqual({
@@ -655,7 +762,7 @@ describe("merge: saved places (ciphertext)", () => {
     );
     const r = await storeOver(col).merge(
       ME,
-      stored({ savedPlaces: tombs }),
+      patch({ savedPlaces: tombs }),
       NOW,
     );
     expect(r).toMatchObject({
@@ -665,45 +772,30 @@ describe("merge: saved places (ciphertext)", () => {
   });
 });
 
+// --- what every write is scoped to ----------------------------------------------------------------------------
+
 describe("what every write is scoped to", () => {
-  it("matches the verified person on every operation and touches only two fields", async () => {
+  it("matches the verified person, and sets only the two lists and updatedAt", async () => {
     const col = new FakePersons(person());
     await storeOver(col).merge(
       ME,
-      stored({ activities: [activity()], savedPlaces: [place()] }),
+      patch({ activities: [activity()], savedPlaces: [place()] }),
       NOW,
     );
-    const ops = col.writes[0];
-    expect(ops.length).toBeGreaterThan(1);
-    for (const op of ops) {
-      expect(op.filter.workosUserId).toBe(ME);
-      expect(op.filter.isActive).toEqual({ $ne: false });
-      const update = op.update as {
-        $set?: Doc;
-        $push?: Doc;
-        $unset?: Doc;
-        $pull?: Doc;
-      };
-      const touched = [
-        ...Object.keys(update.$set ?? {}),
-        ...Object.keys(update.$push ?? {}),
-        ...Object.keys(update.$unset ?? {}),
-        ...Object.keys(update.$pull ?? {}),
-      ];
-      for (const path of touched) {
-        expect(path).toMatch(/^(activities|savedPlaces|updatedAt)(\.|$)/);
-      }
-      expect(
-        Object.keys(update).every((k) =>
-          ["$set", "$push", "$unset", "$pull"].includes(k),
-        ),
-      ).toBe(true);
-    }
+    const { filter, update } = col.writes[0];
+    expect(filter.workosUserId).toBe(ME);
+    expect(filter.isActive).toEqual({ $ne: false });
+    expect(Object.keys(update)).toEqual(["$set"]);
+    expect(Object.keys(update.$set as Doc).sort()).toEqual([
+      "activities",
+      "savedPlaces",
+      "updatedAt",
+    ]);
   });
 
   it("never upserts and never replaces the record", async () => {
     const col = new FakePersons(person());
-    await storeOver(col).merge(ME, stored({ activities: [activity()] }), NOW);
+    await storeOver(col).merge(ME, patch({ activities: [activity()] }), NOW);
     const serialised = JSON.stringify(col.writes);
     expect(serialised).not.toContain("upsert");
     expect(serialised).not.toContain("replace");
@@ -714,7 +806,7 @@ describe("what every write is scoped to", () => {
     const col = new FakePersons(person({ workosUserId: "user_other" }));
     const r = await storeOver(col).merge(
       ME,
-      stored({ activities: [activity()] }),
+      patch({ activities: [activity()] }),
       NOW,
     );
     expect(r.kind).toBe("no_person");
@@ -725,7 +817,7 @@ describe("what every write is scoped to", () => {
     const col = new FakePersons(
       person({ email: "a@example.com", givenName: "Ada" }),
     );
-    await storeOver(col).merge(ME, stored({ activities: [activity()] }), NOW);
+    await storeOver(col).merge(ME, patch({ activities: [activity()] }), NOW);
     expect(col.doc).toMatchObject({
       email: "a@example.com",
       givenName: "Ada",

@@ -51,6 +51,7 @@ const CLIENT_SIDE = [
   "lib/person-preferences-switches.ts",
   "lib/person-preferences-sync.ts",
   "lib/person-preferences-sync-start.ts",
+  "lib/person-preferences-state.ts",
   "lib/use-person-preferences-sync.ts",
   "components/profile/PersonPreferencesSync.tsx",
 ];
@@ -107,10 +108,13 @@ describe("the store module", () => {
     expect(body.match(/\.collection\("([^"]+)"\)/g)).toEqual([
       '.collection("persons")',
     ]);
-    const roots = new Set(
-      [...body.matchAll(/"(activities|savedPlaces)\./g)].map((m) => m[1]),
+    // The one write sets the two lists and the record's updatedAt, nothing else.
+    const set = new Set(
+      [...body.matchAll(/\bset\.(\w+)\s*=/g)].map((m) => m[1]),
     );
-    expect(roots).toEqual(new Set(["activities", "savedPlaces"]));
+    expect(set).toEqual(new Set(["activities", "savedPlaces", "updatedAt"]));
+    expect(body.match(/\bcol\.updateOne\(/g)).toHaveLength(1);
+    expect(body).not.toMatch(/\$push|\$pull|\$unset|\$inc|bulkWrite/);
   });
 
   it("says it is the interim home and where the truth moves", () => {
@@ -129,6 +133,13 @@ describe("everything else", () => {
       );
     }
     expect(code(source)).not.toMatch(STORE_VOCABULARY);
+  });
+
+  it("the legacy device-profile replication reads only the two-value state module", () => {
+    const specs = importsOf(read("lib/rxdb/replication.ts")).filter((s) =>
+      /person-preferences/.test(s),
+    );
+    expect(specs).toEqual(["../person-preferences-state"]);
   });
 
   it("only the route imports the store module", () => {

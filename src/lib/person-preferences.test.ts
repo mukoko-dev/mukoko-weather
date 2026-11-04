@@ -38,11 +38,22 @@ import {
   placeId,
   without,
 } from "./person-preferences-fixtures";
+import {
+  ACTIVITY_ID_RE as SHARED_ACTIVITY_ID_RE,
+  MAX_SYNCED_ACTIVITIES,
+  isWireTimestamp,
+} from "./rxdb/couch-docs";
+import { ACTIVITY_ID_RE } from "./person-preferences";
 import { MAX_SAVED_LOCATIONS } from "./store";
 
 const NOW = Date.parse("2026-11-04T12:00:00.000Z");
 
 describe("constants", () => {
+  it("takes the activity cap and the id pattern from the one shared definition", () => {
+    expect(MAX_PERSON_ACTIVITIES).toBe(MAX_SYNCED_ACTIVITIES);
+    expect(MAX_PERSON_ACTIVITIES).toBe(30);
+    expect(ACTIVITY_ID_RE).toBe(SHARED_ACTIVITY_ID_RE);
+  });
   it("caps live saved places at the number the app itself allows", () => {
     expect(MAX_PERSON_SAVED_PLACES).toBe(MAX_SAVED_LOCATIONS);
   });
@@ -64,6 +75,7 @@ describe("parsePatch: the body", () => {
     expect(parsePatch({}, NOW)).toEqual({
       ok: true,
       patch: { activities: [], savedPlaces: [] },
+      ignored: [],
     });
     const ok = parsePatch({ activities: [activity()] }, NOW);
     expect(ok.ok && ok.patch.activities).toEqual([activity()]);
@@ -183,6 +195,11 @@ describe("parsePatch: activities", () => {
       { updatedAt: "2026-11-04T09:00:00Z" },
       { updatedAt: "2026-11-04T09:00:00.0Z" },
       { updatedAt: "2026-13-45T09:00:00.000Z" },
+      // The pattern fits, but Date would roll these forward to 2 March, 1 May.
+      { updatedAt: "2026-02-30T09:00:00.000Z" },
+      { updatedAt: "2026-04-31T09:00:00.000Z" },
+      { createdAt: "2026-02-30T09:00:00.000Z" },
+      { createdAt: "2026-06-31T01:00:00.000Z", updatedAt: T1 },
       { createdAt: T3, updatedAt: T1 },
       { tombstone: "yes" },
     ]) {
@@ -201,6 +218,85 @@ describe("parsePatch: activities", () => {
     expect(
       parsePatch({ activities: [activity({ updatedAt: inside })] }, NOW).ok,
     ).toBe(true);
+  });
+});
+
+describe("isWireTimestamp", () => {
+  it("takes a real instant in the one wire form", () => {
+    expect(isWireTimestamp(T1)).toBe(true);
+    expect(isWireTimestamp("2024-02-29T23:59:59.999Z")).toBe(true); // a leap day
+  });
+
+  it.each([
+    "2026-02-30T00:00:00.000Z",
+    "2026-04-31T00:00:00.000Z",
+    "2025-02-29T00:00:00.000Z", // not a leap year
+    "2026-13-01T00:00:00.000Z",
+    "2026-11-04T24:00:00.000Z",
+    "2026-11-04T09:00:00Z",
+    "2026-11-04T09:00:00.0000Z",
+    "2026-11-04T09:00:00.000+02:00",
+    "2026-11-04",
+    "",
+  ])("refuses %j", (v) => {
+    expect(isWireTimestamp(v)).toBe(false);
+  });
+
+  it("refuses anything that is not a string", () => {
+    for (const v of [null, undefined, 0, 1_762_000_000_000, {}, []]) {
+      expect(isWireTimestamp(v)).toBe(false);
+    }
+  });
+
+  it("is what a top-level updatedAt is held to", () => {
+    expect(parsePatch({ updatedAt: "2026-02-30T00:00:00.000Z" }, NOW).ok).toBe(
+      false,
+    );
+    expect(parsePatch({ updatedAt: T1 }, NOW).ok).toBe(true);
+  });
+});
+
+describe("parsePatch: the savedPlaces option", () => {
+  const bad = { savedPlaces: [{ place: "nairobi-ke" }, "junk"] };
+
+  it("reads and validates saved places by default", () => {
+    expect(parsePatch(bad, NOW).ok).toBe(false);
+    const ok = parsePatch({ savedPlaces: [place()] }, NOW);
+    expect(ok.ok && ok.ignored).toEqual([]);
+    expect(ok.ok && ok.patch.savedPlaces).toEqual([place()]);
+  });
+
+  it("with the part turned off, ignores it unread and says so", () => {
+    const parsed = parsePatch({ activities: [activity()], ...bad }, NOW, {
+      savedPlaces: false,
+    });
+    expect(parsed).toEqual({
+      ok: true,
+      patch: { activities: [activity()], savedPlaces: [] },
+      ignored: ["savedPlaces"],
+    });
+  });
+
+  it("with the part turned off, says nothing when there was nothing to ignore", () => {
+    for (const body of [
+      {},
+      { savedPlaces: [] },
+      { activities: [activity()] },
+    ]) {
+      const parsed = parsePatch(body, NOW, { savedPlaces: false });
+      expect(parsed.ok && parsed.ignored).toEqual([]);
+    }
+  });
+
+  it("still holds the rest of the request to every rule", () => {
+    expect(
+      parsePatch({ activities: [{ activityId: "ghost" }], ...bad }, NOW, {
+        savedPlaces: false,
+      }).ok,
+    ).toBe(false);
+    expect(
+      parsePatch({ savedPlaces: "nope" }, NOW, { savedPlaces: false }).ok,
+    ).toBe(false);
   });
 });
 

@@ -28,6 +28,11 @@ import {
 import { activity } from "@/lib/person-preferences-fixtures";
 
 const SITE = "https://weather.mukoko.com";
+const get = (headers: Record<string, string> = {}) =>
+  new Request(`${SITE}/api/profile/preferences`, {
+    method: "GET",
+    headers,
+  }) as never;
 const put = () =>
   new Request(`${SITE}/api/profile/preferences`, {
     method: "PUT",
@@ -49,7 +54,7 @@ describe("the route as shipped", () => {
   });
 
   it("GET is 503 preferences_unavailable and reads nothing", async () => {
-    const res = await GET();
+    const res = await GET(get());
     expect(res.status).toBe(503);
     expect(((await res.json()) as { code: string }).code).toBe(
       "preferences_unavailable",
@@ -70,7 +75,7 @@ describe("the route as shipped", () => {
 
   it("is still 401 for the signed-out, and the CSRF guard still comes first", async () => {
     withAuthMock.mockResolvedValue({ user: null });
-    expect((await GET()).status).toBe(401);
+    expect((await GET(get())).status).toBe(401);
     expect((await PUT(put())).status).toBe(401);
     const crossSite = new Request(`${SITE}/api/profile/preferences`, {
       method: "PUT",
