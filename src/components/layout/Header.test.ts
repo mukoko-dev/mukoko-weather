@@ -88,13 +88,60 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
     expect(bottomNav).toContain("backdrop-blur-xl");
   });
 
-  it("is 4rem tall; --mobile-nav-clearance is the bar plus the lift, the safe area and a breath", () => {
+  it("is 4.5rem tall; --mobile-nav-clearance is the bar plus the lift, the safe area and a breath", () => {
     expect(bottomNav).toContain("h-[var(--mobile-nav-bar-height)]");
-    expect(css).toContain("--mobile-nav-bar-height: 4rem;");
+    expect(css).toContain("--mobile-nav-bar-height: 4.5rem;");
     expect(css).toContain("--mobile-nav-inset: 0.75rem;");
     expect(css).toMatch(
       /--mobile-nav-clearance: calc\(\s*env\(safe-area-inset-bottom, 0px\) \+ var\(--mobile-nav-inset\) \+\s*var\(--mobile-nav-bar-height\) \+ 0\.5rem\s*\);/,
     );
+  });
+
+  it("is in proportion (owner, 2026-11-04): 14px labels, 18px icons, pill-sized targets, 8px between them", () => {
+    // At 16px labels and 21px icons the content filled the 64px bar edge to
+    // edge: 56px of item in 64px, and chips 48px in 64px, with 4px between.
+    expect(css).toContain("--text-nav-label: 0.875rem;");
+    expect(css).not.toContain("--text-nav-label: 1rem;");
+    expect(bottomNav).toContain("size-[18px]");
+    expect(bottomNav).not.toContain("size-[21px]");
+    // A pinned item is a pill about as tall as a chip, not a bar-high oval
+    // (its focus ring and hover follow its shape); the bar-high part is the
+    // tappable area, from .plover.
+    const link = bottomNav.match(/"(plover [^"]*)",\s*hasLane/);
+    expect(link).not.toBeNull();
+    expect(link?.[1]).toContain("min-h-[var(--touch-target-min)]");
+    expect(link?.[1]).not.toMatch(/(^|\s)h-full(\s|$)/);
+    expect(bottomNav).toContain('hasLane ? "gap-2 px-2"');
+  });
+
+  it("every target's tappable area is the bar's height, derived from the token, and fits inside the bar", () => {
+    // One rule serves the pinned items (.plover) and the lane's chips (.lark).
+    const hit = css.match(/\.plover::after,\s*\.lark::after\s*\{([^}]*)\}/);
+    expect(hit).not.toBeNull();
+    const body = hit?.[1] ?? "";
+    // Stretched to exactly the bar, centred on the link: no hard-coded px or
+    // rem guess at the bar's size, so changing the token moves the area too.
+    expect(body).toContain(
+      "inset-block: calc((100% - var(--mobile-nav-bar-height)) / 2);",
+    );
+    expect(body).toMatch(/inset-inline:\s*0;/);
+    // The link's own box is a touch target tall and its content fits the bar,
+    // so the area is an extension and never a shrink.
+    const bar = css.match(/--mobile-nav-bar-height:\s*([\d.]+)rem;/);
+    const touch = css.match(/--touch-target-min:\s*(\d+)px;/);
+    expect(bar).not.toBeNull();
+    expect(touch).not.toBeNull();
+    expect(Number(bar?.[1]) * 16).toBeGreaterThan(Number(touch?.[1]));
+    expect(rule("lark")).toContain("min-h-[var(--touch-target-min)]");
+    // Both kinds of target carry it.
+    expect(bottomNav).toMatch(/"plover relative /);
+  });
+
+  it("the active accent bar is anchored to the bar's top edge, whatever the item's height", () => {
+    expect(bottomNav).toContain(
+      "top-[calc((100%_-_var(--mobile-nav-bar-height))_/_2_+_1px)]",
+    );
+    expect(bottomNav).not.toContain("-top-[3px]");
   });
 
   it("is ONE surface: the nav landmark is the pill, with no second pill and no leftover tokens", () => {
@@ -160,7 +207,7 @@ describe("MobileNav — pinned items and the places lane", () => {
     expect(rule("lark")).toContain("min-h-[var(--touch-target-min)]");
   });
 
-  it("labels use the 16px --text-nav-label token, not upstream's 10px", () => {
+  it("labels use the 14px (Mzizi body-sm) --text-nav-label token, not upstream's 10px or the 16px that read as too large", () => {
     expect(bottomNav).toContain("text-[length:var(--text-nav-label)]");
     expect(bottomNav).not.toContain("text-[10px]");
   });

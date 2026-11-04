@@ -260,6 +260,6 @@ describe("PlaceLane — styling comes from tokens", () => {
 
   it("gives the scroller room so a chip's focus ring and ends are not clipped", () => {
     expect(source).toContain("p-0 px-1");
-    expect(source).toContain("gap-1.5");
+    expect(source).toContain("gap-2");
   });
 });

@@ -173,7 +173,7 @@ export function PlaceLaneView({
     <div
       role="group"
       aria-label="Places"
-      className={`relative flex h-full min-w-0 flex-1 items-center gap-1.5 ${
+      className={`relative flex h-full min-w-0 flex-1 items-center gap-2 ${
         places.length === 0 ? "justify-center" : ""
       }`}
     >
@@ -213,7 +213,7 @@ export function PlaceLaneView({
           <ul
             ref={listRef}
             aria-label="Saved places and suggestions"
-            className="relative m-0 flex h-full w-max list-none items-center gap-1.5 p-0 px-1"
+            className="relative m-0 flex h-full w-max list-none items-center gap-2 p-0 px-1"
           >
             {places.map((chip) => {
               const isActive = chips.indexOf(chip) === activeIndex;
