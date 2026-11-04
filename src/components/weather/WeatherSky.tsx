@@ -1,6 +1,5 @@
 import type { ReactNode, Ref } from "react";
 import { SKY_CLASS, type SkyFamily, type SkyTexture } from "@/lib/hero";
-import { SkyRain } from "@/components/weather/SkyRain";
 
 interface Props {
   /** The sky box, for the live page's reach measurement (WeatherBackdrop). */
@@ -8,13 +7,6 @@ interface Props {
   family: SkyFamily;
   /** The faint static texture for the family (`skyTexture(family)`). */
   texture: SkyTexture | null;
-  /**
-   * Move the rain and storm sky with the CSS-only layer (`SkyRain`) instead of
-   * showing the still streaks. Set by WeatherBackdrop where the Three.js scene
-   * is not used and motion is allowed (`backdropMode` is "css"); never by the
-   * loading skeleton.
-   */
-  moveRain?: boolean;
   /** The optional animated particle layer, painted over the sky
    *  (WeatherBackdrop only; the loading skeleton has none). */
   children?: ReactNode;
@@ -31,13 +23,7 @@ interface Props {
  *
  * Decorative — `aria-hidden`, non-interactive.
  */
-export function WeatherSky({
-  ref,
-  family,
-  texture,
-  moveRain = false,
-  children,
-}: Props) {
+export function WeatherSky({ ref, family, texture, children }: Props) {
   return (
     <div
       ref={ref}
@@ -54,12 +40,7 @@ export function WeatherSky({
           WebGL-failure fallback, and the base the particle layer paints over. */}
       <div className={`kestrel ${SKY_CLASS[family]}`} />
       {texture === "stars" && <div className="kestrel-stars" />}
-      {texture === "streaks" &&
-        (moveRain ? (
-          <SkyRain storm={family === "storm"} />
-        ) : (
-          <div className="kestrel-streaks" />
-        ))}
+      {texture === "streaks" && <div className="kestrel-streaks" />}
       {children}
     </div>
   );

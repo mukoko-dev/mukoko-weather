@@ -121,9 +121,9 @@ describe("backdropMode", () => {
     expect(backdropMode({ reducedMotion: false })).toBe("webgl");
   });
 
-  it("moves the sky in CSS only on iPhone and iPad, which never get WebGL", () => {
-    expect(backdropMode(iphone)).toBe("css");
-    expect(backdropMode({ ...iphone, deviceMemory: 4 })).toBe("css");
+  it("runs the 2D effects on iPhone and iPad, which never get WebGL", () => {
+    expect(backdropMode(iphone)).toBe("canvas");
+    expect(backdropMode({ ...iphone, deviceMemory: 4 })).toBe("canvas");
   });
 
   it("keeps the sky still when the person asked for less motion or less data", () => {
@@ -152,7 +152,7 @@ describe("backdropMode", () => {
     }
   });
 
-  it("never runs both: WebGL and the CSS layer are exclusive, and agree with shouldAnimateBackdrop", () => {
+  it("never runs both: WebGL and the canvas effects are exclusive, and agree with shouldAnimateBackdrop", () => {
     for (const reducedMotion of [false, true]) {
       for (const saveData of [undefined, false, true]) {
         for (const deviceMemory of [undefined, 1, 2, 4, 8]) {
@@ -162,7 +162,7 @@ describe("backdropMode", () => {
             expect(mode === "webgl", JSON.stringify(h)).toBe(
               shouldAnimateBackdrop(h),
             );
-            if (mode === "css") {
+            if (mode === "canvas") {
               expect(h.ios).toBe(true);
               expect(h.reducedMotion).toBe(false);
             }
