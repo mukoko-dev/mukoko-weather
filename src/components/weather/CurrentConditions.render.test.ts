@@ -139,17 +139,38 @@ describe("CurrentConditions render — the sky hero", () => {
       },
     );
     const crumb = html.indexOf("Home / Harare");
-    const share = html.indexOf('aria-label="Share weather for Harare"');
-    const more = html.indexOf('aria-label="More options"');
+    const group = html.indexOf('class="hadeda sm:hidden"');
     const name = html.indexOf('id="current-conditions-heading"');
     expect(crumb).toBeGreaterThan(-1);
-    expect(crumb).toBeLessThan(share);
-    expect(share).toBeLessThan(more);
-    expect(more).toBeLessThan(name);
-    expect(html).toContain('class="kestrel-round"');
+    expect(crumb).toBeLessThan(group);
+    expect(group).toBeLessThan(name);
+    // From `sm` up, Share sits in the top row on the sky.
     expect(html).toMatch(
-      /<div class="relative sm:hidden"><button[^>]*kestrel-round/,
+      /<div class="hidden shrink-0 sm:block"><div class="relative"><button[^>]*kestrel-round/,
     );
+    // On phones, Share and the profile menu are ONE fixed group, both round
+    // `duiker` controls on its card surface, Share first.
+    const inGroup = html.slice(group, name);
+    const share = inGroup.indexOf('aria-label="Share weather for Harare"');
+    const more = inGroup.indexOf('aria-label="More options"');
+    expect(share).toBeGreaterThan(-1);
+    expect(share).toBeLessThan(more);
+    expect(inGroup.match(/class="duiker"/g)).toHaveLength(2);
+    expect(inGroup).not.toContain("kestrel-round");
+    // The breadcrumb leaves room for the group on phones, none from `sm`.
+    expect(html).toContain("pr-[var(--hadeda-reserve)]");
+    expect(html).toContain("sm:pr-0");
+  });
+
+  it("renders the phone Share and the desktop Share as two instances, one hidden at each width", () => {
+    const html = render();
+    expect(html.match(/aria-label="Share weather for Harare"/g)).toHaveLength(
+      2,
+    );
+    expect(html.match(/<div class="hidden shrink-0 sm:block">/g)).toHaveLength(
+      1,
+    );
+    expect(html.match(/class="hadeda sm:hidden"/g)).toHaveLength(1);
   });
 
   it("shows the eyebrow only for current location or home, keeping the line reserved", () => {
