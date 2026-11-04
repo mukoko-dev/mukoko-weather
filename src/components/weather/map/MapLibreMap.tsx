@@ -25,9 +25,12 @@ import {
 import { overlayFrameId, planOverlayFrames } from "@/lib/overlay-frames";
 import {
   BASE_MAP_PROVIDERS,
+  MAP_MAX_ZOOM_DEFAULT,
   MAP_PROVIDERS,
   attributionHtml,
+  maxMapZoomFor,
   overlayAttribution,
+  planZoomCap,
   withoutStyleAttributions,
 } from "@/lib/map-sources";
 import {
@@ -117,6 +120,13 @@ const OVERLAY_SOURCE_IDS = [
  * timeline label, which is worse than a frame that is still filling in.
  */
 const FRAME_SWAP_TIMEOUT_MS = 2500;
+
+/**
+ * How long the map eases down to a layer's zoom cap when the visitor changes
+ * layer while zoomed past it. MapLibre's easeTo already goes instant under
+ * prefers-reduced-motion (it is not marked `essential`).
+ */
+const ZOOM_CAP_EASE_MS = 400;
 
 /**
  * Shows `state.want` if it has loaded (or `force` is set): raises it to full
@@ -598,6 +608,13 @@ export function MapLibreMap({
           container: containerRef.current,
           center: [lon, lat],
           zoom,
+          // A satellite layer cannot show more than its data holds (see
+          // GibsLayer.maxMapZoom); the effect below keeps this in step with
+          // the active layer.
+          maxZoom: maxMapZoomFor(
+            overlayPropsRef.current.layer,
+            MAP_MAX_ZOOM_DEFAULT,
+          ),
           interactive,
           // The default attribution control sits bottom-right, which would collide
           // with the bottom-right overlay layer switcher. Disable it here and re-add
@@ -747,6 +764,31 @@ export function MapLibreMap({
       transformStyle: (_previous, next) => withoutStyleAttributions(next),
     });
   }, [isDark]);
+
+  // Cap the zoom at what the active layer's data can show. A GIBS layer is
+  // magnified past its native resolution as the visitor zooms in (IMERG's 11 km
+  // cell becomes 145 px at zoom 10), so it carries a maximum map zoom; every
+  // other layer gets the normal maximum back. When the map is already zoomed
+  // past the new cap it eases down first and locks the maximum once it stops
+  // (setMaxZoom alone would jump). The pending lock reads the CURRENT layer,
+  // so switching again mid-ease never leaves a stale cap.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const cap = maxMapZoomFor(weatherLayer, MAP_MAX_ZOOM_DEFAULT);
+    if (map.getMaxZoom() === cap) return;
+    const plan = planZoomCap(map.getZoom(), cap);
+    if (plan.easeTo === null) {
+      map.setMaxZoom(cap);
+      return;
+    }
+    map.easeTo({ zoom: plan.easeTo, duration: ZOOM_CAP_EASE_MS });
+    map.once("moveend", () => {
+      map.setMaxZoom(
+        maxMapZoomFor(overlayPropsRef.current.layer, MAP_MAX_ZOOM_DEFAULT),
+      );
+    });
+  }, [weatherLayer]);
 
   // Switch the weather overlay frame when the layer or forecast time changes.
   // Before the style is ready there is nothing to do: restore() reads the

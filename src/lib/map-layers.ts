@@ -463,7 +463,7 @@ export const MAP_CHIPS: readonly MapChip[] = [
     legend: {
       unit: "true colour",
       segments: [],
-      note: "NOAA-20 VIIRS, one pass a day",
+      note: "NOAA-20 VIIRS, about 250 m detail, one pass a day",
     },
   },
   {
@@ -472,7 +472,8 @@ export const MAP_CHIPS: readonly MapChip[] = [
     legend: {
       unit: "mm/h",
       segments: [],
-      note: "NASA IMERG, about 4–6 hours behind",
+      // \u2060 (word joiner) keeps "4–6" from breaking after the dash on a narrow sheet.
+      note: "NASA IMERG, about 10 km grid, 4–\u20606 hours behind",
     },
   },
 ];

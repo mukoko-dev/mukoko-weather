@@ -423,6 +423,48 @@ describe("MapLibreMap — overlay sources and attribution", () => {
   });
 });
 
+describe("GIBS zoom cap (a satellite layer cannot show more than its data holds)", () => {
+  it("creates the map with the active layer's cap", () => {
+    expect(source).toMatch(
+      /maxZoom: maxMapZoomFor\(\s*overlayPropsRef\.current\.layer,\s*MAP_MAX_ZOOM_DEFAULT,?\s*\)/,
+    );
+  });
+
+  const effect = source.slice(
+    source.indexOf("// Cap the zoom at what the active layer's data can show."),
+    source.indexOf("// Switch the weather overlay frame when the layer"),
+  );
+
+  it("re-caps on every layer change and gives the default back to non-GIBS layers", () => {
+    expect(effect).toContain(
+      "const cap = maxMapZoomFor(weatherLayer, MAP_MAX_ZOOM_DEFAULT);",
+    );
+    expect(effect).toContain("if (map.getMaxZoom() === cap) return;");
+    expect(effect).toContain("}, [weatherLayer]);");
+  });
+
+  it("eases down to the cap instead of jumping, then locks the maximum", () => {
+    expect(effect).toContain("planZoomCap(map.getZoom(), cap)");
+    expect(effect).toContain(
+      "map.easeTo({ zoom: plan.easeTo, duration: ZOOM_CAP_EASE_MS })",
+    );
+    expect(effect).toContain('map.once("moveend"');
+    // MapLibre's easeTo is already instant under prefers-reduced-motion unless
+    // marked essential: never mark this one.
+    expect(effect).not.toContain("essential");
+  });
+
+  it("locks the CURRENT layer's cap when the ease ends, so switching mid-ease leaves no stale cap", () => {
+    const lock = effect.slice(
+      effect.indexOf('map.once("moveend"'),
+      effect.indexOf("}, [weatherLayer]);"),
+    );
+    expect(lock).toContain("overlayPropsRef.current.layer");
+    expect(lock).not.toContain("weatherLayer");
+    expect(lock).not.toContain("setMaxZoom(cap)");
+  });
+});
+
 describe("style attribution de-duplication", () => {
   it("strips the style's own attribution on creation and on theme switch", () => {
     expect(source).toContain("withoutStyleAttributions");
