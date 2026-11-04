@@ -38,13 +38,39 @@ export function isIosWebKit(
   return platform === "MacIntel" && maxTouchPoints > 1;
 }
 
-/** Whether to create the Three.js layer at all. */
-export function shouldAnimateBackdrop(h: BackdropDeviceHints): boolean {
+/**
+ * Whether the sky may move at all: not under reduced motion, Save-Data or a
+ * low-memory report. The one place that decides it, for the Three.js scene and
+ * the CSS rain alike.
+ */
+export function motionAllowed(h: BackdropDeviceHints): boolean {
   if (h.reducedMotion) return false;
-  if (h.ios) return false;
   if (h.saveData) return false;
   if (typeof h.deviceMemory === "number" && h.deviceMemory <= 2) return false;
   return true;
+}
+
+/** Whether to create the Three.js layer at all. */
+export function shouldAnimateBackdrop(h: BackdropDeviceHints): boolean {
+  return motionAllowed(h) && !h.ios;
+}
+
+/** How the sky moves. */
+export type BackdropMode = "webgl" | "css" | "static";
+
+/**
+ * Which layer moves the sky on this device:
+ * - `webgl`: the Three.js scene ([`shouldAnimateBackdrop`]).
+ * - `css`: iPhone and iPad, which never get WebGL here (see [`isIosWebKit`]),
+ *   move the rain and storm sky with a CSS-only layer instead: one composited
+ *   element, no WebGL context, no extra script. It follows the same rules as
+ *   the scene otherwise (never under reduced motion, Save-Data or a low-memory
+ *   report), so a person who asked for less motion or less data gets none.
+ * - `static`: the still sky and its faint texture.
+ */
+export function backdropMode(h: BackdropDeviceHints): BackdropMode {
+  if (!motionAllowed(h)) return "static";
+  return h.ios ? "css" : "webgl";
 }
 
 /**

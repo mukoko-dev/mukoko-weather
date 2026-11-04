@@ -129,7 +129,8 @@ describe("WeatherBackdrop — scene mapping + twilight", () => {
     expect(source).toContain("SKY_CLASS");
     expect(source).not.toContain("skyClassName");
     expect(source).not.toContain("weaver-sky");
-    expect(backdrop).toContain("<WeatherSky ref={skyRef} family={family}");
+    expect(backdrop).toContain("<WeatherSky");
+    expect(backdrop).toContain("family={family}");
   });
 
   it("derives a dawn/dusk phase from the location clock and passes it on", () => {
@@ -160,8 +161,15 @@ describe("WeatherBackdrop — subdued particle layer", () => {
 });
 
 describe("WeatherBackdrop — device and scroll policy (v0.10.0 perf)", () => {
-  it("decides whether to animate via shouldAnimateBackdrop (reduced motion, Save-Data, low-end)", () => {
-    expect(source).toContain("shouldAnimateBackdrop(readBackdropHints())");
+  it("decides how the sky moves via backdropMode (WebGL, CSS-only on iPhone and iPad, or still)", () => {
+    expect(source).toContain("backdropMode(readBackdropHints())");
+    // The CSS rain layer is shown only in the "css" mode, and WebGL only in "webgl".
+    expect(source).toContain('moveRain={mode === "css"}');
+    expect(source).toContain('const animate = mode === "webgl"');
+    // Reduce Motion switched on or off while the page is open takes effect at once.
+    expect(source).toContain('"(prefers-reduced-motion: reduce)"');
+    expect(source).toContain('addEventListener("change", update)');
+    expect(source).toContain('removeEventListener("change", update)');
   });
 
   it("idles the loop while scrolling and when the sky has scrolled away", () => {

@@ -2285,6 +2285,84 @@ body {
     opacity: 0.12;
   }
 
+  /* .kestrel-drops — the moving rain sky for iPhone and iPad (no WebGL there;
+     see backdropMode). One SVG pattern of drops, a tile high, slid down one
+     tile per loop, so it is one composited layer. It covers the hero only (the
+     first 40rem, faded at its foot) to keep the layer small. The animation is
+     only declared under prefers-reduced-motion: no-preference, and the
+     component is not rendered at all when motion is not wanted. Colour is the
+     sky foreground token. --rain-tile must equal RAIN_TILE_H in
+     src/lib/sky-rain.ts. */
+  .kestrel-drops {
+    --rain-tile: 320px;
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: min(100%, 40rem);
+    overflow: hidden;
+    mask-image: linear-gradient(to bottom, black 65%, transparent);
+  }
+  .kestrel-drops svg {
+    position: absolute;
+    left: 0;
+    top: calc(-1 * var(--rain-tile));
+    width: 100%;
+    height: calc(100% + var(--rain-tile));
+    opacity: 0.3;
+  }
+  .kestrel-drops line {
+    stroke: var(--sky-fg);
+    stroke-width: 1.25;
+    stroke-linecap: round;
+  }
+  /* .kestrel-flash — a thunderstorm's rare, faint double flicker: two flashes
+     in half a second, then quiet for a few seconds (WCAG 2.3.1: at most three
+     in a second). Low contrast: the sky foreground at under 14%. */
+  .kestrel-flash {
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: min(100%, 40rem);
+    background-color: var(--sky-fg);
+    mask-image: linear-gradient(to bottom, black 65%, transparent);
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .kestrel-drops svg {
+      will-change: transform;
+      animation: kestrel-rain-fall 1.5s linear infinite;
+    }
+    .kestrel-flash {
+      animation: kestrel-flash 9s ease-out 3s infinite;
+    }
+  }
+  @keyframes kestrel-rain-fall {
+    from {
+      transform: translateY(0);
+    }
+    to {
+      transform: translateY(var(--rain-tile));
+    }
+  }
+  @keyframes kestrel-flash {
+    0% {
+      opacity: 0;
+    }
+    0.8% {
+      opacity: 0.13;
+    }
+    1.6% {
+      opacity: 0.03;
+    }
+    2.4% {
+      opacity: 0.11;
+    }
+    6% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+
   /* .kestrel-ink — re-points the text, accent and surface tokens at the sky
      foreground for everything inside, so existing children (badges, headings,
      hour tiles, links) read on the sky without a restyle. Shared by the
