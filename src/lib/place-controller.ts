@@ -101,13 +101,14 @@ export interface PlaceDeps {
    * Live weather from the Worker (the visitor's own request, through the
    * shared Worker read: one call per place, a remembered failure replayed).
    * `force`: read again past a remembered failure (the visitor pressed
-   * "Try again").
+   * "Try again"). `background`: a place the visitor has not asked for yet
+   * (`warm`): one attempt, the Worker only, never a direct call to a provider.
    */
   fetchWeather(
     lat: number,
     lon: number,
     signal: AbortSignal,
-    options?: { force?: boolean },
+    options?: { force?: boolean; background?: boolean },
   ): Promise<{ weather: WeatherData; usingFallback: boolean }>;
   /** A place for a slug the stage has not seen (catalogue, Worker, spot). */
   resolve(slug: string, signal: AbortSignal): Promise<PlaceSeed | null>;
@@ -144,20 +145,45 @@ interface MemoryEntry {
 
 const memory = new Map<string, MemoryEntry>();
 
-/** Remember a real forecast for a place. The seasonal estimate is never kept. */
+/**
+ * Remember a real forecast for a place. The seasonal estimate is never kept.
+ *
+ * `speculative` is a place nobody has opened (`warm`): it only ever takes a
+ * free slot, and goes to the OLD end, so a place the visitor has opened is
+ * never pushed out by one they may never open. A copy already held keeps its
+ * place in the order.
+ */
 export function rememberInMemory(
   payload: DashboardPayload,
   fetchedAt: number,
+  { speculative = false }: { speculative?: boolean } = {},
 ): void {
   if (payload.usingFallback) return;
   const slug = payload.location.slug;
+  const entry = { payload: slimPayload(payload), fetchedAt };
+  if (speculative) {
+    if (memory.has(slug)) {
+      memory.set(slug, entry);
+    } else if (memory.size < MEMORY_MAX_PLACES) {
+      const held = [...memory];
+      memory.clear();
+      memory.set(slug, entry);
+      for (const [key, value] of held) memory.set(key, value);
+    }
+    return;
+  }
   memory.delete(slug);
-  memory.set(slug, { payload: slimPayload(payload), fetchedAt });
+  memory.set(slug, entry);
   while (memory.size > MEMORY_MAX_PLACES) {
     const oldest = memory.keys().next().value;
     if (oldest === undefined) break;
     memory.delete(oldest);
   }
+}
+
+/** True when a speculative copy of `slug` can be kept without pushing one out. */
+export function memoryHasRoomFor(slug: string): boolean {
+  return memory.has(slug) || memory.size < MEMORY_MAX_PLACES;
 }
 
 /** The in-memory copy of a place, re-based on `now`, or null. */
@@ -266,6 +292,15 @@ export interface PresentResult {
   failed: boolean;
 }
 
+/**
+ * What warming a place did: it was already held young enough (`fresh`), a
+ * forecast was fetched and kept (`warmed`), nothing usable came back
+ * (`failed`: the place is unknown, the request failed, or only the seasonal
+ * estimate was served), or it was not attempted (`skipped`: the caller gave up
+ * first, My Location is unknown to this stage, or memory has no free slot).
+ */
+export type WarmResult = "fresh" | "warmed" | "failed" | "skipped";
+
 export interface PlaceController {
   getState(): PlaceState;
   subscribe(listener: () => void): () => void;
@@ -284,6 +319,14 @@ export interface PlaceController {
   reconcile(pathname: string): Promise<boolean>;
   /** Show a target (used by the switch bus). */
   showTarget(target: PlaceTarget, url?: UrlAction): Promise<boolean>;
+  /**
+   * Get a place the visitor may go to next ready before they ask: one forecast
+   * request, kept in memory, so the switch paints from it at once. It shows
+   * nothing, never touches the screen's state or the request that is on
+   * screen, and never retries (one attempt; the switch itself retries). A
+   * place held young enough costs nothing.
+   */
+  warm(target: PlaceTarget, signal?: AbortSignal): Promise<WarmResult>;
   /** Fetch the place on screen again, now ("Try again"). */
   retry(): Promise<PresentResult>;
   /** The browser came online / the page became visible: one more attempt if the last failed. */
@@ -548,8 +591,70 @@ export function createPlaceController(
     return refresh(req, seed, found);
   }
 
+  async function warm(
+    target: PlaceTarget,
+    signal?: AbortSignal,
+  ): Promise<WarmResult> {
+    if (signal?.aborted) return "skipped";
+    const slug =
+      target.kind === "slug" ? target.slug : (home?.location.slug ?? null);
+    if (!slug) return "skipped";
+    const young = (view: DeviceView): boolean =>
+      isFreshEnough(view, deps.now());
+
+    const mem = recallFromMemory(slug, deps.now());
+    if (mem && young(mem)) return "fresh";
+    let seed: PlaceSeed | null =
+      target.kind === "home" ? home : mem ? seedOfPayload(mem.payload) : null;
+    if (!seed) {
+      const device = await withTimeout(
+        Promise.resolve(deps.recall(slug)).catch(() => null),
+        deps.recallTimeoutMs ?? 400,
+      );
+      if (signal?.aborted) return "skipped";
+      if (device && young(device)) {
+        // A copy from an earlier visit that is still young: keep it where a
+        // switch reads first, so it does not wait for the device.
+        rememberInMemory(device.payload, device.fetchedAt, {
+          speculative: true,
+        });
+        return "fresh";
+      }
+      seed = device ? seedOfPayload(device.payload) : null;
+    }
+    const own = new AbortController();
+    const sig = signal ?? own.signal;
+    if (!seed) {
+      seed = await deps.resolve(slug, sig).catch(() => null);
+      if (signal?.aborted) return "skipped";
+    }
+    if (!seed) return "failed";
+    // Memory is full of places the visitor has opened: a request for one they
+    // may never open would be thrown away, and must not push one of theirs out.
+    if (!memoryHasRoomFor(slug)) return "skipped";
+    try {
+      const value = await deps.fetchWeather(
+        seed.location.lat,
+        seed.location.lon,
+        sig,
+        { background: true },
+      );
+      // Kept even if the caller gave up meanwhile: the request was paid for.
+      // The seasonal estimate is never kept (rememberInMemory refuses it).
+      rememberInMemory(
+        liveViewFor(seed, value.weather, value.usingFallback),
+        deps.now(),
+        { speculative: true },
+      );
+      return value.usingFallback ? "failed" : "warmed";
+    } catch {
+      return "failed";
+    }
+  }
+
   const controller: PlaceController = {
     getState: () => state,
+    warm,
     subscribe(listener) {
       listeners.add(listener);
       return () => {

@@ -30,7 +30,10 @@ describe("PlaceStage — what the page waits for and what it shows", () => {
   it("never renders weather it did not get from memory, the device or the visitor's own request", () => {
     // Through the shared Worker read (worker-data.ts), never a raw fetchWorker.
     expect(stage).toContain("fetchHomeWeather(lat, lon)");
-    expect(stage).not.toContain("fetchWorker");
+    // `\bfetchWorker\b` is the raw helper; fetchWorkerWeatherOnce (the
+    // background warm) reads through the same shared store, with no fallback.
+    expect(stage).not.toMatch(/\bfetchWorker\b/);
+    expect(stage).toContain("fetchWorkerWeatherOnce(lat, lon)");
     expect(stage).toContain('workerData.invalidate("weather", { lat, lon })');
     expect(stage).toContain("recallPlace(slug)");
     expect(stage).not.toContain("createFallbackWeather");
@@ -52,7 +55,7 @@ describe("PlaceStage — what the page waits for and what it shows", () => {
       "lib/use-location-pager.ts",
     ]) {
       const source = readFileSync(resolve(dir, file), "utf-8");
-      expect(source, file).not.toContain("fetchWorker");
+      expect(source, file).not.toMatch(/\bfetchWorker\b/);
     }
   });
 
