@@ -229,6 +229,74 @@ impl AlertPrefs {
         }
         Ok(())
     }
+
+    /// The planner's preferences, from what the Nyuchi API serves for one alert
+    /// target (`alert_kinds`, `quiet_start`, `quiet_end`, `place_slugs`; the
+    /// jobs Worker's client reads them, `nyuchi-api` `web_push.py`).
+    ///
+    /// The API's and this module's shapes differ, so this is the one place they
+    /// meet:
+    ///
+    /// - `alert_kinds` is a list; `frost` turns frost on. `severe` and any kind
+    ///   this build does not know change nothing here: the severe kind has its
+    ///   own gate (`severe_alert`), and a kind added to the API later must not
+    ///   make an old sender guess.
+    /// - Quiet hours are two different whole hours as `HH:00`, or both absent
+    ///   for none (stored here as two equal hours, which `in_quiet_hours` reads
+    ///   as no quiet time). In the API's model absent IS none: its view of a
+    ///   person with no stored preference is "no alerts, no quiet hours", and
+    ///   `validate_quiet_hours` says "both None for no quiet hours", so a person
+    ///   who never set any has none; the 22:00 to 06:00 of `Default` is the
+    ///   app's own, not the API's. The API refuses a half window, a quarter-hour, two
+    ///   equal hours and anything not `HH:00`; so does this, because a value the
+    ///   API would not store cannot be what a person asked for. A malformed
+    ///   value is an error, never a guess: the caller skips that target.
+    /// - The follow list is checked as [`AlertPrefs::validate`] does.
+    pub fn from_api(
+        kinds: &[&str],
+        quiet_start: Option<&str>,
+        quiet_end: Option<&str>,
+        places: &[String],
+    ) -> Result<AlertPrefs, PushError> {
+        let (quiet_start, quiet_end) = match (quiet_start, quiet_end) {
+            (None, None) => (0, 0),
+            (Some(start), Some(end)) => {
+                let (start, end) = (whole_hour(start)?, whole_hour(end)?);
+                if start == end {
+                    return Err(PushError::BadQuietHours);
+                }
+                (start, end)
+            }
+            _ => return Err(PushError::BadQuietHours),
+        };
+        let prefs = AlertPrefs {
+            frost: kinds.contains(&KIND_FROST),
+            quiet_start,
+            quiet_end,
+            places: places.to_vec(),
+        };
+        prefs.validate()?;
+        Ok(prefs)
+    }
+}
+
+/// A whole local hour written `HH:00`, `00:00` through `23:00`, exactly: no
+/// space, no seconds, no single-digit hour (the API's own rule).
+fn whole_hour(text: &str) -> Result<u8, PushError> {
+    let b = text.as_bytes();
+    if b.len() == 5
+        && b[2] == b':'
+        && b[3] == b'0'
+        && b[4] == b'0'
+        && b[0].is_ascii_digit()
+        && b[1].is_ascii_digit()
+    {
+        let hour = (b[0] - b'0') * 10 + (b[1] - b'0');
+        if hour <= 23 {
+            return Ok(hour);
+        }
+    }
+    Err(PushError::BadQuietHours)
 }
 
 /// Whether `hour` (0..=23, the place's local hour) falls in `[start, end)`,
@@ -834,6 +902,106 @@ mod tests {
         assert!(!in_quiet_hours(12, 22, 6));
         assert!(in_quiet_hours(13, 12, 14));
         assert!(!in_quiet_hours(5, 5, 5));
+    }
+
+    #[test]
+    fn prefs_from_the_apis_target_shape() {
+        let places = vec!["harare".to_string(), "place--ksy4d".to_string()];
+        let p = AlertPrefs::from_api(&["frost", "severe"], Some("22:00"), Some("06:00"), &places)
+            .unwrap();
+        assert!(p.frost);
+        assert_eq!((p.quiet_start, p.quiet_end), (22, 6));
+        assert_eq!(p.places, places);
+        // Severe alone does not turn frost on; no kinds at all is nothing wanted.
+        assert!(
+            !AlertPrefs::from_api(&["severe"], None, None, &places)
+                .unwrap()
+                .frost
+        );
+        assert!(
+            !AlertPrefs::from_api(&[], None, None, &places)
+                .unwrap()
+                .frost
+        );
+        // A kind this build does not know changes nothing, and is not an error.
+        let p = AlertPrefs::from_api(&["flood", "frost"], None, None, &places).unwrap();
+        assert!(p.frost);
+        // Midnight and 23:00 are whole hours.
+        let p = AlertPrefs::from_api(&["frost"], Some("00:00"), Some("23:00"), &places).unwrap();
+        assert_eq!((p.quiet_start, p.quiet_end), (0, 23));
+    }
+
+    #[test]
+    fn no_quiet_hours_from_the_api_means_no_quiet_time_at_all() {
+        let p = AlertPrefs::from_api(&["frost"], None, None, &[]).unwrap();
+        assert_eq!(p.quiet_start, p.quiet_end);
+        // Not the default 22:00 to 06:00: the person said none.
+        for hour in 0..=23u8 {
+            assert!(!in_quiet_hours(hour, p.quiet_start, p.quiet_end), "{hour}");
+        }
+    }
+
+    #[test]
+    fn quiet_hours_the_api_would_refuse_are_refused_here_too() {
+        let places: Vec<String> = Vec::new();
+        for (start, end) in [
+            (Some("22:00"), None),
+            (None, Some("06:00")),
+            (Some("22:00"), Some("22:00")),
+            (Some("22:30"), Some("06:00")),
+            (Some("22:15"), Some("06:00")),
+            (Some("7:00"), Some("22:00")),
+            (Some("24:00"), Some("06:00")),
+            (Some("99:00"), Some("06:00")),
+            (Some("22:00:00"), Some("06:00")),
+            (Some(" 22:00"), Some("06:00")),
+            (Some("22:00\n"), Some("06:00")),
+            (Some("22.00"), Some("06:00")),
+            (Some("２２:00"), Some("06:00")), // full-width digits
+            (Some(""), Some("")),
+            (Some("22:00"), Some("")),
+        ] {
+            assert_eq!(
+                AlertPrefs::from_api(&["frost"], start, end, &places),
+                Err(PushError::BadQuietHours),
+                "{start:?} {end:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_follow_list_from_the_api_is_checked_like_any_other() {
+        let bad = vec!["Har are".to_string()];
+        assert_eq!(
+            AlertPrefs::from_api(&["frost"], None, None, &bad),
+            Err(PushError::BadSlug)
+        );
+        let many: Vec<String> = (0..11).map(|i| format!("p{i}")).collect();
+        assert_eq!(
+            AlertPrefs::from_api(&["frost"], None, None, &many),
+            Err(PushError::TooManyPlaces)
+        );
+    }
+
+    /// Every whole hour the API accepts parses to itself, and nothing else does:
+    /// a walk over every two-digit pair, not a few examples.
+    #[test]
+    fn whole_hours_are_exactly_00_to_23() {
+        for h in 0..=99u32 {
+            let text = format!("{h:02}:00");
+            let got = whole_hour(&text);
+            if h <= 23 {
+                assert_eq!(got, Ok(h as u8), "{text}");
+            } else {
+                assert_eq!(got, Err(PushError::BadQuietHours), "{text}");
+            }
+        }
+        for m in 1..=59u32 {
+            assert_eq!(
+                whole_hour(&format!("12:{m:02}")),
+                Err(PushError::BadQuietHours)
+            );
+        }
     }
 
     #[test]
