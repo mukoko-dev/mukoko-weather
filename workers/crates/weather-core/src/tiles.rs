@@ -33,12 +33,37 @@ pub const TILE_CACHE_CONTROL: &str =
 /// browsers pick up the fresh one soon after the provider recovers.
 pub const FALLBACK_CACHE_CONTROL: &str = "public, max-age=300";
 
-/// No caching at all for the empty tile. It says nothing about the place: only
+/// A short caching for the empty tile. It says nothing about the place: only
 /// that the provider could not be asked at that moment. Kept for five minutes
 /// by a browser, a failed request during a quota or breaker window became a
 /// blank tile that stayed blank after the provider had recovered, and every
-/// zoom back to that area re-used it.
-pub const EMPTY_CACHE_CONTROL: &str = "no-store";
+/// zoom back to that area re-used it. But not `no-store` either: while a quota
+/// is spent, a browser asking again on every pan would send each ask on to the
+/// provider, and the only brake on that is a per-isolate breaker, so the empty
+/// tile is kept for thirty seconds.
+pub const EMPTY_CACHE_CONTROL: &str = "public, max-age=30";
+
+/// Which kind of tile a response carries, for its `Cache-Control`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TileKind {
+    /// A real tile the provider (or our cache) just gave.
+    Fresh,
+    /// A real tile, an hour or more old, served because the provider failed.
+    Stale,
+    /// The transparent stand-in: nothing could be served.
+    Empty,
+}
+
+/// The `Cache-Control` of a response, by what it carries. The longer a thing
+/// is true, the longer it may be kept: a fresh tile for an hour, a stale one
+/// for five minutes, the empty stand-in for thirty seconds.
+pub fn cache_control(kind: TileKind) -> &'static str {
+    match kind {
+        TileKind::Fresh => TILE_CACHE_CONTROL,
+        TileKind::Stale => FALLBACK_CACHE_CONTROL,
+        TileKind::Empty => EMPTY_CACHE_CONTROL,
+    }
+}
 
 /// A 1x1 fully transparent PNG (8-bit RGBA, one all-zero pixel), served
 /// (HTTP 200) when the provider fails and no cached tile exists, so the map
@@ -240,14 +265,29 @@ mod tests {
         parse(q).expect("valid")
     }
 
+    /// The `max-age` of a `Cache-Control` value, in seconds.
+    fn max_age(value: &str) -> u64 {
+        value
+            .split(',')
+            .filter_map(|d| d.trim().strip_prefix("max-age="))
+            .next()
+            .and_then(|n| n.parse().ok())
+            .expect("a max-age")
+    }
+
     #[test]
-    fn an_empty_tile_is_never_kept_by_a_cache_but_a_stale_one_is_kept_briefly() {
-        // The empty tile is a stand-in for "could not ask"; a stale tile is a
-        // real, older image. Only the second may be cached.
-        assert_eq!(EMPTY_CACHE_CONTROL, "no-store");
-        assert!(FALLBACK_CACHE_CONTROL.contains("max-age=300"));
-        assert!(!FALLBACK_CACHE_CONTROL.contains("no-store"));
-        assert!(TILE_CACHE_CONTROL.contains("max-age=3600"));
+    fn the_less_a_tile_says_the_less_a_cache_keeps_it() {
+        // Fresh tile > stale tile > the empty stand-in, and the empty one is
+        // short but not zero: a browser that asked again on every pan would
+        // send each ask on to a provider whose quota is already spent.
+        let fresh = max_age(cache_control(TileKind::Fresh));
+        let stale = max_age(cache_control(TileKind::Stale));
+        let empty = max_age(cache_control(TileKind::Empty));
+        assert!(fresh > stale, "{fresh} > {stale}");
+        assert!(stale > empty, "{stale} > {empty}");
+        assert!(empty > 0 && empty <= 60, "{empty}");
+        // The empty tile must be cacheable only briefly; never shared long.
+        assert!(!cache_control(TileKind::Empty).contains("s-maxage"));
     }
 
     #[test]

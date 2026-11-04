@@ -147,13 +147,15 @@ export function getMapLayerById(id: string): MapLayer | undefined {
  * when the user zooms in further instead of requesting tiles the Worker
  * rejects — which would otherwise make the overlay vanish when zoomed in.
  *
- * The cap is 8 (#266 set it to 10; lowered 2026-11-04). The forecast grid behind
- * the tiles is several kilometres wide, so tiles deeper than z8 (about 300 m a
- * pixel on a 512 px tile) only repeat the same values, while every tile of a
- * deeper level is a request to the provider's small shared quota, one hour of
- * cache at a time. Zooming from 8 to 10 now asks for nothing new: MapLibre
- * enlarges the z8 tile, so a zoom cannot leave a patch of the map without its
- * overlay. A cold z10 screen needed up to sixteen times the tiles of a z8 one.
+ * The cap is 8 (#266 set it to 10; lowered 2026-11-04). The forecast grids
+ * behind the tiles are kilometres wide, so tiles deeper than z8 are assumed to
+ * repeat the same values (not measured against the provider's data), while
+ * every tile of a deeper level is a request to the provider's small shared
+ * quota, one hour of cache at a time: a screen one zoom level deeper needs up
+ * to four times the tiles. Zooming from 8 to 10 now asks for nothing new:
+ * MapLibre enlarges the z8 tile, so a zoom cannot leave a patch of the map
+ * without its overlay. The price is a coarser overlay at city zoom, an owner
+ * call that the provider's capacity decides (see the tile-source decision).
  */
 export const WEATHER_OVERLAY_MIN_ZOOM = 1;
 export const WEATHER_OVERLAY_MAX_ZOOM = 8;

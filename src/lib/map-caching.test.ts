@@ -69,19 +69,26 @@ describe("service worker map-tile caching", () => {
     expect(tilesWorker).toContain('set("X-Cache", "STALE")');
   });
 
-  it("never lets a browser keep the empty tile, which only says the provider could not be asked", () => {
+  it("keeps the empty tile only briefly (never as long as a stale one), and marks it so the service worker never stores it", () => {
     // Kept for five minutes (`max-age=300`), a request that failed during a
     // quota or breaker window stayed a blank patch of the map after the
-    // provider had recovered, and every zoom back to that area re-used it.
-    const body = tilesWorker.match(
-      /fn empty_response\(\)[^{]*\{([\s\S]*?)\n\}/,
-    );
-    expect(body).not.toBeNull();
-    expect(body?.[1]).toContain("tiles::EMPTY_CACHE_CONTROL");
-    expect(body?.[1]).not.toContain("FALLBACK_CACHE_CONTROL");
-    // A stale tile, a real image, is still kept briefly.
-    const stale = tilesWorker.match(/fn stale_response\([^{]*\{([\s\S]*?)\n\}/);
-    expect(stale?.[1]).toContain("tiles::FALLBACK_CACHE_CONTROL");
+    // provider had recovered. The lengths themselves are tested natively
+    // (weather_core::tiles, `the_less_a_tile_says_the_less_a_cache_keeps_it`);
+    // this pins which kind each response helper passes, and that the empty
+    // one carries the marker the service worker refuses to cache.
+    const body = (name: string) =>
+      tilesWorker.match(
+        new RegExp(`fn ${name}\\([^{]*\\{([\\s\\S]*?)\\n\\}`),
+      )?.[1] ?? "";
+    expect(body("empty_response")).toContain("TileKind::Empty");
+    expect(body("empty_response")).toContain('set("X-Map-Tile", "empty")');
+    expect(body("stale_response")).toContain("TileKind::Stale");
+    expect(body("tile_response")).toContain("TileKind::Fresh");
+    // The three kinds are never passed from the wrong helper.
+    expect(body("empty_response")).not.toContain("TileKind::Stale");
+    expect(body("empty_response")).not.toContain("TileKind::Fresh");
+    // The other half: the worker refuses any response with the marker.
+    expect(sw).toContain('!response.headers.has("X-Map-Tile")');
   });
 });
 
