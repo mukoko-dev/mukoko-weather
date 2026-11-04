@@ -7,9 +7,14 @@
  * `nairobi-ke`) or `{name}--{geohash}` with exactly five geohash characters
  * (about 4.9 km square). The app's saved spots are seven characters (about
  * 153 m), so the client cuts them before it asks for alerts: cutting a
- * geohash is a prefix, and the five-character cell is the same place seen
- * from further away. Nothing finer than the cell ever leaves the browser for
- * this purpose.
+ * geohash is a prefix, so the key names the 5 km cell around the spot, and
+ * nothing finer than that cell leaves the browser for this purpose, name
+ * included (see {@link alertPlaceKey}).
+ *
+ * What a person should be told: an alert for a spot covers the whole cell
+ * (about 5 km square) and is worked out for its centre, which can sit a few
+ * kilometres from the saved point. On a ridge, a valley floor or a coast that
+ * can be a different frost or rain picture. The alerts panel must say so.
  *
  * Pure: no storage, no network, no clock. Wiring it to the alerts panel is
  * step (e) of #289.
@@ -23,7 +28,7 @@ export const ALERT_GEOHASH_LENGTH = 5;
 /** The most places one person may ask alerts for (ADR-0003). */
 export const MAX_ALERT_PLACES = 10;
 
-/** The name half used when a spot's own name cannot be part of a valid key. */
+/** The name half of every spot key: a label the API ignores, never the slug's own. */
 const NEUTRAL_NAME = "place";
 
 /**
@@ -53,10 +58,20 @@ export function isAlertPlaceKey(key: string): boolean {
  * - A spot (`{name}--{geohash}`) is cut to a five-character geohash. A
  *   geohash shorter than five characters (about 39 km or more) is too coarse
  *   to be a forecast place and gives null.
- * - The name half is kept only when the whole key then passes the grammar;
- *   otherwise it becomes `place`. The API rebuilds the name from the place
- *   record and does not trust this one (ADR-0003), so the name is a label,
- *   never an identity.
+ * - A spot's name is NEVER sent: the key is always `place--{cell}`. The name
+ *   half of a slug is free text and can be finer than the cell (a street
+ *   address, `525-canberra-drive--ksy4d`), and the grammar cannot tell. The
+ *   API rebuilds a name from the place record and does not trust the client's
+ *   (ADR-0003), so nothing is lost; how an alert names a spot is the
+ *   sender's job. Two spots in one cell are therefore one key.
+ * - Known limit: a catalogue slug and a spot in the same city are two keys
+ *   (`harare` and `place--ksy4d`), because the slug alone does not say which
+ *   cell a catalogue place covers. The alerts panel should offer one place
+ *   per area.
+ * - A catalogue slug that ends in six letters from a-f or digits after a
+ *   dash (`area-decade`) is refused by the grammar, on purpose (ADR-0003):
+ *   the platform's six-hex slugs are indistinguishable by shape. That place
+ *   gets alerts through its spot form.
  * - A map feature ref (`--osm-w890123`) gives null: it names one building and
  *   the slug carries no coordinate to cut. A caller that holds the place's
  *   coordinate can mint a spot slug from it instead.
@@ -74,30 +89,21 @@ export function alertPlaceKey(slug: string): string | null {
   if (!parsed || parsed.ref.kind !== "spot" || !parsed.geohash) return null;
   if (parsed.geohash.length < ALERT_GEOHASH_LENGTH) return null;
 
-  const cell = parsed.geohash.slice(0, ALERT_GEOHASH_LENGTH);
-  for (const name of [parsed.nameSlug, NEUTRAL_NAME]) {
-    const key = `${name}--${cell}`;
-    if (isAlertPlaceKey(key)) return key;
-  }
-  return null;
+  const key = `${NEUTRAL_NAME}--${parsed.geohash.slice(0, ALERT_GEOHASH_LENGTH)}`;
+  return isAlertPlaceKey(key) ? key : null;
 }
 
 /**
  * The keys for a list of saved slugs, in order, without repeats and at most
- * {@link MAX_ALERT_PLACES}. Two spots in one 5 km cell are one place for
- * alert purposes, so the second is dropped.
+ * {@link MAX_ALERT_PLACES}. Two spots in one 5 km cell make one key, so the
+ * second is dropped.
  */
 export function alertPlaceKeys(slugs: readonly string[]): string[] {
-  const keys: string[] = [];
-  const cells = new Set<string>();
+  const keys = new Set<string>();
   for (const slug of slugs) {
     const key = alertPlaceKey(slug);
-    if (!key) continue;
-    const cell = key.includes("--") ? key.slice(key.lastIndexOf("--")) : key;
-    if (cells.has(cell)) continue;
-    cells.add(cell);
-    keys.push(key);
-    if (keys.length === MAX_ALERT_PLACES) break;
+    if (key) keys.add(key);
+    if (keys.size === MAX_ALERT_PLACES) break;
   }
-  return keys;
+  return [...keys];
 }

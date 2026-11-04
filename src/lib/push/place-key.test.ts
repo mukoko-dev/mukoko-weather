@@ -52,13 +52,26 @@ describe("alertPlaceKey", () => {
   });
 
   it("cuts a seven-character saved spot to its five-character cell", () => {
-    expect(alertPlaceKey("harare--ksy4dd7")).toBe("harare--ksy4d");
-    expect(alertPlaceKey("mbare-musika--ksy4d6r")).toBe("mbare-musika--ksy4d");
+    expect(alertPlaceKey("harare--ksy4dd7")).toBe("place--ksy4d");
+    expect(alertPlaceKey("mbare-musika--ksy4d6r")).toBe("place--ksy4d");
   });
 
-  it("leaves a five-character spot alone and cuts a six-character one", () => {
-    expect(alertPlaceKey("harare--ksy4d")).toBe("harare--ksy4d");
-    expect(alertPlaceKey("harare--ksy4dd")).toBe("harare--ksy4d");
+  it("cuts a five- or six-character spot to the same cell", () => {
+    expect(alertPlaceKey("harare--ksy4d")).toBe("place--ksy4d");
+    expect(alertPlaceKey("harare--ksy4dd")).toBe("place--ksy4d");
+  });
+
+  it("never sends a spot's own name, which can be finer than the cell", () => {
+    expect(alertPlaceKey("525-canberra-drive--ksy4dd7")).toBe("place--ksy4d");
+    expect(alertPlaceKey("mrs-moyo-home-farm--ksy4dd7")).toBe("place--ksy4d");
+    for (const slug of [
+      "525-canberra-drive--ksy4dd7",
+      "mrs-moyo-home-farm--ksy4dd7",
+      "12-35n-45-62e--ksy4dd7",
+      "river-decade--ksy4dd7",
+    ]) {
+      expect(alertPlaceKey(slug), slug).toBe("place--ksy4d");
+    }
   });
 
   it("refuses a spot too coarse to be a forecast place", () => {
@@ -78,11 +91,10 @@ describe("alertPlaceKey", () => {
     expect(alertPlaceKey("x".repeat(81))).toBeNull();
   });
 
-  it("falls back to a neutral name when the spot's own name cannot be in a key", () => {
-    // A coordinate label is about 1 km; the key may carry the 5 km cell only.
-    expect(alertPlaceKey("12-35n-45-62e--ksy4dd7")).toBe("place--ksy4d");
-    // A name ending in six hex digits would be read as a platform slug.
-    expect(alertPlaceKey("river-decade--ksy4dd7")).toBe("place--ksy4d");
+  it("refuses a bare catalogue-shaped slug that ends in six hex characters", () => {
+    // ADR-0003 takes this cost on purpose: such a place uses its spot form.
+    expect(alertPlaceKey("area-decade")).toBeNull();
+    expect(alertPlaceKey("port-facade")).toBeNull();
   });
 
   it("never returns anything the grammar refuses, or anything finer than the cell", () => {
@@ -102,7 +114,8 @@ describe("alertPlaceKey", () => {
           const key = alertPlaceKey(slug);
           expect(key, slug).not.toBeNull();
           expect(isAlertPlaceKey(key as string), slug).toBe(true);
-          const cell = (key as string).split("--")[1];
+          const [keyName, cell] = (key as string).split("--");
+          expect(keyName, slug).toBe("place");
           expect(cell).toHaveLength(ALERT_GEOHASH_LENGTH);
           // The cell is a prefix of the spot's own geohash: same place, coarser.
           expect(slug.endsWith(`--${encodeGeohash(lat, lon, 7)}`)).toBe(true);
@@ -116,6 +129,7 @@ describe("alertPlaceKey", () => {
     const lat = -17.8288;
     const lon = 31.0522;
     const key = alertPlaceKey(buildSmartSlug("My farm", lat, lon)) as string;
+    expect(key).not.toContain("farm");
     const decoded = decodeGeohash(key.split("--")[1]);
     expect(decoded).not.toBeNull();
     const b = decoded!.bounds;
@@ -139,12 +153,21 @@ describe("alertPlaceKeys", () => {
         "12-35n-45-62e",
         "nairobi-ke",
       ]),
-    ).toEqual(["harare", "mbare-musika--ksy4d", "nairobi-ke"]);
+    ).toEqual(["harare", "place--ksy4d", "nairobi-ke"]);
   });
 
   it("counts two spots in one 5 km cell as one place", () => {
     expect(alertPlaceKeys(["home--ksy4dd7", "work--ksy4d6r"])).toEqual([
-      "home--ksy4d",
+      "place--ksy4d",
+    ]);
+  });
+
+  it("keeps a catalogue slug and a spot in the same city as two keys (known limit)", () => {
+    // The slug alone does not say which cell `harare` covers; the alerts
+    // panel offers one place per area. Documented in place-key.ts.
+    expect(alertPlaceKeys(["harare", "harare--ksy4dd7"])).toEqual([
+      "harare",
+      "place--ksy4d",
     ]);
   });
 
@@ -160,5 +183,6 @@ describe("alertPlaceKeys", () => {
 
   it("returns nothing for nothing", () => {
     expect(alertPlaceKeys([])).toEqual([]);
+    expect(alertPlaceKeys(["canberra-residences--osm-w890123"])).toEqual([]);
   });
 });
