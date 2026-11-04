@@ -8,6 +8,7 @@ import {
   type Mock,
 } from "vitest";
 import {
+  SHEET_AXIS_DECIDE_PX,
   SHEET_DISMISS_MAX_PX,
   SHEET_DISMISS_MIN_PX,
   SHEET_DRAG_ATTRIBUTE,
@@ -22,11 +23,10 @@ import {
   canScrollUp,
   decideRelease,
   dismissDistance,
-  hasTravelled,
   nextVelocity,
+  readMove,
   releaseVelocity,
   smoothVelocity,
-  startsPull,
   type ScrollProbe,
 } from "./sheet-drag";
 
@@ -108,18 +108,32 @@ describe("decideRelease", () => {
 });
 
 describe("reading a gesture", () => {
-  it("a pull is down and at least as vertical as it is sideways", () => {
-    expect(startsPull(0, 10)).toBe(true);
-    expect(startsPull(10, 10)).toBe(true);
-    expect(startsPull(12, 10)).toBe(false);
-    expect(startsPull(0, -10)).toBe(false);
-    expect(startsPull(0, 2)).toBe(false);
+  it("a pull is decisive travel downward, at least as vertical as sideways", () => {
+    expect(readMove(0, SHEET_AXIS_DECIDE_PX)).toBe("pull");
+    expect(readMove(10, 10)).toBe("pull");
+    expect(readMove(-10, 12)).toBe("pull");
   });
 
-  it("a gesture is read once it moved 3px either way", () => {
-    expect(hasTravelled(0, 2)).toBe(false);
-    expect(hasTravelled(3, 0)).toBe(true);
-    expect(hasTravelled(0, -3)).toBe(true);
+  it("jitter decides nothing: a first move of dx 3, dy 2 is undecided, not abandoned", () => {
+    expect(readMove(3, 2)).toBe("undecided");
+    expect(readMove(-3, 3)).toBe("undecided");
+    expect(readMove(0, SHEET_AXIS_DECIDE_PX - 1)).toBe("undecided");
+    expect(readMove(5, -4)).toBe("undecided");
+    // ...and the same touch becomes a pull once it travels.
+    expect(readMove(3, 8)).toBe("pull");
+  });
+
+  it("a mostly sideways move is still undecided until it is clearly sideways", () => {
+    expect(readMove(10, 8)).toBe("undecided");
+    expect(readMove(10, 7)).toBe("undecided");
+    expect(readMove(12, 8)).toBe("undecided");
+    expect(readMove(13, 8)).toBe("other");
+    expect(readMove(7, 2)).toBe("other");
+  });
+
+  it("a clearly upward move is given up", () => {
+    expect(readMove(0, -SHEET_AXIS_DECIDE_PX)).toBe("other");
+    expect(readMove(2, -20)).toBe("other");
   });
 
   it("smooths the speed and ignores a zero interval", () => {
@@ -339,14 +353,20 @@ describe("attachSheetDrag", () => {
     vi.unstubAllGlobals();
   });
 
-  const pointer = (type: string, y: number, at: number, target = title) =>
+  const pointer = (
+    type: string,
+    y: number,
+    at: number,
+    target = title,
+    x = 100,
+  ) =>
     sheet.fire(type, {
       target,
       isPrimary: true,
       pointerType: "touch",
       pointerId: 1,
       button: 0,
-      clientX: 100,
+      clientX: x,
       clientY: y,
       timeStamp: at,
     });
@@ -357,13 +377,14 @@ describe("attachSheetDrag", () => {
     at: number,
     target: FakeElement = paragraph,
     preventDefault = vi.fn(),
+    x = 100,
   ) => {
     sheet.fire(type, {
       target,
       touches:
         type === "touchend" || type === "touchcancel"
           ? []
-          : [{ identifier: 7, clientX: 100, clientY: y }],
+          : [{ identifier: 7, clientX: x, clientY: y }],
       timeStamp: at,
       cancelable: true,
       preventDefault,
@@ -500,6 +521,37 @@ describe("attachSheetDrag", () => {
     expect(sheet.style.transform ?? "").toBe("");
     touch("touchstart", 300, 0);
     expect(sheet.has("touchmove")).toBe(false);
+  });
+
+  it("a jittery first move does not kill a real pull (bar)", () => {
+    pointer("pointerdown", 100, 0);
+    pointer("pointermove", 102, 8, title, 103); // dx 3, dy 2: jitter
+    expect(sheet.style.transform ?? "").toBe("");
+    pointer("pointermove", 140, 24, title, 103);
+    expect(sheet.style.transform).toBe("translate3d(0, 40px, 0)");
+    pointer("pointermove", 300, 400, title, 103);
+    pointer("pointerup", 300, 800, title, 103);
+    vi.advanceTimersByTime(SHEET_EXIT_MS + 20);
+    expect(dismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("a jittery first move does not kill a real pull (content, touch)", () => {
+    touch("touchstart", 300, 0);
+    const first = touch("touchmove", 302, 8, paragraph, vi.fn(), 103);
+    // Undecided: not stopped, not given up: the listener is still there.
+    expect(first).not.toHaveBeenCalled();
+    expect(sheet.has("touchmove")).toBe(true);
+    const second = touch("touchmove", 340, 24, paragraph, vi.fn(), 103);
+    expect(second).toHaveBeenCalled();
+    expect(sheet.style.transform).toBe("translate3d(0, 40px, 0)");
+  });
+
+  it("a clearly sideways touch is still handed to the browser", () => {
+    touch("touchstart", 300, 0);
+    const side = touch("touchmove", 303, 8, paragraph, vi.fn(), 120);
+    expect(side).not.toHaveBeenCalled();
+    expect(sheet.has("touchmove")).toBe(false);
+    expect(sheet.style.transform ?? "").toBe("");
   });
 
   it("a second finger cancels a pull and the sheet springs back", () => {

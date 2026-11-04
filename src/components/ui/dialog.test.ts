@@ -91,6 +91,31 @@ describe("a visible Close at the top of every modal", () => {
     expect(px(token("--gap-floor"))).toBeGreaterThanOrEqual(7);
   });
 
+  it("the sheet's scroller keeps the bar's height as scroll padding", () => {
+    // scrollIntoView (a card scrolled to on open) and Tab focus scroll an
+    // element to the top edge of the scroller, which the pinned bar covers.
+    expect(fn("DialogContent")).toContain(
+      "scroll-pt-[var(--sheet-bar-height)]",
+    );
+    // The token is exactly the bar: 7px above the row, the 49px row, the 7px
+    // gap, the accent line.
+    const sum =
+      px(token("--gap-floor")) +
+      px(token("--target-floor")) +
+      px(token("--gap-floor")) +
+      px(token("--minerals-accent-height"));
+    expect(sum).toBe(66);
+    expect(css.replace(/\s+/g, " ")).toContain(
+      "--sheet-bar-height: calc( var(--gap-floor) + var(--touch-target-min) + var(--gap-floor) + var(--minerals-accent-height) );",
+    );
+    expect(bar).toContain("pt-[var(--gap-floor)]"); // above the row
+    expect(bar).toContain("h-[var(--touch-target-min)]"); // the row
+    expect(bar).toContain("mt-[var(--gap-floor)]"); // the gap to the accent
+    expect(css).toMatch(
+      /\.minerals-accent \{\s*height: var\(--minerals-accent-height\);/,
+    );
+  });
+
   it("is pinned to the top of the scrolling sheet and is the drag handle", () => {
     expect(bar).toContain("sticky top-0");
     expect(bar).toContain("bg-surface-card");
@@ -169,9 +194,15 @@ describe("pull down to dismiss, built once", () => {
     // (the bar's own control, not a Close button a modal draws at its foot)
     expect(content).toContain('"[data-sheet-close]"');
     expect(content).toContain("?.click()");
-    // The listeners go when the node does, and the caller's own ref survives.
+    // The listeners go when the node does, and the caller's own ref survives:
+    // setRef keeps a function ref's returned cleanup (node-ref.test.ts), and
+    // the wrapper never calls ref(null) itself.
+    expect(dialog).toContain('from "@/lib/node-ref"');
+    expect(content).toContain("setRef(ref, node)");
     expect(content).toContain("return () => {");
     expect(content).toContain("detach();");
+    expect(content).toContain("release();");
+    expect(content).not.toMatch(/\bref\(null\)/);
   });
 
   it("stops the scroller from chaining a pull into the page", () => {
@@ -189,17 +220,31 @@ describe("pull down to dismiss, built once", () => {
     }
   });
 
-  it("honours prefers-reduced-motion and still closes", () => {
-    expect(dragSource).toContain("prefers-reduced-motion: reduce");
+  it("honours the app's reduced-motion query and still closes", () => {
+    // The harness's own reader, not a second copy of the query string.
+    expect(dragSource).toContain(
+      'import { readReducedMotion } from "@/lib/harness"',
+    );
+    expect(dragSource).not.toContain("prefers-reduced-motion");
     // The reduced-motion branch of slideOut closes at once.
     expect(dragSource).toMatch(
-      /const slideOut = \(\) => \{\s*if \(prefersReducedMotion\(\)\) \{\s*close\(\);/,
+      /const slideOut = \(\) => \{\s*if \(readReducedMotion\(\)\) \{\s*close\(\);/,
     );
   });
 
-  it("is a phone behaviour: nothing from the sm breakpoint up", () => {
-    expect(dragSource).toContain('"(min-width: 640px)"');
+  it("is a phone behaviour: nothing from the sm breakpoint up, one constant", () => {
+    // The `sm` the classes use and the `sm` the script asks are held together
+    // in breakpoints.test.ts; there is no 640 in the drag code.
+    expect(dragSource).toContain(
+      'import { SM_UP_QUERY } from "@/lib/breakpoints"',
+    );
+    expect(dragSource).not.toMatch(/640/);
     expect(content).toContain("sm:inset-auto");
+  });
+
+  it("leaves nothing behind that nothing reads", () => {
+    expect(dragSource).not.toContain("data-sheet-dragging");
+    expect(css).not.toContain("data-sheet-dragging");
   });
 
   it("does not hijack sideways scrollers, fields or charts", () => {
@@ -272,20 +317,33 @@ describe("the modals themselves", () => {
     expect(src).toContain("if (!open) handleCancel();");
   });
 
-  it("the detail sheets keep their full-width Close at the foot for the thumb", () => {
+  it("the detail sheets keep their full-width Close at the foot, named apart from the bar's", () => {
     for (const file of [
       "src/components/ui/detail-sheet.tsx",
       "src/components/weather/AirQualityDetail.tsx",
     ]) {
       const src = read(file);
       expect(src, file).toContain("<DialogClose asChild>");
-      expect(src, file).toContain("Close");
+      // Two controls called "Close" in one dialog read as a duplicate to a
+      // screen reader; the foot one says what it closes. Its visible label
+      // "Close" is inside the name (WCAG 2.5.3, label in name).
+      expect(src, file).toContain('aria-label="Close sheet"');
+      expect(src, file).toMatch(
+        /aria-label="Close sheet"[\s\S]*?>\s*Close\s*</,
+      );
     }
   });
 
-  it("the install prompt is a sheet on a phone, not a left-hugging card", () => {
+  it("the install prompt is a sheet on a phone, its name is in the bar, focus goes to Install", () => {
     const src = read("src/components/weather/PWAInstallPrompt.tsx");
-    expect(src).toContain('<DialogContent className="sm:max-w-sm">');
+    expect(src).toContain('heading="Install mukoko weather"');
+    expect(src).toContain('className="sm:max-w-sm"');
     expect(src).not.toContain("rounded-[var(--radius-card)] p-6");
+    // One title: the bar's. No second one in the body.
+    expect(src).not.toContain("<DialogTitle");
+    // Opens on the primary action, not on Close.
+    expect(src).toContain("onOpenAutoFocus");
+    expect(src).toContain("installButton.current?.focus()");
+    expect(src).toContain("ref={installButton}");
   });
 });

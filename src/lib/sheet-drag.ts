@@ -20,10 +20,20 @@
  * scroller. The close button stays the accessible way out; this is the
  * enhancement.
  */
+import { SM_UP_QUERY } from "@/lib/breakpoints";
+import { readReducedMotion } from "@/lib/harness";
 import { isSwipeExcluded } from "@/lib/use-swipe";
 
-/** Travel before a gesture is read: shorter is noise. */
-export const SHEET_DRAG_START_PX = 3;
+/**
+ * Travel on the larger axis before a gesture is read at all. Finger jitter and
+ * the first, coarse move of a touch are smaller than this and decide nothing.
+ */
+export const SHEET_AXIS_DECIDE_PX = 6;
+/**
+ * A gesture is "clearly sideways" only when its horizontal travel is this many
+ * times its vertical travel; anything between is still undecided.
+ */
+export const SHEET_SIDEWAYS_RATIO = 1.5;
 /** A pull is released as a dismissal past this share of the sheet's height... */
 export const SHEET_DISMISS_RATIO = 0.25;
 /** ...but never closer than this (a twitch must not close it)... */
@@ -39,11 +49,6 @@ export const SHEET_REST_MS = 100;
 /** Slide out, then spring back, in milliseconds. */
 export const SHEET_EXIT_MS = 180;
 export const SHEET_RESTORE_MS = 240;
-/**
- * Matches from the `sm` breakpoint up, where the dialog is centred and cannot
- * be pulled. A phone is the viewport that does NOT match.
- */
-export const SHEET_CENTRED_QUERY = "(min-width: 640px)";
 /** After asking the dialog to close, this long to see whether it began to. */
 export const SHEET_REFUSAL_CHECK_MS = 60;
 
@@ -73,16 +78,29 @@ export function decideRelease(input: {
   return "restore";
 }
 
-/** True when a gesture that has moved (dx, dy) is a pull down. */
-export function startsPull(dx: number, dy: number): boolean {
-  return dy >= SHEET_DRAG_START_PX && dy >= Math.abs(dx);
-}
+export type MoveReading = "undecided" | "pull" | "other";
 
-/** True when the gesture has moved far enough to be read at all. */
-export function hasTravelled(dx: number, dy: number): boolean {
-  return (
-    Math.abs(dx) >= SHEET_DRAG_START_PX || Math.abs(dy) >= SHEET_DRAG_START_PX
-  );
+/**
+ * Read a gesture that has moved (dx, dy) from where the finger came down.
+ *
+ * It decides only once the travel is decisive (SHEET_AXIS_DECIDE_PX on the
+ * larger axis, a pull needing that much DOWNWARD), and gives a gesture up only
+ * when it is clearly upward or clearly sideways. A first move such as dx 3,
+ * dy 2 is jitter: undecided, not a reason to hand a real pull to the browser
+ * for the rest of the touch.
+ */
+export function readMove(dx: number, dy: number): MoveReading {
+  const down = dy;
+  const across = Math.abs(dx);
+  if (down >= SHEET_AXIS_DECIDE_PX && down >= across) return "pull";
+  if (down <= -SHEET_AXIS_DECIDE_PX) return "other";
+  if (
+    across >= SHEET_AXIS_DECIDE_PX &&
+    across > SHEET_SIDEWAYS_RATIO * Math.abs(dy)
+  ) {
+    return "other";
+  }
+  return "undecided";
 }
 
 /** A smoothed downward speed: the new sample leans 60%, the old 40%. */
@@ -180,10 +198,11 @@ interface Gesture {
   lastAt: number;
 }
 
+/** A phone is a viewport below `sm`: the one that does NOT match SM_UP_QUERY. */
 const isPhone = () =>
   typeof window !== "undefined" &&
   typeof window.matchMedia === "function" &&
-  !window.matchMedia(SHEET_CENTRED_QUERY).matches;
+  !window.matchMedia(SM_UP_QUERY).matches;
 
 /** True while a CSS animation (not a transition) is running on the element. */
 function runsCssAnimation(el: HTMLElement): boolean {
@@ -196,11 +215,6 @@ function runsCssAnimation(el: HTMLElement): boolean {
         animation.playState === "running",
     );
 }
-
-const prefersReducedMotion = () =>
-  typeof window !== "undefined" &&
-  typeof window.matchMedia === "function" &&
-  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 function scrollChain(target: Element, root: Element): ScrollProbe[] {
   const chain: ScrollProbe[] = [];
@@ -259,11 +273,10 @@ export function attachSheetDrag(
     el.style.transition = "";
     el.style.willChange = "";
     el.removeAttribute(SHEET_CLOSING_ATTRIBUTE);
-    el.removeAttribute("data-sheet-dragging");
   };
 
   const spring = () => {
-    if (prefersReducedMotion()) {
+    if (readReducedMotion()) {
       reset();
       return;
     }
@@ -287,7 +300,7 @@ export function attachSheetDrag(
   };
 
   const slideOut = () => {
-    if (prefersReducedMotion()) {
+    if (readReducedMotion()) {
       close();
       return;
     }
@@ -323,9 +336,10 @@ export function attachSheetDrag(
     const dx = x - g.x0;
     const dy = y - g.y0;
     if (!g.dragging) {
-      if (!hasTravelled(dx, dy)) return false;
-      if (!startsPull(dx, dy)) {
-        // Up or sideways: not ours. Let the browser scroll.
+      const reading = readMove(dx, dy);
+      if (reading === "undecided") return false;
+      if (reading === "other") {
+        // Clearly upward or sideways: not ours. Let the browser scroll.
         gesture = null;
         return false;
       }
@@ -340,7 +354,6 @@ export function attachSheetDrag(
       clearTimers();
       el.style.transition = "none";
       el.style.willChange = "transform";
-      el.setAttribute("data-sheet-dragging", "");
     }
     g.offset = Math.max(0, g.base + dy);
     g.velocity = nextVelocity(

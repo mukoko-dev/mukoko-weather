@@ -6,7 +6,6 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
-  DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -54,6 +53,7 @@ export function PWAInstallPrompt() {
   const [open, setOpen] = useState(false);
   const deferredPrompt = useRef<BeforeInstallPromptEvent | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const installButton = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     // Already installed as PWA — don't show
@@ -138,7 +138,16 @@ export function PWAInstallPrompt() {
         if (!v) handleDismiss();
       }}
     >
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent
+        heading="Install mukoko weather"
+        className="sm:max-w-sm"
+        // The primary action is the point of this prompt: focus it, not the
+        // Close in the shared bar (which every other dialog opens on).
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          installButton.current?.focus();
+        }}
+      >
         <DialogHeader className="items-center gap-4 px-6 pt-3 text-center">
           {/* App icon — full-color brand mark */}
           <div className="flex items-center justify-center w-16 h-16 rounded-[var(--radius-card)] bg-surface-dim">
@@ -150,10 +159,6 @@ export function PWAInstallPrompt() {
               className="w-12 h-12"
             />
           </div>
-
-          <DialogTitle className="text-xl font-bold text-text-primary">
-            Install mukoko weather
-          </DialogTitle>
 
           <DialogDescription className="text-sm text-text-secondary leading-relaxed">
             Get instant access from your home screen with offline weather data
@@ -183,6 +188,7 @@ export function PWAInstallPrompt() {
         {/* Actions */}
         <div className="flex flex-col gap-2 px-6 pt-2 pb-6">
           <Button
+            ref={installButton}
             onClick={handleInstall}
             className="min-h-[var(--touch-target-min)]"
           >

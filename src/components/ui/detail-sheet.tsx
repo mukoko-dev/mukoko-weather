@@ -32,7 +32,8 @@ const DESCRIPTION_ID = "detail-sheet-about";
  * title bar with the Close control at the top right, the pull down to dismiss
  * and the screen-radius corners; Radix traps focus inside, closes on Escape and
  * returns focus to the opener. The full-width Close at the foot stays for the
- * thumb. Used by the Conditions tiles (MetricDetailModal) and by the activity
+ * thumb, named "Close sheet" so the dialog has one control called "Close" (the
+ * bar's). Used by the Conditions tiles (MetricDetailModal) and by the activity
  * advice (ActivitiesDetailSheet).
  */
 export function DetailSheet({
@@ -69,7 +70,11 @@ export function DetailSheet({
             </DialogDescription>
           )}
           <DialogClose asChild>
-            <Button variant="outline" className="w-full">
+            <Button
+              variant="outline"
+              className="w-full"
+              aria-label="Close sheet"
+            >
               Close
             </Button>
           </DialogClose>

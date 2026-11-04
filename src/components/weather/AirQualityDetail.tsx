@@ -159,7 +159,11 @@ export function AirQualityDetail({ open, reading, slug, now, onClose }: Props) {
           )}
 
           <DialogClose asChild>
-            <Button variant="outline" className="w-full">
+            <Button
+              variant="outline"
+              className="w-full"
+              aria-label="Close sheet"
+            >
               Close
             </Button>
           </DialogClose>

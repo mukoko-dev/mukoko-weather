@@ -5,6 +5,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { setRef } from "@/lib/node-ref";
 import { attachSheetDrag } from "@/lib/sheet-drag";
 
 function Dialog({
@@ -90,20 +91,23 @@ function DialogContent({
   ...props
 }: DialogContentProps) {
   // A ref callback with a cleanup (React 19): the listeners live exactly as
-  // long as the content node, and the caller's own `ref` still works.
+  // long as the content node, and the caller's own `ref` still works (setRef
+  // keeps the cleanup a function ref returns and only falls back to calling
+  // the ref with null when it returned none). The pull closes through the
+  // BAR's own control,
+  // found by its data attribute, never "the first Close in the DOM": a modal
+  // may draw another Close button at its foot.
   const attach = React.useCallback(
     (node: HTMLDivElement | null) => {
-      if (typeof ref === "function") ref(node);
-      else if (ref) ref.current = node;
       if (!node) return;
+      const release = setRef(ref, node);
       const detach = attachSheetDrag(node, {
         dismiss: () =>
           node.querySelector<HTMLElement>("[data-sheet-close]")?.click(),
       });
       return () => {
         detach();
-        if (typeof ref === "function") ref(null);
-        else if (ref) ref.current = null;
+        release();
       };
     },
     [ref],
@@ -116,7 +120,9 @@ function DialogContent({
         ref={attach}
         data-slot="dialog-content"
         className={cn(
-          "bg-surface-card fixed z-50 w-full shadow-lg duration-200 overscroll-y-contain",
+          // scroll-pt: the pinned bar covers the top of the scroller, so a card
+          // scrolled or focused into view lands below it (--sheet-bar-height).
+          "bg-surface-card fixed z-50 w-full shadow-lg duration-200 overscroll-y-contain scroll-pt-[var(--sheet-bar-height)]",
           // Phone: a bottom sheet that slides up from the bottom. Its top
           // corners follow the screen's; it stops short of the status bar.
           "inset-x-0 bottom-0 max-h-[calc(100dvh-var(--float-top))] overflow-y-auto rounded-t-[var(--radius-screen)] data-[state=open]:animate-slide-up data-[state=closed]:animate-slide-down",

@@ -69,8 +69,10 @@ describe("PWAInstallPrompt — accessibility", () => {
     expect(src).toContain("<Dialog");
   });
 
-  it("has DialogTitle for screen readers", () => {
-    expect(src).toContain("<DialogTitle");
+  it("names the dialog for screen readers (the shared bar's title)", () => {
+    // The title is the bar's (`heading`), which is a DialogTitle: Radix
+    // labels the dialog by it.
+    expect(src).toContain('heading="Install mukoko weather"');
   });
 
   it("has DialogDescription for screen readers", () => {

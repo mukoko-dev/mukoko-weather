@@ -296,6 +296,16 @@
      phone bottom sheet's top corners (components/ui/dialog.tsx); from `sm` a
      dialog is centred and uses --radius-card. */
   --radius-screen: 2.75rem;
+  /* The pinned bar of a modal or sheet (components/ui/dialog.tsx): 7px above
+     the 49px Close row, the 7px gap, and the minerals accent line. The sheet's
+     scroller keeps this much scroll padding at its top, so a card scrolled or
+     focused into view (scrollIntoView, Tab) lands below the bar and not under
+     it. dialog.test.ts holds the sum to the bar's own classes. */
+  --minerals-accent-height: 3px;
+  --sheet-bar-height: calc(
+    var(--gap-floor) + var(--touch-target-min) + var(--gap-floor) +
+      var(--minerals-accent-height)
+  );
 
   /* Shadows — Light mode */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -1049,7 +1059,7 @@ body {
 
 /* ===== Minerals Accent — Horizontal gradient for dialogs (7 minerals, ring order) ===== */
 .minerals-accent {
-  height: 3px;
+  height: var(--minerals-accent-height);
   border-radius: var(--radius-full);
   background: linear-gradient(
     to right,
