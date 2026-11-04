@@ -492,7 +492,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
 
       {/* Top-right: stacked controls (layer sheet, my location) and the list. */}
       <div className="pointer-events-none absolute right-[var(--float-right)] top-[var(--float-top)] z-10 flex flex-col items-end gap-[var(--float-gap)]">
-        <div className="serval pointer-events-auto flex flex-col rounded-full">
+        <div className="serval pointer-events-auto relative flex flex-col gap-[var(--float-gap)] rounded-full">
           <button
             type="button"
             onClick={toggleSheet}
@@ -503,7 +503,10 @@ export function MapDashboard({ location }: MapDashboardProps) {
           >
             <Layers className={ICON_CLASS} aria-hidden="true" />
           </button>
-          <span aria-hidden="true" className="mx-3 h-px bg-border" />
+          <span
+            aria-hidden="true"
+            className="absolute inset-x-[var(--inset-floor)] top-1/2 h-px -translate-y-1/2 bg-[color:var(--float-border)]"
+          />
           <button
             type="button"
             onClick={handleLocate}
