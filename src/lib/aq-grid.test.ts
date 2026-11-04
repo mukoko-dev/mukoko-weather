@@ -307,8 +307,9 @@ describe("AQI bubbles (full-screen map)", () => {
 describe("AQI_BAND_FILL_CLASS (the static map's SVG fills)", () => {
   it("names the same --wx-aqi token as the scale, band for band", () => {
     for (const band of AQI_BANDS) {
-      // "--wx-aqi-3" -> "fill-wx-aqi-3": the class is spelled out in aq-grid.ts
-      // (Tailwind only generates what it finds), so this is what keeps it honest.
+      // "--wx-aqi-3" -> "fill-wx-aqi-3": derived from the scale band's `fill`,
+      // which is spelled out in weather-scales.ts (Tailwind only generates what
+      // it finds); this keeps the map and the token in step.
       expect(AQI_BAND_FILL_CLASS[band]).toBe(
         `fill${AQI_BAND_TOKEN[band].replace(/^-/, "")}`,
       );

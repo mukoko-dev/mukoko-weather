@@ -182,10 +182,27 @@ describe("AirQualityMapView", () => {
     expect(html).toContain("aspect-square max-h-[28rem]");
   });
 
-  it("still draws the cells when there is no MapTiler key (no tiles, no map library)", async () => {
+  it("with no MapTiler key shows the reading and a text fallback, not bare squares, and credits no base map", async () => {
     const { html } = await render({ key: "" });
     expect(html).not.toContain("<image");
-    expect(html.match(/<polygon/g)).toHaveLength(49);
+    expect(html).not.toContain("<svg");
+    expect(html).not.toContain("<polygon");
+    expect(html).toContain("The map could not be loaded");
+    // The reading itself is still there, in its band's colour and for AT.
+    expect(html).toContain("· My Location");
+    expect(html).toContain("bg-wx-aqi-2");
+    expect(html).toContain(
+      'aria-label="Air quality around Harare: moderate (52) at your location"',
+    );
+    // MapTiler and OpenStreetMap are credited only when their map is drawn.
+    expect(html).not.toMatch(/MapTiler|OpenStreetMap/);
+    expect(html).toContain("Copernicus Atmosphere Monitoring Service");
+    expect(html).toContain("Open-Meteo.com");
+  });
+
+  it("draws no fallback text when the tiles are shown", async () => {
+    const { html } = await render();
+    expect(html).not.toContain("The map could not be loaded");
   });
 
   it("ships no map library markup", async () => {

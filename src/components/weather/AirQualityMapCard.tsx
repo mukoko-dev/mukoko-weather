@@ -14,7 +14,7 @@ import {
   type AqiBand,
 } from "@/lib/aq-grid";
 import { aqStaticCells } from "@/lib/aq-static-cells";
-import { attributionForLayer } from "@/lib/map-sources";
+import { attributionForLayer, overlayAttribution } from "@/lib/map-sources";
 
 /** Grid shape requested from the API: 7×7 points across ±40 km. */
 const GRID_RADIUS_KM = 40;
@@ -135,54 +135,86 @@ export function AirQualityMapView({
         <span className="dove text-xs">{data.source}</span>
       </div>
 
-      <div
-        role="img"
-        aria-label={summary}
-        className="relative mx-auto aspect-square max-h-[28rem] w-full bg-surface-base"
-      >
-        <svg
-          viewBox={picture.viewBox}
-          preserveAspectRatio="xMidYMid slice"
-          className="absolute inset-0 h-full w-full"
-          aria-hidden="true"
-        >
-          {tilesShown && (
-            <StaticMapTiles picture={picture} onTileError={onTileError} />
-          )}
-          {/* One square per grid point, in its EPA band's colour; the outline
-              carries the contrast the official fills cannot (see the full map). */}
-          {cells.map((cell) => (
-            <polygon
-              key={cell.id}
-              points={cell.points}
-              className={`${AQI_BAND_FILL_CLASS[cell.band]} stroke-wx-outline`}
-              fillOpacity={0.55}
-              strokeWidth={1}
-              vectorEffect="non-scaling-stroke"
-            />
-          ))}
-        </svg>
+      {tilesShown ? (
         <div
-          aria-hidden="true"
-          className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-button)] border border-border bg-surface-card/95 px-3 py-1.5 text-sm font-medium text-text-primary shadow-lg backdrop-blur-sm"
+          role="img"
+          aria-label={summary}
+          className="relative mx-auto aspect-square max-h-[28rem] w-full bg-surface-base"
         >
-          <span
+          <svg
+            viewBox={picture.viewBox}
+            preserveAspectRatio="xMidYMid slice"
+            className="absolute inset-0 h-full w-full"
             aria-hidden="true"
-            className={`size-3 shrink-0 rounded-full ring-1 ring-wx-outline ${AQI_BAND_BG_CLASS[band]}`}
+          >
+            <StaticMapTiles picture={picture} onTileError={onTileError} />
+            {/* One square per grid point, in its EPA band's colour; the outline
+                carries the contrast the official fills cannot (see the full map). */}
+            {cells.map((cell) => (
+              <polygon
+                key={cell.id}
+                points={cell.points}
+                className={`${AQI_BAND_FILL_CLASS[cell.band]} stroke-wx-outline`}
+                fillOpacity={0.55}
+                strokeWidth={1}
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+          </svg>
+          <AqiBubble
+            aqi={aqi}
+            band={band}
+            className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
           />
-          <span className="text-base font-semibold text-text-primary">
-            {aqi}
-          </span>
-          <span>· My Location</span>
         </div>
-      </div>
+      ) : (
+        // No MapTiler key, or every tile failed: cells over nothing say
+        // nothing, so the reading stands alone, as MapPreview's text does.
+        <div
+          role="img"
+          aria-label={summary}
+          className="flex flex-col items-center gap-2 px-[var(--space-card)] py-8 text-center"
+        >
+          <AqiBubble aqi={aqi} band={band} />
+          <span className="dove text-sm">The map could not be loaded</span>
+        </div>
+      )}
       {/* Credits outside the picture (they are links), generated from
           map-sources.ts like the full map's: the base map and the air quality
-          data. */}
+          data, or only the data when no base map is drawn. */}
       <MapCredits
-        credits={attributionForLayer("airQuality")}
+        credits={
+          tilesShown
+            ? attributionForLayer("airQuality")
+            : overlayAttribution("airQuality")
+        }
         className="mt-0 px-[var(--space-card)] py-2 text-xs"
       />
     </section>
+  );
+}
+
+/** The "{aqi} · My Location" bubble: the band's EPA fill and the printed number. */
+function AqiBubble({
+  aqi,
+  band,
+  className,
+}: {
+  aqi: number;
+  band: AqiBand;
+  className?: string;
+}) {
+  return (
+    <div
+      aria-hidden="true"
+      className={`flex items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-button)] border border-border bg-surface-card/95 px-3 py-1.5 text-sm font-medium text-text-primary shadow-lg backdrop-blur-sm ${className ?? ""}`}
+    >
+      <span
+        aria-hidden="true"
+        className={`size-3 shrink-0 rounded-full ring-1 ring-wx-outline ${AQI_BAND_BG_CLASS[band]}`}
+      />
+      <span className="text-base font-semibold text-text-primary">{aqi}</span>
+      <span>· My Location</span>
+    </div>
   );
 }
