@@ -187,7 +187,7 @@ export function flashProfile(since: number): number {
 }
 
 /** The strikes: the first 2 to 5 s in, then a random 3 to 8 s apart. */
-function lightning(init: SceneInit): CanvasScene & { flash(): number } {
+export function lightning(init: SceneInit): CanvasScene & { flash(): number } {
   const { size, rng, palette } = init;
   let nextAt = between(rng, 2, 5);
   let strikeAt = -1;
