@@ -38,8 +38,20 @@ describe("WeatherBackdrop — component contract", () => {
 });
 
 describe("WeatherBackdrop — performance discipline", () => {
-  it("caps the renderer pixel ratio at 1", () => {
-    expect(source).toContain("maxPixelRatio: 1");
+  it("caps the pixel ratio at 1 for WebGL and 2 for the 2D effects, and hands the cap to the scene", () => {
+    expect(source).toContain('maxPixelRatio: mode === "webgl" ? 1 : 2');
+    const factory = readFileSync(
+      resolve(
+        __dirname,
+        "../../lib/weather-scenes/canvas/create-canvas-scene.ts",
+      ),
+      "utf-8",
+    );
+    expect(factory).toContain("config.maxPixelRatio");
+  });
+
+  it("drops the still rain streaks and stars under the 2D effects, which draw their own", () => {
+    expect(source).toContain('texture={mode === "canvas" ? null : texture}');
   });
 
   it("pauses/resumes on tab visibility changes", () => {
@@ -129,7 +141,8 @@ describe("WeatherBackdrop — scene mapping + twilight", () => {
     expect(source).toContain("SKY_CLASS");
     expect(source).not.toContain("skyClassName");
     expect(source).not.toContain("weaver-sky");
-    expect(backdrop).toContain("<WeatherSky ref={skyRef} family={family}");
+    expect(backdrop).toContain("<WeatherSky");
+    expect(backdrop).toContain("family={family}");
   });
 
   it("derives a dawn/dusk phase from the location clock and passes it on", () => {
@@ -139,7 +152,7 @@ describe("WeatherBackdrop — scene mapping + twilight", () => {
 
   it("restarts the scene when the phase changes", () => {
     expect(source).toContain(
-      "[animate, isMobile, isDay, phase, sceneType, windSpeed]",
+      "[mode, isMobile, isDay, phase, sceneType, windSpeed]",
     );
   });
 });
@@ -160,8 +173,20 @@ describe("WeatherBackdrop — subdued particle layer", () => {
 });
 
 describe("WeatherBackdrop — device and scroll policy (v0.10.0 perf)", () => {
-  it("decides whether to animate via shouldAnimateBackdrop (reduced motion, Save-Data, low-end)", () => {
-    expect(source).toContain("shouldAnimateBackdrop(readBackdropHints())");
+  it("decides how the sky moves via backdropMode (WebGL, 2D canvas on iPhone and iPad, or still)", () => {
+    expect(source).toContain("backdropMode(readBackdropHints())");
+    // Each layer is rendered only in its own mode, and each has its own factory.
+    expect(source).toContain('const animate = mode === "webgl"');
+    expect(source).toMatch(
+      /mode === "canvas" && \(\s*<div ref=\{effectsRef\} className="kestrel-effects" \/>\s*\)/,
+    );
+    expect(source).toContain(
+      'const create = mode === "webgl" ? createWeatherScene : createCanvasScene;',
+    );
+    // Reduce Motion switched on or off while the page is open takes effect at once.
+    expect(source).toContain('"(prefers-reduced-motion: reduce)"');
+    expect(source).toContain('addEventListener("change", update)');
+    expect(source).toContain('removeEventListener("change", update)');
   });
 
   it("idles the loop while scrolling and when the sky has scrolled away", () => {
