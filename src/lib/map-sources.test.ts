@@ -5,6 +5,7 @@ import {
   DEFAULT_MAP_MODEL,
   GIBS_LAYERS,
   GIBS_WMTS_ORIGIN,
+  MAP_MAX_ZOOM_DEFAULT,
   MAP_MODELS,
   MAP_PROVIDERS,
   MODEL_LAYER_VARIABLES,
@@ -19,7 +20,9 @@ import {
   isGibsLayer,
   isModelLayer,
   mapModelForPreference,
+  maxMapZoomFor,
   overlayAttribution,
+  planZoomCap,
   withoutStyleAttributions,
   parseGibsDomains,
   satelliteFrames,
@@ -229,6 +232,98 @@ describe("NASA GIBS layers", () => {
     expect(src.maxzoom).toBe(9);
     expect(src.tiles[0]).toContain("2026-10-10");
     expect(src.attribution).toContain("NASA GIBS");
+  });
+});
+
+describe("GIBS zoom caps (the data is magnified past its native zoom)", () => {
+  /** Tiles are 256 px, so tile zoom z is native at MapLibre map zoom z - 1. */
+  const nativeMapZoom = (layer: typeof imerg) => layer.maxZoom - 1;
+
+  it("caps IMERG rain at map zoom 8 and VIIRS true colour at 9", () => {
+    expect(imerg.maxMapZoom).toBe(8);
+    expect(viirs.maxMapZoom).toBe(9);
+    expect(maxMapZoomFor("satelliteRain", MAP_MAX_ZOOM_DEFAULT)).toBe(8);
+    expect(maxMapZoomFor("satellite", MAP_MAX_ZOOM_DEFAULT)).toBe(9);
+  });
+
+  it("never caps below the data's native zoom, so the cap hides nothing real", () => {
+    for (const layer of Object.values(GIBS_LAYERS)) {
+      expect(layer.maxMapZoom).toBeGreaterThanOrEqual(nativeMapZoom(layer));
+    }
+  });
+
+  it("keeps one IMERG data cell (0.1 degree, 4.5 px in a tile) readable at the cap", () => {
+    // 4.5 px per cell at native zoom, doubled for every map zoom above it.
+    const cellPx = 4.5 * 2 ** (imerg.maxMapZoom - nativeMapZoom(imerg));
+    expect(cellPx).toBe(36);
+    // The uncapped view of the owner's screenshot, zoom 10, was 144 px: a soft block.
+    expect(4.5 * 2 ** (10 - nativeMapZoom(imerg))).toBe(144);
+    // VIIRS is at most 2x magnified.
+    expect(2 ** (viirs.maxMapZoom - nativeMapZoom(viirs))).toBe(2);
+  });
+
+  it("leaves every other layer on the map's normal maximum", () => {
+    for (const id of [
+      "precipitationIntensity",
+      "temperature",
+      "windSpeed",
+      "cloudCover",
+      "airQuality",
+      "modelTemperature",
+      "modelPrecipitation",
+      "modelWind",
+      "unknown-layer",
+    ]) {
+      expect(maxMapZoomFor(id, MAP_MAX_ZOOM_DEFAULT), id).toBe(
+        MAP_MAX_ZOOM_DEFAULT,
+      );
+    }
+    expect(maxMapZoomFor(null, 17)).toBe(17);
+    expect(maxMapZoomFor(undefined, 17)).toBe(17);
+    expect(maxMapZoomFor("", 17)).toBe(17);
+  });
+
+  it("restores the default when the layer goes from a GIBS layer to any other and back", () => {
+    const sequence = [
+      "satelliteRain",
+      "airQuality",
+      "satellite",
+      "temperature",
+      "satelliteRain",
+      null,
+    ];
+    const caps = sequence.map((id) => maxMapZoomFor(id, MAP_MAX_ZOOM_DEFAULT));
+    expect(caps).toEqual([
+      8,
+      MAP_MAX_ZOOM_DEFAULT,
+      9,
+      MAP_MAX_ZOOM_DEFAULT,
+      8,
+      MAP_MAX_ZOOM_DEFAULT,
+    ]);
+  });
+
+  it("eases down to the cap when the map is zoomed past it, and locks it at once otherwise", () => {
+    expect(planZoomCap(10, 8)).toEqual({ easeTo: 8, lockNow: false });
+    expect(planZoomCap(8.01, 8)).toEqual({ easeTo: 8, lockNow: false });
+    expect(planZoomCap(8, 8)).toEqual({ easeTo: null, lockNow: true });
+    expect(planZoomCap(6.5, 8)).toEqual({ easeTo: null, lockNow: true });
+    // Raising the cap never needs an ease.
+    expect(planZoomCap(8, MAP_MAX_ZOOM_DEFAULT)).toEqual({
+      easeTo: null,
+      lockNow: true,
+    });
+  });
+
+  it("says what each layer is in its legend note, in plain words", () => {
+    const note = (id: string) =>
+      MAP_CHIPS.find((c) => c.id === id)?.legend.note;
+    expect(note("satelliteRain")).toBe(
+      "NASA IMERG, about 10 km grid, 4–\u20606 hours behind",
+    );
+    expect(note("satellite")).toBe(
+      "NOAA-20 VIIRS, about 250 m detail, one pass a day",
+    );
   });
 });
 

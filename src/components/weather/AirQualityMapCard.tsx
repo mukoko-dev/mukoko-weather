@@ -8,12 +8,13 @@ import {
   AQI_BAND_FILL_CLASS,
   AQI_BAND_LABELS,
   aqiBand,
+  aqFieldRaster,
   fetchAirQualityGrid,
-  gridToGeoJSON,
   type AqGridResponse,
   type AqiBand,
 } from "@/lib/aq-grid";
-import { aqStaticCells } from "@/lib/aq-static-cells";
+import { aqStaticCells, aqStaticField } from "@/lib/aq-static-cells";
+import { rasterDataUrl, rasterPalette } from "@/lib/field-raster-image";
 import { attributionForLayer, overlayAttribution } from "@/lib/map-sources";
 
 /** Grid shape requested from the API: 7×7 points across ±40 km. */
@@ -21,6 +22,12 @@ const GRID_RADIUS_KM = 40;
 const GRID_N = 7;
 /** Zoom that fits ±40 km inside a card-width map on phone and desktop. */
 const MAP_ZOOM = 9;
+/**
+ * Opacity of the data picture over the base map: the same 0.55 the full map's
+ * air quality layer uses (AQI_OVERLAY_OPACITY in MapLibreMap.tsx; the card's
+ * test compares the two). The picture's own alpha is only its edge fade.
+ */
+export const AQI_FIELD_OPACITY = 0.55;
 
 type CardState =
   | { status: "loading" }
@@ -39,9 +46,12 @@ interface AirQualityMapCardProps {
  * place, plus a centred "{aqi} · My Location" bubble. Renders nothing when the
  * grid is unavailable so a provider outage never shows an empty card.
  *
- * The picture is four MapTiler raster tiles with the grid's cells drawn over
- * them as SVG polygons (src/lib/static-map.ts, src/lib/aq-static-cells.ts), not
- * a MapLibre map (#476). The card cannot be panned or zoomed, and as a map it
+ * The picture is four MapTiler raster tiles with the grid drawn over them as
+ * the same smooth banded image the full map shows (`aqFieldRaster`, painted to
+ * an offscreen canvas and placed as an SVG `<image>`, with the band outlines as
+ * paths; src/lib/static-map.ts, src/lib/aq-static-cells.ts), not a MapLibre map
+ * (#476). Where the raster cannot be painted it falls back to one square per
+ * grid point. The card cannot be panned or zoomed, and as a map it
  * cost a WebGL context, web workers, about 1.2 MB of script and 40 to 50 MB
  * of the tab's memory (measured: scripts/browser-check/memory-budget.mjs), the
  * single largest thing on the place page. The full, interactive map is
@@ -120,9 +130,21 @@ export function AirQualityMapView({
     lon,
     zoom: MAP_ZOOM,
   });
+  // The smooth picture the full map shows. Pure up to the data URL, which
+  // needs a canvas: null on the server or where the browser has none, and the
+  // card then draws one square per grid point instead.
+  const raster = useMemo(() => aqFieldRaster(data), [data]);
+  const field = useMemo(
+    () => (raster ? aqStaticField(raster, MAP_ZOOM) : null),
+    [raster],
+  );
+  const imageUrl = useMemo(
+    () => (raster ? rasterDataUrl(raster, rasterPalette(raster)) : null),
+    [raster],
+  );
   const cells = useMemo(
-    () => aqStaticCells(gridToGeoJSON(data.points, data.cellKm), MAP_ZOOM),
-    [data],
+    () => (imageUrl ? [] : aqStaticCells(data, MAP_ZOOM)),
+    [data, imageUrl],
   );
   const summary = `Air quality around ${placeName}: ${AQI_BAND_LABELS[band].toLowerCase()} (${aqi}) at your location`;
 
@@ -148,18 +170,47 @@ export function AirQualityMapView({
             aria-hidden="true"
           >
             <StaticMapTiles picture={picture} onTileError={onTileError} />
-            {/* One square per grid point, in its EPA band's colour; the outline
-                carries the contrast the official fills cannot (see the full map). */}
-            {cells.map((cell) => (
-              <polygon
-                key={cell.id}
-                points={cell.points}
-                className={`${AQI_BAND_FILL_CLASS[cell.band]} stroke-wx-outline`}
-                fillOpacity={0.55}
-                strokeWidth={1}
-                vectorEffect="non-scaling-stroke"
-              />
-            ))}
+            {imageUrl && field ? (
+              <>
+                {/* One smooth banded image over the tiles, stretched between
+                    its corners (north and south projected, not linear). */}
+                <image
+                  href={imageUrl}
+                  x={field.x}
+                  y={field.y}
+                  width={field.width}
+                  height={field.height}
+                  preserveAspectRatio="none"
+                  opacity={AQI_FIELD_OPACITY}
+                />
+                {/* Thin outlines where one band ends and the next starts: the
+                    contrast the official fills cannot carry (see the full map). */}
+                {field.contours.map((contour) => (
+                  <path
+                    key={contour.level}
+                    d={contour.d}
+                    fill="none"
+                    className="stroke-wx-outline"
+                    strokeWidth={1}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ))}
+              </>
+            ) : (
+              // No canvas to paint the picture on: one square per grid point.
+              cells.map((cell) => (
+                <polygon
+                  key={cell.id}
+                  points={cell.points}
+                  className={`${AQI_BAND_FILL_CLASS[cell.band]} stroke-wx-outline`}
+                  fillOpacity={AQI_FIELD_OPACITY}
+                  strokeWidth={1}
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))
+            )}
           </svg>
           <AqiBubble
             aqi={aqi}

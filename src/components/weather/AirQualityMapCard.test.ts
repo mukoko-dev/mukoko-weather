@@ -1,19 +1,29 @@
 /**
- * AirQualityMapCard (#476): the card is a raster picture with the AQI grid
- * drawn over it as SVG, not a MapLibre map. The view is rendered for real
- * (react-dom/server) so the checks are on the HTML a visitor gets; the few
- * structural checks read the source for what no render can show (that the
- * map library is not imported at all).
+ * AirQualityMapCard (#476): the card is a raster picture with the same smooth
+ * banded image the full map shows drawn over it as SVG (one square per grid
+ * point where that cannot be painted), not a MapLibre map. The view is rendered
+ * for real (react-dom/server) so the checks are on the HTML a visitor gets; the
+ * few structural checks read the source for what no render can show (that the
+ * map library is not imported at all). The canvas that paints the picture does
+ * not exist in Node, so `field-raster-image` is replaced by a stand-in whose
+ * data URL the tests choose (null: no canvas).
  */
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AqGridResponse } from "@/lib/aq-grid";
+import { aqFieldRaster, type AqGridResponse } from "@/lib/aq-grid";
+import { contourLines } from "@/lib/field-raster";
+import { worldRect } from "@/lib/static-map";
 
 const theme = vi.hoisted(() => ({ dark: false }));
 vi.mock("./map/use-map-style", () => ({ useMapIsDark: () => theme.dark }));
+const picture = vi.hoisted(() => ({ url: null as string | null }));
+vi.mock("@/lib/field-raster-image", () => ({
+  rasterPalette: () => [],
+  rasterDataUrl: () => picture.url,
+}));
 
 const raw = readFileSync(resolve(__dirname, "AirQualityMapCard.tsx"), "utf-8");
 // The code, without its comments (which name MapLibre and issue numbers).
@@ -43,10 +53,15 @@ function grid(): AqGridResponse {
   };
 }
 
-async function render(opts: { key?: string; dark?: boolean } = {}) {
+const DATA_URL = "data:image/png;base64,iVBORw0KGgo=";
+
+async function render(
+  opts: { key?: string; dark?: boolean; url?: string | null } = {},
+) {
   vi.resetModules();
   vi.stubEnv("NEXT_PUBLIC_MAPTILER_API_KEY", opts.key ?? "test-key\n");
   theme.dark = opts.dark ?? false;
+  picture.url = opts.url ?? null;
   const { AirQualityMapView } = await import("./AirQualityMapCard");
   const { attributionForLayer } = await import("@/lib/map-sources");
   return {
@@ -126,8 +141,9 @@ describe("AirQualityMapView", () => {
     expect(html).toContain("/maps/streets-v2-dark/9/");
   });
 
-  it("draws one cell per grid point, in the EPA band's fill class, outlined", async () => {
-    const { html } = await render();
+  it("falls back to one cell per grid point, in the EPA band's fill class, outlined, where the picture cannot be painted", async () => {
+    const { html } = await render({ url: null });
+    expect(html).not.toContain("data:image");
     const polygons = [...html.matchAll(/<polygon[^>]*>/g)].map((m) => m[0]);
     expect(polygons).toHaveLength(49);
     for (const polygon of polygons) {
@@ -141,6 +157,60 @@ describe("AirQualityMapView", () => {
       polygons.map((p) => /fill-wx-aqi-([1-6])/.exec(p)![1]),
     );
     expect(used.size).toBeGreaterThan(2);
+  });
+
+  it("draws the smooth banded picture the full map shows: one <image> over the tiles, 0.55 opaque, stretched to the raster's rectangle", async () => {
+    const { html } = await render({ url: DATA_URL });
+    const raster = aqFieldRaster(grid())!;
+    const rect = worldRect(raster.extent, 9);
+    const images = [...html.matchAll(/<image[^>]*>/g)].map((m) => m[0]);
+    const data = images.filter((tag) => tag.includes(DATA_URL));
+    expect(images).toHaveLength(5); // four tiles and the picture
+    expect(data).toHaveLength(1);
+    expect(data[0]).toContain('preserveAspectRatio="none"');
+    expect(data[0]).toContain('opacity="0.55"');
+    // Placed with the static map's own projection: north and south projected.
+    const attr = (name: string) =>
+      Number(new RegExp(` ${name}="([^"]+)"`).exec(data[0])![1]);
+    expect(attr("x")).toBeCloseTo(rect.x, 6);
+    expect(attr("y")).toBeCloseTo(rect.y, 6);
+    expect(attr("width")).toBeCloseTo(rect.width, 6);
+    expect(attr("height")).toBeCloseTo(rect.height, 6);
+    // The tiles are drawn first, the picture on top of them.
+    expect(html.indexOf(DATA_URL)).toBeGreaterThan(
+      html.indexOf("api.maptiler.com"),
+    );
+    expect(html).not.toContain("<polygon");
+  });
+
+  it("outlines the band edges with thin vector paths, one per level the field crosses", async () => {
+    const { html } = await render({ url: DATA_URL });
+    const levels = contourLines(aqFieldRaster(grid())!).features.length;
+    const paths = [...html.matchAll(/<path[^>]*>/g)].map((m) => m[0]);
+    expect(levels).toBeGreaterThan(0);
+    expect(paths).toHaveLength(levels);
+    for (const path of paths) {
+      expect(path).toContain("stroke-wx-outline");
+      expect(path).toContain('fill="none"');
+      expect(path).toContain('vector-effect="non-scaling-stroke"');
+      expect(path).toContain('stroke-linecap="round"');
+      expect(path).toMatch(/ d="M[\d.\-]+ [\d.\-]+L/);
+    }
+  });
+
+  it("keeps the opacity of the full map's air quality layer", () => {
+    const map = readFileSync(
+      resolve(__dirname, "map/MapLibreMap.tsx"),
+      "utf-8",
+    );
+    const live = /const AQI_OVERLAY_OPACITY = ([\d.]+);/.exec(map)![1];
+    expect(raw).toContain(`export const AQI_FIELD_OPACITY = ${live};`);
+  });
+
+  it("paints the raster once per grid, from the same aqFieldRaster the full map uses", () => {
+    expect(source).toContain("aqFieldRaster(data)");
+    expect(source).not.toContain("gridToGeoJSON");
+    expect(source).toContain("rasterDataUrl(raster, rasterPalette(raster))");
   });
 
   it("keeps the centre bubble with the band's fill and a printed number", async () => {

@@ -7,6 +7,7 @@ import {
   staticMapTiles,
   wantsRetinaTiles,
   worldPixel,
+  worldRect,
 } from "./static-map";
 
 const harare = { lat: -17.8292, lon: 31.0522 };
@@ -211,5 +212,46 @@ describe("coverage near the poles", () => {
         }
       }
     }
+  });
+});
+
+describe("worldRect: a lon/lat box as a rectangle in world pixels (#476)", () => {
+  const box = { west: 30.4, east: 31.7, south: -18.4, north: -17.3 };
+
+  it("is the box's corners projected: x from the west, y from the PROJECTED north", () => {
+    const rect = worldRect(box, 9);
+    const northWest = worldPixel(box.north, box.west, 9);
+    const southEast = worldPixel(box.south, box.east, 9);
+    expect(rect.x).toBe(northWest.x);
+    expect(rect.y).toBe(northWest.y);
+    expect(rect.width).toBeCloseTo(southEast.x - northWest.x, 9);
+    expect(rect.height).toBeCloseTo(southEast.y - northWest.y, 9);
+    expect(rect.width).toBeGreaterThan(0);
+    expect(rect.height).toBeGreaterThan(0);
+  });
+
+  it("spaces latitude in Mercator, not linearly: the middle latitude is not the middle row", () => {
+    // At 50 to 60 degrees north a degree is taller further north, so the 55th
+    // parallel sits below the picture's vertical middle (y grows southward).
+    const high = { west: 0, east: 10, south: 50, north: 60 };
+    const rect = worldRect(high, 9);
+    const middle = worldPixel(55, 5, 9).y - rect.y;
+    expect(middle).toBeGreaterThan(rect.height / 2 + 5);
+    // And its edges are exactly the projected parallels.
+    expect(rect.y + rect.height).toBeCloseTo(worldPixel(50, 5, 9).y, 9);
+  });
+
+  it("scales by 2 per zoom level", () => {
+    const a = worldRect(box, 8);
+    const b = worldRect(box, 9);
+    expect(b.x).toBeCloseTo(a.x * 2, 6);
+    expect(b.y).toBeCloseTo(a.y * 2, 6);
+    expect(b.width).toBeCloseTo(a.width * 2, 6);
+    expect(b.height).toBeCloseTo(a.height * 2, 6);
+  });
+
+  it("gives a box that is 360 degrees wide the width of the world", () => {
+    const rect = worldRect({ west: -180, east: 180, south: -10, north: 10 }, 3);
+    expect(rect.width).toBeCloseTo(STATIC_TILE_SIZE * 2 ** 3, 6);
   });
 });

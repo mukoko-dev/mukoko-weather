@@ -124,31 +124,89 @@
   --focus-ring-offset: 2px;
   --focus-ring-width: 2px;
 
-  /* Touch & Interaction — 56px optimal (Material Design 3 recommended) */
-  --touch-target-min: 48px;
+  /* The Bundu floor (Mzizi registry 4.23.0 and 4.24.0; owner rulings of 1 to
+     4 November 2026; https://docs.mzizi.dev/foundations/bundu-floor and
+     /foundations/spacing-floor; issue #479): the minimums every surface keeps
+     on every device. They are named as the registry names them, so that when
+     mzizi-tokens-globals.css is vendored again (the next step of #479) these
+     four lines are replaced by the registry's own and nothing else moves.
+     --target-floor is the hit region of every control (7 x 7, above Apple's
+     44 pt), --inset-floor the padding between text and its container edge (the
+     inline axis for a control), --gap-floor the gap between adjacent controls,
+     labels and fields, and sibling items, --leading-floor the body line
+     height. Stage 1 of #479 applies the target and the inset (and holds the
+     float grid above the gap); --gap-floor and --leading-floor are carried
+     here so the registry swap is a straight replacement, and the sweep of
+     #479 puts them to use. bundu-floor.test.ts holds what is applied. */
+  --target-floor: 49px;
+  --inset-floor: 14px;
+  --gap-floor: 7px;
+  --leading-floor: 1.5;
+
+  /* Touch & Interaction: the hit region of a control is the floor (it was
+     48px until 2026-11-04). */
+  --touch-target-min: var(--target-floor);
+
+  /* One grid for everything that floats over a page or a map (owner,
+     2026-11-04, from Apple's Find My: every control sits the same distance
+     from the screen edge and the same distance from its neighbour).
+     --float-inset is the distance from any screen edge, --float-gap the space
+     between two floating things (and between neighbouring targets in a bar,
+     and from a bar's edge to its first target), --float-pad the padding
+     inside a capsule around its controls. --float-top, -bottom, -left and
+     -right add the safe area, so nothing floats under a notch, a status bar,
+     the home indicator or a landscape notch (today the app does not set
+     viewport-fit=cover, where the insets are 0). The bottom bar, the phone
+     hero's icon group (.hadeda) and the map's controls and sheet all read
+     these; none of them keeps an edge distance or a safe-area expression of
+     its own. */
+  --float-inset: 1rem;
+  --float-gap: 0.5rem;
+  --float-pad: 0.25rem;
+  /* The grid is above the floor (1rem over --inset-floor, 0.5rem over
+     --gap-floor), never under it; bundu-floor.test.ts compares them.
+
+     --float-border is the hairline round everything that floats: the bar, its
+     targets, the hero's icon group and the map's controls (owner, 2026-11-04:
+     "the surface blends and boundaries disappear"). --mzizi-border is about
+     1.2:1 against a card, so a 0.5px edge in it vanished; the foreground at 50%
+     is 3:1 or better on the card, the page and the muted fill in both themes,
+     the WCAG 1.4.11 and Bundu floor contrast for a UI part (it is the
+     foreground colour, so it follows the theme; bundu-floor.test.ts computes
+     it). */
+  --float-border: color-mix(in srgb, var(--foreground) 50%, transparent);
+  /* The bottom edge sits a little higher than the others (owner, 2026-11-04:
+     "the nav bar needs slight lifting"): --float-lift clears the home
+     indicator zone and the browser's toolbar, where the bar was too close. */
+  --float-lift: 0.25rem;
+  --float-top: max(var(--float-inset), env(safe-area-inset-top, 0px));
+  --float-bottom: calc(
+    env(safe-area-inset-bottom, 0px) + var(--float-inset) + var(--float-lift)
+  );
+  --float-left: max(var(--float-inset), env(safe-area-inset-left, 0px));
+  --float-right: max(var(--float-inset), env(safe-area-inset-right, 0px));
 
   /* Mobile bottom nav geometry — ONE floating bar (option B, owner
-     2026-11-02): inset 1rem from both screen edges, lifted --mobile-nav-inset
-     (0.75rem) above the bottom edge plus the safe area, max-w-md, pill
-     (rounded-full), 0.5px token border, shadow-lg, backdrop-blur-xl, 4rem
-     tall. Map and Locations are pinned at its ends and the places lane
+     2026-11-02): inset --float-inset (1rem) from the screen edges (the sides
+     and the bottom alike), max-w-md, pill
+     (rounded-full), 0.5px token border, shadow-lg, backdrop-blur-xl, 4.5rem
+     tall (72px; 64px before 2026-11-04, when the content filled it edge to
+     edge). Map and Locations are pinned at its ends and the places lane
      (My Location first, then the saved places) scrolls between them; there is
      no second pill above it. --mobile-nav-clearance is the space page content
      must leave at the bottom so nothing sits under the nav (bar, lift and safe
      area, plus a 0.5rem breath). Floating controls above the nav (e.g.
      reorder "Done") use it too. Header.test.ts keeps these in step with the
      component. */
-  --mobile-nav-inset: 0.75rem;
-  --mobile-nav-bar-height: 4rem;
+  --mobile-nav-bar-height: 4.5rem;
   --mobile-nav-clearance: calc(
-    env(safe-area-inset-bottom, 0px) + var(--mobile-nav-inset) +
-      var(--mobile-nav-bar-height) + 0.5rem
+    var(--float-bottom) + var(--mobile-nav-bar-height) + 0.5rem
   );
 
   /* The phone hero's icon group (.hadeda): Share and the profile menu in ONE
      round pill fixed to the top of the screen, inset 1rem from the top and
      right edges (the hero's own gutter). Its size comes from these tokens and
-     from nothing else: --hadeda-width is the controls (48px each) plus the
+     from nothing else: --hadeda-width is the controls (49px each) plus the
      gaps between them plus the padding around them, and --hadeda-reserve is
      what the breadcrumb at the left of the hero's top row leaves free for it
      (the pill plus a 0.75rem gap), so the trail wraps before it reaches the
@@ -156,15 +214,15 @@
      reserve follows. Header.test.ts and viewport-layout.test.ts keep them in
      step with the component.
 
-     The inset is the same 1rem as the hero's own top margin, so the group is
-     level with the top row at the top of the page. The top and right use
-     max(inset, env(safe-area-inset-*)) so the pill is never under a notch or
-     status bar; today the app does not set viewport-fit=cover, where those
-     insets are 0. If it ever does, the hero's top row needs the same inset. */
-  --hadeda-inset: 1rem;
+     The inset is the float grid's 1rem, the same as the hero's own top
+     margin, so the group is level with the top row at the top of the page. Its
+     top and right are --float-top and --float-right, which add the safe area
+     so the pill is never under a notch or status bar; today the app does not
+     set viewport-fit=cover, where those insets are 0. If it ever does, the
+     hero's top row needs the same inset. */
   --hadeda-controls: 2;
-  --hadeda-gap: 0.5rem;
-  --hadeda-pad: 0.25rem;
+  --hadeda-gap: var(--float-gap);
+  --hadeda-pad: var(--float-pad);
   --hadeda-width: calc(
     var(--hadeda-controls) * var(--touch-target-min) +
       (var(--hadeda-controls) - 1) * var(--hadeda-gap) + 2 * var(--hadeda-pad)
@@ -182,8 +240,10 @@
   --text-body: 1rem; /* 16px — base body/footer text */
   --text-body-lg: 1.125rem; /* 18px — larger body text variant */
   --text-body-leading: 1.6;
-  /* 1rem (16px) — minimum font size per app-wide hard rule. */
-  --text-nav-label: 1rem;
+  /* 0.875rem (14px) — the Mzizi body-sm size. The nav bar's labels and place
+     chips (owner, 2026-11-04: at 16px they read as out of proportion in the
+     bar). The 16px minimum applies to reading text, not to a bar's labels. */
+  --text-nav-label: 0.875rem;
   /* Mzizi type scale (mzizi_get_tokens typography.scale) — the ONLY sizes the
      hero, the Conditions card and the skeleton may use. Weights are 400, 600
      and 700 only (Tailwind font-normal / font-semibold / font-bold). */
@@ -972,7 +1032,7 @@ body {
 /* ===== Minerals Accent — Horizontal gradient for dialogs (7 minerals, ring order) ===== */
 .minerals-accent {
   height: 3px;
-  border-radius: 9999px;
+  border-radius: var(--radius-full);
   background: linear-gradient(
     to right,
     var(--mineral-tanzanite) 0%,
@@ -1307,7 +1367,7 @@ body {
            transition-all;
   }
 
-  /* .duiker — round 48px icon control on a card surface (the duiker: small,
+  /* .duiker — round icon control (--touch-target-min, 49px) on a card surface (the duiker: small,
      quick, ducks into cover). No surface of its own, so it sits inside the
      nav island or a map overlay card. aria-current / aria-pressed light it
      with a primary tint. */
@@ -1333,15 +1393,15 @@ body {
      caller adds sm:hidden); from `sm` the site header is the top chrome. */
   .hadeda {
     position: fixed;
-    top: max(var(--hadeda-inset), env(safe-area-inset-top, 0px));
-    right: max(var(--hadeda-inset), env(safe-area-inset-right, 0px));
+    top: var(--float-top);
+    right: var(--float-right);
     z-index: 40;
     display: flex;
     align-items: center;
     gap: var(--hadeda-gap);
     padding: var(--hadeda-pad);
-    border-radius: 9999px;
-    border: var(--border-width-rest) solid var(--border);
+    border-radius: var(--radius-full);
+    border: var(--border-width-rest) solid var(--float-border);
     background-color: color-mix(in srgb, var(--card) 90%, transparent);
     box-shadow: var(--shadow-lg);
   }
@@ -1356,7 +1416,7 @@ body {
   }
 
   /* .duiker-solid — the one primary round control in a group (map timeline
-     play/pause). Filled with the brand colour, same 48px geometry. */
+     play/pause). Filled with the brand colour, same 49px geometry. */
   .duiker-solid {
     @apply flex shrink-0 items-center justify-center rounded-full
            w-[var(--touch-target-min)] h-[var(--touch-target-min)]
@@ -1369,7 +1429,8 @@ body {
      stack). Solid card surface so it reads over tiles in light and dark. */
   .serval {
     @apply rounded-[var(--radius-card)] bg-surface-card text-text-primary
-           shadow-md ring-1 ring-border;
+           shadow-md ring-[length:var(--border-width-rest)]
+           ring-[color:var(--float-border)];
   }
 
   /* .springhare — the map timeline range input. Native <input type=range>
@@ -1761,7 +1822,8 @@ body {
      --text-nav-label token, truncated, so a long name never crowds the lane. */
   .lark {
     @apply relative flex min-h-[var(--touch-target-min)] items-center
-           justify-center gap-1.5 rounded-full border-border bg-muted px-3
+           justify-center gap-1.5 rounded-full border-[color:var(--float-border)] bg-muted
+           px-[var(--inset-floor)]
            text-[length:var(--text-nav-label)] font-medium whitespace-nowrap
            text-foreground transition-colors;
     border-style: solid;
@@ -1771,14 +1833,48 @@ body {
        of being clipped at the lane's edges. */
     max-width: min(10rem, calc(100cqw - 0.5rem));
   }
+  /* .plover — a target in the phone bottom bar (a pinned item, or a .lark
+     chip) keeps the look of a pill about one touch target tall, but its
+     tappable area runs the bar's whole height: the ::after is stretched to
+     exactly --mobile-nav-bar-height, centred on the link (the bar centres its
+     targets). A thumb that lands a little high or low still counts, no number
+     here is a guess at the bar, and a change to the bar's token moves it.
+     Horizontally it is the link's own width, so it never reaches the next
+     target. It stays inside the bar (and the lane's scroller, which is the
+     bar's height), so nothing is clipped.
+
+     A pinned item wears the same bordered pill as a chip (owner, 2026-11-04:
+     the surface blends and boundaries disappear): the --float-border hairline
+     on a muted fill, so each target reads as its own button on the bar. */
+  .plover {
+    @apply bg-muted;
+    border-style: solid;
+    border-width: var(--border-width-rest);
+    border-color: var(--float-border);
+  }
+  .plover::after,
+  .lark::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    inset-block: calc((100% - var(--mobile-nav-bar-height)) / 2);
+  }
+  /* The current target wears one look wherever it is: a soft rounded fill
+     (the cobalt container), its readable text colour and a soft border of
+     it. A pinned item keeps its hairline width; a chip also thickens its
+     border below. */
+  .plover:is([aria-current]:not([aria-current="false"])),
   .lark:is([aria-current]:not([aria-current="false"])) {
     @apply border-on-container-cobalt/25 bg-container-cobalt
            text-on-container-cobalt;
+  }
+  .lark:is([aria-current]:not([aria-current="false"])) {
     border-width: var(--border-width-active);
     /* The thicker border comes out of the padding, so the chip keeps its
        outer width and a place switch does not nudge the row. */
     padding-inline: calc(
-      0.75rem - (var(--border-width-active) - var(--border-width-rest)) / 2
+      var(--inset-floor) -
+        (var(--border-width-active) - var(--border-width-rest)) / 2
     );
   }
 
@@ -1902,7 +1998,7 @@ body {
 :focus-visible {
   outline: var(--focus-ring-width, 3px) solid var(--focus-ring);
   outline-offset: var(--focus-ring-offset, 2px);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 /* Remove default focus ring for mouse users, keep for keyboard */
@@ -1916,7 +2012,7 @@ body {
    @layer components could never win over it. Keyboard focus only — mouse users
    keep the ring-free look.
 
-   The global rule also forces `border-radius: 4px` on every focused element,
+   The global rule also forces `border-radius: var(--radius-sm)` on every focused element,
    which squares off the pill buttons (--radius-button) on keyboard focus, so
    each button rule restores its own radius. */
 .kudu:focus-visible,
@@ -1931,13 +2027,23 @@ body {
 }
 
 /* .lark (a place chip in the bottom bar's lane) — unlayered like the fauna
-   rules above, so the global :focus-visible radius of 4px does not square the
+   rules above, so the global :focus-visible radius (--radius-sm) does not square the
    pill on keyboard focus. The ring is inset: the lane's scroller clips
    anything drawn outside it. */
 .lark:focus-visible {
   outline: var(--focus-ring-width, 3px) solid var(--focus-ring);
   outline-offset: -3px;
-  border-radius: 9999px;
+  border-radius: var(--radius-full);
+}
+
+/* The round map and nav controls (.duiker, .duiker-solid) and the bottom bar's
+   pinned items (.plover) are circles and pills, so their keyboard focus ring
+   follows that shape instead of the global rounded square. Only the radius is
+   restored; the ring itself is the global rule's. */
+.duiker:focus-visible,
+.duiker-solid:focus-visible,
+.plover:focus-visible {
+  border-radius: var(--radius-full);
 }
 
 /* .bee sits on the bg-primary header action pill. The cobalt ring is the same
@@ -1949,7 +2055,7 @@ body {
   /* No offset: the pill only pads its buttons by 2px, so a zero-offset ring
      stays on the cobalt pill instead of spilling onto the light header. */
   outline-offset: 0px;
-  border-radius: 9999px;
+  border-radius: var(--radius-full);
 }
 
 /* Focus on the sky (WCAG 1.4.11, 3:1). The page sky is a saturated gradient
@@ -1977,11 +2083,11 @@ body {
 
 /* .kestrel-round (Share, the ⋯ trigger) — unlayered like the fauna rules above:
    the global :focus-visible rule would otherwise square the round control to a
-   4px radius on keyboard focus. */
+   --radius-sm radius on keyboard focus. */
 .kestrel-round:focus-visible {
   outline: var(--focus-ring-width, 3px) solid var(--sky-fg);
   outline-offset: var(--focus-ring-offset, 2px);
-  border-radius: 9999px;
+  border-radius: var(--radius-full);
 }
 
 /* Loading-skeleton shimmer (.okapi). Only when motion is welcome; otherwise

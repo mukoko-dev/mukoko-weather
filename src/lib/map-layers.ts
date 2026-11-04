@@ -173,12 +173,18 @@ export function getMapLayerById(id: string): MapLayer | undefined {
  * when the user zooms in further instead of requesting tiles the Worker
  * rejects — which would otherwise make the overlay vanish when zoomed in.
  *
- * The cap is 10, not 12 (#266): a z10 tile is already ~150 m per pixel, far
- * finer than the forecast grid behind it, so z11–12 tiles add requests against
- * a small shared quota without adding detail.
+ * The cap is 8 (#266 set it to 10; lowered 2026-11-04). The forecast grids
+ * behind the tiles are kilometres wide, so tiles deeper than z8 are assumed to
+ * repeat the same values (not measured against the provider's data), while
+ * every tile of a deeper level is a request to the provider's small shared
+ * quota, one hour of cache at a time: a screen one zoom level deeper needs up
+ * to four times the tiles. Zooming from 8 to 10 now asks for nothing new:
+ * MapLibre enlarges the z8 tile, so a zoom cannot leave a patch of the map
+ * without its overlay. The price is a coarser overlay at city zoom, an owner
+ * call that the provider's capacity decides (see the tile-source decision).
  */
 export const WEATHER_OVERLAY_MIN_ZOOM = 1;
-export const WEATHER_OVERLAY_MAX_ZOOM = 10;
+export const WEATHER_OVERLAY_MAX_ZOOM = 8;
 
 /**
  * Display size of one overlay tile, in CSS pixels. Tomorrow.io tiles are
@@ -425,12 +431,19 @@ export function timelineLabel(step: number): string {
 
 /**
  * Legend for US AQI: the six official EPA categories (weather-scales.ts), the
- * same colours the grid fill, the bubbles and the gauge use.
+ * same colours the grid fill, the bubbles and the gauge use. The note says how
+ * fine the data really is: CAMS is a 0.4 degree (about 44 km) model worldwide
+ * and 0.1 degree (about 11 km) over Europe, so the 13 km sample grid
+ * oversamples it, and the picture is smoothed between samples, not sharper.
  */
 export const AQI_LEGEND: LayerLegend = {
   unit: "US AQI",
   segments: legendSegmentsFor(AQI_SCALE),
+  note: "CAMS model, grid of about 10 to 40 km",
 };
+
+/** Spacing of the model-field sample points (the Worker's 7 x 7 over +-120 km). */
+const MODEL_GRID_NOTE = "Points 40 km apart, smoothed between";
 
 /**
  * Caption for the layers painted by Tomorrow.io raster tiles (rain, temperature,
@@ -489,7 +502,7 @@ export const MAP_CHIPS: readonly MapChip[] = [
     legend: {
       unit: "true colour",
       segments: [],
-      note: "NOAA-20 VIIRS, one pass a day",
+      note: "NOAA-20 VIIRS, about 250 m detail, one pass a day",
     },
   },
   {
@@ -498,7 +511,8 @@ export const MAP_CHIPS: readonly MapChip[] = [
     legend: {
       unit: "mm/h",
       segments: [],
-      note: "NASA IMERG, about 4–6 hours behind",
+      // \u2060 (word joiner) keeps "4–6" from breaking after the dash on a narrow sheet.
+      note: "NASA IMERG, about 10 km grid, 4–\u20606 hours behind",
     },
   },
 ];
@@ -517,6 +531,7 @@ export const MODEL_CHIPS: readonly MapChip[] = [
     legend: {
       unit: "°C",
       segments: legendSegmentsFor(TEMP_SCALE, { withBounds: true }),
+      note: MODEL_GRID_NOTE,
     },
   },
   {
@@ -525,7 +540,7 @@ export const MODEL_CHIPS: readonly MapChip[] = [
     legend: {
       unit: "mm/h",
       segments: legendSegmentsFor(RAIN_SCALE, { withBounds: true }),
-      note: "Below 0.1 mm/h is left clear",
+      note: `${MODEL_GRID_NOTE}; below 0.1 mm/h is left clear`,
     },
   },
   {
@@ -534,6 +549,7 @@ export const MODEL_CHIPS: readonly MapChip[] = [
     legend: {
       unit: "km/h",
       segments: legendSegmentsFor(WIND_SCALE, { withBounds: true }),
+      note: MODEL_GRID_NOTE,
     },
   },
 ];

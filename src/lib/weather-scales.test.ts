@@ -183,14 +183,17 @@ describe("weather scales", () => {
     expect(weak).toContain("dark:--wx-aqi-6");
     expect(weak).toContain("light:--wx-aqi-2");
     // ... and the outline passes in both themes (previous test), and the map
-    // and legend swatches draw it.
+    // and legend swatches draw it. On the map the outline follows the BAND
+    // EDGES of the smooth picture (a vector line, one pixel wide at every zoom);
+    // the picture's outer edge fades out instead of ending in a hard line, so
+    // the legend and the printed values carry what colour alone cannot.
     const mapSrc = readFileSync(
       join(SRC, "components/weather/map/MapLibreMap.tsx"),
       "utf8",
     );
-    expect(mapSrc).toContain("addCellOutline(map, AQI_OVERLAY_ID, beforeId)");
-    expect(mapSrc).toContain("addCellOutline(map, MODEL_OVERLAY_ID, beforeId)");
-    expect(mapSrc).toContain('"line-color": resolveColor("var(--wx-outline)")');
+    expect(mapSrc).toContain("contourLines(raster)");
+    expect(mapSrc).toContain('resolveColor("var(--wx-outline)")');
+    expect(mapSrc).toContain('"line-color": outlineColor');
     const dash = readFileSync(
       join(SRC, "app/[location]/map/MapDashboard.tsx"),
       "utf8",
@@ -330,10 +333,11 @@ describe("weather scales", () => {
         "Reference scale; map shading from Tomorrow.io",
       );
     }
-    // Our own AQI grid and model fields are painted by us: no caption.
-    expect(
-      MAP_CHIPS.find((c) => c.id === "airQuality")!.legend.note,
-    ).toBeUndefined();
+    // Our own AQI grid is painted by us: no Tomorrow.io caption, but it says
+    // how fine the data really is.
+    const aq = MAP_CHIPS.find((c) => c.id === "airQuality")!.legend.note;
+    expect(aq).toBe("CAMS model, grid of about 10 to 40 km");
+    expect(aq).not.toMatch(/Tomorrow/);
   });
 });
 

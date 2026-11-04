@@ -5,9 +5,8 @@ import type {
   Map as MapLibreGLMap,
   Marker,
   GeoJSONSource,
-  ExpressionSpecification,
+  ImageSource,
 } from "maplibre-gl";
-import type { FeatureCollection } from "geojson";
 import { useAppStore } from "@/lib/store";
 import { resolveTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -26,19 +25,27 @@ import {
 import { overlayFrameId, planOverlayFrames } from "@/lib/overlay-frames";
 import {
   BASE_MAP_PROVIDERS,
+  MAP_MAX_ZOOM_DEFAULT,
   MAP_PROVIDERS,
   attributionHtml,
+  maxMapZoomFor,
   overlayAttribution,
+  planZoomCap,
   withoutStyleAttributions,
 } from "@/lib/map-sources";
 import {
-  AQI_BANDS,
   AQI_BAND_BG_CLASS,
   AQI_BAND_FG_CLASS,
   AQI_BAND_LABELS,
-  AQI_BAND_TOKEN,
   type AqBubble,
 } from "@/lib/aq-grid";
+import {
+  contourLines,
+  paintRaster,
+  parseCssColor,
+  type FieldRaster,
+  type Rgb,
+} from "@/lib/field-raster";
 
 export function getMapTilerStyle(isDark: boolean): string {
   const style = maptilerStyleId(isDark);
@@ -118,6 +125,13 @@ const OVERLAY_SOURCE_IDS = [
  * timeline label, which is worse than a frame that is still filling in.
  */
 const FRAME_SWAP_TIMEOUT_MS = 2500;
+
+/**
+ * How long the map eases down to a layer's zoom cap when the visitor changes
+ * layer while zoomed past it. MapLibre's easeTo already goes instant under
+ * prefers-reduced-motion (it is not marked `essential`).
+ */
+const ZOOM_CAP_EASE_MS = 400;
 
 /**
  * Shows `state.want` if it has loaded (or `force` is set): raises it to full
@@ -281,170 +295,173 @@ function renderAqiBubbles(
 }
 
 /**
- * Fill colour per AQI band, as a MapLibre `match` expression. Colours come from
- * the resolved weather-scale tokens (paint values cannot read var()), so they
- * follow the light/dark theme. Unknown bands fall back to the tertiary text token.
+ * Opacity of each data picture. The picture's own alpha is only its edge fade
+ * (field-raster.ts), so the layer opacity is the one place this lives.
  */
-function aqiFillColorExpression(): ExpressionSpecification {
-  // Flat [band, colour, band, colour, …] pairs after the lookup, then fallback.
-  const pairs: string[] = [];
-  for (const band of AQI_BANDS) {
-    pairs.push(band, resolveColor(`var(${AQI_BAND_TOKEN[band]})`));
-  }
-  const expression: unknown[] = [
-    "match",
-    ["get", "band"],
-    ...pairs,
-    resolveColor("var(--color-text-tertiary)"),
-  ];
-  return expression as ExpressionSpecification;
-}
-
-/** Id of the outline layer that sits on a data-fill layer. */
-function outlineLayerId(fillLayerId: string): string {
-  return `${fillLayerId}-outline`;
-}
+const AQI_OVERLAY_OPACITY = 0.55;
+const FIELD_OVERLAY_OPACITY = 0.5;
 
 /**
- * Outlines every data cell with the theme's --wx-outline colour. The official
- * EPA / WHO / radar fill colours cannot all be 3:1 against a light or a dark
- * base map (the worst AQI band, maroon, is about 1.3:1 on the dark base), so
- * the cell edge carries the contrast (non-text UI, WCAG 1.4.11).
- */
-function addCellOutline(
-  map: MapLibreGLMap,
-  fillLayerId: string,
-  beforeId: string | undefined,
-) {
-  map.addLayer(
-    {
-      id: outlineLayerId(fillLayerId),
-      type: "line",
-      source: fillLayerId,
-      paint: {
-        "line-color": resolveColor("var(--wx-outline)"),
-        "line-width": 1,
-      },
-    },
-    beforeId,
-  );
-}
-
-/**
- * Adds (or replaces) the AQI grid overlay: one semi-transparent fill per grid
- * cell, coloured by its `band` property. The layer is inserted beneath the
- * first symbol layer so road and place labels stay readable over the colour.
- * Idempotent; a null/undefined collection just clears the overlay.
- */
-function applyAqiOverlay(
-  map: MapLibreGLMap,
-  data: FeatureCollection | null | undefined,
-) {
-  if (map.getLayer(outlineLayerId(AQI_OVERLAY_ID)))
-    map.removeLayer(outlineLayerId(AQI_OVERLAY_ID));
-  if (map.getLayer(AQI_OVERLAY_ID)) map.removeLayer(AQI_OVERLAY_ID);
-  if (map.getSource(AQI_OVERLAY_ID)) map.removeSource(AQI_OVERLAY_ID);
-
-  if (!data) return;
-
-  const beforeId = map
-    .getStyle()
-    ?.layers?.find((layer) => layer.type === "symbol")?.id;
-
-  map.addSource(AQI_OVERLAY_ID, {
-    type: "geojson",
-    data,
-    attribution: attributionHtml(overlayAttribution("airQuality")),
-  });
-  map.addLayer(
-    {
-      id: AQI_OVERLAY_ID,
-      type: "fill",
-      source: AQI_OVERLAY_ID,
-      paint: {
-        "fill-color": aqiFillColorExpression(),
-        "fill-opacity": 0.55,
-      },
-    },
-    beforeId,
-  );
-  addCellOutline(map, AQI_OVERLAY_ID, beforeId);
-}
-
-/**
- * A forecast field painted from grid cells (model layers): each feature
- * carries a `band` index into `tokens` (CSS custom properties, resolved here
- * because paint values cannot read var()). `attribution` credits the model.
+ * A forecast field painted as one smooth image (model layers): the raster
+ * (field-raster.ts) and the credit for the model that made it.
  */
 export interface FieldOverlay {
-  data: FeatureCollection;
-  tokens: readonly string[];
+  raster: FieldRaster;
   attribution: string;
 }
 
 /**
- * Adds (or replaces) the model-field overlay beneath the first symbol layer,
- * like the AQI grid. Idempotent; null clears it.
+ * Id of the outline source and layer that sit on a data image. The `@` keeps
+ * an error from it classed as an overlay error (classifyMapError), like the
+ * per-frame ids of the tile overlay.
  */
-/** Colour tokens + credit each map's field overlay was built with. */
-const fieldStyleOf = new WeakMap<MapLibreGLMap, string>();
+function outlineId(overlayId: string): string {
+  return `${overlayId}@outline`;
+}
 
-function applyFieldOverlay(
+/**
+ * RGB of a resolved colour. Tokens are hex in globals.css, so this is almost
+ * always the pure parse; anything else (a colour function the parser does not
+ * read) is converted by the browser.
+ */
+function toRgb(css: string): Rgb {
+  const parsed = parseCssColor(css);
+  if (parsed) return parsed;
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 1;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (ctx) {
+      ctx.fillStyle = css;
+      ctx.fillRect(0, 0, 1, 1);
+      const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+      return [r, g, b];
+    }
+  } catch {
+    // No 2D context: fall through to a neutral grey rather than a missing band.
+  }
+  return [128, 128, 128];
+}
+
+/** The credit each map's data images were built with, so a new step swaps in place. */
+const overlayCredit = new WeakMap<MapLibreGLMap, Map<string, string>>();
+
+function removeRasterOverlay(map: MapLibreGLMap, id: string) {
+  if (map.getLayer(outlineId(id))) map.removeLayer(outlineId(id));
+  if (map.getLayer(id)) map.removeLayer(id);
+  if (map.getSource(outlineId(id))) map.removeSource(outlineId(id));
+  if (map.getSource(id)) map.removeSource(id);
+  overlayCredit.get(map)?.delete(id);
+}
+
+/**
+ * Adds (or replaces) a data overlay: ONE image source holding the smooth
+ * banded raster (field-raster.ts), drawn beneath the first symbol layer so
+ * road and place labels stay readable over the colour, with a thin outline on
+ * top where one band ends and the next starts. Colours are resolved from the
+ * weather-scale tokens HERE, on every call, so a light/dark switch (which
+ * re-runs this from restore()) repaints the picture in the new theme's colours.
+ *
+ * The outline keeps the --wx-outline rule: the official EPA / WHO / radar fills
+ * cannot all hold 3:1 against a light or dark base map, so the band edges carry
+ * the contrast. It is a vector line, one screen pixel wide at every zoom.
+ *
+ * An ImageSource has no `attribution`, so the credit rides on the outline's
+ * GeoJSON source, which the attribution control does read.
+ *
+ * Idempotent; null clears the overlay. With the same credit (a timeline step)
+ * the image and outline are swapped in place instead of rebuilding the layers.
+ */
+function applyRasterOverlay(
   map: MapLibreGLMap,
+  id: string,
   overlay: FieldOverlay | null | undefined,
+  opacity: number,
 ) {
-  const style = overlay
-    ? `${overlay.tokens.join(",")}|${overlay.attribution}`
-    : "";
-  // Same palette and credit (a timeline step): swap the cells in place.
-  const existing = map.getSource(MODEL_OVERLAY_ID) as GeoJSONSource | undefined;
+  if (!overlay) {
+    removeRasterOverlay(map, id);
+    return;
+  }
+  const { raster, attribution } = overlay;
+  const image = new ImageData(
+    paintRaster(
+      raster,
+      raster.tokens.map((token) => toRgb(resolveColor(`var(${token})`))),
+    ),
+    raster.width,
+    raster.height,
+  );
+  const outline = contourLines(raster);
+  const outlineColor = resolveColor("var(--wx-outline)");
+
+  const credits = overlayCredit.get(map) ?? new Map<string, string>();
+  overlayCredit.set(map, credits);
+  const source = map.getSource(id) as ImageSource | undefined;
+  const outlineSource = map.getSource(outlineId(id)) as
+    | GeoJSONSource
+    | undefined;
   if (
-    overlay &&
-    existing &&
-    map.getLayer(MODEL_OVERLAY_ID) &&
-    fieldStyleOf.get(map) === style
+    source &&
+    outlineSource &&
+    map.getLayer(id) &&
+    map.getLayer(outlineId(id)) &&
+    credits.get(id) === attribution
   ) {
-    existing.setData(overlay.data);
+    source.updateImage({ image, coordinates: raster.corners });
+    outlineSource.setData(outline);
+    map.setPaintProperty(outlineId(id), "line-color", outlineColor);
     return;
   }
 
-  if (map.getLayer(outlineLayerId(MODEL_OVERLAY_ID)))
-    map.removeLayer(outlineLayerId(MODEL_OVERLAY_ID));
-  if (map.getLayer(MODEL_OVERLAY_ID)) map.removeLayer(MODEL_OVERLAY_ID);
-  if (map.getSource(MODEL_OVERLAY_ID)) map.removeSource(MODEL_OVERLAY_ID);
-  fieldStyleOf.delete(map);
-  if (!overlay || overlay.tokens.length === 0) return;
-
+  removeRasterOverlay(map, id);
   const beforeId = map
     .getStyle()
     ?.layers?.find((layer) => layer.type === "symbol")?.id;
-  const pairs: (number | string)[] = [];
-  overlay.tokens.forEach((token, i) => {
-    pairs.push(i, resolveColor(`var(${token})`));
-  });
-  const fillColor = [
-    "match",
-    ["get", "band"],
-    ...pairs,
-    resolveColor("var(--color-text-tertiary)"),
-  ] as unknown as ExpressionSpecification;
-
-  map.addSource(MODEL_OVERLAY_ID, {
+  // Created empty and fed an already-decoded image: no network request, no
+  // data URL, and the pixels the tests pin are the pixels MapLibre uploads.
+  map.addSource(id, { type: "image", coordinates: raster.corners });
+  (map.getSource(id) as ImageSource).updateImage({ image });
+  map.addSource(outlineId(id), {
     type: "geojson",
-    data: overlay.data,
-    attribution: overlay.attribution,
+    data: outline,
+    attribution,
   });
   map.addLayer(
     {
-      id: MODEL_OVERLAY_ID,
-      type: "fill",
-      source: MODEL_OVERLAY_ID,
-      paint: { "fill-color": fillColor, "fill-opacity": 0.5 },
+      id,
+      type: "raster",
+      source: id,
+      paint: {
+        "raster-opacity": opacity,
+        "raster-resampling": "linear",
+        "raster-fade-duration": 0,
+      },
     },
     beforeId,
   );
-  addCellOutline(map, MODEL_OVERLAY_ID, beforeId);
-  fieldStyleOf.set(map, style);
+  map.addLayer(
+    {
+      id: outlineId(id),
+      type: "line",
+      source: outlineId(id),
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": outlineColor, "line-width": 1 },
+    },
+    beforeId,
+  );
+  credits.set(id, attribution);
+}
+
+/** The AQ grid raster with its credit, or null for none. */
+function aqiOverlayOf(
+  raster: FieldRaster | null | undefined,
+): FieldOverlay | null {
+  return raster
+    ? {
+        raster,
+        attribution: attributionHtml(overlayAttribution("airQuality")),
+      }
+    : null;
 }
 
 interface MapLibreMapProps {
@@ -486,10 +503,11 @@ interface MapLibreMapProps {
    */
   attributionControl?: boolean;
   /**
-   * Optional AQI grid (cells with `band` properties, see `gridToGeoJSON`).
-   * Rendered as a fill layer beneath map labels. Omit for no overlay.
+   * Optional AQI grid as a smooth banded raster (see `aqFieldRaster`). Drawn
+   * as one image beneath map labels, outlined where the bands change. Omit
+   * for no overlay.
    */
-  aqiOverlay?: FeatureCollection | null;
+  aqiOverlay?: FieldRaster | null;
   /** Optional model forecast field (see FieldOverlay). Omit for none. */
   fieldOverlay?: FieldOverlay | null;
   className?: string;
@@ -544,7 +562,7 @@ export function MapLibreMap({
   const aqiBubblesRef = useRef<readonly AqBubble[] | null>(aqiBubbles);
   aqiBubblesRef.current = aqiBubbles;
   // Same pattern for the AQI overlay: restore() reads the latest collection.
-  const aqiOverlayRef = useRef<FeatureCollection | null>(aqiOverlay);
+  const aqiOverlayRef = useRef<FieldRaster | null>(aqiOverlay);
   aqiOverlayRef.current = aqiOverlay;
   const fieldOverlayRef = useRef<FieldOverlay | null>(fieldOverlay);
   fieldOverlayRef.current = fieldOverlay;
@@ -602,6 +620,13 @@ export function MapLibreMap({
           container: containerRef.current,
           center: [lon, lat],
           zoom,
+          // A satellite layer cannot show more than its data holds (see
+          // GibsLayer.maxMapZoom); the effect below keeps this in step with
+          // the active layer.
+          maxZoom: maxMapZoomFor(
+            overlayPropsRef.current.layer,
+            MAP_MAX_ZOOM_DEFAULT,
+          ),
           interactive,
           // Never above 2x: the canvas is width x height x pixelRatio^2 pixels
           // of GPU memory, and a 3x phone's full-screen map held 46 MB of it
@@ -670,8 +695,18 @@ export function MapLibreMap({
           for (const id of previous.present) removeFrame(map, previous, id);
           framesRef.current = newFrameState();
           syncFramesFrom(map, framesRef.current, overlayPropsRef.current);
-          applyAqiOverlay(map, aqiOverlayRef.current);
-          applyFieldOverlay(map, fieldOverlayRef.current);
+          applyRasterOverlay(
+            map,
+            AQI_OVERLAY_ID,
+            aqiOverlayOf(aqiOverlayRef.current),
+            AQI_OVERLAY_OPACITY,
+          );
+          applyRasterOverlay(
+            map,
+            MODEL_OVERLAY_ID,
+            fieldOverlayRef.current,
+            FIELD_OVERLAY_OPACITY,
+          );
           bubbleMarkersRef.current.forEach((m) => m.remove());
           bubbleMarkersRef.current = aqiBubblesRef.current
             ? renderAqiBubbles(map, MLMarker, aqiBubblesRef.current)
@@ -759,6 +794,35 @@ export function MapLibreMap({
     });
   }, [isDark]);
 
+  // Cap the zoom at what the active layer's data can show. A GIBS layer is
+  // magnified past its native resolution as the visitor zooms in (IMERG's 11 km
+  // cell becomes 145 px at zoom 10), so it carries a maximum map zoom; every
+  // other layer gets the normal maximum back. When the map is already zoomed
+  // past the new cap it eases down first and locks the maximum once it stops
+  // (setMaxZoom alone would jump). The pending lock reads the CURRENT layer,
+  // so switching again mid-ease never leaves a stale cap.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const cap = maxMapZoomFor(weatherLayer, MAP_MAX_ZOOM_DEFAULT);
+    if (map.getMaxZoom() === cap) return;
+    const plan = planZoomCap(map.getZoom(), cap);
+    if (plan.easeTo === null) {
+      map.setMaxZoom(cap);
+      return;
+    }
+    // The listener goes on BEFORE the ease: under reduced motion (or a zero
+    // duration) MapLibre finishes the move inside easeTo and fires "moveend"
+    // there, so a listener added after the call would miss it and the cap
+    // would never be locked.
+    map.once("moveend", () => {
+      map.setMaxZoom(
+        maxMapZoomFor(overlayPropsRef.current.layer, MAP_MAX_ZOOM_DEFAULT),
+      );
+    });
+    map.easeTo({ zoom: plan.easeTo, duration: ZOOM_CAP_EASE_MS });
+  }, [weatherLayer]);
+
   // Switch the weather overlay frame when the layer or forecast time changes.
   // Before the style is ready there is nothing to do: restore() reads the
   // latest props from refs on "style.load".
@@ -809,7 +873,12 @@ export function MapLibreMap({
     // Before "style.load", restore() applies the latest grid from its ref.
     if (!styleReadyRef.current) return;
     try {
-      applyAqiOverlay(map, aqiOverlay);
+      applyRasterOverlay(
+        map,
+        AQI_OVERLAY_ID,
+        aqiOverlayOf(aqiOverlay),
+        AQI_OVERLAY_OPACITY,
+      );
     } catch {
       // Style being replaced; restore() applies the latest grid.
     }
@@ -823,7 +892,12 @@ export function MapLibreMap({
     if (!map) return;
     if (!styleReadyRef.current) return;
     try {
-      applyFieldOverlay(map, fieldOverlay);
+      applyRasterOverlay(
+        map,
+        MODEL_OVERLAY_ID,
+        fieldOverlay,
+        FIELD_OVERLAY_OPACITY,
+      );
     } catch {
       // Style being replaced; restore() applies the latest field.
     }

@@ -180,7 +180,7 @@ export function CurrentConditions({
           [data-sky-hero]), so Share and the profile menu live in ONE round icon
           group (`.hadeda`) fixed to the top of the screen: it stays in reach
           while the page scrolls, and the breadcrumb leaves room for it. Round
-          48px controls: content stays distinct from controls. */}
+          49px controls: content stays distinct from controls. */}
       <div className="flex items-center justify-between gap-3 pt-1 pr-[env(safe-area-inset-right,0px)] pl-[env(safe-area-inset-left,0px)]">
         <div className="min-h-[var(--touch-target-min)] min-w-0 pr-[var(--hadeda-reserve)] text-[length:var(--text-body-sm)] leading-[var(--text-body-sm-leading)] text-[var(--sky-fg-dim)] sm:pr-0">
           {breadcrumb}

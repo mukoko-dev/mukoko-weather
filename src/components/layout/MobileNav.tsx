@@ -93,7 +93,7 @@ function LaneFallback() {
  * same places. There is no second pill above the bar.
  *
  * Page content leaves `--mobile-nav-clearance` at the bottom so nothing sits
- * under the bar; that token is the bar (4rem) plus the lift, the safe area
+ * under the bar; that token is the bar (4.5rem) plus the lift, the safe area
  * and a breath.
  */
 export function MobileNav({
