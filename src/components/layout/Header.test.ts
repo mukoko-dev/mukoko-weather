@@ -72,10 +72,11 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
   });
 
   it("floats like mukoko-news's island: inset from the edges, lifted, max-w-md, pill, token border, shadow, blur", () => {
-    expect(bottomNav).toContain("fixed inset-x-4");
+    // The same inset on the sides and the bottom, from the one float grid.
     expect(bottomNav).toContain(
-      "bottom-[calc(env(safe-area-inset-bottom,0px)+var(--mobile-nav-inset))]",
+      "fixed left-[var(--float-left)] right-[var(--float-right)]",
     );
+    expect(bottomNav).toContain("bottom-[var(--float-bottom)]");
     expect(bottomNav).toContain("z-50 mx-auto");
     expect(bottomNav).toContain("max-w-md");
     // Never docked: no full-width edge-to-edge bar, no top-border-only bar.
@@ -91,9 +92,16 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
   it("is 4.5rem tall; --mobile-nav-clearance is the bar plus the lift, the safe area and a breath", () => {
     expect(bottomNav).toContain("h-[var(--mobile-nav-bar-height)]");
     expect(css).toContain("--mobile-nav-bar-height: 4.5rem;");
-    expect(css).toContain("--mobile-nav-inset: 0.75rem;");
-    expect(css).toMatch(
-      /--mobile-nav-clearance: calc\(\s*env\(safe-area-inset-bottom, 0px\) \+ var\(--mobile-nav-inset\) \+\s*var\(--mobile-nav-bar-height\) \+ 0\.5rem\s*\);/,
+    // The lift is the grid's bottom (inset plus the safe area), so the bar
+    // sits as far from the bottom edge as from the sides, and there is no
+    // second token for it.
+    expect(css).not.toContain("--mobile-nav-inset");
+    expect(css).toContain("--float-inset: 1rem;");
+    expect(css).toContain(
+      "--float-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--float-inset));",
+    );
+    expect(css.replace(/\s+/g, " ")).toContain(
+      "--mobile-nav-clearance: calc( var(--float-bottom) + var(--mobile-nav-bar-height) + 0.5rem );",
     );
   });
 
@@ -111,7 +119,9 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
     expect(link).not.toBeNull();
     expect(link?.[1]).toContain("min-h-[var(--touch-target-min)]");
     expect(link?.[1]).not.toMatch(/(^|\s)h-full(\s|$)/);
-    expect(bottomNav).toContain('hasLane ? "gap-2 px-2"');
+    expect(bottomNav).toContain(
+      '"gap-[var(--float-gap)] px-[var(--float-gap)]"',
+    );
   });
 
   it("every target's tappable area is the bar's height, derived from the token, and fits inside the bar", () => {
@@ -137,11 +147,23 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
     expect(bottomNav).toMatch(/"plover relative /);
   });
 
-  it("the active accent bar is anchored to the bar's top edge, whatever the item's height", () => {
-    expect(bottomNav).toContain(
-      "top-[calc((100%_-_var(--mobile-nav-bar-height))_/_2_+_1px)]",
-    );
+  it("the current item is a soft pill fill (Apple's tab bars), not a line on the bar's top edge", () => {
+    // No accent bar span and no hand-set colour: the look is one shared rule.
+    const code = bottomNav.replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(code).not.toContain("h-[2.5px]");
+    expect(code).not.toContain("text-[var(--brand-accent");
     expect(bottomNav).not.toContain("-top-[3px]");
+    // The rule serves a pinned item and a lane chip alike: ONE "you are here".
+    const at = css.indexOf(
+      '.plover:is([aria-current]:not([aria-current="false"])),',
+    );
+    expect(at).toBeGreaterThan(-1);
+    const rule = css.slice(at, css.indexOf("}", at));
+    expect(rule).toContain(
+      '.lark:is([aria-current]:not([aria-current="false"]))',
+    );
+    expect(rule).toContain("bg-container-cobalt");
+    expect(rule).toContain("text-on-container-cobalt");
   });
 
   it("is ONE surface: the nav landmark is the pill, with no second pill and no leftover tokens", () => {

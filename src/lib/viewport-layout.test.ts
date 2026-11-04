@@ -200,12 +200,10 @@ describe("the hero's phone icon group (.hadeda) stays fixed to the viewport", ()
   it("is position: fixed at the top right, from the inset tokens and the safe area", () => {
     const rule = body("  .hadeda");
     expect(rule).toContain("position: fixed");
-    expect(rule).toContain(
-      "top: max(var(--hadeda-inset), env(safe-area-inset-top, 0px))",
-    );
-    expect(rule).toContain(
-      "right: max(var(--hadeda-inset), env(safe-area-inset-right, 0px))",
-    );
+    // The safe-area maths lives once, in the float grid.
+    expect(rule).toContain("top: var(--float-top)");
+    expect(rule).toContain("right: var(--float-right)");
+    expect(rule).not.toContain("env(");
     expect(rule).toMatch(/z-index:\s*40/);
   });
 
@@ -232,10 +230,10 @@ describe("the hero's phone icon group (.hadeda) stays fixed to the viewport", ()
   });
 
   it("sizes itself from its tokens, and the breadcrumb's reserve is derived from the same ones", () => {
-    expect(css).toContain("--hadeda-inset: 1rem;");
+    expect(css).not.toContain("--hadeda-inset");
     expect(css).toContain("--hadeda-controls: 2;");
-    expect(css).toContain("--hadeda-gap: 0.5rem;");
-    expect(css).toContain("--hadeda-pad: 0.25rem;");
+    expect(css).toContain("--hadeda-gap: var(--float-gap);");
+    expect(css).toContain("--hadeda-pad: var(--float-pad);");
     // The width is the controls, the gaps between them and the padding around.
     expect(css.replace(/\s+/g, " ")).toContain(
       "--hadeda-width: calc( var(--hadeda-controls) * var(--touch-target-min) + (var(--hadeda-controls) - 1) * var(--hadeda-gap) + 2 * var(--hadeda-pad) );",
