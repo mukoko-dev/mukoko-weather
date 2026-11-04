@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { getScenePalette, SCENE_TYPES } from "../palette";
 import type { WeatherSceneType } from "../types";
 import { seeded } from "./random";
@@ -9,10 +9,16 @@ import {
   flashProfile,
   FOG_ALPHA,
   LIGHTNING_MAX_ALPHA,
+  lightning,
   type Canvas2D,
   type CanvasScene,
   type Size,
 } from "./scenes";
+
+// These tests simulate minutes of animation frame by frame. They take a second
+// or two on a laptop and several times that on a loaded CI runner, so they get
+// more than the 5 s default instead of flaking at it.
+vi.setConfig({ testTimeout: 30_000 });
 
 const PHONE: Size = { w: 393, h: 640 };
 const DT = 1 / 30;
@@ -228,9 +234,19 @@ describe("lightning", () => {
     expect(flashProfile(5)).toBe(0);
   });
 
+  /** The lightning layer alone (no rain or clouds), so ten minutes cost nothing. */
+  const strikeLayer = (seed: number) =>
+    lightning({
+      type: "thunderstorm",
+      size: PHONE,
+      palette: getScenePalette("thunderstorm", true),
+      isDay: true,
+      rng: seeded(seed),
+    });
+
   it("strikes at random, 3 to 8 seconds apart, faint, never more than two flashes in a second", () => {
     for (const seed of [1, 2, 3, 4, 5]) {
-      const scene = build("thunderstorm", seed);
+      const scene = strikeLayer(seed);
       const { ctx, calls } = recorder();
       const series: number[] = [];
       for (let i = 0; i < 30 * 600; i++) {
@@ -278,6 +294,35 @@ describe("lightning", () => {
       }
       expect(worst).toBeLessThanOrEqual(2);
     }
+  });
+
+  it("is part of the thunderstorm scene, under the same cap, and of no other", () => {
+    const flashes = (type: WeatherSceneType) => {
+      const scene = build(type, 2);
+      const { ctx, calls } = recorder();
+      const alphas: number[] = [];
+      // Full-box fills only: a flash is the one fillRect over the whole box.
+      for (let i = 0; i < 30 * 40; i++) {
+        scene.step(DT, (i + 1) * DT);
+        calls.length = 0;
+        scene.draw(ctx, sprites);
+        for (const c of calls) {
+          if (
+            c.op === "fillRect" &&
+            c.args[2] === PHONE.w &&
+            c.args[3] === PHONE.h
+          ) {
+            alphas.push(c.alpha);
+          }
+        }
+      }
+      return alphas;
+    };
+    const storm = flashes("thunderstorm");
+    expect(storm.length).toBeGreaterThan(0);
+    expect(Math.max(...storm)).toBeLessThanOrEqual(LIGHTNING_MAX_ALPHA + 1e-9);
+    expect(flashes("rain")).toHaveLength(0);
+    expect(flashes("clear")).toHaveLength(0);
   });
 });
 
