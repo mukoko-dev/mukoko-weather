@@ -59,10 +59,10 @@ describe("ActivitiesDetailSheet structure", () => {
 });
 
 describe("DetailSheet (one scaffold for both sheets)", () => {
-  it("is built on the shared Dialog: handle, title, description, Close", () => {
+  it("is built on the shared Dialog: pinned title bar, description, Close", () => {
     expect(detailSheet).toContain('from "@/components/ui/dialog"');
-    expect(detailSheet).toContain("<DialogSheetHandle />");
-    expect(detailSheet).toContain("<DialogTitle");
+    // The title sits in the shared top bar beside the Close control.
+    expect(detailSheet).toContain("heading={title}");
     expect(detailSheet).toContain("<DialogDescription");
     expect(detailSheet).toContain("Close");
   });
