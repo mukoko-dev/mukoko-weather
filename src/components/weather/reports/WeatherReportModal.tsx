@@ -5,9 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogSheetHandle,
   DialogHeader,
-  DialogTitle,
   DialogDescription,
   DialogClose,
 } from "@/components/ui/dialog";
@@ -144,14 +142,12 @@ export function WeatherReportModal() {
         else handleClose();
       }}
     >
-      <DialogContent className="sm:max-w-md">
-        <DialogSheetHandle />
-
-        {/* Title + description */}
-        <DialogHeader className="px-5">
-          <DialogTitle>
-            {step === "confirm" ? "Report Submitted" : "Report Weather"}
-          </DialogTitle>
+      <DialogContent
+        heading={step === "confirm" ? "Report Submitted" : "Report Weather"}
+        className="sm:max-w-md"
+      >
+        {/* Description (the title is pinned in the top bar) */}
+        <DialogHeader className="px-5 py-3">
           <DialogDescription className="mt-0.5 text-base text-text-secondary">
             {step === "select" && "What are you experiencing right now?"}
             {step === "clarify" &&
