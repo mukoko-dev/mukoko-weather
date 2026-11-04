@@ -4,6 +4,8 @@ import {
   Children,
   useCallback,
   useEffect,
+  useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
@@ -15,7 +17,7 @@ import { LocationSkeleton } from "@/components/weather/LocationSkeleton";
 import { PlaceLoadNotice } from "@/components/weather/PlaceLoadNotice";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { useAiUser } from "@/lib/use-ai-user";
-import { fetchHomeWeather } from "@/lib/home-weather";
+import { fetchHomeWeather, fetchWorkerWeatherOnce } from "@/lib/home-weather";
 import { workerData } from "@/lib/worker-data";
 import {
   createPlaceController,
@@ -32,8 +34,13 @@ import { recallPlace } from "@/lib/rxdb/weather-places";
 import { useAppStore } from "@/lib/store";
 import { readDeviceHints } from "@/lib/lazy-visibility";
 import { useIdleOnce } from "@/lib/use-idle-once";
-import { usePagerSequence } from "@/lib/use-location-pager";
-import { warmLimit, warmTargets } from "@/lib/place-warm";
+import { pagerSequence } from "@/lib/location-pager";
+import {
+  WARM_PAUSE_AFTER_FAILURE_MS,
+  warmLimit,
+  warmPass,
+  warmTargets,
+} from "@/lib/place-warm";
 
 /** The longest to wait for an idle moment before warming the next places. */
 const WARM_IDLE_TIMEOUT_MS = 1500;
@@ -53,6 +60,27 @@ const WeatherDashboard = dynamic(loadDashboard, {
   loading: () => <LocationSkeleton />,
 });
 
+/**
+ * Resolves once the tab is visible (at once when it already is), or when
+ * `signal` aborts: background warming waits for the visitor instead of running
+ * in a hidden tab, and carries on when they come back.
+ */
+function untilVisible(signal: AbortSignal): Promise<void> {
+  if (document.visibilityState !== "hidden") return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => {
+      document.removeEventListener("visibilitychange", onChange);
+      signal.removeEventListener("abort", done);
+      resolve();
+    };
+    const onChange = () => {
+      if (document.visibilityState !== "hidden") done();
+    };
+    document.addEventListener("visibilitychange", onChange);
+    signal.addEventListener("abort", done);
+  });
+}
+
 /** The browser's side of `PlaceDeps`. */
 function browserDeps(): PlaceDeps {
   return {
@@ -63,6 +91,9 @@ function browserDeps(): PlaceDeps {
     // shared request outlives a place the visitor left, so its answer is
     // there if they come back; the controller ignores it for the screen.
     fetchWeather: (lat, lon, _signal, options) => {
+      // A place nobody asked for yet (the next saved place, got ready in the
+      // background): the Worker only, one attempt, never the provider direct.
+      if (options?.background) return fetchWorkerWeatherOnce(lat, lon);
       if (options?.force) workerData.invalidate("weather", { lat, lon });
       return fetchHomeWeather(lat, lon);
     },
@@ -176,30 +207,36 @@ export function usePlaceStage(
   }, [controller]);
 
   // Get the places a swipe can reach next ready while this one is read
-  // (src/lib/place-warm.ts): once its own forecast is in and the browser has had
-  // an idle moment, one request at a time, never while the tab is hidden. The
-  // answer is held in memory, so the switch paints at once instead of waiting.
+  // (src/lib/place-warm.ts): the visitor's SAVED places only (never the
+  // suggested ones they did not choose), once the place on screen has its own
+  // forecast and the browser has had an idle moment, one request at a time. A
+  // hidden tab waits for the visitor to come back; a pass that fails pauses
+  // warming for a minute. The answer is held in memory, so the switch paints at
+  // once instead of waiting.
   const savedLocations = useAppStore((s) => s.savedLocations);
-  const selectedLocation = useAppStore((s) => s.selectedLocation);
-  const sequence = usePagerSequence(savedLocations, selectedLocation);
+  const warmSequence = useMemo(
+    () => pagerSequence(savedLocations, []),
+    [savedLocations],
+  );
   const settled = !!state.view && !state.fetching && !state.failed;
   const idle = useIdleOnce(WARM_IDLE_TIMEOUT_MS, state.path);
+  const pausedUntil = useRef(0);
   useEffect(() => {
-    if (!settled || !idle) return;
+    if (!settled || !idle || Date.now() < pausedUntil.current) return;
     const limit = warmLimit(readDeviceHints(), navigator.onLine !== false);
-    const targets = warmTargets(sequence, state.path, limit);
+    const targets = warmTargets(warmSequence, state.path, limit);
     if (targets.length === 0) return;
     const stop = new AbortController();
-    void (async () => {
-      for (const target of targets) {
-        if (stop.signal.aborted || document.visibilityState === "hidden") {
-          return;
-        }
-        await controller.warm(target, stop.signal);
+    void warmPass(targets, (target) => controller.warm(target, stop.signal), {
+      signal: stop.signal,
+      untilVisible,
+    }).then((end) => {
+      if (end === "failed") {
+        pausedUntil.current = Date.now() + WARM_PAUSE_AFTER_FAILURE_MS;
       }
-    })();
+    });
     return () => stop.abort();
-  }, [controller, settled, idle, sequence, state.path]);
+  }, [controller, settled, idle, warmSequence, state.path]);
 
   const retry = useCallback(() => void controller.retry(), [controller]);
   return { state, controller, retry };

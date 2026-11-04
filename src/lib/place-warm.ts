@@ -1,5 +1,6 @@
 import { isConstrainedDevice, type DeviceHints } from "./lazy-visibility";
 import { pagerIndex } from "./location-pager";
+import type { WarmResult } from "./place-controller";
 import { placeTargetOf, type PlaceTarget } from "./place-target";
 
 /**
@@ -57,4 +58,37 @@ export function warmTargets(
     }
   }
   return out;
+}
+
+/** How a pass over the places ended. */
+export type WarmPassEnd = "done" | "stopped" | "failed";
+
+/**
+ * After a pass that failed, nothing is warmed for this long: the Worker is
+ * refusing the client, or cannot be reached, or the provider behind it is
+ * limited and it only had the seasonal estimate. Asking again at every place
+ * change would only add to that.
+ */
+export const WARM_PAUSE_AFTER_FAILURE_MS = 60_000;
+
+/**
+ * Warm `targets` in order, one at a time. A hidden tab waits (`untilVisible`)
+ * instead of giving up, so coming back to it carries on; an aborted signal
+ * stops the pass; a place that FAILED ends it at once (the rest would meet the
+ * same refusal) and the caller pauses.
+ */
+export async function warmPass(
+  targets: readonly PlaceTarget[],
+  warm: (target: PlaceTarget) => Promise<WarmResult>,
+  io: {
+    signal: AbortSignal;
+    untilVisible: (signal: AbortSignal) => Promise<void>;
+  },
+): Promise<WarmPassEnd> {
+  for (const target of targets) {
+    await io.untilVisible(io.signal);
+    if (io.signal.aborted) return "stopped";
+    if ((await warm(target)) === "failed") return "failed";
+  }
+  return "done";
 }

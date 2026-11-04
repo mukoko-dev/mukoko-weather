@@ -101,13 +101,14 @@ export interface PlaceDeps {
    * Live weather from the Worker (the visitor's own request, through the
    * shared Worker read: one call per place, a remembered failure replayed).
    * `force`: read again past a remembered failure (the visitor pressed
-   * "Try again").
+   * "Try again"). `background`: a place the visitor has not asked for yet
+   * (`warm`): one attempt, the Worker only, never a direct call to a provider.
    */
   fetchWeather(
     lat: number,
     lon: number,
     signal: AbortSignal,
-    options?: { force?: boolean },
+    options?: { force?: boolean; background?: boolean },
   ): Promise<{ weather: WeatherData; usingFallback: boolean }>;
   /** A place for a slug the stage has not seen (catalogue, Worker, spot). */
   resolve(slug: string, signal: AbortSignal): Promise<PlaceSeed | null>;
@@ -144,20 +145,45 @@ interface MemoryEntry {
 
 const memory = new Map<string, MemoryEntry>();
 
-/** Remember a real forecast for a place. The seasonal estimate is never kept. */
+/**
+ * Remember a real forecast for a place. The seasonal estimate is never kept.
+ *
+ * `speculative` is a place nobody has opened (`warm`): it only ever takes a
+ * free slot, and goes to the OLD end, so a place the visitor has opened is
+ * never pushed out by one they may never open. A copy already held keeps its
+ * place in the order.
+ */
 export function rememberInMemory(
   payload: DashboardPayload,
   fetchedAt: number,
+  { speculative = false }: { speculative?: boolean } = {},
 ): void {
   if (payload.usingFallback) return;
   const slug = payload.location.slug;
+  const entry = { payload: slimPayload(payload), fetchedAt };
+  if (speculative) {
+    if (memory.has(slug)) {
+      memory.set(slug, entry);
+    } else if (memory.size < MEMORY_MAX_PLACES) {
+      const held = [...memory];
+      memory.clear();
+      memory.set(slug, entry);
+      for (const [key, value] of held) memory.set(key, value);
+    }
+    return;
+  }
   memory.delete(slug);
-  memory.set(slug, { payload: slimPayload(payload), fetchedAt });
+  memory.set(slug, entry);
   while (memory.size > MEMORY_MAX_PLACES) {
     const oldest = memory.keys().next().value;
     if (oldest === undefined) break;
     memory.delete(oldest);
   }
+}
+
+/** True when a speculative copy of `slug` can be kept without pushing one out. */
+export function memoryHasRoomFor(slug: string): boolean {
+  return memory.has(slug) || memory.size < MEMORY_MAX_PLACES;
 }
 
 /** The in-memory copy of a place, re-based on `now`, or null. */
@@ -270,7 +296,8 @@ export interface PresentResult {
  * What warming a place did: it was already held young enough (`fresh`), a
  * forecast was fetched and kept (`warmed`), nothing usable came back
  * (`failed`: the place is unknown, the request failed, or only the seasonal
- * estimate was served), or the caller gave up first (`skipped`).
+ * estimate was served), or it was not attempted (`skipped`: the caller gave up
+ * first, My Location is unknown to this stage, or memory has no free slot).
  */
 export type WarmResult = "fresh" | "warmed" | "failed" | "skipped";
 
@@ -588,7 +615,9 @@ export function createPlaceController(
       if (device && young(device)) {
         // A copy from an earlier visit that is still young: keep it where a
         // switch reads first, so it does not wait for the device.
-        rememberInMemory(device.payload, device.fetchedAt);
+        rememberInMemory(device.payload, device.fetchedAt, {
+          speculative: true,
+        });
         return "fresh";
       }
       seed = device ? seedOfPayload(device.payload) : null;
@@ -600,17 +629,22 @@ export function createPlaceController(
       if (signal?.aborted) return "skipped";
     }
     if (!seed) return "failed";
+    // Memory is full of places the visitor has opened: a request for one they
+    // may never open would be thrown away, and must not push one of theirs out.
+    if (!memoryHasRoomFor(slug)) return "skipped";
     try {
       const value = await deps.fetchWeather(
         seed.location.lat,
         seed.location.lon,
         sig,
+        { background: true },
       );
       // Kept even if the caller gave up meanwhile: the request was paid for.
       // The seasonal estimate is never kept (rememberInMemory refuses it).
       rememberInMemory(
         liveViewFor(seed, value.weather, value.usingFallback),
         deps.now(),
+        { speculative: true },
       );
       return value.usingFallback ? "failed" : "warmed";
     } catch {

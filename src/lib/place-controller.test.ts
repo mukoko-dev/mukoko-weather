@@ -9,6 +9,7 @@ import {
   createPlaceController,
   isFreshEnough,
   liveViewFor,
+  memoryHasRoomFor,
   mergeStoredWithSeed,
   recallFromMemory,
   rememberInMemory,
@@ -119,6 +120,8 @@ interface Harness {
     fetch: string[];
     recall: string[];
     resolve: string[];
+    /** The options of each fetchWeather call, in order. */
+    options: Array<{ force?: boolean; background?: boolean } | undefined>;
     push: string[];
     replace: string[];
     shown: string[];
@@ -148,6 +151,7 @@ function harness(initialPath: string): Harness {
     fetch: [],
     recall: [],
     resolve: [],
+    options: [],
     push: [],
     replace: [],
     shown: [],
@@ -182,9 +186,10 @@ function harness(initialPath: string): Harness {
       calls.recall.push(slug);
       return stored.get(slug) ?? null;
     },
-    fetchWeather: async (lat) => {
+    fetchWeather: async (lat, _lon, _signal, options) => {
       const slug = byLat.get(lat) ?? "?";
       calls.fetch.push(slug);
+      calls.options.push(options);
       await holds.get(slug);
       if (failFetch.on) throw new Error("offline");
       return {
@@ -1272,6 +1277,43 @@ describe("warm: getting the next place ready before it is asked for", () => {
     expect(h.calls.fetch).toEqual(["harare"]);
   });
 
+  it("asks for a background read (the Worker only, one attempt); the visitor's own switch does not", async () => {
+    const h = harness("/harare");
+    const c = await startedAt(h);
+    expect(h.calls.options.map((o) => o?.background)).toEqual([undefined]);
+    await c.warm(slugOf("nairobi-ke"));
+    expect(h.calls.options.at(-1)).toEqual({ background: true });
+    await c.showSlug("lagos-ng");
+    expect(h.calls.options.at(-1)?.background).toBeUndefined();
+  });
+
+  it("never pushes out a place the visitor opened: with no free slot it asks for nothing", async () => {
+    const h = harness("/harare");
+    const c = await startedAt(h);
+    // Fill every slot with places the visitor "opened".
+    for (let i = 0; i < MEMORY_MAX_PLACES; i++) {
+      const s = seed(`opened-${i}`, 40 + i);
+      rememberInMemory(
+        {
+          location: s.location,
+          weather: weather(i),
+          usingFallback: false,
+          frostAlert: null,
+          season: s.season,
+          countryName: s.countryName,
+        },
+        NOW,
+      );
+    }
+    expect(memoryHasRoomFor("nairobi-ke")).toBe(false);
+    const fetchesBefore = h.calls.fetch.length;
+    expect(await c.warm(slugOf("nairobi-ke"))).toBe("skipped");
+    expect(h.calls.fetch.length).toBe(fetchesBefore);
+    for (let i = 0; i < MEMORY_MAX_PLACES; i++) {
+      expect(recallFromMemory(`opened-${i}`, NOW)).not.toBeNull();
+    }
+  });
+
   it("a signal that is already aborted does nothing", async () => {
     const h = harness("/harare");
     const c = await startedAt(h);
@@ -1365,6 +1407,66 @@ describe("pure helpers", () => {
     expect(
       recallFromMemory(`place-${MEMORY_MAX_PLACES + 2}`, NOW),
     ).not.toBeNull();
+  });
+
+  it("a speculative copy takes only a free slot and is the first to go", () => {
+    const put = (slug: string, i: number, speculative = false) => {
+      const s = seed(slug, i);
+      rememberInMemory(
+        {
+          location: s.location,
+          weather: weather(i),
+          usingFallback: false,
+          frostAlert: null,
+          season: s.season,
+          countryName: s.countryName,
+        },
+        NOW,
+        { speculative },
+      );
+    };
+    // Room: kept, and at the OLD end, so the next two opened places push it
+    // out before anything the visitor opened.
+    for (let i = 0; i < MEMORY_MAX_PLACES - 1; i++) put(`opened-${i}`, i);
+    put("warm-a", 50, true);
+    expect(recallFromMemory("warm-a", NOW)).not.toBeNull();
+    expect(memoryHasRoomFor("warm-b")).toBe(false);
+    put("opened-x", 60);
+    expect(recallFromMemory("warm-a", NOW)).toBeNull();
+    expect(recallFromMemory("opened-0", NOW)).not.toBeNull();
+
+    // No room: dropped, nothing evicted.
+    put("warm-b", 51, true);
+    expect(recallFromMemory("warm-b", NOW)).toBeNull();
+    expect(recallFromMemory("opened-0", NOW)).not.toBeNull();
+  });
+
+  it("a speculative refresh of a held place keeps its place in the order and the seasonal estimate is still refused", () => {
+    const s = seed("held", 1);
+    const payload = (temp: number, usingFallback = false) => ({
+      location: s.location,
+      weather: weather(temp),
+      usingFallback,
+      frostAlert: null,
+      season: s.season,
+      countryName: s.countryName,
+    });
+    rememberInMemory(payload(1), NOW);
+    for (let i = 0; i < MEMORY_MAX_PLACES - 1; i++) {
+      const o = seed(`other-${i}`, 10 + i);
+      rememberInMemory({ ...payload(2), location: o.location }, NOW);
+    }
+    rememberInMemory(payload(30), NOW, { speculative: true });
+    expect(
+      recallFromMemory("held", NOW)?.payload.weather.current.temperature_2m,
+    ).toBe(30);
+    // Still the oldest: the next opened place evicts it.
+    const x = seed("opened-new", 99);
+    rememberInMemory({ ...payload(3), location: x.location }, NOW);
+    expect(recallFromMemory("held", NOW)).toBeNull();
+    // The estimate is refused, speculative or not.
+    rememberInMemory(payload(5, true), NOW, { speculative: true });
+    expect(recallFromMemory("held", NOW)).toBeNull();
   });
 
   it("memory re-bases an old copy on now and drops one the forecast no longer covers", () => {
