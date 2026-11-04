@@ -15,11 +15,11 @@
  *    slow-load the v0.10.0 fix removes.
  * 2. The active item carries `aria-current="page"` (upstream marks it only
  *    visually).
- * 3. Items are at least `--touch-target-min` (48px) tall. Upstream items are
+ * 3. Items are at least `--touch-target-min` (the 49px Bundu floor) tall. Upstream items are
  *    `py-1` + a 21px icon + a 10px label, about 47px. Here the icon is 18px
  *    and the label 14px, so the item is about 51px, and its tappable area
  *    (`.plover`, globals.css) runs the bar's whole height.
- * 4. (Superseded by 9.) Upstream's `h-20` bar left only 46px for the 48px
+ * 4. (Superseded by 9.) Upstream's `h-20` bar left only 46px for the 48px (then)
  *    items on an iPhone.
  * 5. An optional `label` (the landmark's aria-label).
  * 6. Icons come from lucide-react (this app has no `@/lib/icons` shim). The
@@ -64,7 +64,7 @@
  *    region, a 14px inline inset on every side of the text, not 60px) and their
  *    labels collapse to screen-reader-only below
  *    360px, so the lane keeps the width on a small phone; the bar uses
- *    `--float-gap` between its parts and as its side padding. Pinned items stay pill-sized (about 51px) and
+ *    `--float-gap` between its parts and as its side padding. Pinned items stay pill-sized (about 53px with the border) and
  *    take `.plover`, so the whole bar height is their tappable area, and their
  *    icon is 18px. Without `lane` the bar is exactly the registry's single
  *    `items` row.

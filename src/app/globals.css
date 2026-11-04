@@ -134,7 +134,10 @@
      44 pt), --inset-floor the padding between text and its container edge (the
      inline axis for a control), --gap-floor the gap between adjacent controls,
      labels and fields, and sibling items, --leading-floor the body line
-     height. Nothing in the app goes under them; bundu-floor.test.ts says so. */
+     height. Stage 1 of #479 applies the target and the inset (and holds the
+     float grid above the gap); --gap-floor and --leading-floor are carried
+     here so the registry swap is a straight replacement, and the sweep of
+     #479 puts them to use. bundu-floor.test.ts holds what is applied. */
   --target-floor: 49px;
   --inset-floor: 14px;
   --gap-floor: 7px;
@@ -1426,7 +1429,8 @@ body {
      stack). Solid card surface so it reads over tiles in light and dark. */
   .serval {
     @apply rounded-[var(--radius-card)] bg-surface-card text-text-primary
-           shadow-md ring-1 ring-[color:var(--float-border)];
+           shadow-md ring-[length:var(--border-width-rest)]
+           ring-[color:var(--float-border)];
   }
 
   /* .springhare — the map timeline range input. Native <input type=range>
