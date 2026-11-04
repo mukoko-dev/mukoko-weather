@@ -54,6 +54,27 @@ export function worldPixel(
 }
 
 /**
+ * A lon/lat box as a rectangle in world pixels at `zoom`: where a picture that
+ * covers the box goes in the static map's SVG. The vertical edges are the box's
+ * north and south PROJECTED (Web Mercator), never linear latitude, because a
+ * field raster has its rows spaced evenly in Mercator y (field-raster.ts), which
+ * is also how MapLibre stretches an image over its corners.
+ */
+export function worldRect(
+  box: { west: number; east: number; south: number; north: number },
+  zoom: number,
+): { x: number; y: number; width: number; height: number } {
+  const northWest = worldPixel(box.north, box.west, zoom);
+  const southEast = worldPixel(box.south, box.east, zoom);
+  return {
+    x: northWest.x,
+    y: northWest.y,
+    width: southEast.x - northWest.x,
+    height: southEast.y - northWest.y,
+  };
+}
+
+/**
  * MapTiler raster tile URL. `retina` adds the documented `@2x` suffix: the same
  * area and content as the plain tile with twice the pixels in each direction,
  * so the SVG geometry does not change.
@@ -88,6 +109,28 @@ export function allTilesFailed(
   failed: ReadonlySet<string>,
 ): boolean {
   return map.tiles.length > 0 && map.tiles.every((t) => failed.has(t.href));
+}
+
+/** The failed tiles, and the theme + density they failed under. */
+export interface TileFailures {
+  variant: string;
+  hrefs: ReadonlySet<string>;
+}
+
+/**
+ * `prev` with one more failed tile, for a state updater (`setFailures((prev) =>
+ * withFailedTile(prev, ...))`). Four tiles can fail in the same tick (a bad key,
+ * no network); building the set from the render-time snapshot let each error
+ * overwrite the last, so `allTilesFailed` never turned true. Failures recorded
+ * under another theme or density are dropped: the new variant starts afresh.
+ */
+export function withFailedTile(
+  prev: TileFailures,
+  variant: string,
+  href: string,
+): TileFailures {
+  const kept = prev.variant === variant ? prev.hrefs : new Set<string>();
+  return { variant, hrefs: new Set([...kept, href]) };
 }
 
 /**

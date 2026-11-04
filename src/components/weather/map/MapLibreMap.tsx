@@ -15,6 +15,7 @@ import {
   MAPTILER_KEY,
   maptilerStyleId,
   maplibreWorkerUrl,
+  mapPixelRatioOverride,
   WEATHER_OVERLAY_ID,
   AQI_OVERLAY_ID,
   MODEL_OVERLAY_ID,
@@ -612,6 +613,9 @@ export function MapLibreMap({
         );
         import("maplibre-gl/dist/maplibre-gl.css");
 
+        const pixelRatioOverride = mapPixelRatioOverride(
+          window.devicePixelRatio,
+        );
         const map: MapLibreGLMap = new Map({
           container: containerRef.current,
           center: [lon, lat],
@@ -624,6 +628,13 @@ export function MapLibreMap({
             MAP_MAX_ZOOM_DEFAULT,
           ),
           interactive,
+          // Never above 2x: the canvas is width x height x pixelRatio^2 pixels
+          // of GPU memory, and a 3x phone's full-screen map held 46 MB of it
+          // against 20 MB at 2x. Set only above the cap: a set ratio pins
+          // MapLibre's pixel ratio for the map's life (mapPixelRatioOverride).
+          ...(pixelRatioOverride !== undefined && {
+            pixelRatio: pixelRatioOverride,
+          }),
           // The default attribution control sits bottom-right, which would collide
           // with the bottom-right overlay layer switcher. Disable it here and re-add
           // it explicitly at bottom-left below.
