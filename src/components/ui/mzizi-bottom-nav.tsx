@@ -16,8 +16,9 @@
  * 2. The active item carries `aria-current="page"` (upstream marks it only
  *    visually).
  * 3. Items are at least `--touch-target-min` (48px) tall. Upstream items are
- *    `py-1` + a 21px icon + a 10px label, about 47px. Here they fill the
- *    bar's height and their icon is 18px.
+ *    `py-1` + a 21px icon + a 10px label, about 47px. Here the icon is 18px
+ *    and the label 14px, so the item is about 51px, and its tappable area
+ *    (`.plover`, globals.css) runs the bar's whole height.
  * 4. (Superseded by 9.) Upstream's `h-20` bar left only 46px for the 48px
  *    items on an iPhone.
  * 5. An optional `label` (the landmark's aria-label).
@@ -37,8 +38,9 @@
  *    source of truth: src/components/layout/bottom-nav.tsx there). The bar is
  *    no longer `inset-x-0 bottom-0` with a top border; it is a pill inset 1rem
  *    from both screen edges (`left-4 right-4 mx-auto max-w-md`), lifted
- *    `--mobile-nav-inset` plus the safe-area inset off the bottom, `4rem`
- *    tall (`--mobile-nav-bar-height`; 4.5rem since 2026-11-04), `rounded-full`, a solid 0.5px token
+ *    `--mobile-nav-inset` plus the safe-area inset off the bottom,
+ *    `--mobile-nav-bar-height` tall (4.5rem; 4rem until 2026-11-04),
+ *    `rounded-full`, a solid 0.5px token
  *    border (`--border-width-rest`), `shadow-lg` and `backdrop-blur-xl` on a
  *    translucent card surface. A floating bar clears the browser toolbar and
  *    the home-indicator gesture zone, which a full-width bar welded to the
@@ -60,9 +62,10 @@
  *    items are as narrow as a touch target allows (`min-w` 48px, `px-2`, not
  *    60px and `px-3`) and their labels collapse to screen-reader-only below
  *    360px, so the lane keeps the width on a small phone; the bar uses
- *    `gap-2` between its parts. Pinned items fill the bar's height (`h-full`),
- *    so the whole bar height is their touch target, and their icon is 18px. Without `lane` the bar is exactly the
- *    registry's single `items` row.
+ *    `gap-2` between its parts. Pinned items stay pill-sized (about 51px) and
+ *    take `.plover`, so the whole bar height is their tappable area, and their
+ *    icon is 18px. Without `lane` the bar is exactly the registry's single
+ *    `items` row.
  *    This replaces the earlier `indicator` pill (a second floating pill one
  *    touch target tall above the bar, with a `--mobile-nav-gap` between): the
  *    bar is now the only floating surface and both are gone.
@@ -189,7 +192,7 @@ export function MziziBottomNav({
         aria-current={active ? "page" : undefined}
         aria-label={item.ariaLabel}
         className={cn(
-          "relative flex h-full min-h-[var(--touch-target-min)] flex-col items-center justify-center gap-1 rounded-full py-1",
+          "plover relative flex min-h-[var(--touch-target-min)] flex-col items-center justify-center gap-1 rounded-full py-1",
           hasLane
             ? "min-w-[var(--touch-target-min)] shrink-0 px-2"
             : "min-w-[60px] px-3",
@@ -199,11 +202,13 @@ export function MziziBottomNav({
             : "text-muted-foreground",
         )}
       >
-        {/* Active top accent bar — brand identity marker */}
+        {/* Active top accent bar — brand identity marker. Anchored to the
+            BAR's top edge (the item is centred in a taller bar), 1px inside
+            it, so it does not depend on how tall the item happens to be. */}
         {active && (
           <span
             aria-hidden="true"
-            className="absolute -top-[3px] h-[2.5px] w-7 rounded-full bg-[var(--brand-accent,var(--color-primary))]"
+            className="absolute top-[calc((100%_-_var(--mobile-nav-bar-height))_/_2_+_1px)] h-[2.5px] w-7 rounded-full bg-[var(--brand-accent,var(--color-primary))]"
           />
         )}
         <Icon
