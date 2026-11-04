@@ -54,12 +54,20 @@ export function maptilerStyleId(isDark: boolean): string {
  */
 export const MAP_MAX_PIXEL_RATIO = 2;
 
-/** The pixel ratio the map is created with, for the screen's `devicePixelRatio`. */
-export function mapPixelRatio(devicePixelRatio: number | undefined): number {
+/**
+ * The `pixelRatio` option to create the map with, or undefined for none. MapLibre
+ * treats a set ratio as an override of `devicePixelRatio` that it keeps for the
+ * map's life (only null turns it off), so a map made at 1x would stay blurry
+ * after moving to a retina display. The option is therefore passed ONLY on a
+ * screen above the cap, where the cap is the point; everywhere else MapLibre
+ * keeps following the screen's own ratio.
+ */
+export function mapPixelRatioOverride(
+  devicePixelRatio: number | undefined,
+): number | undefined {
   const ratio = devicePixelRatio;
-  if (typeof ratio !== "number" || !Number.isFinite(ratio) || ratio <= 0)
-    return 1;
-  return Math.min(ratio, MAP_MAX_PIXEL_RATIO);
+  if (typeof ratio !== "number" || !Number.isFinite(ratio)) return undefined;
+  return ratio > MAP_MAX_PIXEL_RATIO ? MAP_MAX_PIXEL_RATIO : undefined;
 }
 
 export const MAPTILER_STYLE_LIGHT = `https://api.maptiler.com/maps/${MAPTILER_STYLE_ID_LIGHT}/style.json?key=${MAPTILER_KEY}`;

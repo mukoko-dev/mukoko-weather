@@ -22,7 +22,7 @@ import {
   TIMELINE_STEPS,
   MAP_LAYER_STORAGE_KEY,
   MAP_MAX_PIXEL_RATIO,
-  mapPixelRatio,
+  mapPixelRatioOverride,
   readStoredMapLayer,
   writeStoredMapLayer,
 } from "./map-layers";
@@ -471,34 +471,33 @@ describe("MapTiler key and style ids (#266)", () => {
   });
 });
 
-describe("mapPixelRatio (#476)", () => {
-  it("never draws the map above 2x: a 3x phone's canvas would be 2.25x the memory", () => {
+describe("mapPixelRatioOverride (#476)", () => {
+  it("caps a screen above 2x at 2x: a 3x phone's canvas would be 2.25x the memory", () => {
     expect(MAP_MAX_PIXEL_RATIO).toBe(2);
-    expect(mapPixelRatio(3)).toBe(2);
-    expect(mapPixelRatio(4)).toBe(2);
-    expect(mapPixelRatio(2.75)).toBe(2);
+    expect(mapPixelRatioOverride(3)).toBe(2);
+    expect(mapPixelRatioOverride(4)).toBe(2);
+    expect(mapPixelRatioOverride(2.75)).toBe(2);
   });
 
-  it("leaves the common ratios alone", () => {
-    expect(mapPixelRatio(1)).toBe(1);
-    expect(mapPixelRatio(1.5)).toBe(1.5);
-    expect(mapPixelRatio(2)).toBe(2);
+  it("passes no option at or below 2x, so MapLibre keeps following the screen (a map made at 1x must not stay blurry on a retina display)", () => {
+    for (const ratio of [0.75, 1, 1.5, 2])
+      expect(mapPixelRatioOverride(ratio)).toBeUndefined();
   });
 
-  it("falls back to 1 for a screen that reports nothing usable", () => {
-    expect(mapPixelRatio(undefined)).toBe(1);
-    expect(mapPixelRatio(0)).toBe(1);
-    expect(mapPixelRatio(-1)).toBe(1);
-    expect(mapPixelRatio(Number.NaN)).toBe(1);
-    expect(mapPixelRatio(Number.POSITIVE_INFINITY)).toBe(1);
+  it("passes no option for a screen that reports nothing usable", () => {
+    for (const ratio of [undefined, Number.NaN, Number.POSITIVE_INFINITY])
+      expect(mapPixelRatioOverride(ratio)).toBeUndefined();
   });
 
-  it("is the one thing the interactive map's pixel ratio comes from", () => {
-    // Without it MapLibre uses devicePixelRatio as is (3 on an iPhone Pro).
+  it("is spread into the Map options only when it is set (an undefined key would still override)", () => {
     const map = readFileSync(
       resolve(__dirname, "../components/weather/map/MapLibreMap.tsx"),
       "utf-8",
     );
-    expect(map).toContain("pixelRatio: mapPixelRatio(window.devicePixelRatio)");
+    expect(map).toContain("mapPixelRatioOverride(");
+    expect(map).toMatch(
+      /\.\.\.\(pixelRatioOverride !== undefined && \{\s*pixelRatio: pixelRatioOverride,\s*\}\)/,
+    );
+    expect(map).not.toMatch(/^\s*pixelRatio: mapPixelRatio/m);
   });
 });
