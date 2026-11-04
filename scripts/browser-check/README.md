@@ -1,8 +1,8 @@
 # Real-browser checks
 
-Chromium checks of the production build, for what unit tests cannot see: the service worker, the offline page, in-place place switching and a forecast that does not arrive (issue #414). They read the public weather API through the test browser and refuse every write, so nothing is created in production.
+Chromium checks of the production build, for what unit tests cannot see: the service worker, the offline page, in-place place switching and a forecast that does not arrive (issue #414). They read the public weather API through the test browser and refuse every write, so nothing is created in production (`memory-budget.mjs` is the exception: it answers every request itself and needs no network).
 
-Playwright is not a dependency of this repo. Run them where it is installed, or point `NODE_PATH` at its `node_modules`.
+Playwright is not a dependency of this repo, so none of these run in CI: they are run by hand, before a release that touches what they cover. Run them where Playwright is installed, or point `NODE_PATH` at its `node_modules`.
 
 ```bash
 npm run build && npx next start -p 3100 &

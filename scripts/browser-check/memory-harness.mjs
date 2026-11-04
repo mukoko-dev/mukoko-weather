@@ -43,12 +43,25 @@ export const SAVED_PLACES = [
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ------------------------------------------------------------------ PNG tiles
+// CRC-32 (the PNG one), computed here: zlib.crc32 only exists from Node 20.15 /
+// 22.2, and this check should run on whatever Node Playwright runs on.
+const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+function crc32(buffer) {
+  let c = 0xffffffff;
+  for (const byte of buffer) c = CRC_TABLE[(c ^ byte) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
 function chunk(type, data) {
   const length = Buffer.alloc(4);
   length.writeUInt32BE(data.length);
   const body = Buffer.concat([Buffer.from(type), data]);
   const crc = Buffer.alloc(4);
-  crc.writeUInt32BE(zlib.crc32(body) >>> 0);
+  crc.writeUInt32BE(crc32(body));
   return Buffer.concat([length, body, crc]);
 }
 
@@ -413,10 +426,14 @@ export async function launchMeasured(profileName = "iphone") {
   await context.addInitScript(CANVAS_TRACKER);
   const calls = await mockNetwork(context);
   const page = await context.newPage();
+  // Uncaught page errors, which the budget asserts there are none of. One is
+  // the harness's own doing: serviceWorkers is "block", and serwist then reads
+  // `registration.waiting` of a registration that never came.
   const errors = [];
-  page.on("pageerror", (error) =>
-    errors.push(String(error.message).slice(0, 160)),
-  );
+  page.on("pageerror", (error) => {
+    const message = String(error.message).slice(0, 160);
+    if (!/reading 'waiting'/.test(message)) errors.push(message);
+  });
   const cdp = await context.newCDPSession(page);
   await cdp.send("Performance.enable");
   await cdp.send("HeapProfiler.enable");
@@ -498,18 +515,27 @@ export const waitForPlace = (page, timeout = 30000) =>
 
 /**
  * The app creates its preferences on a first visit and only then reads them, so
- * saved places are written into that document and the page is reloaded.
+ * saved places are written into that document and the page is reloaded. The
+ * RxDB database is found by listing IndexedDB (its name carries a schema
+ * version), and a seeding that did not work throws: a budget measured on a page
+ * without the saved places measures the wrong page.
  */
 export async function seedSavedPlaces(page, saved = SAVED_PLACES) {
   await page.goto(`${BASE}/harare`, { waitUntil: "domcontentloaded" });
+  // Let the app finish creating its preferences before they are written to.
   await page.waitForTimeout(3500);
-  const seeded = await page.evaluate(
-    (places) =>
-      new Promise((resolve) => {
-        const open = indexedDB.open(
-          "rxdb-dexie-mukoko_weather--3--preferences",
-        );
-        open.onerror = () => resolve(false);
+  const seed = () =>
+    page.evaluate(async (places) => {
+      const names = (await indexedDB.databases()).map((d) => d.name);
+      const name = names.find((n) => /^rxdb-dexie-.*--preferences$/.test(n));
+      if (!name)
+        return {
+          ok: false,
+          why: `no preferences database (found: ${names.join(", ") || "none"})`,
+        };
+      return new Promise((resolve) => {
+        const open = indexedDB.open(name);
+        open.onerror = () => resolve({ ok: false, why: `cannot open ${name}` });
         open.onsuccess = () => {
           const store = open.result
             .transaction("docs", "readwrite")
@@ -517,7 +543,11 @@ export async function seedSavedPlaces(page, saved = SAVED_PLACES) {
           const all = store.getAll();
           all.onsuccess = () => {
             const doc = all.result[0];
-            if (!doc) return resolve(false);
+            if (!doc)
+              return resolve({
+                ok: false,
+                why: `${name} holds no preferences document`,
+              });
             Object.assign(doc, {
               savedLocations: places,
               selectedActivities: [
@@ -530,14 +560,31 @@ export async function seedSavedPlaces(page, saved = SAVED_PLACES) {
               theme: "light",
               updatedAt: Date.now(),
             });
-            store.put(doc).onsuccess = () => resolve(true);
+            store.put(doc).onsuccess = () => resolve({ ok: true });
           };
         };
-      }),
-    saved,
-  );
+      });
+    }, saved);
+  // The database and its document appear a moment after load (a first visit
+  // creates them): try for up to 25 s, then give up with the reason.
+  let seeded = await seed();
+  for (let i = 0; i < 25 && !seeded.ok; i++) {
+    await page.waitForTimeout(1000);
+    seeded = await seed();
+  }
+  if (!seeded.ok)
+    throw new Error(
+      `seedSavedPlaces: ${seeded.why}. The app's preferences store has changed; update memory-harness.mjs.`,
+    );
   await page.reload({ waitUntil: "domcontentloaded" });
-  return seeded;
+  // The places lane must now offer the saved places.
+  await page
+    .waitForSelector(`a[href="/${saved[0]}"]`, { timeout: 20000 })
+    .catch(() => {
+      throw new Error(
+        `seedSavedPlaces: the saved places were written but the page does not list /${saved[0]}; update memory-harness.mjs.`,
+      );
+    });
 }
 
 /** Click a link by its href from the page, as a plain left click. */

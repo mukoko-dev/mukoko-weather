@@ -6,8 +6,10 @@
 //   PROFILE=pixel  ...   # the Android profile: the Three.js sky instead of the 2D one
 //   QUICK=1        ...   # 12 place switches, 8 sheet cycles, 1 chip round (about 3 minutes)
 //
-// Needs no network: the app's Worker calls, the map tiles and everything else it
-// asks for are answered by memory-harness.mjs. Exit code 0 is a pass, 1 a
+// A manual check, run before a release that touches the place page or the map;
+// not a CI gate (Playwright is not a dependency of this repo: put its
+// node_modules on NODE_PATH). Needs no network: the app's Worker calls, the map
+// tiles and everything else it asks for are answered by memory-harness.mjs. Exit code 0 is a pass, 1 a
 // budget that was exceeded, 2 a crash of the check itself.
 //
 // What it proves: no memory is kept for a place, a sheet, a section or a map
@@ -89,13 +91,20 @@ const BUDGET = {
   sheets: { heapGrowthMB: 2, nodesGrowth: 40, listenersGrowth: 40 },
   // The full-screen map, every layer chip three times, the timeline playing:
   // the one place a WebGL map belongs. Its canvas is drawn at 2x at most
-  // (mapPixelRatio): 10 MB on a 3x phone, 23 MB before the cap.
+  // (mapPixelRatioOverride): 10 MB on a 3x phone, 23 MB before the cap.
   map: { heapMB: 18, webglAlive: 1, canvasMB: 14 },
   // Place page -> sub-route/map/list -> back, in the router, no document reload.
   navigation: {
     heapSlopeMBPerRound: 1,
     nodesGrowth: 40,
     webglAlive: SKY_WEBGL,
+    // Not zero, and not a leak: once a map page has been opened MapLibre keeps
+    // its one global worker pool for the rest of the session (its global
+    // dispatcher holds it), so leaving /map in the router leaves exactly that
+    // pool. Its size is MapLibre's own workerCount: 1 for a Chrome user agent
+    // (the Android profile), up to 3 for a Safari one by core count (the iPhone
+    // profile; 2 on a 4-core machine). Only a new document frees it (#476).
+    workers: PROFILE === "pixel" ? 1 : 3,
   },
 };
 
@@ -107,6 +116,14 @@ const within = (name, value, limit, unit = "") =>
     `${name} <= ${limit}${unit}`,
     value <= limit,
     `${+value.toFixed(2)}${unit}`,
+  );
+
+/** The scenario's page threw nothing: an error page or a crashed section makes everything shrink and "pass". */
+const noPageErrors = (env, scenario) =>
+  note(
+    `${scenario}: no uncaught page errors`,
+    env.errors.length === 0,
+    env.errors.slice(0, 3).join(" | "),
   );
 
 async function openPlace(env) {
@@ -166,6 +183,7 @@ run(async () => {
     console.log(`card      ${show(card)}`);
     for (const key of ["heapMB", "nodes", "canvasMB", "webglAlive", "workers"])
       within(`card ${key}`, card[key], BUDGET.card[key]);
+    noPageErrors(env, "cold and scrolled");
     await env.browser.close();
   }
 
@@ -182,10 +200,10 @@ run(async () => {
       "/",
     ];
     const rows = [];
+    const missing = [];
     for (let i = 1; i <= SWITCHES; i++) {
       const href = lap[(i - 1) % lap.length];
-      if (!(await clickLink(env.page, href)))
-        env.errors.push(`no link ${href}`);
+      if (!(await clickLink(env.page, href))) missing.push(href);
       await sleep(2200);
       rows.push(await reading(env, `switch ${i} ${href}`));
     }
@@ -195,10 +213,7 @@ run(async () => {
     console.log(
       `switching ${steady.length} switches after warm-up: ${show(first)}  ->  ${show(last)}`,
     );
-    note(
-      "every place link was there",
-      !env.errors.some((e) => e.startsWith("no link")),
-    );
+    note("every place link was there", missing.length === 0, missing.join(" "));
     within(
       "switch heap growth",
       last.heapMB - first.heapMB,
@@ -228,6 +243,7 @@ run(async () => {
       last.webglAlive,
       BUDGET.switches.webglAlive,
     );
+    noPageErrors(env, "place switching");
     await env.browser.close();
   }
 
@@ -281,6 +297,7 @@ run(async () => {
       end.listeners - start.listeners,
       BUDGET.sheets.listenersGrowth,
     );
+    noPageErrors(env, "detail sheets");
     await env.browser.close();
   }
 
@@ -318,6 +335,7 @@ run(async () => {
     within("map heap", map.heapMB, BUDGET.map.heapMB, " MB");
     within("map webgl contexts alive", map.webglAlive, BUDGET.map.webglAlive);
     within("map canvas memory", map.canvasMB, BUDGET.map.canvasMB, " MB");
+    noPageErrors(env, "the map");
     await env.browser.close();
   }
 
@@ -326,6 +344,7 @@ run(async () => {
     const env = await launchMeasured(PROFILE);
     await openPlace(env);
     const rows = [await reading(env, "navigation start")];
+    const missing = [];
     for (let round = 1; round <= NAV_ROUNDS; round++) {
       for (const href of [
         "/harare/forecast",
@@ -333,8 +352,7 @@ run(async () => {
         "/harare/map",
         "/locations",
       ]) {
-        if (!(await clickLink(env.page, href)))
-          env.errors.push(`no link ${href}`);
+        if (!(await clickLink(env.page, href))) missing.push(href);
         await sleep(href.endsWith("map") ? 5000 : 3500);
         await env.page.evaluate(() =>
           window.scrollTo({ top: 1800, behavior: "instant" }),
@@ -356,10 +374,7 @@ run(async () => {
     console.log(
       `navigation ${NAV_ROUNDS} rounds: ${show(first)}  ->  ${show(last)}`,
     );
-    note(
-      "every link was there",
-      !env.errors.some((e) => e.startsWith("no link")),
-    );
+    note("every link was there", missing.length === 0, missing.join(" "));
     within(
       "navigation heap slope",
       slope(steady, (r) => r.heapMB),
@@ -371,16 +386,17 @@ run(async () => {
       last.nodes - first.nodes,
       BUDGET.navigation.nodesGrowth,
     );
-    // Known, and not fixable here: MapLibre keeps its worker pool for the rest
-    // of the session once a map page has been opened (its global dispatcher
-    // holds it), so leaving /map in the router leaves the workers (1 to 3,
-    // by browser) and their script behind. Only a new document frees them.
-    within("navigation workers after the map", last.workers, 3);
+    within(
+      "navigation workers after the map",
+      last.workers,
+      BUDGET.navigation.workers,
+    );
     within(
       "navigation webgl contexts alive",
       last.webglAlive,
       BUDGET.navigation.webglAlive,
     );
+    noPageErrors(env, "router navigation");
     await env.browser.close();
   }
 
