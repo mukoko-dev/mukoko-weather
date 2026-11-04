@@ -2285,6 +2285,19 @@ body {
     opacity: 0.12;
   }
 
+  /* .kestrel-effects — the boundary of the 2D weather effects (iPhone and iPad,
+     see backdropMode): a box over the hero region, one canvas inside it. The
+     canvas is clipped to it, so no effect is ever drawn outside; its foot fades
+     into the page like the sky box's own. No animation here: the canvas draws
+     its own frames, and is not rendered at all under reduced motion. */
+  .kestrel-effects {
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: min(100%, 40rem);
+    overflow: hidden;
+    mask-image: linear-gradient(to bottom, black 65%, transparent);
+  }
+
   /* .kestrel-ink — re-points the text, accent and surface tokens at the sky
      foreground for everything inside, so existing children (badges, headings,
      hour tiles, links) read on the sky without a restyle. Shared by the
