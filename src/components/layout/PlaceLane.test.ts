@@ -196,7 +196,8 @@ describe("PlaceLane — styling comes from tokens", () => {
   });
 
   it("the current chip keeps its outer width: the thicker border comes out of the padding", () => {
-    const at = css.indexOf(
+    // The chip's own rule is the second one with this selector.
+    const at = css.lastIndexOf(
       '.lark:is([aria-current]:not([aria-current="false"])) {',
     );
     const r = css.slice(at, css.indexOf("}", at + 200));
@@ -224,13 +225,24 @@ describe("PlaceLane — styling comes from tokens", () => {
   });
 
   it("the current chip takes the cobalt container fill and the active border width", () => {
-    const at = css.indexOf(
+    // The fill and text colour are the shared "you are here" rule (a pinned
+    // item wears the same); the thicker border is the chip's own.
+    const shared = css.indexOf(
+      '.plover:is([aria-current]:not([aria-current="false"])),',
+    );
+    expect(shared).toBeGreaterThan(-1);
+    const fill = css.slice(shared, css.indexOf("}", shared));
+    expect(fill).toContain(
+      '.lark:is([aria-current]:not([aria-current="false"]))',
+    );
+    expect(fill).toContain("bg-container-cobalt");
+    expect(fill).toContain("text-on-container-cobalt");
+    // The chip's own rule is the second one with this selector.
+    const at = css.lastIndexOf(
       '.lark:is([aria-current]:not([aria-current="false"])) {',
     );
     expect(at).toBeGreaterThan(-1);
     const r = css.slice(at, css.indexOf("}", at));
-    expect(r).toContain("bg-container-cobalt");
-    expect(r).toContain("text-on-container-cobalt");
     expect(r).toContain("border-width: var(--border-width-active);");
   });
 

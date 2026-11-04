@@ -127,9 +127,25 @@
   /* Touch & Interaction — 56px optimal (Material Design 3 recommended) */
   --touch-target-min: 48px;
 
+  /* One grid for everything that floats over a page or a map (owner,
+     2026-11-04, from Apple's Find My: every control sits the same distance
+     from the screen edge and the same distance from its neighbour).
+     --float-inset is the distance from any screen edge, --float-gap the space
+     between two floating things, --float-pad the padding inside a capsule
+     around its controls. --float-top and --float-bottom add the safe area, so
+     nothing floats under a notch, a status bar or the home indicator (today
+     the app does not set viewport-fit=cover, where the insets are 0). The
+     bottom bar, the phone hero's icon group (.hadeda) and the map's controls
+     and sheet all read these; none of them keeps a number of its own. */
+  --float-inset: 1rem;
+  --float-gap: 0.5rem;
+  --float-pad: 0.25rem;
+  --float-top: max(var(--float-inset), env(safe-area-inset-top, 0px));
+  --float-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--float-inset));
+
   /* Mobile bottom nav geometry — ONE floating bar (option B, owner
-     2026-11-02): inset 1rem from both screen edges, lifted --mobile-nav-inset
-     (0.75rem) above the bottom edge plus the safe area, max-w-md, pill
+     2026-11-02): inset --float-inset (1rem) from the screen edges (the sides
+     and the bottom alike), max-w-md, pill
      (rounded-full), 0.5px token border, shadow-lg, backdrop-blur-xl, 4.5rem
      tall (72px; 64px before 2026-11-04, when the content filled it edge to
      edge). Map and Locations are pinned at its ends and the places lane
@@ -139,7 +155,7 @@
      area, plus a 0.5rem breath). Floating controls above the nav (e.g.
      reorder "Done") use it too. Header.test.ts keeps these in step with the
      component. */
-  --mobile-nav-inset: 0.75rem;
+  --mobile-nav-inset: var(--float-inset);
   --mobile-nav-bar-height: 4.5rem;
   --mobile-nav-clearance: calc(
     env(safe-area-inset-bottom, 0px) + var(--mobile-nav-inset) +
@@ -162,10 +178,10 @@
      max(inset, env(safe-area-inset-*)) so the pill is never under a notch or
      status bar; today the app does not set viewport-fit=cover, where those
      insets are 0. If it ever does, the hero's top row needs the same inset. */
-  --hadeda-inset: 1rem;
+  --hadeda-inset: var(--float-inset);
   --hadeda-controls: 2;
-  --hadeda-gap: 0.5rem;
-  --hadeda-pad: 0.25rem;
+  --hadeda-gap: var(--float-gap);
+  --hadeda-pad: var(--float-pad);
   --hadeda-width: calc(
     var(--hadeda-controls) * var(--touch-target-min) +
       (var(--hadeda-controls) - 1) * var(--hadeda-gap) + 2 * var(--hadeda-pad)
@@ -1790,9 +1806,15 @@ body {
     inset-inline: 0;
     inset-block: calc((100% - var(--mobile-nav-bar-height)) / 2);
   }
+  /* The current target wears one look wherever it is: a soft rounded fill
+     (the cobalt container) and its readable text colour. A pinned item gets
+     only that; a chip also takes the active border below. */
+  .plover:is([aria-current]:not([aria-current="false"])),
   .lark:is([aria-current]:not([aria-current="false"])) {
-    @apply border-on-container-cobalt/25 bg-container-cobalt
-           text-on-container-cobalt;
+    @apply bg-container-cobalt text-on-container-cobalt;
+  }
+  .lark:is([aria-current]:not([aria-current="false"])) {
+    @apply border-on-container-cobalt/25;
     border-width: var(--border-width-active);
     /* The thicker border comes out of the padding, so the chip keeps its
        outer width and a place switch does not nudge the row. */

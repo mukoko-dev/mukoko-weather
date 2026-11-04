@@ -119,8 +119,10 @@ describe("MapDashboard — timeline", () => {
 describe("MapDashboard — bottom sheet", () => {
   it("is a floating .serval card lifted off the edge by the safe area", () => {
     expect(source).toContain('data-slot="map-sheet"');
+    // The same inset from the side and bottom edges as the controls above,
+    // and the bar on other pages: the one float grid in globals.css.
     expect(source).toMatch(
-      /serval absolute inset-x-3 bottom-\[calc\(env\(safe-area-inset-bottom,0px\)\+0\.75rem\)\]/,
+      /serval absolute inset-x-\[var\(--float-inset\)\] bottom-\[var\(--float-bottom\)\]/,
     );
     expect(source).toContain("max-w-xl");
   });
@@ -168,7 +170,8 @@ describe("MapDashboard — bottom sheet", () => {
   it("uses one icon size for every control, and keeps top controls clear of the notch", () => {
     expect(source).toContain('const ICON_CLASS = "h-5 w-5";');
     expect(source).not.toMatch(/className="h-5 w-5"/);
-    expect(source).toContain("top-[max(1rem,env(safe-area-inset-top))]");
+    expect(source).toContain("top-[var(--float-top)]");
+    expect(source).not.toContain("env(safe-area-inset-top)");
   });
 });
 
