@@ -186,6 +186,21 @@ describe("PlaceLane — scrolling", () => {
     expect(html).toContain("overflow-x-auto");
     expect(html).toContain("min-w-0");
   });
+
+  it("moves sideways only: the vertical axis is clipped, not scrollable", () => {
+    // `overflow-x: auto` makes `overflow-y` compute to `auto` as well, and the
+    // chips' touch targets are taller than the lane, so the lane could be
+    // dragged up and down (owner, 2026-11-05).
+    const html = view(["harare"], 0);
+    expect(html).toContain("overflow-y-hidden");
+  });
+
+  it("clips the chips' list to the lane, so the tap region cannot overshoot it", () => {
+    // `.lark::after` is as tall as the bar token; the lane inside the bar's
+    // border is shorter. Clipping the list is what leaves nothing to scroll.
+    const html = view(["harare"], 0);
+    expect(html).toMatch(/<ul[^>]*class="[^"]*overflow-clip/);
+  });
 });
 
 describe("PlaceLane — styling comes from tokens", () => {
