@@ -130,8 +130,8 @@
   /* Mobile bottom nav geometry — ONE floating bar (option B, owner
      2026-11-02): inset 1rem from both screen edges, lifted --mobile-nav-inset
      (0.75rem) above the bottom edge plus the safe area, max-w-md, pill
-     (rounded-full), 0.5px token border, shadow-lg, backdrop-blur-xl, 4rem
-     tall. Map and Locations are pinned at its ends and the places lane
+     (rounded-full), 0.5px token border, shadow-lg, backdrop-blur-xl, 4.5rem
+     tall (72px; 64px before 2026-11-04, when the content filled it edge to edge). Map and Locations are pinned at its ends and the places lane
      (My Location first, then the saved places) scrolls between them; there is
      no second pill above it. --mobile-nav-clearance is the space page content
      must leave at the bottom so nothing sits under the nav (bar, lift and safe
@@ -139,7 +139,7 @@
      reorder "Done") use it too. Header.test.ts keeps these in step with the
      component. */
   --mobile-nav-inset: 0.75rem;
-  --mobile-nav-bar-height: 4rem;
+  --mobile-nav-bar-height: 4.5rem;
   --mobile-nav-clearance: calc(
     env(safe-area-inset-bottom, 0px) + var(--mobile-nav-inset) +
       var(--mobile-nav-bar-height) + 0.5rem
@@ -182,8 +182,10 @@
   --text-body: 1rem; /* 16px — base body/footer text */
   --text-body-lg: 1.125rem; /* 18px — larger body text variant */
   --text-body-leading: 1.6;
-  /* 1rem (16px) — minimum font size per app-wide hard rule. */
-  --text-nav-label: 1rem;
+  /* 0.875rem (14px) — the Mzizi body-sm size. The nav bar's labels and place
+     chips (owner, 2026-11-04: at 16px they read as out of proportion in the
+     bar). The 16px minimum applies to reading text, not to a bar's labels. */
+  --text-nav-label: 0.875rem;
   /* Mzizi type scale (mzizi_get_tokens typography.scale) — the ONLY sizes the
      hero, the Conditions card and the skeleton may use. Weights are 400, 600
      and 700 only (Tailwind font-normal / font-semibold / font-bold). */
@@ -1770,6 +1772,17 @@ body {
        so on a small phone one chip always fits whole, name truncated, instead
        of being clipped at the lane's edges. */
     max-width: min(10rem, calc(100cqw - 0.5rem));
+  }
+  /* A chip is 48px tall inside a 72px bar; the link's tappable area runs the
+     bar's height (8px above and below), so a thumb that lands a little high
+     or low still counts. Stays inside the lane (its scroller is the bar's
+     height), so nothing is clipped, and never reaches the next chip: the gap
+     between chips is wider than the 0.125rem it adds either side. */
+  .lark::after {
+    content: "";
+    position: absolute;
+    inset-block: -0.5rem;
+    inset-inline: -0.125rem;
   }
   .lark:is([aria-current]:not([aria-current="false"])) {
     @apply border-on-container-cobalt/25 bg-container-cobalt
