@@ -242,8 +242,14 @@ describe("fetchWorkerWeatherOnce (the background read for a place not yet asked 
     await expect(fetchWorkerWeatherOnce(-17.83, 31.05)).rejects.toThrow();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const urls = fetchMock.mock.calls.map((c) => String((c as unknown[])[0]));
-    expect(urls.every((u) => u.includes("weather-api.mukoko.com"))).toBe(true);
-    expect(urls.some((u) => u.includes("open-meteo"))).toBe(false);
+    // Compare the HOST, never a substring of the whole URL: a path or a query
+    // string that merely contains a host name is not that host.
+    expect(
+      urls.every((u) => new URL(u).hostname === "weather-api.mukoko.com"),
+    ).toBe(true);
+    expect(
+      urls.some((u) => new URL(u).hostname.endsWith("open-meteo.com")),
+    ).toBe(false);
   });
 
   it("never goes to the provider when the Worker cannot be reached either", async () => {
@@ -254,7 +260,9 @@ describe("fetchWorkerWeatherOnce (the background read for a place not yet asked 
     await expect(fetchWorkerWeatherOnce(-17.83, 31.05)).rejects.toThrow();
     expect(
       fetchMock.mock.calls.some((c) =>
-        String((c as unknown[])[0]).includes("open-meteo"),
+        new URL(String((c as unknown[])[0])).hostname.endsWith(
+          "open-meteo.com",
+        ),
       ),
     ).toBe(false);
   });
