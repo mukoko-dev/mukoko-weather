@@ -29,9 +29,9 @@ import { detectUserLocation } from "@/lib/geolocation";
 import {
   AQI_BAND_LABELS,
   aqBubbles,
+  aqFieldRaster,
   aqiBand,
   fetchAirQualityGrid,
-  gridToGeoJSON,
   type AqGridResponse,
 } from "@/lib/aq-grid";
 import {
@@ -63,8 +63,7 @@ import {
 } from "@/lib/map-sources";
 import {
   fetchModelGrid,
-  modelGridToGeoJSON,
-  modelLegendTokens,
+  modelFieldRaster,
   type ModelGridResponse,
 } from "@/lib/model-grid";
 import { getFeatureFlag } from "@/lib/feature-flags";
@@ -346,11 +345,10 @@ export function MapDashboard({ location }: MapDashboardProps) {
     const seriesIndex =
       modelGridData?.times.indexOf(frames[step]?.timestamp ?? "") ?? -1;
     if (seriesIndex < 0) return null;
-    const data = modelGridToGeoJSON(modelGridData, activeLayer, seriesIndex);
-    if (!data) return null;
+    const raster = modelFieldRaster(modelGridData, activeLayer, seriesIndex);
+    if (!raster) return null;
     return {
-      data,
-      tokens: modelLegendTokens(getMapChip(activeLayer)?.legend),
+      raster,
       attribution: attributionHtml(
         overlayAttribution(activeLayer, activeModel),
       ),
@@ -388,10 +386,8 @@ export function MapDashboard({ location }: MapDashboardProps) {
       ? "ready"
       : "error";
 
-  const aqFill = useMemo(
-    () => (grid?.available ? gridToGeoJSON(grid.points, grid.cellKm) : null),
-    [grid],
-  );
+  // The grid as one smooth, banded picture (interpolated between the samples).
+  const aqRaster = useMemo(() => aqFieldRaster(grid), [grid]);
   const bubbles = useMemo(() => (grid ? aqBubbles(grid) : null), [grid]);
   const centerAqi = grid?.center?.aqi ?? null;
   const centerBand = centerAqi === null ? null : aqiBand(centerAqi);
@@ -464,7 +460,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
         weatherTimestamp={weatherTimestamp}
         weatherPrefetchTimestamp={prefetchTimestamp}
         onWeatherFrameLoaded={setLoadedTimestamp}
-        aqiOverlay={aqOn ? aqFill : null}
+        aqiOverlay={aqOn ? aqRaster : null}
         fieldOverlay={fieldOverlay}
         aqiBubbles={aqOn ? bubbles : null}
         navigationControl={false}

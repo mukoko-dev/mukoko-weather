@@ -3,12 +3,17 @@
  *
  * The Rust Worker's `/v1/model-grid` returns one model's 3-hourly temperature, precipitation
  * and wind on an n×n grid. This module types that response, turns one variable
- * at one step into coloured square cells (reusing the AQ grid's cell geometry)
- * and fetches it. Everything but `fetchModelGrid` is pure and unit-tested.
+ * at one step into a smooth, banded raster (field-raster.ts interpolates
+ * between the samples, the legend's bands colour it) and fetches it.
+ * Everything but `fetchModelGrid` is pure and unit-tested.
  */
 
-import type { FeatureCollection, Polygon } from "geojson";
-import { gridToGeoJSON } from "./aq-grid";
+import {
+  buildFieldRaster,
+  hasReadings,
+  sampleGridFrom,
+  type FieldRaster,
+} from "./field-raster";
 import { getMapChip, legendBandIndex, type LayerLegend } from "./map-layers";
 import { MODEL_LAYER_VARIABLES, type ModelVariable } from "./map-sources";
 import { weatherApiBase } from "./weather-api";
@@ -45,52 +50,50 @@ const SERIES_KEY: Record<
   wind: "windSpeed",
 };
 
-export interface ModelCellProperties {
-  /** Index into the chip legend's segments (the fill colour). */
-  band: number;
-  value: number;
-}
-
 /**
- * Cells for one model-field chip at one timeline step. Points without a value,
- * or below the legend's first band (e.g. drizzle under 0.1 mm/h), are left out
- * so the map shows nothing there rather than a misleading colour.
+ * One model-field chip at one timeline step as a smooth, banded raster: the
+ * 7 x 7 values interpolated between the samples, every pixel put in the chip
+ * legend's band (`legendBandIndex`, the rule the legend itself uses). A value
+ * below the legend's first band (drizzle under 0.1 mm/h) stays clear, and a
+ * missing reading leaves a hole, so the map shows nothing there rather than a
+ * misleading colour. Null when there is nothing to draw: an unavailable grid,
+ * a layer that is not a model field, or a step with no readings.
+ *
+ * Smoother, not more detailed: the data is still 49 samples of a 9 to 25 km
+ * model, 40 km apart.
  */
-export function modelGridToGeoJSON(
+export function modelFieldRaster(
   grid: ModelGridResponse | null | undefined,
   layerId: string,
   step: number,
-): FeatureCollection<Polygon, ModelCellProperties> | null {
+  options: { side?: number } = {},
+): FieldRaster | null {
   const variable = MODEL_LAYER_VARIABLES[layerId];
   const legend = getMapChip(layerId)?.legend;
   if (!grid?.available || !variable || !legend) return null;
 
   const key = SERIES_KEY[variable];
-  const kept: { lat: number; lon: number; band: number; value: number }[] = [];
-  for (const p of grid.points) {
-    const value = p[key]?.[step];
-    if (value === null || value === undefined) continue;
-    const band = legendBandIndex(legend, value);
-    if (band < 0) continue;
-    kept.push({ lat: p.lat, lon: p.lon, band, value });
-  }
-
-  // gridToGeoJSON builds the square cells; only its geometry is used here.
-  const cells = gridToGeoJSON(
-    kept.map((k) => ({ lat: k.lat, lon: k.lon, aqi: null })),
-    grid.cellKm,
-  );
-  return {
-    type: "FeatureCollection",
-    features: cells.features.map((f, i) => ({
-      type: "Feature",
-      geometry: f.geometry,
-      properties: { band: kept[i].band, value: kept[i].value },
+  const samples = sampleGridFrom(
+    grid.points.map((p) => ({
+      lat: p.lat,
+      lon: p.lon,
+      value: p[key]?.[step] ?? null,
     })),
-  };
+  );
+  if (!samples || !hasReadings(samples)) return null;
+  return buildFieldRaster(samples, {
+    classify: (value) => legendBandIndex(legend, value),
+    tokens: modelLegendTokens(legend),
+    levels: legend.segments
+      .map((s) => s.from)
+      .filter(
+        (from): from is number => from !== undefined && Number.isFinite(from),
+      ),
+    side: options.side,
+  });
 }
 
-/** CSS custom properties per band, for the map's fill colour expression. */
+/** CSS custom properties per band, for painting the raster (paint cannot read var()). */
 export function modelLegendTokens(legend: LayerLegend | undefined): string[] {
   return (legend?.segments ?? []).map(
     (s) => s.token ?? "--color-text-tertiary",
