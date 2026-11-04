@@ -166,6 +166,12 @@ function finger(cdp) {
         await sleep(Math.min(stepMs, 6));
       }
     },
+    /** One small move in both axes, as the first coarse touchmove of a real finger. */
+    async nudge(dx, dy, ms = 8) {
+      x += dx;
+      y += dy;
+      await send("touchMove", ms);
+    },
     /** Lift the finger `after` ms of gesture time after the last move. */
     async up({ after = 0 } = {}) {
       await send("touchEnd", after);
@@ -237,6 +243,8 @@ const MODALS = [
   },
   {
     name: "My activities (advice sheet)",
+    // The cards the sheet scrolls to and focuses.
+    cardSelector: '[id^="activity-card-box-"]',
     prepare: async (page) => {
       // The advice sheet opens from the Community lane, which shows once an
       // activity is picked: pick two in My Weather (which exercises it too).
@@ -268,10 +276,9 @@ const MODALS = [
       await sleep(1500);
     },
     open: async (page) => {
-      // A lane row's own hit area (it sits over the whole-card one).
-      const button = page
-        .locator('button[aria-label$=": open advice"]')
-        .first();
+      // A lane row's own hit area (it sits over the whole-card one). The
+      // SECOND activity, so the sheet has to scroll to its card.
+      const button = page.locator('button[aria-label$=": open advice"]').nth(1);
       await button.scrollIntoViewIfNeeded();
       await sleep(300);
       await button.tap();
@@ -376,6 +383,121 @@ async function checkModal(browser, spec, { reduced = false } = {}) {
         DIALOG,
       ),
     );
+
+    // One control is called "Close" (the bar's); a Close drawn at the foot of
+    // a sheet is named apart ("Close sheet"), so a screen reader does not read
+    // two identical buttons.
+    const names = await page.evaluate((selector) => {
+      const dialog = document.querySelector(selector);
+      return [...dialog.querySelectorAll("button")].map(
+        (b) => b.getAttribute("aria-label") ?? b.textContent.trim(),
+      );
+    }, DIALOG);
+    note(
+      `${tag}: exactly one control is named "Close"`,
+      names.filter((n) => n === "Close").length === 1,
+      `buttons: ${names.filter((n) => /close/i.test(n)).join(" | ")}`,
+    );
+
+    // The pinned bar covers the top of the scroller: what is scrolled or
+    // focused into view must land BELOW it, not under it.
+    if (spec.cardSelector) {
+      const pad = await page.evaluate((selector) => {
+        const dialog = document.querySelector(selector);
+        const bar = dialog.querySelector('[data-slot="dialog-bar"]');
+        return {
+          scrollPaddingTop: parseFloat(
+            getComputedStyle(dialog).scrollPaddingTop,
+          ),
+          barHeight: bar.getBoundingClientRect().height,
+        };
+      }, DIALOG);
+      note(
+        `${tag}: the scroller's scroll padding is the bar's height`,
+        Math.abs(pad.scrollPaddingTop - pad.barHeight) <= 0.5,
+        `scroll-padding-top ${pad.scrollPaddingTop}px, bar ${pad.barHeight}px`,
+      );
+      const below = (pick, card) =>
+        page.evaluate(
+          ({ dialogSelector, cardSelector, pick }) => {
+            const dialog = document.querySelector(dialogSelector);
+            const bar = dialog
+              .querySelector('[data-slot="dialog-bar"]')
+              .getBoundingClientRect();
+            const cards = [...dialog.querySelectorAll(cardSelector)];
+            const el =
+              pick === "active"
+                ? document.activeElement
+                : cards[pick === "first" ? 0 : cards.length - 1];
+            return {
+              isCard: cards.includes(el),
+              gapBelowBar: el.getBoundingClientRect().top - bar.bottom,
+              scrollTop: dialog.scrollTop,
+            };
+          },
+          { dialogSelector: DIALOG, cardSelector: card, pick },
+        );
+      // On open the sheet scrolls to the tapped activity's card and focuses it.
+      const opened = await below("active", spec.cardSelector);
+      note(
+        `${tag}: the card the sheet opened on is below the bar, not under it`,
+        opened.isCard && opened.scrollTop > 0 && opened.gapBelowBar >= -0.5,
+        `scrolled ${opened.scrollTop.toFixed(0)}px, card ${opened.gapBelowBar.toFixed(1)}px below the bar`,
+      );
+      // Focus (Tab, Shift+Tab, focus()) scrolls an element above the view to
+      // the top edge: also below the bar.
+      await page.evaluate((selector) => {
+        const dialog = document.querySelector(selector);
+        dialog.scrollTop = dialog.scrollHeight;
+      }, DIALOG);
+      await sleep(150);
+      await page.evaluate(
+        ({ dialogSelector, cardSelector }) => {
+          document
+            .querySelector(dialogSelector)
+            .querySelector(cardSelector)
+            .focus();
+        },
+        { dialogSelector: DIALOG, cardSelector: spec.cardSelector },
+      );
+      await sleep(250);
+      const focused = await below("first", spec.cardSelector);
+      note(
+        `${tag}: a card focused from below scrolls to just under the bar`,
+        focused.gapBelowBar >= -0.5 && focused.gapBelowBar <= 40,
+        `card ${focused.gapBelowBar.toFixed(1)}px below the bar`,
+      );
+      // Control: take the padding away and the same focus puts the card UNDER
+      // the bar, so the check above can fail (it is not passing by luck).
+      await page.evaluate((selector) => {
+        const dialog = document.querySelector(selector);
+        dialog.style.scrollPaddingTop = "0px";
+        dialog.scrollTop = dialog.scrollHeight;
+      }, DIALOG);
+      await sleep(150);
+      await page.evaluate(
+        ({ dialogSelector, cardSelector }) => {
+          document
+            .querySelector(dialogSelector)
+            .querySelector(cardSelector)
+            .focus();
+        },
+        { dialogSelector: DIALOG, cardSelector: spec.cardSelector },
+      );
+      await sleep(250);
+      const without = await below("first", spec.cardSelector);
+      note(
+        `${tag}: control: without the padding the same focus hides the card under the bar`,
+        without.gapBelowBar < 0,
+        `card ${without.gapBelowBar.toFixed(1)}px below the bar`,
+      );
+      await page.evaluate((selector) => {
+        const dialog = document.querySelector(selector);
+        dialog.style.scrollPaddingTop = "";
+        dialog.scrollTop = 0;
+      }, DIALOG);
+      await sleep(150);
+    }
 
     // Screenshots, light then dark.
     const slug = spec.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
@@ -496,6 +618,44 @@ async function checkModal(browser, spec, { reduced = false } = {}) {
       (await waitClosed(page, 1500)) !== null,
     );
     await reopen(page, spec);
+
+    // ── 7b. A jittery first move must not kill a real pull ───────────────────
+    // The first touchmove of a real finger is coarse: 3px across, 2 down. It
+    // decides nothing; the pull that follows must still move the sheet.
+    const jitterStart = await measure(page);
+    const jitterBar = barPoint(jitterStart);
+    await touch.down(jitterBar.x, jitterBar.y);
+    await touch.nudge(3, 2);
+    await touch.to(jitterBar.y + 2 + 70, { steps: 10 });
+    await sleep(60);
+    const jitterMid = await measure(page);
+    note(
+      `${tag}: a jittery first move (3px across, 2 down) does not kill a pull (bar)`,
+      Math.abs(jitterMid.top - jitterStart.top - 72) <= 6,
+      `finger moved 72px, sheet moved ${(jitterMid.top - jitterStart.top).toFixed(1)}px`,
+    );
+    await touch.up({ after: 150 });
+    await sleep(450);
+    // Content pull: from the top of the content (a sheet may have scrolled).
+    await scrollerOf(page);
+    await page.evaluate(() => {
+      const el = document.querySelector("[data-check-scroller]");
+      if (el) el.scrollTop = 0;
+    });
+    await sleep(150);
+    const jitterContent = await measure(page);
+    await touch.down(300, jitterContent.top + 120);
+    await touch.nudge(3, 2);
+    await touch.to(jitterContent.top + 120 + 2 + 70, { steps: 10 });
+    await sleep(60);
+    const jitterContentMid = await measure(page);
+    note(
+      `${tag}: a jittery first move does not kill a pull from the content (touch)`,
+      Math.abs(jitterContentMid.top - jitterContent.top - 72) <= 8,
+      `finger moved 72px, sheet moved ${(jitterContentMid.top - jitterContent.top).toFixed(1)}px`,
+    );
+    await touch.up({ after: 150 });
+    await sleep(450);
 
     // ── 8. From the content while it is at its top ───────────────────────────
     const scroller = await scrollerOf(page);
@@ -649,6 +809,73 @@ async function checkDesktop(browser) {
   await context.close();
 }
 
+/**
+ * The `sm` breakpoint, from both sides: the classes (sheet below it, centred
+ * dialog from it) and the pull-down script (a phone only) must agree at the
+ * pixel. 639px is a sheet, 640px is a centred dialog that cannot be pulled.
+ */
+async function checkBreakpoint(browser) {
+  const context = await browser.newContext({
+    viewport: { width: 639, height: 800 },
+  });
+  await proxyApi(context);
+  const page = await context.newPage();
+  await page.goto(`${BASE}/harare`, { waitUntil: "domcontentloaded" });
+  const wind = page.locator('button[aria-label="Wind details"]');
+  await wind.waitFor({ state: "attached", timeout: 60000 });
+  await sleep(1500);
+  const openWind = async () => {
+    await wind.scrollIntoViewIfNeeded();
+    await wind.click();
+    await waitOpen(page);
+  };
+  const pullBar = async (box) => {
+    await page.mouse.move(box.left + 100, box.top + 32);
+    await page.mouse.down();
+    await page.mouse.move(box.left + 100, box.top + 232, { steps: 8 });
+    const moved = await measure(page);
+    await page.mouse.up();
+    return moved.top - box.top;
+  };
+
+  await openWind();
+  const narrow = await measure(page);
+  note(
+    "639px: a docked sheet (screen-radius top corners, bottom edge at the viewport bottom)",
+    Math.abs(narrow.radius.tl - SCREEN_RADIUS_PX) < 0.5 &&
+      Math.abs(narrow.bottom - 800) <= 1,
+    `radius ${narrow.radius.tl}px, bottom ${narrow.bottom}px`,
+  );
+  const narrowMoved = await pullBar(narrow);
+  note(
+    "639px: a mouse pull on the bar moves the sheet",
+    Math.abs(narrowMoved - 200) <= 6,
+    `moved ${narrowMoved.toFixed(1)}px for a 200px drag`,
+  );
+  await sleep(500);
+  if (await isOpen(page)) await page.keyboard.press("Escape");
+  await waitClosed(page);
+
+  await page.setViewportSize({ width: 640, height: 800 });
+  await sleep(400);
+  await openWind();
+  const wide = await measure(page);
+  note(
+    "640px: a centred dialog with the card radius",
+    Math.abs(wide.radius.tl - CARD_RADIUS_PX) < 0.5 &&
+      Math.abs((wide.left + wide.right) / 2 - 320) <= 1 &&
+      Math.abs(wide.bottom - 800) > 1,
+    `radius ${wide.radius.tl}px, centre ${((wide.left + wide.right) / 2).toFixed(1)}`,
+  );
+  const wideMoved = await pullBar(wide);
+  note(
+    "640px: a mouse pull on the bar does not move the dialog",
+    Math.abs(wideMoved) <= 1,
+    `moved ${wideMoved.toFixed(1)}px`,
+  );
+  await context.close();
+}
+
 async function checkInstallPrompt(browser) {
   const context = await browser.newContext({
     viewport: PHONE,
@@ -692,6 +919,27 @@ async function checkInstallPrompt(browser) {
         Math.abs(m.radius.tl - SCREEN_RADIUS_PX) < 0.5,
       `left ${m.left}, right ${m.right}, radius ${m.radius.tl}px`,
     );
+    // Its name is in the bar (no second title and no blank strip below it),
+    // and it opens on the primary action, not on Close.
+    const named = await page.evaluate((selector) => {
+      const dialog = document.querySelector(selector);
+      const bar = dialog.querySelector('[data-slot="dialog-bar"]');
+      return {
+        barTitle: bar.querySelector('[data-slot="dialog-title"]')?.textContent,
+        titles: dialog.querySelectorAll('[data-slot="dialog-title"]').length,
+        focused: document.activeElement?.textContent?.trim(),
+      };
+    }, DIALOG);
+    note(
+      "Install prompt: the name is the bar's title, and the only title",
+      named.barTitle === "Install mukoko weather" && named.titles === 1,
+      `"${named.barTitle}", ${named.titles} title element(s)`,
+    );
+    note(
+      'Install prompt: it opens with focus on "Install app", not on Close',
+      named.focused === "Install app",
+      `focused: "${named.focused}"`,
+    );
     await page.screenshot({
       path: join(SHOTS, "modal-install-prompt-light.png"),
     });
@@ -713,6 +961,7 @@ run(async () => {
   // The same pull, with the system asking for reduced motion.
   await checkModal(browser, MODALS[1], { reduced: true });
   await checkDesktop(browser);
+  await checkBreakpoint(browser);
   await checkInstallPrompt(browser);
   await browser.close();
   finish();
