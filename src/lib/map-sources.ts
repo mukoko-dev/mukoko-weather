@@ -323,7 +323,17 @@ export interface GibsLayer {
   gibsId: string;
   /** Web Mercator tile matrix set; its level is the native max zoom. */
   matrixSet: string;
+  /** Highest TILE zoom GIBS serves (the matrix set's level). */
   maxZoom: number;
+  /**
+   * Highest MAP zoom the layer is shown at. The tiles are 256 px, so tile zoom
+   * z is native at map zoom z - 1 and every map zoom above that magnifies the
+   * data's own cells. Capped where one data cell still reads honestly rather
+   * than as a soft block: IMERG's 0.1 degree (about 11 km) cell is 4.5 px in a
+   * tile, so about 36 px at map zoom 8 and about 145 px at map zoom 10;
+   * VIIRS true colour is 250 m data, 2x magnified at map zoom 9.
+   */
+  maxMapZoom: number;
   ext: "jpg" | "png";
   /** Time step between frames: one day or 30 minutes. */
   cadence: "P1D" | "PT30M";
@@ -353,6 +363,7 @@ export const GIBS_LAYERS: Readonly<Record<string, GibsLayer>> = {
     gibsId: "VIIRS_NOAA20_CorrectedReflectance_TrueColor",
     matrixSet: "GoogleMapsCompatible_Level9",
     maxZoom: 9,
+    maxMapZoom: 9,
     ext: "jpg",
     cadence: "P1D",
     frames: 7,
@@ -364,6 +375,7 @@ export const GIBS_LAYERS: Readonly<Record<string, GibsLayer>> = {
     gibsId: "IMERG_Precipitation_Rate_30min",
     matrixSet: "GoogleMapsCompatible_Level6",
     maxZoom: 6,
+    maxMapZoom: 8,
     ext: "png",
     cadence: "PT30M",
     frames: 13,
@@ -378,6 +390,39 @@ export function getGibsLayer(layerId: string): GibsLayer | undefined {
 
 export function isGibsLayer(layerId: string): boolean {
   return layerId in GIBS_LAYERS;
+}
+
+/** MapLibre's own maximum map zoom, which every layer without a cap keeps. */
+export const MAP_MAX_ZOOM_DEFAULT = 22;
+
+/**
+ * The highest map zoom to allow while `layerId` is the active layer: a GIBS
+ * layer's own cap (see GibsLayer.maxMapZoom), `defaultMax` for every other
+ * layer or none. Tomorrow.io layers, air quality and model fields keep the
+ * map's normal maximum.
+ */
+export function maxMapZoomFor(
+  layerId: string | null | undefined,
+  defaultMax: number,
+): number {
+  return (
+    (layerId ? getGibsLayer(layerId)?.maxMapZoom : undefined) ?? defaultMax
+  );
+}
+
+/**
+ * What to do when the active layer's zoom cap changes, given the zoom now: ease
+ * down to the cap first when the map is zoomed past it (and lock the maximum
+ * once the ease ends), otherwise lock it at once. MapLibre's own setMaxZoom
+ * jumps to the cap, which is abrupt when the visitor only changed layer.
+ */
+export function planZoomCap(
+  currentZoom: number,
+  cap: number,
+): { easeTo: number | null; lockNow: boolean } {
+  return currentZoom > cap + 1e-6
+    ? { easeTo: cap, lockNow: false }
+    : { easeTo: null, lockNow: true };
 }
 
 /** XYZ tile template for a GIBS layer at one time (MapLibre fills {z}/{x}/{y}). */

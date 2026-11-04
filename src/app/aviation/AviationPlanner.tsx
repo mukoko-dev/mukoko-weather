@@ -19,7 +19,7 @@ import { Field } from "@/components/ui/field";
 function FlightCategoryBadge({ fc }: { fc: string }) {
   return (
     <span
-      className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-bold tracking-wide ${getFlightCategoryClass(fc)}`}
+      className={`inline-flex items-center rounded-[var(--radius-badge)] px-2 py-0.5 text-xs font-bold tracking-wide ${getFlightCategoryClass(fc)}`}
     >
       {fc}
     </span>
@@ -240,7 +240,7 @@ function MetarCard({ obs }: { obs: MetarObs }) {
         <p className="text-xs text-text-tertiary mb-0.5">Clouds</p>
         <p className="text-text-primary">{cloudsStr(obs)}</p>
       </div>
-      <pre className="text-xs font-mono bg-surface-dim rounded p-2 whitespace-pre-wrap break-all text-text-secondary">
+      <pre className="text-xs font-mono bg-surface-dim rounded-[var(--radius-input)] p-2 whitespace-pre-wrap break-all text-text-secondary">
         {obs.raw}
       </pre>
     </div>
