@@ -138,7 +138,11 @@ export function SkeletonStack({
     <div className={className}>
       {Array.from({ length: count }, (_, i) => (
         <React.Fragment key={i}>
-          {children ? children(i) : <Skeleton className="h-16 w-full" />}
+          {children ? (
+            children(i)
+          ) : (
+            <Skeleton className="h-16 w-full rounded-[var(--radius-card)]" />
+          )}
         </React.Fragment>
       ))}
     </div>

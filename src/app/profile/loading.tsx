@@ -11,8 +11,8 @@ export default function ProfileLoading() {
           <Skeleton className="h-7 w-48" />
           <Skeleton className="h-4 w-56" />
         </div>
-        <Skeleton className="h-32 w-full" />
-        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-32 w-full rounded-[var(--radius-card)]" />
+        <Skeleton className="h-32 w-full rounded-[var(--radius-card)]" />
       </div>
     </PageShellSkeleton>
   );

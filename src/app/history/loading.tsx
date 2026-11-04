@@ -11,8 +11,8 @@ export default function HistoryLoading() {
       <>
         <PageHeaderSkeleton />
         <div className="herd">
-          <Skeleton className="h-14 w-full" />
-          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-14 w-full rounded-[var(--radius-card)]" />
+          <Skeleton className="h-64 w-full rounded-[var(--radius-card)]" />
         </div>
       </>
     </PageShellSkeleton>

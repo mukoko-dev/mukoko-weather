@@ -1249,11 +1249,11 @@ export function HistoryDashboard() {
                     />
                     <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-base text-text-tertiary">
                       <span className="flex items-center gap-1">
-                        <span className="inline-block h-2 w-4 rounded-sm bg-chart-1" />{" "}
+                        <span className="inline-block h-2 w-4 rounded-[var(--radius-sm)] bg-chart-1" />{" "}
                         High
                       </span>
                       <span className="flex items-center gap-1">
-                        <span className="inline-block h-2 w-4 rounded-sm bg-chart-2" />{" "}
+                        <span className="inline-block h-2 w-4 rounded-[var(--radius-sm)] bg-chart-2" />{" "}
                         Low
                       </span>
                       <span className="flex items-center gap-1">
@@ -1285,7 +1285,7 @@ export function HistoryDashboard() {
                     />
                     <div className="mt-2 flex items-center justify-center gap-4 text-base text-text-tertiary">
                       <span className="flex items-center gap-1">
-                        <span className="inline-block h-3 w-3 rounded-sm bg-rain opacity-60" />{" "}
+                        <span className="inline-block h-3 w-3 rounded-[var(--radius-sm)] bg-rain opacity-60" />{" "}
                         Rainfall
                       </span>
                       <span className="flex items-center gap-1">
@@ -1313,7 +1313,7 @@ export function HistoryDashboard() {
                     />
                     <div className="mt-2 flex items-center justify-center gap-4 text-base text-text-tertiary">
                       <span className="flex items-center gap-1">
-                        <span className="inline-block h-3 w-3 rounded-sm bg-chart-3 opacity-50" />{" "}
+                        <span className="inline-block h-3 w-3 rounded-[var(--radius-sm)] bg-chart-3 opacity-50" />{" "}
                         UV Index
                       </span>
                       <span className="flex items-center gap-1">
@@ -1343,7 +1343,7 @@ export function HistoryDashboard() {
                     />
                     <div className="mt-2 flex items-center justify-center gap-4 text-base text-text-tertiary">
                       <span className="flex items-center gap-1">
-                        <span className="inline-block h-2 w-4 rounded-sm bg-chart-1" />{" "}
+                        <span className="inline-block h-2 w-4 rounded-[var(--radius-sm)] bg-chart-1" />{" "}
                         Speed
                       </span>
                       <span className="flex items-center gap-1">
@@ -1829,7 +1829,7 @@ export function HistoryDashboard() {
                           />
                           <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-base text-text-tertiary">
                             <span className="flex items-center gap-1">
-                              <span className="inline-block h-2 w-4 rounded-sm bg-mineral-malachite" />{" "}
+                              <span className="inline-block h-2 w-4 rounded-[var(--radius-sm)] bg-mineral-malachite" />{" "}
                               Maize/Soybean
                             </span>
                             <span className="flex items-center gap-1">
