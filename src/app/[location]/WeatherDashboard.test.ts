@@ -344,7 +344,7 @@ describe("globals.css — touch-target and nav-clearance tokens", () => {
   it("defines the mobile nav clearance token from the lift, the safe area and the one bar", () => {
     expect(css).toContain("--mobile-nav-clearance:");
     expect(css).toContain("env(safe-area-inset-bottom");
-    expect(css).toContain("--mobile-nav-inset:");
+    expect(css).toContain("--float-bottom:");
     expect(css).toContain("--mobile-nav-bar-height:");
     // The pager pill above the bar is gone, and with it its height and gap.
     expect(css).not.toContain("--mobile-nav-height:");

@@ -37,8 +37,9 @@
  * 9. FLOATING, not docked (owner decision 2026-10-17, mukoko-news is the
  *    source of truth: src/components/layout/bottom-nav.tsx there). The bar is
  *    no longer `inset-x-0 bottom-0` with a top border; it is a pill inset 1rem
- *    from both screen edges (`left-4 right-4 mx-auto max-w-md`), lifted
- *    `--mobile-nav-inset` plus the safe-area inset off the bottom,
+ *    from the sides and the bottom alike (`--float-left`, `--float-right` and
+ *    `--float-bottom`, the one float grid in globals.css, which add the
+ *    safe-area insets; `mx-auto max-w-md`),
  *    `--mobile-nav-bar-height` tall (4.5rem; 4rem until 2026-11-04),
  *    `rounded-full`, a solid 0.5px token
  *    border (`--border-width-rest`), `shadow-lg` and `backdrop-blur-xl` on a
@@ -62,13 +63,20 @@
  *    items are as narrow as a touch target allows (`min-w` 48px, `px-2`, not
  *    60px and `px-3`) and their labels collapse to screen-reader-only below
  *    360px, so the lane keeps the width on a small phone; the bar uses
- *    `gap-2` between its parts. Pinned items stay pill-sized (about 51px) and
+ *    `--float-gap` between its parts and as its side padding. Pinned items stay pill-sized (about 51px) and
  *    take `.plover`, so the whole bar height is their tappable area, and their
  *    icon is 18px. Without `lane` the bar is exactly the registry's single
  *    `items` row.
  *    This replaces the earlier `indicator` pill (a second floating pill one
  *    touch target tall above the bar, with a `--mobile-nav-gap` between): the
  *    bar is now the only floating surface and both are gone.
+ *
+ * 11. The current item is marked by a SOFT PILL FILL (Apple's tab bars; the
+ *    owner's Find My reference, 2026-11-04), not by a line on the bar's top
+ *    edge. The fill is the one a current chip in the lane wears (the cobalt
+ *    container), so the bar has one look for "you are here"; it is a rule on
+ *    `.plover` in globals.css, which also sets the text colour, so this file
+ *    sets none for the current item. `aria-current="page"` stays.
  *
  * `--mobile-nav-clearance` in globals.css is the bar (4.5rem) plus the lift,
  * the safe area and a breath, so page content always matches the one bar.
@@ -197,20 +205,12 @@ export function MziziBottomNav({
             ? "min-w-[var(--touch-target-min)] shrink-0 px-2"
             : "min-w-[60px] px-3",
           "text-[length:var(--text-nav-label)] font-medium transition-colors",
-          active
-            ? "text-[var(--brand-accent,var(--color-primary))]"
-            : "text-muted-foreground",
+          // The current item is marked by `.plover`'s aria-current rule (a
+          // soft pill fill, the same one a current chip in the lane wears),
+          // so no colour is set here for it.
+          !active && "text-muted-foreground",
         )}
       >
-        {/* Active top accent bar — brand identity marker. Anchored to the
-            BAR's top edge (the item is centred in a taller bar), 1px inside
-            it, so it does not depend on how tall the item happens to be. */}
-        {active && (
-          <span
-            aria-hidden="true"
-            className="absolute top-[calc((100%_-_var(--mobile-nav-bar-height))_/_2_+_1px)] h-[2.5px] w-7 rounded-full bg-[var(--brand-accent,var(--color-primary))]"
-          />
-        )}
         <Icon
           className={cn(
             "size-[18px]",
@@ -232,9 +232,11 @@ export function MziziBottomNav({
       data-portal="https://mzizi.dev/components/mzizi-bottom-nav"
       aria-label={label}
       className={cn(
-        "fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom,0px)+var(--mobile-nav-inset))] z-50 mx-auto flex h-[var(--mobile-nav-bar-height)] max-w-md items-center md:hidden",
+        "fixed left-[var(--float-left)] right-[var(--float-right)] bottom-[var(--float-bottom)] z-50 mx-auto flex h-[var(--mobile-nav-bar-height)] max-w-md items-center md:hidden",
         FLOATING_SURFACE,
-        hasLane ? "gap-2 px-2" : "justify-around px-2",
+        hasLane
+          ? "gap-[var(--float-gap)] px-[var(--float-gap)]"
+          : "justify-around px-[var(--float-gap)]",
         "[&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-2 [&_a]:focus-visible:outline-primary [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-offset-2 [&_button]:focus-visible:outline-primary",
         className,
       )}

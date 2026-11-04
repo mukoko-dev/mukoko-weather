@@ -119,8 +119,15 @@ describe("MapDashboard — timeline", () => {
 describe("MapDashboard — bottom sheet", () => {
   it("is a floating .serval card lifted off the edge by the safe area", () => {
     expect(source).toContain('data-slot="map-sheet"');
+    // The same inset from the side and bottom edges as the controls above,
+    // and the bar on other pages: the one float grid in globals.css.
     expect(source).toMatch(
-      /serval absolute inset-x-3 bottom-\[calc\(env\(safe-area-inset-bottom,0px\)\+0\.75rem\)\]/,
+      /serval absolute left-\[var\(--float-left\)\] right-\[var\(--float-right\)\] bottom-\[var\(--float-bottom\)\]/,
+    );
+    // Its height cap leaves room for the top controls and the grid's gaps, so
+    // it never runs under them, with the safe area counted on both sides.
+    expect(source).toContain(
+      "max-h-[calc(100dvh-var(--float-top)-var(--touch-target-min)-var(--float-gap)-var(--float-bottom))]",
     );
     expect(source).toContain("max-w-xl");
   });
@@ -139,7 +146,10 @@ describe("MapDashboard — bottom sheet", () => {
   });
 
   it("caps its height so a landscape phone still sees the map", () => {
-    expect(source).toContain("max-h-[calc(100dvh-6rem)]");
+    // The cap is derived from the float grid (the top row of controls, a gap
+    // and the safe areas), never a literal such as 6rem.
+    expect(source).toMatch(/max-h-\[calc\(100dvh-var\(--float-top\)/);
+    expect(source).not.toContain("100dvh-6rem");
     expect(source).toContain("overflow-y-auto");
     expect(source).toContain("[@media(max-height:500px)]:mr-auto");
   });
@@ -168,7 +178,8 @@ describe("MapDashboard — bottom sheet", () => {
   it("uses one icon size for every control, and keeps top controls clear of the notch", () => {
     expect(source).toContain('const ICON_CLASS = "h-5 w-5";');
     expect(source).not.toMatch(/className="h-5 w-5"/);
-    expect(source).toContain("top-[max(1rem,env(safe-area-inset-top))]");
+    expect(source).toContain("top-[var(--float-top)]");
+    expect(source).not.toContain("env(safe-area-inset-top)");
   });
 });
 
