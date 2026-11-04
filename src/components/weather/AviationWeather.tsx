@@ -387,7 +387,7 @@ export function AviationWeather({ slug, lat, lon }: Props) {
           <div className="mt-4" role="status" aria-label="Loading">
             <Skeleton className="h-4 w-full mb-2" />
             <Skeleton className="h-4 w-3/4 mb-4" />
-            <Skeleton className="h-32 w-full" />
+            <Skeleton className="h-32 w-full rounded-[var(--radius-card)]" />
           </div>
         )}
 
@@ -425,7 +425,7 @@ export function AviationWeather({ slug, lat, lon }: Props) {
                         Clouds &amp; Ceiling
                       </h3>
                       <span
-                        className={`inline-flex items-center justify-center rounded-[var(--radius-input)] px-2 py-0.5 text-xs font-bold min-w-[3rem] ${getFlightCategoryClass(latest.flight_category)}`}
+                        className={`inline-flex items-center justify-center rounded-[var(--radius-badge)] px-2 py-0.5 text-xs font-bold min-w-[3rem] ${getFlightCategoryClass(latest.flight_category)}`}
                         aria-label={`Flight category: ${latest.flight_category}`}
                       >
                         {latest.flight_category}

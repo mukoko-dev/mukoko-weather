@@ -9,7 +9,10 @@ export default function StatusLoading() {
         <Skeleton className="mb-8 h-9 w-40" />
         <div className="herd">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-16 w-full" />
+            <Skeleton
+              key={i}
+              className="h-16 w-full rounded-[var(--radius-card)]"
+            />
           ))}
         </div>
       </>
