@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { workerData } from "./worker-data";
-import { fetchHomeWeather, loadModelWeather } from "./home-weather";
+import {
+  fetchHomeWeather,
+  fetchWorkerWeatherOnce,
+  loadModelWeather,
+} from "./home-weather";
 import { createFallbackWeather } from "./weather";
 
 function respond(provider: string, init: { status?: number } = {}) {
@@ -219,5 +223,61 @@ describe("fetchHomeWeather", () => {
     ]);
     await fetchHomeWeather(-17.83, 31.05);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("fetchWorkerWeatherOnce (the background read for a place not yet asked for)", () => {
+  it("is one call through the shared read: a later switch to the same cell costs nothing", async () => {
+    const fetchMock = vi.fn(async () => respond("open-meteo:blend"));
+    vi.stubGlobal("fetch", fetchMock);
+    const warmed = await fetchWorkerWeatherOnce(-17.83, 31.05);
+    expect(warmed.usingFallback).toBe(false);
+    await fetchHomeWeather(-17.83, 31.05);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("never goes to the provider when the Worker fails: it throws after ONE attempt", async () => {
+    const fetchMock = vi.fn(async () => failing(503));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fetchWorkerWeatherOnce(-17.83, 31.05)).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const urls = fetchMock.mock.calls.map((c) => String((c as unknown[])[0]));
+    expect(urls.every((u) => u.includes("weather-api.mukoko.com"))).toBe(true);
+    expect(urls.some((u) => u.includes("open-meteo"))).toBe(false);
+  });
+
+  it("never goes to the provider when the Worker cannot be reached either", async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fetchWorkerWeatherOnce(-17.83, 31.05)).rejects.toThrow();
+    expect(
+      fetchMock.mock.calls.some((c) =>
+        String((c as unknown[])[0]).includes("open-meteo"),
+      ),
+    ).toBe(false);
+  });
+
+  it("refuses a body that is not a forecast", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "X-Weather-Provider": "open-meteo:blend" }),
+        json: async () => ({ nope: true }),
+      })),
+    );
+    await expect(fetchWorkerWeatherOnce(-17.83, 31.05)).rejects.toThrow();
+  });
+
+  it("says when the Worker only had the seasonal estimate", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => respond("fallback")),
+    );
+    const result = await fetchWorkerWeatherOnce(-17.83, 31.05);
+    expect(result.usingFallback).toBe(true);
   });
 });

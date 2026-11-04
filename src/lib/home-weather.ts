@@ -64,6 +64,30 @@ export async function fetchHomeWeather(
   return { weather: await fetchWeather(lat, lon), usingFallback: false };
 }
 
+/**
+ * Our Worker's forecast for a place the visitor has not asked for yet (the
+ * next saved place, got ready in the background): one attempt through the
+ * shared read, and NEVER a direct call to the provider. A background request
+ * must not spend the visitor's own Open-Meteo allowance, go round the Worker's
+ * budgets or use the free, non-commercial host; when the Worker cannot answer,
+ * the place is simply not warmed and the visitor's own switch asks as usual.
+ * Throws when the Worker does not give a renderable forecast.
+ */
+export async function fetchWorkerWeatherOnce(
+  lat: number,
+  lon: number,
+): Promise<{ weather: WeatherData; usingFallback: boolean }> {
+  const res = await workerData.read<unknown>(
+    "weather",
+    { lat, lon },
+    { retries: 0, signal: AbortSignal.timeout(HOME_WEATHER_TIMEOUT_MS) },
+  );
+  if (res.ok && isRenderableWeather(res.data)) {
+    return { weather: res.data, usingFallback: res.provider === "fallback" };
+  }
+  throw new Error("the Worker has no forecast for this place");
+}
+
 /** What `loadModelWeather` hands the dashboard: the forecast, or why not. */
 export type ModelWeatherResult =
   | {
