@@ -18,7 +18,9 @@
  *     Caches are named `pages-<build version>`; a new worker deletes the rest.
  *   - Weather API: NetworkFirst (5s timeout, 15min cache)
  *   - Suitability/activities: StaleWhileRevalidate (1h cache)
- *   - Map tiles: CacheFirst (24h cache)
+ *   - Map tiles for a fixed forecast hour: CacheFirst (3h cache)
+ *   - "Now" map tiles: NetworkFirst (the same URL is a new frame every hour)
+ *   - Transparent fallback map tiles (X-Map-Tile header): never cached
  *   - AI/chat endpoints: NetworkOnly (personalized, never cached)
  */
 
@@ -70,6 +72,26 @@ interface ShellScope {
     listener: (event: ShellEvent) => void,
   ): void;
 }
+
+/**
+ * Only fresh overlay tiles may be stored. The tiles Worker marks its
+ * transparent fallback (quota spent, upstream error) with an `X-Map-Tile`
+ * header and an outdated tile served during an outage with `X-Cache: STALE`;
+ * caching one CacheFirst would hide the radar on this device long after the
+ * quota reset (#266). The Worker is on another origin, so the worker script
+ * can read these two headers only because the Worker lists them in
+ * `Access-Control-Expose-Headers` (workers/tiles/src/lib.rs; pinned by
+ * src/lib/map-caching.test.ts). Replacing `cacheWillUpdate` drops the default
+ * 200-only check, so it is repeated here.
+ */
+const skipFallbackTiles = {
+  cacheWillUpdate: async ({ response }: { response: Response }) =>
+    response.status === 200 &&
+    !response.headers.has("X-Map-Tile") &&
+    response.headers.get("X-Cache") !== "STALE"
+      ? response
+      : null,
+};
 
 declare const self: {
   __SW_MANIFEST: Array<PrecacheEntry | string>;
@@ -198,15 +220,38 @@ const serwist: Serwist = new Serwist({
       }),
     },
 
-    // Map tiles — CacheFirst (expensive, stable data)
+    // Map tiles for a fixed forecast hour — CacheFirst: the URL names the
+    // hour, so a stored tile stays right until the forecast is re-run. The
+    // tiles Worker lives on its own origin (weather-tiles.mukoko.com), so this
+    // matches on the path alone, as the /v1/weather route does.
     {
-      matcher: ({ url }) => url.pathname.startsWith("/v1/map-tiles"),
+      matcher: ({ url }) =>
+        url.pathname.startsWith("/v1/map-tiles") &&
+        url.searchParams.has("timestamp"),
       handler: new CacheFirst({
         cacheName: "map-tiles",
         plugins: [
+          skipFallbackTiles,
           new ExpirationPlugin({
             maxEntries: 500,
-            maxAgeSeconds: 24 * 60 * 60,
+            maxAgeSeconds: 3 * 60 * 60,
+          }),
+        ],
+      }),
+    },
+
+    // "Now" map tiles — NetworkFirst: the URL carries no time, so a stored
+    // copy is only an offline fallback, never served ahead of the network.
+    {
+      matcher: ({ url }) => url.pathname.startsWith("/v1/map-tiles"),
+      handler: new NetworkFirst({
+        cacheName: "map-tiles-now",
+        networkTimeoutSeconds: 6,
+        plugins: [
+          skipFallbackTiles,
+          new ExpirationPlugin({
+            maxEntries: 200,
+            maxAgeSeconds: 60 * 60,
           }),
         ],
       }),

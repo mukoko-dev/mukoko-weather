@@ -33,6 +33,20 @@ export const DISPLAY_REFRESH_MS = {
   reload: 6 * 60 * 60 * 1000,
 } as const;
 
+/**
+ * The wait before reading again after a read that failed while the panel has
+ * no data yet (`failures` counts failures so far, 0 for the first): about 2 s,
+ * 5 s, 15 s, 30 s, then every minute. The server no longer seeds the
+ * forecast (issue #452), so the screen's own first read is the only way a
+ * panel fills; one dropped or refused read must not leave a wall on a
+ * skeleton until the next 10-minute interval. A minute is far inside the
+ * Worker's per-address limit for three panels.
+ */
+export function emptyRetryDelayMs(failures: number): number {
+  const steps = [2_000, 5_000, 15_000, 30_000] as const;
+  return steps[Math.max(0, Math.floor(failures))] ?? 60_000;
+}
+
 /** Radar is the point of a wall display, so it is the default layer. */
 export const DISPLAY_DEFAULT_LAYER = "precipitationIntensity";
 

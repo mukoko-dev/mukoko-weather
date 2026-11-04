@@ -29,18 +29,62 @@ pub const FRESH_SECONDS: u64 = 5_400;
 pub const TILE_CACHE_CONTROL: &str =
     "public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800";
 
-/// Short caching for stale and empty tiles, so browsers recover soon after
-/// the provider's quota resets.
+/// Short caching for a stale tile (a real image, an hour or more old), so
+/// browsers pick up the fresh one soon after the provider recovers.
 pub const FALLBACK_CACHE_CONTROL: &str = "public, max-age=300";
 
-/// A 1x1 fully transparent PNG, served (HTTP 200) when the provider fails and
-/// no cached tile exists, so the map shows no overlay for that tile.
-pub const TRANSPARENT_PNG: [u8; 70] = [
-    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
-    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x04, 0x00, 0x00, 0x00, 0xB5, 0x1C, 0x0C,
-    0x02, 0x00, 0x00, 0x00, 0x0B, 0x49, 0x44, 0x41, 0x54, 0x78, 0xDA, 0x63, 0x64, 0xF8, 0xCF, 0x50,
-    0x0F, 0x00, 0x03, 0x86, 0x01, 0x80, 0x5A, 0x34, 0x7D, 0x6B, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
-    0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+/// A short caching for the empty tile. It says nothing about the place: only
+/// that the provider could not be asked at that moment. Kept for five minutes
+/// by a browser, a failed request during a quota or breaker window became a
+/// blank tile that stayed blank after the provider had recovered, and every
+/// zoom back to that area re-used it. But not `no-store` either: while a quota
+/// is spent, a browser asking again on every pan would send each ask on to the
+/// provider, and the only brake on that is a per-isolate breaker, so the empty
+/// tile is kept for thirty seconds.
+pub const EMPTY_CACHE_CONTROL: &str = "public, max-age=30";
+
+/// Which kind of tile a response carries, for its `Cache-Control`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TileKind {
+    /// A real tile the provider (or our cache) just gave.
+    Fresh,
+    /// A real tile, an hour or more old, served because the provider failed.
+    Stale,
+    /// The transparent stand-in: nothing could be served.
+    Empty,
+}
+
+/// The `Cache-Control` of a response, by what it carries. The longer a thing
+/// is true, the longer it may be kept: a fresh tile for an hour, a stale one
+/// for five minutes, the empty stand-in for thirty seconds.
+pub fn cache_control(kind: TileKind) -> &'static str {
+    match kind {
+        TileKind::Fresh => TILE_CACHE_CONTROL,
+        TileKind::Stale => FALLBACK_CACHE_CONTROL,
+        TileKind::Empty => EMPTY_CACHE_CONTROL,
+    }
+}
+
+/// A 1x1 fully transparent PNG (8-bit RGBA, one all-zero pixel), served
+/// (HTTP 200) when the provider fails and no cached tile exists, so the map
+/// shows no overlay for that tile.
+///
+/// It must be a PNG a browser really decodes: `createImageBitmap` (MapLibre's
+/// tile path) rejects a file with a wrong chunk CRC or a truncated zlib stream,
+/// and the map then reports a failed overlay tile for every step of the
+/// timeline.
+/// The tests walk the chunks, check every CRC-32 and inflate the image data.
+pub const TRANSPARENT_PNG: [u8; 68] = [
+    // signature
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, //
+    // IHDR (13): 1 x 1, bit depth 8, colour type 6 (RGBA), deflate, adaptive filter, no interlace
+    0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+    0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, //
+    // IDAT (11): zlib stream of filter byte 0 + four zero bytes, then its Adler-32
+    0x00, 0x00, 0x00, 0x0B, 0x49, 0x44, 0x41, 0x54, 0x78, 0xDA, 0x63, 0x60, 0x00, 0x02, 0x00, 0x00,
+    0x05, 0x00, 0x01, 0xE9, 0xFA, 0xDC, 0xD8, //
+    // IEND
+    0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
 ];
 
 const TOMORROW_TILE_ORIGIN: &str = "https://api.tomorrow.io";
@@ -221,6 +265,31 @@ mod tests {
         parse(q).expect("valid")
     }
 
+    /// The `max-age` of a `Cache-Control` value, in seconds.
+    fn max_age(value: &str) -> u64 {
+        value
+            .split(',')
+            .filter_map(|d| d.trim().strip_prefix("max-age="))
+            .next()
+            .and_then(|n| n.parse().ok())
+            .expect("a max-age")
+    }
+
+    #[test]
+    fn the_less_a_tile_says_the_less_a_cache_keeps_it() {
+        // Fresh tile > stale tile > the empty stand-in, and the empty one is
+        // short but not zero: a browser that asked again on every pan would
+        // send each ask on to a provider whose quota is already spent.
+        let fresh = max_age(cache_control(TileKind::Fresh));
+        let stale = max_age(cache_control(TileKind::Stale));
+        let empty = max_age(cache_control(TileKind::Empty));
+        assert!(fresh > stale, "{fresh} > {stale}");
+        assert!(stale > empty, "{stale} > {empty}");
+        assert!(empty > 0 && empty <= 60, "{empty}");
+        // The empty tile must be cacheable only briefly; never shared long.
+        assert!(!cache_control(TileKind::Empty).contains("s-maxage"));
+    }
+
     #[test]
     fn a_normal_tile() {
         let t = ok(&[
@@ -396,13 +465,157 @@ mod tests {
         assert!(!is_fresh(0, FRESH_SECONDS * 1_000));
     }
 
+    // ---- The fallback tile must be a PNG a browser decodes ----------------
+    //
+    // The first version of the constant had the right signature and the right
+    // last eight bytes, and passed a test that checked only those, but its
+    // IDAT length, CRC and zlib stream were wrong: Chromium's
+    // `createImageBitmap` refused it. These helpers check the whole file the
+    // way a decoder does, with no dependency beyond `miniz_oxide`.
+
+    /// CRC-32 as PNG defines it (ISO 3309, polynomial 0xEDB88320, reflected).
+    fn crc32(bytes: &[u8]) -> u32 {
+        let mut crc = 0xFFFF_FFFF_u32;
+        for &b in bytes {
+            crc ^= u32::from(b);
+            for _ in 0..8 {
+                crc = if crc & 1 == 1 {
+                    (crc >> 1) ^ 0xEDB8_8320
+                } else {
+                    crc >> 1
+                };
+            }
+        }
+        !crc
+    }
+
+    /// Adler-32, the checksum that ends a zlib stream (RFC 1950).
+    fn adler32(bytes: &[u8]) -> u32 {
+        let (mut a, mut b) = (1_u32, 0_u32);
+        for &x in bytes {
+            a = (a + u32::from(x)) % 65_521;
+            b = (b + a) % 65_521;
+        }
+        (b << 16) | a
+    }
+
+    /// One PNG chunk: its type, its data and the CRC the file stores for it.
+    struct Chunk<'a> {
+        kind: [u8; 4],
+        data: &'a [u8],
+        stored_crc: u32,
+    }
+
+    impl Chunk<'_> {
+        /// CRC-32 over the type and the data, as the PNG spec says.
+        fn computed_crc(&self) -> u32 {
+            let mut covered = self.kind.to_vec();
+            covered.extend_from_slice(self.data);
+            crc32(&covered)
+        }
+    }
+
+    /// Walk the file strictly: the signature, then chunks that each fit, and
+    /// nothing left over. A chunk length that points past the end, or bytes
+    /// after the last chunk, are errors (the old constant failed both).
+    fn chunks(png: &[u8]) -> Result<Vec<Chunk<'_>>, String> {
+        const SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";
+        if png.get(..8) != Some(SIGNATURE) {
+            return Err("bad PNG signature".into());
+        }
+        let be32 = |at: usize| -> Option<u32> {
+            let b: [u8; 4] = png.get(at..at + 4)?.try_into().ok()?;
+            Some(u32::from_be_bytes(b))
+        };
+        let mut out = Vec::new();
+        let mut at = 8;
+        while at < png.len() {
+            let len = be32(at).ok_or("truncated chunk length")? as usize;
+            let kind: [u8; 4] = png
+                .get(at + 4..at + 8)
+                .and_then(|k| k.try_into().ok())
+                .ok_or("truncated chunk type")?;
+            let end = (at + 8).checked_add(len).ok_or("chunk length overflows")?;
+            let data = png
+                .get(at + 8..end)
+                .ok_or_else(|| format!("chunk {kind:?} runs past the end of the file"))?;
+            let stored_crc = be32(end).ok_or("truncated chunk CRC")?;
+            out.push(Chunk {
+                kind,
+                data,
+                stored_crc,
+            });
+            at = end + 4;
+        }
+        if at != png.len() {
+            return Err("bytes after the last chunk".into());
+        }
+        Ok(out)
+    }
+
     #[test]
-    fn transparent_png_matches_the_python_bytes() {
-        // base64 of the same PNG as api/py/_tiles.py
-        assert_eq!(&TRANSPARENT_PNG[..8], b"\x89PNG\r\n\x1a\n");
+    fn the_crc_and_adler_helpers_match_published_vectors() {
+        // So the PNG tests below cannot pass because the helpers are wrong.
+        assert_eq!(crc32(b"123456789"), 0xCBF4_3926);
+        assert_eq!(crc32(b"IEND"), 0xAE42_6082, "the CRC every PNG ends with");
+        assert_eq!(adler32(b"Wikipedia"), 0x11E6_0398);
+        assert_eq!(adler32(&[0; 5]), 0x0005_0001);
+    }
+
+    #[test]
+    fn transparent_png_is_a_well_formed_png() {
+        let parsed = chunks(&TRANSPARENT_PNG).expect("signature and chunk layout");
+        let kinds: Vec<&[u8]> = parsed.iter().map(|c| c.kind.as_slice()).collect();
+        assert_eq!(kinds, [b"IHDR".as_slice(), b"IDAT", b"IEND"]);
+        for c in &parsed {
+            assert_eq!(
+                c.stored_crc,
+                c.computed_crc(),
+                "CRC-32 of the {} chunk",
+                String::from_utf8_lossy(&c.kind)
+            );
+        }
+        assert!(parsed[2].data.is_empty(), "IEND carries no data");
+    }
+
+    #[test]
+    fn transparent_png_is_one_rgba_pixel() {
+        let parsed = chunks(&TRANSPARENT_PNG).expect("chunk layout");
+        let ihdr = parsed[0].data;
+        assert_eq!(ihdr.len(), 13, "IHDR is 13 bytes");
+        assert_eq!(&ihdr[0..4], 1_u32.to_be_bytes(), "width");
+        assert_eq!(&ihdr[4..8], 1_u32.to_be_bytes(), "height");
+        assert_eq!(ihdr[8], 8, "bit depth");
         assert_eq!(
-            &TRANSPARENT_PNG[TRANSPARENT_PNG.len() - 8..],
-            b"IEND\xaeB`\x82"
+            ihdr[9], 6,
+            "colour type 6 is RGBA, so it has an alpha channel"
         );
+        assert_eq!(ihdr[10], 0, "compression method: deflate");
+        assert_eq!(ihdr[11], 0, "filter method: adaptive");
+        assert_eq!(ihdr[12], 0, "no interlace");
+    }
+
+    #[test]
+    fn transparent_png_pixels_inflate_to_one_clear_pixel() {
+        let parsed = chunks(&TRANSPARENT_PNG).expect("chunk layout");
+        let idat: Vec<u8> = parsed
+            .iter()
+            .filter(|c| &c.kind == b"IDAT")
+            .flat_map(|c| c.data.iter().copied())
+            .collect();
+        // RFC 1950 header: deflate with a window up to 32 KiB, and the two
+        // header bytes together a multiple of 31.
+        assert_eq!(idat[0] & 0x0F, 8, "zlib compression method is deflate");
+        assert_eq!((u32::from(idat[0]) << 8 | u32::from(idat[1])) % 31, 0);
+        // The whole stream inflates (miniz_oxide also checks the Adler-32)...
+        let raw = miniz_oxide::inflate::decompress_to_vec_zlib(&idat)
+            .expect("the image data is a complete zlib stream");
+        // ...to one scanline: filter type 0 and R, G, B, A all zero. Alpha 0
+        // is what makes the tile show no overlay.
+        assert_eq!(raw, [0_u8; 5]);
+        // ...and the stream's own checksum is right, checked here without the
+        // library so the two do not share a blind spot.
+        let trailer = idat.len().checked_sub(4).map(|i| &idat[i..]);
+        assert_eq!(trailer, Some(adler32(&raw).to_be_bytes().as_slice()));
     }
 }

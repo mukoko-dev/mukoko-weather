@@ -86,7 +86,7 @@ export default function PrivacyPage() {
             </h3>
             <p className="mt-2">
               We set a single functional cookie (
-              <code className="text-sm bg-surface-dim px-1 rounded">
+              <code className="text-sm bg-surface-dim px-1 rounded-[var(--radius-sm)]">
                 lastLocation
               </code>
               ) to remember your most recently viewed location and redirect you

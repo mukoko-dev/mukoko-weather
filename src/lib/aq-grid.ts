@@ -2,14 +2,20 @@
  * Air quality grid helpers for the Air Quality Map card.
  *
  * `/v1/air-quality/grid` (the Rust Worker) returns current US AQI on a regular n×n grid. This
- * module turns those points into square GeoJSON cells (one per grid point) for
- * a MapLibre fill layer, classifies AQI into EPA bands, and fetches the grid.
- * Everything except `fetchAirQualityGrid` is pure and unit-tested.
+ * module turns those points into one smooth, banded raster for a MapLibre
+ * image source (field-raster.ts interpolates between the samples), classifies
+ * AQI into EPA bands, and fetches the grid. Everything except
+ * `fetchAirQualityGrid` is pure and unit-tested.
  */
 
-import type { Feature, FeatureCollection, Polygon } from "geojson";
 import { workerData } from "@/lib/worker-data";
 import { AQI_SCALE } from "@/lib/weather-scales";
+import {
+  buildFieldRaster,
+  hasReadings,
+  sampleGridFrom,
+  type FieldRaster,
+} from "@/lib/field-raster";
 
 /** EPA US AQI categories, lowest to highest severity. */
 export type AqiBand =
@@ -67,6 +73,14 @@ export const AQI_BAND_TOKEN: Record<AqiBand, string> = Object.fromEntries(
 /** Static Tailwind fill classes for a band (bubbles, swatches). */
 export const AQI_BAND_BG_CLASS: Record<AqiBand, string> = Object.fromEntries(
   AQI_BANDS.map((b) => [b, scaleBandOf(b).bg]),
+) as Record<AqiBand, string>;
+
+/**
+ * Static Tailwind SVG fill classes for a band (the static air quality map's
+ * cells), from the scale band's own `fill`.
+ */
+export const AQI_BAND_FILL_CLASS: Record<AqiBand, string> = Object.fromEntries(
+  AQI_BANDS.map((b) => [b, scaleBandOf(b).fill ?? ""]),
 ) as Record<AqiBand, string>;
 
 /** Foreground class that passes 4.5:1 on the band's fill (bubble numbers). */
@@ -156,58 +170,40 @@ export interface AqGridResponse {
   source: string;
 }
 
-export interface AqCellProperties {
-  aqi: number | null;
-  band: AqiBand | null;
-}
-
-/** Metres-per-degree constants match the backend (spherical Earth, R = 6371 km). */
-const KM_PER_DEG = 111.195;
+/**
+ * Where one EPA band ends and the next starts on the CONTINUOUS field. An
+ * interpolated value is rounded to a whole index before it is classified
+ * (aqiBand), so the band that starts at 51 starts at 50.5, and so on. The map
+ * outlines the bands at these values.
+ */
+export const AQI_BAND_EDGES: readonly number[] = AQI_SCALE.bands
+  .slice(1)
+  .map((band) => band.from - 0.5);
 
 /**
- * Square polygon cells, one per grid point, centred on the point. `cellKm` is
- * the side length in metres-on-the-ground: longitude spacing is corrected for
- * latitude so cells are square on the map, not stretched.
+ * The grid as one smooth, banded picture for the map: the 7 x 7 readings
+ * interpolated onto a finer raster (field-raster.ts), every pixel classified
+ * into its EPA band with `aqiBand`, the same function the bubbles, the gauge
+ * and the legend use. A reading the model did not return leaves a hole. Null
+ * when the grid is unavailable or has too few points to interpolate.
  *
- * Rings are counter-clockwise (RFC 7946 exterior-ring convention) and closed.
+ * Smoother, not more detailed: the data is still the 49 samples.
  */
-export function gridToGeoJSON(
-  points: readonly (Omit<AqGridPoint, "pm2_5"> & { pm2_5?: number | null })[],
-  cellKm: number,
-): FeatureCollection<Polygon, AqCellProperties> {
-  const halfKm = cellKm / 2;
-  const halfLatDeg = halfKm / KM_PER_DEG;
-
-  const features: Feature<Polygon, AqCellProperties>[] = points.map((p) => {
-    const cosLat = Math.cos((p.lat * Math.PI) / 180);
-    // Guard the pole: cos → 0 would divide by zero. Clamp to a tiny positive value.
-    const halfLonDeg = halfKm / (KM_PER_DEG * Math.max(cosLat, 1e-6));
-    const w = p.lon - halfLonDeg;
-    const e = p.lon + halfLonDeg;
-    const s = p.lat - halfLatDeg;
-    const n = p.lat + halfLatDeg;
-    return {
-      type: "Feature",
-      properties: {
-        aqi: p.aqi,
-        band: p.aqi === null ? null : aqiBand(p.aqi),
-      },
-      geometry: {
-        type: "Polygon",
-        coordinates: [
-          [
-            [w, s],
-            [e, s],
-            [e, n],
-            [w, n],
-            [w, s],
-          ],
-        ],
-      },
-    };
+export function aqFieldRaster(
+  grid: AqGridResponse | null | undefined,
+  options: { side?: number } = {},
+): FieldRaster | null {
+  if (!grid?.available) return null;
+  const samples = sampleGridFrom(
+    grid.points.map((p) => ({ lat: p.lat, lon: p.lon, value: p.aqi })),
+  );
+  if (!samples || !hasReadings(samples)) return null;
+  return buildFieldRaster(samples, {
+    classify: (aqi) => AQI_BANDS.indexOf(aqiBand(aqi)),
+    tokens: AQI_BANDS.map((band) => AQI_BAND_TOKEN[band]),
+    levels: AQI_BAND_EDGES,
+    side: options.side,
   });
-
-  return { type: "FeatureCollection", features };
 }
 
 /**

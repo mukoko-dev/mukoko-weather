@@ -2,12 +2,8 @@
 
 import { useState, useEffect, useMemo, type ReactNode } from "react";
 import { PhoneMenu } from "@/components/layout/PhoneMenu";
-import {
-  ShareIcon,
-  NavigationIcon,
-  WeatherIcon,
-  nightIcon,
-} from "@/lib/weather-icons";
+import { ShareControl } from "@/components/weather/ShareControl";
+import { NavigationIcon, WeatherIcon, nightIcon } from "@/lib/weather-icons";
 import {
   weatherCodeToInfo,
   type CurrentWeather,
@@ -30,8 +26,6 @@ import {
   skyFamily,
   type HeroBadge,
 } from "@/lib/hero";
-
-const BASE_URL = "https://weather.mukoko.com";
 
 interface Props {
   current: CurrentWeather;
@@ -174,42 +168,6 @@ export function CurrentConditions({
 
   const localTime = heroLocalTime(now, utcOffsetSeconds);
 
-  const [copied, setCopied] = useState(false);
-  const [copyFailed, setCopyFailed] = useState(false);
-
-  useEffect(() => {
-    if (!copied) return;
-    const t = setTimeout(() => setCopied(false), 2000);
-    return () => clearTimeout(t);
-  }, [copied]);
-
-  useEffect(() => {
-    if (!copyFailed) return;
-    const t = setTimeout(() => setCopyFailed(false), 2000);
-    return () => clearTimeout(t);
-  }, [copyFailed]);
-
-  function handleShare() {
-    const url = slug ? `${BASE_URL}/${slug}` : window.location.href;
-    const shareData = {
-      title: `${locationName} Weather`,
-      text: `Check the weather in ${locationName} on mukoko weather`,
-      url,
-    };
-    if (typeof navigator !== "undefined" && navigator.share) {
-      navigator.share(shareData).catch(() => undefined);
-    } else {
-      navigator.clipboard
-        .writeText(url)
-        .then(() => {
-          setCopied(true);
-        })
-        .catch(() => {
-          setCopyFailed(true);
-        });
-    }
-  }
-
   return (
     <section
       aria-labelledby="current-conditions-heading"
@@ -217,41 +175,27 @@ export function CurrentConditions({
       data-sky={family}
       className="relative text-[var(--sky-fg)]"
     >
-      {/* Top row — breadcrumb at the left, Share and (phones) the ⋯ menu at the
-          right. On phones the site header is not drawn over the sky (see
-          globals.css, [data-sky-hero]), so these controls are the page's top
-          chrome. Round 48px controls: content stays distinct from controls. */}
+      {/* Top row — the breadcrumb at the left; Share at the right from `sm` up.
+          On phones the site header is not drawn over the sky (see globals.css,
+          [data-sky-hero]), so Share and the profile menu live in ONE round icon
+          group (`.hadeda`) fixed to the top of the screen: it stays in reach
+          while the page scrolls, and the breadcrumb leaves room for it. Round
+          49px controls: content stays distinct from controls. */}
       <div className="flex items-center justify-between gap-3 pt-1 pr-[env(safe-area-inset-right,0px)] pl-[env(safe-area-inset-left,0px)]">
-        <div className="min-w-0 text-[length:var(--text-body-sm)] leading-[var(--text-body-sm-leading)] text-[var(--sky-fg-dim)]">
+        <div className="min-h-[var(--touch-target-min)] min-w-0 pr-[var(--hadeda-reserve)] text-[length:var(--text-body-sm)] leading-[var(--text-body-sm-leading)] text-[var(--sky-fg-dim)] sm:pr-0">
           {breadcrumb}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="hidden shrink-0 sm:block">
+          <ShareControl slug={slug} locationName={locationName} variant="sky" />
+        </div>
+        <div className="hadeda sm:hidden">
+          <ShareControl
+            slug={slug}
+            locationName={locationName}
+            variant="card"
+          />
           <div className="relative">
-            <button
-              type="button"
-              onClick={handleShare}
-              aria-label={`Share weather for ${locationName}`}
-              className="kestrel-round"
-            >
-              <ShareIcon size={20} aria-hidden="true" />
-            </button>
-            <span
-              role="status"
-              className={
-                copied || copyFailed
-                  ? "absolute top-full right-0 mt-1 text-[length:var(--text-body-sm)] leading-[var(--text-body-sm-leading)] font-semibold whitespace-nowrap"
-                  : "sr-only"
-              }
-            >
-              {copied ? "Link copied" : copyFailed ? "Copy failed" : ""}
-            </span>
-          </div>
-          <div className="relative sm:hidden">
-            <PhoneMenu
-              trigger="profile"
-              buttonClassName="kestrel-round"
-              iconClassName="text-[var(--sky-fg)]"
-            />
+            <PhoneMenu trigger="profile" buttonClassName="duiker" />
           </div>
         </div>
       </div>

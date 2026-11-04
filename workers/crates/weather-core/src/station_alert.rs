@@ -177,8 +177,9 @@ pub struct JoinedFrost {
 }
 
 /// The place's local wall-clock time, or `None` for an offset that does not
-/// exist.
-fn local_time(t: DateTime<Utc>, utc_offset_seconds: i32) -> Option<NaiveDateTime> {
+/// exist. Shared with `alert_plan`, so the plan's "now" and the station join's
+/// "now" can never be read two ways.
+pub(crate) fn local_time(t: DateTime<Utc>, utc_offset_seconds: i32) -> Option<NaiveDateTime> {
     if !(MIN_UTC_OFFSET_S..=MAX_UTC_OFFSET_S).contains(&utc_offset_seconds) {
         return None;
     }

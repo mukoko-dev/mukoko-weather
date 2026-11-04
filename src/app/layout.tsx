@@ -4,6 +4,7 @@ import { withAuth } from "@workos-inc/authkit-nextjs";
 import { MineralsStripe } from "@/components/brand/MineralsStripe";
 import { AppChrome } from "@/components/layout/AppChrome";
 import { ThemeProvider } from "@/components/brand/ThemeProvider";
+import { PersonPreferencesSync } from "@/components/profile/PersonPreferencesSync";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { PWAInstallPrompt } from "@/components/weather/PWAInstallPrompt";
 import { ServiceWorkerUpdater } from "@/components/pwa/ServiceWorkerUpdater";
@@ -376,6 +377,7 @@ export default async function RootLayout({
         </a>
         <AuthKitProvider initialAuth={initialAuth}>
           <ThemeProvider>
+            <PersonPreferencesSync />
             <MineralsStripe />
             <div className="overflow-x-clip pl-0 min-[480px]:pl-2">
               <AppChrome>{children}</AppChrome>

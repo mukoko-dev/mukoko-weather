@@ -1,9 +1,6 @@
 import { PageShellSkeleton } from "@/components/layout/PageShell";
-import {
-  ChartSkeleton,
-  MetricCardSkeleton,
-  Skeleton,
-} from "@/components/ui/skeleton";
+import { AtmosphereBodySkeleton } from "@/components/weather/SubRouteSkeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function AtmosphereLoading() {
   return (
@@ -17,19 +14,8 @@ export default function AtmosphereLoading() {
         <Skeleton className="h-7 w-56 rounded-[var(--radius-badge)]" />
       </div>
 
-      {/* Metric cards skeleton */}
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <MetricCardSkeleton key={i} />
-        ))}
-      </div>
-
-      {/* Chart skeletons */}
-      <div className="mt-8 space-y-6">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <ChartSkeleton key={i} />
-        ))}
-      </div>
+      {/* The page's own body skeleton: metric cards, then the charts. */}
+      <AtmosphereBodySkeleton />
     </PageShellSkeleton>
   );
 }

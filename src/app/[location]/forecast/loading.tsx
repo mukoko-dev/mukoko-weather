@@ -1,8 +1,5 @@
 import { PageShellSkeleton } from "@/components/layout/PageShell";
-import {
-  DailyForecastSkeleton,
-  HourlyForecastSkeleton,
-} from "@/components/weather/SectionSkeleton";
+import { ForecastBodySkeleton } from "@/components/weather/SubRouteSkeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function ForecastLoading() {
@@ -17,13 +14,8 @@ export default function ForecastLoading() {
         <Skeleton className="h-7 w-56 rounded-[var(--radius-badge)]" />
       </div>
 
-      <div className="mt-6">
-        <HourlyForecastSkeleton />
-      </div>
-
-      <div className="mt-8">
-        <DailyForecastSkeleton />
-      </div>
+      {/* The page's own body skeleton: the same grid as the loaded page. */}
+      <ForecastBodySkeleton />
     </PageShellSkeleton>
   );
 }

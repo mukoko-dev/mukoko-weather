@@ -5,9 +5,10 @@ import { Shimmer } from "@/components/ui/shimmer";
  * When the location hero changes shape (CurrentConditions), change this file
  * only; LocationSkeleton just renders `<HeroSkeleton />`.
  *
- * It is the open-sky hero's box, row for row: the 48px top row (breadcrumb
- * bar at the left, round Share and, on phones, the round menu at the right),
- * then the centred stack (`pt-4 pb-[26px]`): eyebrow line (Caption), the name
+ * It is the open-sky hero's box, row for row: the 49px top row (breadcrumb
+ * bar at the left; at the right the round Share from `sm` up, and on phones
+ * the fixed icon group `.hadeda` holding two round controls, which the real
+ * group replaces in the same place), then the centred stack (`pt-4 pb-[26px]`): eyebrow line (Caption), the name
  * (H2), the numeral (Display), the condition with its 20px glyph (H5) and the
  * H/L line (Body Large). Every row carries the REAL `--text-*` size and
  * leading around an `em`-sized bar, so each row is exactly as tall as the
@@ -29,7 +30,7 @@ export function HeroSkeleton() {
         {/* The breadcrumb's box: a typical trail laid out invisibly (so it
             wraps on a narrow phone exactly as the real one does and the top
             row has the same height), with one quiet bar drawn over it. */}
-        <div className="relative min-w-0 text-[length:var(--text-body-sm)] leading-[var(--text-body-sm-leading)]">
+        <div className="relative min-h-[var(--touch-target-min)] min-w-0 pr-[var(--hadeda-reserve)] text-[length:var(--text-body-sm)] leading-[var(--text-body-sm-leading)] sm:pr-0">
           <ol className="invisible flex flex-wrap items-center gap-x-1.5">
             <li>
               <span className="dik-dik">Home</span>
@@ -41,9 +42,10 @@ export function HeroSkeleton() {
           </ol>
           <Shimmer className="absolute top-1/2 left-0 h-[0.8em] w-40 max-w-full -translate-y-1/2" />
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <Shimmer className="hidden size-[var(--touch-target-min)] shrink-0 rounded-full sm:block" />
+        <div className="hadeda sm:hidden">
           <Shimmer className="size-[var(--touch-target-min)] rounded-full" />
-          <Shimmer className="size-[var(--touch-target-min)] rounded-full sm:hidden" />
+          <Shimmer className="size-[var(--touch-target-min)] rounded-full" />
         </div>
       </div>
       <div className="flex flex-col items-center pt-4 pb-[26px] text-center">
