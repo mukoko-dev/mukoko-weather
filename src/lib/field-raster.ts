@@ -236,7 +236,10 @@ export function interpolateAt(
     }
   });
   if (missing >= 0.5 || present <= 0) return Number.NaN;
-  if (missing > 0) return sum / present;
+  // Any missing corner, even one with no weight here (a point on a grid line
+  // or in the margin, where one pair of corners weighs nothing), rules out the
+  // cubic: it needs all four readings, and would otherwise return NaN.
+  if (corners.some((c) => c === undefined)) return sum / present;
 
   const along = (r: number): number | undefined => {
     const left = readingAt(grid, r, col);

@@ -179,6 +179,35 @@ describe("interpolateAt", () => {
     }
   });
 
+  it("a missing reading that carries no weight here never turns the point into a hole", () => {
+    // On a grid line, or in the half-cell margin, one pair of corners weighs
+    // nothing. If that reading is null the point must still take the value of
+    // the readings that do count, not NaN (the cubic needs all four corners).
+    // A point exactly on a sample falls at the far end (t = 1) of the cell
+    // before it, so the readings WEST and SOUTH of it are the cell's other
+    // corners, with no weight at all.
+    const cols = grid.lons.length;
+    for (const [row, col] of [
+      [3, 2],
+      [2, 3],
+      [2, 2],
+    ]) {
+      const values = [...grid.values];
+      values[row * cols + col] = null;
+      const gapped = { ...grid, values };
+      const at = interpolateAt(gapped, grid.lats[3], grid.lons[3]);
+      expect(Number.isFinite(at), `${row},${col}`).toBe(true);
+      expect(at).toBeCloseTo(grid.values[3 * cols + 3] as number, 9);
+    }
+    // And in the half-cell margin outside the grid it is the nearest edge value.
+    const margin = interpolateAt(
+      grid,
+      grid.lats[grid.lats.length - 1] + 0.01,
+      grid.lons[0] - 0.01,
+    );
+    expect(Number.isFinite(margin)).toBe(true);
+  });
+
   it("reproduces a plane exactly, and is monotone along a ramp", () => {
     const plane = gridOf(workerGrid(5, 5, 40, 7, (r, c) => 10 + 4 * c + 2 * r));
     const mid = interpolateAt(

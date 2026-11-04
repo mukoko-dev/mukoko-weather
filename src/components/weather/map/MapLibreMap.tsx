@@ -800,12 +800,16 @@ export function MapLibreMap({
       map.setMaxZoom(cap);
       return;
     }
-    map.easeTo({ zoom: plan.easeTo, duration: ZOOM_CAP_EASE_MS });
+    // The listener goes on BEFORE the ease: under reduced motion (or a zero
+    // duration) MapLibre finishes the move inside easeTo and fires "moveend"
+    // there, so a listener added after the call would miss it and the cap
+    // would never be locked.
     map.once("moveend", () => {
       map.setMaxZoom(
         maxMapZoomFor(overlayPropsRef.current.layer, MAP_MAX_ZOOM_DEFAULT),
       );
     });
+    map.easeTo({ zoom: plan.easeTo, duration: ZOOM_CAP_EASE_MS });
   }, [weatherLayer]);
 
   // Switch the weather overlay frame when the layer or forecast time changes.

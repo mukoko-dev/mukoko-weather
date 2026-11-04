@@ -515,6 +515,16 @@ describe("GIBS zoom cap (a satellite layer cannot show more than its data holds)
     expect(effect).not.toContain("essential");
   });
 
+  it("registers the lock BEFORE starting the ease, so an instant ease (reduced motion) still locks", () => {
+    // MapLibre finishes a zero-duration ease inside easeTo and fires
+    // "moveend" there; a listener added after the call would miss it.
+    const listener = effect.indexOf('map.once("moveend"');
+    const ease = effect.indexOf("map.easeTo(");
+    expect(listener).toBeGreaterThan(-1);
+    expect(ease).toBeGreaterThan(-1);
+    expect(listener).toBeLessThan(ease);
+  });
+
   it("locks the CURRENT layer's cap when the ease ends, so switching mid-ease leaves no stale cap", () => {
     const lock = effect.slice(
       effect.indexOf('map.once("moveend"'),
