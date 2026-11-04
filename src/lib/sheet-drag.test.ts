@@ -15,6 +15,7 @@ import {
   SHEET_FLING_MIN_PX,
   SHEET_FLING_VELOCITY,
   SHEET_NO_DRAG_SELECTOR,
+  SHEET_REFUSAL_CHECK_MS,
   SHEET_REST_MS,
   SHEET_RESTORE_MS,
   attachSheetDrag,
@@ -22,6 +23,7 @@ import {
   decideRelease,
   dismissDistance,
   hasTravelled,
+  nextVelocity,
   releaseVelocity,
   smoothVelocity,
   startsPull,
@@ -124,6 +126,15 @@ describe("reading a gesture", () => {
     expect(smoothVelocity(0, 10, 10)).toBeCloseTo(0.6);
     expect(smoothVelocity(1, 10, 10)).toBeCloseTo(1);
     expect(smoothVelocity(0.8, 10, 0)).toBe(0.8);
+  });
+
+  it("takes the first sample as it is, then smooths", () => {
+    // A quick flick has two or three moves: the first must not be halved
+    // against a zero nobody measured.
+    expect(nextVelocity(0, 0, 30, 20)).toBeCloseTo(1.5);
+    expect(nextVelocity(1.5, 1, 30, 20)).toBeCloseTo(1.5);
+    expect(nextVelocity(1, 1, 0, 20)).toBeCloseTo(0.4);
+    expect(nextVelocity(0.8, 3, 10, 0)).toBe(0.8);
   });
 
   it("a finger that rested before lifting has no speed", () => {
@@ -516,10 +527,55 @@ describe("attachSheetDrag", () => {
     pointer("pointerup", 320, 800);
     vi.advanceTimersByTime(SHEET_EXIT_MS + 20);
     expect(dismiss).toHaveBeenCalledTimes(1);
-    // data-state is still "open": the consumer refused.
-    vi.advanceTimersByTime(500);
-    expect(sheet.style.transform).toBe("");
+    expect(sheet.hasAttribute("data-sheet-closing")).toBe(true);
+    // data-state is still "open": the consumer refused. Within a moment the
+    // sheet comes back, with a spring and not after a long blank wait.
+    vi.advanceTimersByTime(SHEET_REFUSAL_CHECK_MS);
     expect(sheet.hasAttribute("data-sheet-closing")).toBe(false);
+    expect(sheet.style.transform).toBe("translate3d(0, 0, 0)");
+    vi.advanceTimersByTime(SHEET_RESTORE_MS + 40);
+    expect(sheet.style.transform).toBe("");
+  });
+
+  it("a dialog that does begin to close is left to its own exit", () => {
+    dismiss.mockImplementation(() =>
+      sheet.setAttribute("data-state", "closed"),
+    );
+    pointer("pointerdown", 100, 0);
+    pointer("pointermove", 120, 16);
+    pointer("pointermove", 320, 400);
+    pointer("pointerup", 320, 800);
+    vi.advanceTimersByTime(SHEET_EXIT_MS + 20 + SHEET_REFUSAL_CHECK_MS + 500);
+    expect(dismiss).toHaveBeenCalledTimes(1);
+    expect(sheet.hasAttribute("data-sheet-closing")).toBe(true);
+    expect(sheet.style.transform).toBe("translate3d(0, 100%, 0)");
+  });
+
+  it("a short, quick flick closes it (the first move is not smoothed away)", () => {
+    pointer("pointerdown", 100, 0);
+    pointer("pointermove", 130, 20); // 30px in 20ms
+    pointer("pointerup", 130, 30);
+    vi.advanceTimersByTime(SHEET_EXIT_MS + 20);
+    expect(dismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not take a pull while the slide-up animation still runs", () => {
+    (sheet as unknown as { getAnimations: () => unknown[] }).getAnimations =
+      () => [{ animationName: "slide-up", playState: "running" }];
+    pointer("pointerdown", 100, 0);
+    pointer("pointermove", 160, 100);
+    pointer("pointermove", 300, 200);
+    pointer("pointerup", 300, 300);
+    expect(sheet.style.transform ?? "").toBe("");
+    expect(dismiss).not.toHaveBeenCalled();
+  });
+
+  it("a running transition (a spring in flight) does not stop a new pull", () => {
+    (sheet as unknown as { getAnimations: () => unknown[] }).getAnimations =
+      () => [{ transitionProperty: "transform", playState: "running" }];
+    pointer("pointerdown", 100, 0);
+    pointer("pointermove", 160, 100);
+    expect(sheet.style.transform).toBe("translate3d(0, 60px, 0)");
   });
 
   it("removes every listener when detached", () => {

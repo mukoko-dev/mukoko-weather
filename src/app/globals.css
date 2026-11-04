@@ -1074,7 +1074,7 @@ body {
 /* z-index kept below Radix Dialog's overlay/content (z-50, see dialog.tsx) so
    this page-chrome accent is covered by the backdrop like the rest of the
    page whenever a modal opens — it's a main-layout decoration only. Modals
-   carry their own horizontal mineral accent via DialogSheetHandle's
+   carry their own horizontal mineral accent via DialogBar's
    .minerals-accent instead of having this vertical stripe bleed on top. */
 .minerals-stripe {
   position: fixed;

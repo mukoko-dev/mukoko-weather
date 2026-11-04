@@ -39,8 +39,13 @@ export const SHEET_REST_MS = 100;
 /** Slide out, then spring back, in milliseconds. */
 export const SHEET_EXIT_MS = 180;
 export const SHEET_RESTORE_MS = 240;
-/** The `sm` breakpoint: from here the dialog is centred and cannot be pulled. */
-export const SHEET_PHONE_QUERY = "(min-width: 640px)";
+/**
+ * Matches from the `sm` breakpoint up, where the dialog is centred and cannot
+ * be pulled. A phone is the viewport that does NOT match.
+ */
+export const SHEET_CENTRED_QUERY = "(min-width: 640px)";
+/** After asking the dialog to close, this long to see whether it began to. */
+export const SHEET_REFUSAL_CHECK_MS = 60;
 
 export type SheetRelease = "dismiss" | "restore";
 
@@ -88,6 +93,23 @@ export function smoothVelocity(
 ): number {
   if (!(deltaMs > 0)) return previous;
   return 0.6 * (deltaY / deltaMs) + 0.4 * previous;
+}
+
+/**
+ * The speed after one more move. The first sample is taken as it is: smoothing
+ * it against a zero that was never measured would under-read a short, quick
+ * flick, which has only two or three moves to go on.
+ */
+export function nextVelocity(
+  previous: number,
+  samples: number,
+  deltaY: number,
+  deltaMs: number,
+): number {
+  if (!(deltaMs > 0)) return previous;
+  return samples === 0
+    ? deltaY / deltaMs
+    : smoothVelocity(previous, deltaY, deltaMs);
 }
 
 /** The speed to release with: zero when the finger rested before lifting. */
@@ -152,6 +174,8 @@ interface Gesture {
   dragging: boolean;
   offset: number;
   velocity: number;
+  /** Moves measured so far (the first is taken as it is, see nextVelocity). */
+  samples: number;
   lastY: number;
   lastAt: number;
 }
@@ -159,7 +183,19 @@ interface Gesture {
 const isPhone = () =>
   typeof window !== "undefined" &&
   typeof window.matchMedia === "function" &&
-  !window.matchMedia(SHEET_PHONE_QUERY).matches;
+  !window.matchMedia(SHEET_CENTRED_QUERY).matches;
+
+/** True while a CSS animation (not a transition) is running on the element. */
+function runsCssAnimation(el: HTMLElement): boolean {
+  if (typeof el.getAnimations !== "function") return false;
+  return el
+    .getAnimations()
+    .some(
+      (animation) =>
+        (animation as CSSAnimation).animationName !== undefined &&
+        animation.playState === "running",
+    );
+}
 
 const prefersReducedMotion = () =>
   typeof window !== "undefined" &&
@@ -239,13 +275,15 @@ export function attachSheetDrag(
   const close = () => {
     el.setAttribute(SHEET_CLOSING_ATTRIBUTE, "");
     options.dismiss();
-    // A dialog that refuses to close (a controlled `open` that stays true)
-    // must not be left off-screen.
+    // A dialog that did not begin to close (a guarded `onOpenChange`, a
+    // controlled `open` that stays true) must not be left off-screen: give it a
+    // moment, then bring the sheet back.
     later(() => {
       if (el.isConnected && el.getAttribute("data-state") === "open") {
-        reset();
+        el.removeAttribute(SHEET_CLOSING_ATTRIBUTE);
+        spring();
       }
-    }, 400);
+    }, SHEET_REFUSAL_CHECK_MS);
   };
 
   const slideOut = () => {
@@ -274,6 +312,7 @@ export function attachSheetDrag(
       dragging: false,
       offset: 0,
       velocity: 0,
+      samples: 0,
       lastY: y,
       lastAt: at,
     };
@@ -290,6 +329,12 @@ export function attachSheetDrag(
         gesture = null;
         return false;
       }
+      if (runsCssAnimation(el)) {
+        // The slide-up (or a slide-down) is still running and its transform
+        // would override ours: the sheet would not follow the finger.
+        gesture = null;
+        return false;
+      }
       g.dragging = true;
       // Catching a sheet that is still springing back or sliding out.
       clearTimers();
@@ -298,7 +343,13 @@ export function attachSheetDrag(
       el.setAttribute("data-sheet-dragging", "");
     }
     g.offset = Math.max(0, g.base + dy);
-    g.velocity = smoothVelocity(g.velocity, y - g.lastY, at - g.lastAt);
+    g.velocity = nextVelocity(
+      g.velocity,
+      g.samples,
+      y - g.lastY,
+      at - g.lastAt,
+    );
+    g.samples += 1;
     g.lastY = y;
     g.lastAt = at;
     el.style.transform = `translate3d(0, ${g.offset}px, 0)`;
