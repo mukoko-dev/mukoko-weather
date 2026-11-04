@@ -152,11 +152,12 @@ describe("buildWeatherOverlaySource", () => {
     expect(src.tileSize).toBe(WEATHER_OVERLAY_TILE_SIZE);
     expect(WEATHER_OVERLAY_TILE_SIZE).toBe(512);
     // The maxzoom makes MapLibre overzoom instead of requesting deeper tiles
-    // (the proxy rejects z13+; z11–12 add no detail over the forecast grid).
+    // (the proxy rejects z13+; z9 and deeper add no detail over the forecast
+    // grid and each is a request to a small shared quota).
     expect(src.minzoom).toBe(WEATHER_OVERLAY_MIN_ZOOM);
     expect(src.maxzoom).toBe(WEATHER_OVERLAY_MAX_ZOOM);
     expect(WEATHER_OVERLAY_MIN_ZOOM).toBe(1);
-    expect(WEATHER_OVERLAY_MAX_ZOOM).toBe(10);
+    expect(WEATHER_OVERLAY_MAX_ZOOM).toBe(8);
   });
 
   it("never asks for a zoom the proxy rejects", () => {

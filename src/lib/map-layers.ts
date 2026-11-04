@@ -147,12 +147,18 @@ export function getMapLayerById(id: string): MapLayer | undefined {
  * when the user zooms in further instead of requesting tiles the Worker
  * rejects — which would otherwise make the overlay vanish when zoomed in.
  *
- * The cap is 10, not 12 (#266): a z10 tile is already ~150 m per pixel, far
- * finer than the forecast grid behind it, so z11–12 tiles add requests against
- * a small shared quota without adding detail.
+ * The cap is 8 (#266 set it to 10; lowered 2026-11-04). The forecast grids
+ * behind the tiles are kilometres wide, so tiles deeper than z8 are assumed to
+ * repeat the same values (not measured against the provider's data), while
+ * every tile of a deeper level is a request to the provider's small shared
+ * quota, one hour of cache at a time: a screen one zoom level deeper needs up
+ * to four times the tiles. Zooming from 8 to 10 now asks for nothing new:
+ * MapLibre enlarges the z8 tile, so a zoom cannot leave a patch of the map
+ * without its overlay. The price is a coarser overlay at city zoom, an owner
+ * call that the provider's capacity decides (see the tile-source decision).
  */
 export const WEATHER_OVERLAY_MIN_ZOOM = 1;
-export const WEATHER_OVERLAY_MAX_ZOOM = 10;
+export const WEATHER_OVERLAY_MAX_ZOOM = 8;
 
 /**
  * Display size of one overlay tile, in CSS pixels. Tomorrow.io tiles are
