@@ -230,6 +230,8 @@ This queue is a workaround for memory pressure, not the design (see Platform dir
 | `rate_limits`         | TTL on `expiresAt` | IP rate limiting (atomic findOneAndUpdate)                                                |
 | `api_keys`            |        None        | Third-party API keys (Tomorrow.io, Stytch)                                                |
 
+A signed-in person's activities and saved places are not in this list: they belong to the person, not to a weather collection, and live on the person's own `identity.persons` record (off until nyuchi applies the validator change; see [docs/mongodb-schema-map.md](docs/mongodb-schema-map.md)).
+
 ### Atlas Search Indexes
 
 | Index             | Collection | Fields                                                    | Type   |
