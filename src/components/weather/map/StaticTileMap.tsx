@@ -7,7 +7,9 @@ import {
   staticMapTiles,
   STATIC_TILE_SIZE,
   wantsRetinaTiles,
+  withFailedTile,
   type StaticMap,
+  type TileFailures,
 } from "@/lib/static-map";
 import { useMapIsDark } from "./use-map-style";
 
@@ -49,10 +51,10 @@ export function useStaticTileMap(opts: {
   // failed under, so a theme change starts afresh. One bad tile leaves the
   // others drawn; the fallback shows only when none loaded.
   const variant = `${isDark ? "dark" : "light"}:${retina ? "2x" : "1x"}`;
-  const [failures, setFailures] = useState<{
-    variant: string;
-    hrefs: ReadonlySet<string>;
-  }>({ variant, hrefs: new Set() });
+  const [failures, setFailures] = useState<TileFailures>({
+    variant,
+    hrefs: new Set(),
+  });
   const failed = failures.variant === variant ? failures.hrefs : EMPTY;
 
   const picture = staticMapTiles({
@@ -72,7 +74,9 @@ export function useStaticTileMap(opts: {
       setRetina(false);
       return;
     }
-    setFailures({ variant, hrefs: new Set([...failed, href]) });
+    // From the latest state, not this render's snapshot: tiles that fail in
+    // the same tick must all be recorded (withFailedTile).
+    setFailures((prev) => withFailedTile(prev, variant, href));
   };
 
   return { picture, tilesShown, onTileError };

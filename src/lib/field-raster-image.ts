@@ -20,9 +20,11 @@ import {
 const NEUTRAL: Rgb = [128, 128, 128];
 
 /**
- * One colour per band, read from the tokens NOW (not at module load), so a
- * light/dark switch repaints in the new theme's colours. Neutral grey for a
- * token the page does not define or a colour the parser does not read.
+ * One colour per band, read from the tokens when it is called (not at module
+ * load), in the theme showing then. A caller that keeps the painted picture
+ * keeps those colours: the card paints once per grid, and the six `--wx-aqi-*`
+ * tokens are the same in both themes. Neutral grey for a token the page does not
+ * define or a colour the parser does not read.
  */
 export function rasterPalette(raster: FieldRaster): Rgb[] {
   if (typeof document === "undefined") return raster.tokens.map(() => NEUTRAL);

@@ -111,6 +111,28 @@ export function allTilesFailed(
   return map.tiles.length > 0 && map.tiles.every((t) => failed.has(t.href));
 }
 
+/** The failed tiles, and the theme + density they failed under. */
+export interface TileFailures {
+  variant: string;
+  hrefs: ReadonlySet<string>;
+}
+
+/**
+ * `prev` with one more failed tile, for a state updater (`setFailures((prev) =>
+ * withFailedTile(prev, ...))`). Four tiles can fail in the same tick (a bad key,
+ * no network); building the set from the render-time snapshot let each error
+ * overwrite the last, so `allTilesFailed` never turned true. Failures recorded
+ * under another theme or density are dropped: the new variant starts afresh.
+ */
+export function withFailedTile(
+  prev: TileFailures,
+  variant: string,
+  href: string,
+): TileFailures {
+  const kept = prev.variant === variant ? prev.hrefs : new Set<string>();
+  return { variant, hrefs: new Set([...kept, href]) };
+}
+
 /**
  * The 2×2 tiles around the centre. The block starts on whichever side of the
  * centre tile is nearer, so the view square (smaller than a tile) always

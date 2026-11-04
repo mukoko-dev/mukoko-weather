@@ -6,8 +6,10 @@ import {
   rasterTileUrl,
   staticMapTiles,
   wantsRetinaTiles,
+  withFailedTile,
   worldPixel,
   worldRect,
+  type TileFailures,
 } from "./static-map";
 
 const harare = { lat: -17.8292, lon: 31.0522 };
@@ -253,5 +255,41 @@ describe("worldRect: a lon/lat box as a rectangle in world pixels (#476)", () =>
   it("gives a box that is 360 degrees wide the width of the world", () => {
     const rect = worldRect({ west: -180, east: 180, south: -10, north: 10 }, 3);
     expect(rect.width).toBeCloseTo(STATIC_TILE_SIZE * 2 ** 3, 6);
+  });
+});
+
+describe("withFailedTile", () => {
+  const start: TileFailures = { variant: "light:2x", hrefs: new Set() };
+
+  it("records every tile that fails in the same tick when used as an updater chain", () => {
+    // Four errors fire before React renders again: each updater sees the
+    // result of the one before it, not the render-time snapshot.
+    const map = staticMapTiles({ ...harare, zoom: 9, style: "s", apiKey: "k" });
+    const hrefs = map.tiles.map((t) => t.href);
+    const after = hrefs.reduce(
+      (prev, href) => withFailedTile(prev, "light:2x", href),
+      start,
+    );
+    expect([...after.hrefs].sort()).toEqual([...hrefs].sort());
+    expect(allTilesFailed(map, after.hrefs)).toBe(true);
+  });
+
+  it("does not change the state it was given", () => {
+    const next = withFailedTile(start, "light:2x", "a");
+    expect(start.hrefs.size).toBe(0);
+    expect(next.hrefs.has("a")).toBe(true);
+  });
+
+  it("starts afresh for another theme or density", () => {
+    const light = withFailedTile(start, "light:2x", "a");
+    const dark = withFailedTile(light, "dark:2x", "b");
+    expect(dark.variant).toBe("dark:2x");
+    expect([...dark.hrefs]).toEqual(["b"]);
+  });
+
+  it("keeps a tile that fails twice once", () => {
+    const once = withFailedTile(start, "light:2x", "a");
+    const twice = withFailedTile(once, "light:2x", "a");
+    expect(twice.hrefs.size).toBe(1);
   });
 });
