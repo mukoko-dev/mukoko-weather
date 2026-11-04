@@ -138,8 +138,8 @@ export function PWAInstallPrompt() {
         if (!v) handleDismiss();
       }}
     >
-      <DialogContent className="max-w-sm rounded-[var(--radius-card)] p-6 sm:p-6">
-        <DialogHeader className="items-center text-center gap-4">
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader className="items-center gap-4 px-6 pt-3 text-center">
           {/* App icon — full-color brand mark */}
           <div className="flex items-center justify-center w-16 h-16 rounded-[var(--radius-card)] bg-surface-dim">
             <Image
@@ -162,7 +162,7 @@ export function PWAInstallPrompt() {
         </DialogHeader>
 
         {/* Feature highlights */}
-        <ul className="space-y-3 py-2 text-sm text-text-secondary">
+        <ul className="space-y-3 px-6 py-2 text-sm text-text-secondary">
           {[
             "Works offline with cached weather data",
             "Faster loads — no browser overhead",
@@ -181,7 +181,7 @@ export function PWAInstallPrompt() {
         </ul>
 
         {/* Actions */}
-        <div className="flex flex-col gap-2 pt-2">
+        <div className="flex flex-col gap-2 px-6 pt-2 pb-6">
           <Button
             onClick={handleInstall}
             className="min-h-[var(--touch-target-min)]"

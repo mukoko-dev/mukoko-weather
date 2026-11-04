@@ -285,6 +285,17 @@
   --radius-input: var(--radius-md);
   --radius-badge: 9999px;
   --radius-icon: 24px;
+  /* The corner of a phone sheet (owner, 2026-11-04: "the modal should follow
+     the screen radius"). CSS cannot read the device's screen radius, so this
+     is a stand-in for the corner of a current phone screen (about 40 to 55px on
+     iPhones, 28 to 40px on Android); 2.75rem (44px) sits inside that range and
+     is also what keeps the sheet's Close control (49px, 7px from the corner)
+     inside the curve. It is LOCAL: Mzizi's radius scale (4, 7, 12, 14, 17px and
+     the pill) has no sheet or screen radius, so it is proposed upstream to
+     mzizi-dev/mzizi-registry and not defined in mzizi-tokens.css. Used by the
+     phone bottom sheet's top corners (components/ui/dialog.tsx); from `sm` a
+     dialog is centred and uses --radius-card. */
+  --radius-screen: 2.75rem;
 
   /* Shadows — Light mode */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -1027,6 +1038,13 @@ body {
   /* overscroll-behavior-x prevents iOS Safari from bubbling horizontal
      scroll from inner containers (e.g. hourly forecast row) to the page */
   overscroll-behavior-x: none;
+}
+
+/* A sheet that was pulled down has already slid off the screen (sheet-drag.ts).
+   Radix's own exit animation would bring it back to its resting place and slide
+   it out a second time, so this one close skips the animation. */
+[data-slot="dialog-content"][data-sheet-closing] {
+  animation: none !important;
 }
 
 /* ===== Minerals Accent — Horizontal gradient for dialogs (7 minerals, ring order) ===== */

@@ -6,8 +6,6 @@ import {
   DialogClose,
   DialogContent,
   DialogDescription,
-  DialogSheetHandle,
-  DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { AQI_BAND_LABELS, aqiBand } from "@/lib/aq-grid";
@@ -53,11 +51,14 @@ export function AirQualityDetail({ open, reading, slug, now, onClose }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent aria-describedby="air-quality-guidance" className="pb-6">
-        <DialogSheetHandle />
+      <DialogContent
+        heading="Air quality"
+        headingClassName="hornbill text-sm"
+        aria-describedby="air-quality-guidance"
+        className="pb-6"
+      >
         <div className="flex flex-col gap-[var(--space-section)] px-4 pt-3 sm:px-5">
           <header className="flex flex-col gap-1">
-            <DialogTitle className="hornbill text-sm">Air quality</DialogTitle>
             <MetricValue>
               {reading.aqi}{" "}
               <span className="giraffe">{AQI_BAND_LABELS[band]}</span>
