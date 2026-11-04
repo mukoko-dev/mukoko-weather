@@ -33,8 +33,11 @@ describe("the float grid", () => {
     expect(css).toContain(
       "--float-top: max(var(--float-inset), env(safe-area-inset-top, 0px));",
     );
-    expect(css).toContain(
-      "--float-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--float-inset));",
+    // The bottom edge is the inset plus a small lift (owner, 2026-11-04), so
+    // the bar clears the home indicator and the browser's toolbar.
+    expect(css).toContain("--float-lift: 0.25rem;");
+    expect(css.replace(/\s+/g, " ")).toContain(
+      "--float-bottom: calc( env(safe-area-inset-bottom, 0px) + var(--float-inset) + var(--float-lift) );",
     );
     expect(css).toContain(
       "--float-left: max(var(--float-inset), env(safe-area-inset-left, 0px));",
@@ -71,10 +74,10 @@ describe("the float grid", () => {
     // as an arbitrary value (left-[1rem], inset-x-[12px], bottom-[calc(...)]).
     for (const source of [code(map), code(bottomNav)]) {
       expect(source).not.toMatch(
-        /(^|[\s"`])-?(left|right|top|bottom|inset|inset-x|inset-y)-[0-9]/,
+        /(^|[\s"`])-?(left|right|top|bottom|inset|inset-x|inset-y)-[0-9]+(?![/\d.])/,
       );
       expect(source).not.toMatch(
-        /(^|[\s"`])(left|right|top|bottom|inset|inset-x|inset-y)-\[(?!var\(--float-)/,
+        /(^|[\s"`])(left|right|top|bottom|inset|inset-x|inset-y)-\[(?!var\(--(float|inset-floor|gap-floor))/,
       );
       expect(source).not.toMatch(/safe-area-inset/);
       expect(source).not.toContain("0.75rem");
@@ -88,12 +91,15 @@ describe("the float grid", () => {
     // overflow clip: its buttons are full circles inside it, and a clip would
     // cut the keyboard focus ring drawn outside them.
     const capsule = map.match(
-      /className="(serval pointer-events-auto flex flex-col[^"]*)"/,
+      /className="(serval pointer-events-auto[^"]*flex-col[^"]*)"/,
     );
     expect(capsule).not.toBeNull();
     expect(capsule?.[1]).toContain("rounded-full");
     expect(capsule?.[1]).not.toMatch(/(^|\s)p[xy]?-/);
     expect(capsule?.[1]).not.toMatch(/overflow-/);
+    // Its two controls are a gap apart (the Bundu floor: 7px between adjacent
+    // controls), the hairline between them sitting in that gap.
+    expect(capsule?.[1]).toContain("gap-[var(--float-gap)]");
   });
 
   it("keeps its round controls round on keyboard focus (the global ring would square them)", () => {

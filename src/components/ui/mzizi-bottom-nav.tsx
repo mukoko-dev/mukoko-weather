@@ -60,8 +60,9 @@
  *    does); what scrolls, snaps or fades inside the lane is the consumer's
  *    (this app: components/layout/PlaceLane.tsx, which also keeps its own
  *    first chip pinned and its current chip in view). With a lane the pinned
- *    items are as narrow as a touch target allows (`min-w` 48px, `px-2`, not
- *    60px and `px-3`) and their labels collapse to screen-reader-only below
+ *    items are as narrow as the Bundu floor allows (`min-w` the 49px hit
+ *    region, a 14px inline inset on every side of the text, not 60px) and their
+ *    labels collapse to screen-reader-only below
  *    360px, so the lane keeps the width on a small phone; the bar uses
  *    `--float-gap` between its parts and as its side padding. Pinned items stay pill-sized (about 51px) and
  *    take `.plover`, so the whole bar height is their tappable area, and their
@@ -153,7 +154,7 @@ export function isBottomNavItemActive(
  * blur (mukoko-news island).
  */
 const FLOATING_SURFACE =
-  "rounded-full border-solid border-border border-[length:var(--border-width-rest)] bg-card/90 shadow-lg backdrop-blur-xl";
+  "rounded-full border-solid border-[color:var(--float-border)] border-[length:var(--border-width-rest)] bg-card/90 shadow-lg backdrop-blur-xl";
 
 export function MziziBottomNav({
   items,
@@ -202,8 +203,8 @@ export function MziziBottomNav({
         className={cn(
           "plover relative flex min-h-[var(--touch-target-min)] flex-col items-center justify-center gap-1 rounded-full py-1",
           hasLane
-            ? "min-w-[var(--touch-target-min)] shrink-0 px-2"
-            : "min-w-[60px] px-3",
+            ? "min-w-[var(--touch-target-min)] shrink-0 px-[var(--inset-floor)]"
+            : "min-w-[60px] px-[var(--inset-floor)]",
           "text-[length:var(--text-nav-label)] font-medium transition-colors",
           // The current item is marked by `.plover`'s aria-current rule (a
           // soft pill fill, the same one a current chip in the lane wears),

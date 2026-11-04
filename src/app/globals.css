@@ -124,8 +124,25 @@
   --focus-ring-offset: 2px;
   --focus-ring-width: 2px;
 
-  /* Touch & Interaction — 56px optimal (Material Design 3 recommended) */
-  --touch-target-min: 48px;
+  /* The Bundu floor (Mzizi registry 4.23.0 and 4.24.0; owner rulings of 1 to
+     4 November 2026; https://docs.mzizi.dev/foundations/bundu-floor and
+     /foundations/spacing-floor; issue #479): the minimums every surface keeps
+     on every device. They are named as the registry names them, so that when
+     mzizi-tokens-globals.css is vendored again (the next step of #479) these
+     four lines are replaced by the registry's own and nothing else moves.
+     --target-floor is the hit region of every control (7 x 7, above Apple's
+     44 pt), --inset-floor the padding between text and its container edge (the
+     inline axis for a control), --gap-floor the gap between adjacent controls,
+     labels and fields, and sibling items, --leading-floor the body line
+     height. Nothing in the app goes under them; bundu-floor.test.ts says so. */
+  --target-floor: 49px;
+  --inset-floor: 14px;
+  --gap-floor: 7px;
+  --leading-floor: 1.5;
+
+  /* Touch & Interaction: the hit region of a control is the floor (it was
+     48px until 2026-11-04). */
+  --touch-target-min: var(--target-floor);
 
   /* One grid for everything that floats over a page or a map (owner,
      2026-11-04, from Apple's Find My: every control sits the same distance
@@ -143,8 +160,26 @@
   --float-inset: 1rem;
   --float-gap: 0.5rem;
   --float-pad: 0.25rem;
+  /* The grid is above the floor (1rem over --inset-floor, 0.5rem over
+     --gap-floor), never under it; bundu-floor.test.ts compares them.
+
+     --float-border is the hairline round everything that floats: the bar, its
+     targets, the hero's icon group and the map's controls (owner, 2026-11-04:
+     "the surface blends and boundaries disappear"). --mzizi-border is about
+     1.2:1 against a card, so a 0.5px edge in it vanished; the foreground at 50%
+     is 3:1 or better on the card, the page and the muted fill in both themes,
+     the WCAG 1.4.11 and Bundu floor contrast for a UI part (it is the
+     foreground colour, so it follows the theme; bundu-floor.test.ts computes
+     it). */
+  --float-border: color-mix(in srgb, var(--foreground) 50%, transparent);
+  /* The bottom edge sits a little higher than the others (owner, 2026-11-04:
+     "the nav bar needs slight lifting"): --float-lift clears the home
+     indicator zone and the browser's toolbar, where the bar was too close. */
+  --float-lift: 0.25rem;
   --float-top: max(var(--float-inset), env(safe-area-inset-top, 0px));
-  --float-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--float-inset));
+  --float-bottom: calc(
+    env(safe-area-inset-bottom, 0px) + var(--float-inset) + var(--float-lift)
+  );
   --float-left: max(var(--float-inset), env(safe-area-inset-left, 0px));
   --float-right: max(var(--float-inset), env(safe-area-inset-right, 0px));
 
@@ -168,7 +203,7 @@
   /* The phone hero's icon group (.hadeda): Share and the profile menu in ONE
      round pill fixed to the top of the screen, inset 1rem from the top and
      right edges (the hero's own gutter). Its size comes from these tokens and
-     from nothing else: --hadeda-width is the controls (48px each) plus the
+     from nothing else: --hadeda-width is the controls (49px each) plus the
      gaps between them plus the padding around them, and --hadeda-reserve is
      what the breadcrumb at the left of the hero's top row leaves free for it
      (the pill plus a 0.75rem gap), so the trail wraps before it reaches the
@@ -1329,7 +1364,7 @@ body {
            transition-all;
   }
 
-  /* .duiker — round 48px icon control on a card surface (the duiker: small,
+  /* .duiker — round icon control (--touch-target-min, 49px) on a card surface (the duiker: small,
      quick, ducks into cover). No surface of its own, so it sits inside the
      nav island or a map overlay card. aria-current / aria-pressed light it
      with a primary tint. */
@@ -1363,7 +1398,7 @@ body {
     gap: var(--hadeda-gap);
     padding: var(--hadeda-pad);
     border-radius: var(--radius-full);
-    border: var(--border-width-rest) solid var(--border);
+    border: var(--border-width-rest) solid var(--float-border);
     background-color: color-mix(in srgb, var(--card) 90%, transparent);
     box-shadow: var(--shadow-lg);
   }
@@ -1378,7 +1413,7 @@ body {
   }
 
   /* .duiker-solid — the one primary round control in a group (map timeline
-     play/pause). Filled with the brand colour, same 48px geometry. */
+     play/pause). Filled with the brand colour, same 49px geometry. */
   .duiker-solid {
     @apply flex shrink-0 items-center justify-center rounded-full
            w-[var(--touch-target-min)] h-[var(--touch-target-min)]
@@ -1391,7 +1426,7 @@ body {
      stack). Solid card surface so it reads over tiles in light and dark. */
   .serval {
     @apply rounded-[var(--radius-card)] bg-surface-card text-text-primary
-           shadow-md ring-1 ring-border;
+           shadow-md ring-1 ring-[color:var(--float-border)];
   }
 
   /* .springhare — the map timeline range input. Native <input type=range>
@@ -1783,7 +1818,8 @@ body {
      --text-nav-label token, truncated, so a long name never crowds the lane. */
   .lark {
     @apply relative flex min-h-[var(--touch-target-min)] items-center
-           justify-center gap-1.5 rounded-full border-border bg-muted px-3
+           justify-center gap-1.5 rounded-full border-[color:var(--float-border)] bg-muted
+           px-[var(--inset-floor)]
            text-[length:var(--text-nav-label)] font-medium whitespace-nowrap
            text-foreground transition-colors;
     border-style: solid;
@@ -1801,7 +1837,17 @@ body {
      here is a guess at the bar, and a change to the bar's token moves it.
      Horizontally it is the link's own width, so it never reaches the next
      target. It stays inside the bar (and the lane's scroller, which is the
-     bar's height), so nothing is clipped. */
+     bar's height), so nothing is clipped.
+
+     A pinned item wears the same bordered pill as a chip (owner, 2026-11-04:
+     the surface blends and boundaries disappear): the --float-border hairline
+     on a muted fill, so each target reads as its own button on the bar. */
+  .plover {
+    @apply bg-muted;
+    border-style: solid;
+    border-width: var(--border-width-rest);
+    border-color: var(--float-border);
+  }
   .plover::after,
   .lark::after {
     content: "";
@@ -1810,19 +1856,21 @@ body {
     inset-block: calc((100% - var(--mobile-nav-bar-height)) / 2);
   }
   /* The current target wears one look wherever it is: a soft rounded fill
-     (the cobalt container) and its readable text colour. A pinned item gets
-     only that; a chip also takes the active border below. */
+     (the cobalt container), its readable text colour and a soft border of
+     it. A pinned item keeps its hairline width; a chip also thickens its
+     border below. */
   .plover:is([aria-current]:not([aria-current="false"])),
   .lark:is([aria-current]:not([aria-current="false"])) {
-    @apply bg-container-cobalt text-on-container-cobalt;
+    @apply border-on-container-cobalt/25 bg-container-cobalt
+           text-on-container-cobalt;
   }
   .lark:is([aria-current]:not([aria-current="false"])) {
-    @apply border-on-container-cobalt/25;
     border-width: var(--border-width-active);
     /* The thicker border comes out of the padding, so the chip keeps its
        outer width and a place switch does not nudge the row. */
     padding-inline: calc(
-      0.75rem - (var(--border-width-active) - var(--border-width-rest)) / 2
+      var(--inset-floor) -
+        (var(--border-width-active) - var(--border-width-rest)) / 2
     );
   }
 

@@ -265,7 +265,7 @@ describe("the hero's phone icon group (.hadeda) stays fixed to the viewport", ()
   it("is a card surface with the Mzizi border: 0.5px token border, shadow, 90% card fill", () => {
     const rule = body("  .hadeda");
     expect(rule).toContain(
-      "border: var(--border-width-rest) solid var(--border)",
+      "border: var(--border-width-rest) solid var(--float-border)",
     );
     expect(rule).toContain("var(--card) 90%");
     expect(rule).toContain("box-shadow: var(--shadow-lg)");
