@@ -38,6 +38,13 @@ import { handlePlaceLinkClick, isPlainLeftClick } from "@/lib/place-bus";
  * translucent bar). The start and end edges of the scroller fade while more
  * chips lie that way.
  *
+ * The lane moves sideways only (owner, 2026-11-05). Two things keep it so:
+ * `overflow-x: auto` alone makes the other axis `auto` too, so the scroller
+ * sets `overflow-y-hidden`; and a chip's tap region (`.lark::after`) is sized
+ * to the bar token, 72px, while the lane inside the bar's border is 70px, so
+ * the list clips its content (`overflow-clip`) and the tap region is the
+ * lane's own box, with nothing left over to drag.
+ *
  * Every chip is a real link (`href`, so a new tab, middle click and no-JS
  * work) that a plain click turns into an in-place place switch through the
  * place stage (src/lib/place-bus.ts). The sequence is the swipe's
@@ -206,14 +213,14 @@ export function PlaceLaneView({
           onScroll={measureFade}
           data-fade-start={more.before ? "true" : undefined}
           data-fade-end={more.after ? "true" : undefined}
-          className="sanderling scrollbar-hide h-full min-w-0 flex-1 overflow-x-auto"
+          className="sanderling scrollbar-hide h-full min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
         >
           {/* Named, so a screen reader does not count My Location (the link
               before it) as an item of this list. */}
           <ul
             ref={listRef}
             aria-label="Saved places and suggestions"
-            className="relative m-0 flex h-full w-max list-none items-center gap-2 p-0 px-1"
+            className="relative m-0 flex h-full w-max list-none items-center gap-2 overflow-clip p-0 px-1"
           >
             {places.map((chip) => {
               const isActive = chips.indexOf(chip) === activeIndex;

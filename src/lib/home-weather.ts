@@ -1,6 +1,7 @@
 import type { WeatherData } from "./weather";
 import { fetchWeather } from "./weather";
 import { servedProviderFor } from "./forecast-sources";
+import { roundCoord } from "./location-privacy";
 import {
   classifyTransportError,
   workerData,
@@ -28,13 +29,59 @@ export function isRenderableWeather(data: unknown): data is WeatherData {
 }
 
 /**
+ * How long the visitor's own request to Open-Meteo may take once the Worker
+ * has only the seasonal estimate. Shorter than the library default so the
+ * two attempts together stay near the place stage's "still trying" clock.
+ */
+export const DIRECT_FORECAST_TIMEOUT_MS = 6000;
+
+/**
+ * Open-Meteo asked straight from the visitor's browser: their own address and
+ * their own allowance. Null when it cannot answer either (never throws).
+ */
+async function fetchDirect(
+  lat: number,
+  lon: number,
+): Promise<{ weather: WeatherData; usingFallback: false } | null> {
+  try {
+    const weather = await fetchWeather(
+      roundCoord(lat),
+      roundCoord(lon),
+      undefined,
+      DIRECT_FORECAST_TIMEOUT_MS,
+    );
+    return isRenderableWeather(weather)
+      ? { weather, usingFallback: false }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Weather for a GPS-resolved spot on the home page.
  *
  * Goes through the Rust Worker (`GET /v1/weather`) first, the same answer the
  * server render uses, so a GPS swap shows the same numbers as the `/{slug}`
  * page and isn't at the mercy of the browser's own Open-Meteo quota (a 429
- * there used to surface as "Could not detect location"). Only if the Worker
- * is unreachable does it call Open-Meteo directly.
+ * there used to surface as "Could not detect location"). Open-Meteo is called
+ * directly in two cases: the Worker is unreachable, or it answered with the
+ * seasonal estimate.
+ *
+ * The Worker only answers the estimate (`X-Weather-Provider: fallback`) once
+ * its whole chain has failed: Open-Meteo's blend and `best_match`, the MET
+ * Norway failover (`met-no`, a live forecast, shown as it is), and a stored
+ * forecast for the point (served stale, up to a day old, before the estimate).
+ * That is a point nothing has stored yet while both providers refuse the
+ * Workers' shared address, or a forecast Worker that cannot be reached. The
+ * visitor's own browser has its own address and allowance, so it asks
+ * Open-Meteo before settling for the estimate (otherwise a place stays on a
+ * days-old copy kept on the device with "the forecast service is slow"), and
+ * falls back to the Worker's estimate only if that fails too.
+ *
+ * Only this foreground read does it: a visitor asked for the place and it is
+ * their allowance. `fetchWorkerWeatherOnce` (a place got ready in the
+ * background) never goes to the provider.
  */
 export async function fetchHomeWeather(
   lat: number,
@@ -53,10 +100,17 @@ export async function fetchHomeWeather(
       { retries: 1, signal: AbortSignal.timeout(HOME_WEATHER_TIMEOUT_MS) },
     );
     if (res.ok && isRenderableWeather(res.data)) {
-      return {
-        weather: res.data,
-        usingFallback: res.provider === "fallback",
-      };
+      if (res.provider !== "fallback") {
+        return { weather: res.data, usingFallback: false };
+      }
+      // The Worker had only the seasonal estimate: try the real forecast from
+      // here before showing it. The estimate stands if that fails too.
+      return (
+        (await fetchDirect(lat, lon)) ?? {
+          weather: res.data,
+          usingFallback: true,
+        }
+      );
     }
   } catch {
     // Unreachable / timed out — fall through to the direct provider.

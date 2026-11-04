@@ -1,0 +1,133 @@
+/**
+ * The gate: the sync code is loaded and started only for a signed-in person
+ * while the platform is ready, it is stopped when the person goes, and until
+ * then it is not even fetched. React and the sync itself are stand-ins.
+ */
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+const flags = vi.hoisted(() => ({ ready: true }));
+vi.mock("./person-preferences-switches", () => ({
+  get PERSON_PREFERENCES_READY() {
+    return flags.ready;
+  },
+  PERSON_SAVED_PLACES_READY: false,
+}));
+
+const couch = vi.hoisted(() => ({ on: false }));
+vi.mock("./feature-flags", () => ({
+  getFeatureFlag: (name: string) => (name === "couch_sync" ? couch.on : false),
+}));
+
+let cleanup: (() => void) | void;
+vi.mock("react", () => ({
+  useEffect: (fn: () => (() => void) | void) => {
+    cleanup = fn();
+  },
+}));
+
+const stopMock = vi.hoisted(() => vi.fn());
+const startMock = vi.hoisted(() => vi.fn());
+// The factory runs only when the module is actually imported.
+const moduleLoaded = vi.hoisted(() => vi.fn());
+vi.mock("./person-preferences-sync-start", () => {
+  moduleLoaded();
+  return { startPersonPreferencesSync: startMock };
+});
+
+import { usePersonPreferencesSync } from "./use-person-preferences-sync";
+import {
+  isPersonSyncActive,
+  setPersonSyncActive,
+} from "./person-preferences-state";
+
+const settle = () => new Promise((r) => setTimeout(r, 0));
+
+beforeEach(() => {
+  flags.ready = true;
+  couch.on = false;
+  cleanup = undefined;
+  stopMock.mockReset();
+  startMock.mockReset();
+  startMock.mockReturnValue(stopMock);
+  moduleLoaded.mockReset();
+  setPersonSyncActive(false);
+});
+
+describe("usePersonPreferencesSync", () => {
+  it("does nothing signed out, and never loads the sync", async () => {
+    usePersonPreferencesSync(null);
+    await settle();
+    expect(moduleLoaded).not.toHaveBeenCalled();
+    expect(startMock).not.toHaveBeenCalled();
+    expect(cleanup).toBeUndefined();
+  });
+
+  it("does nothing while the platform is not ready, even signed in", async () => {
+    flags.ready = false;
+    usePersonPreferencesSync("user_1");
+    await settle();
+    expect(moduleLoaded).not.toHaveBeenCalled();
+    expect(startMock).not.toHaveBeenCalled();
+  });
+
+  it("stands down while the CouchDB sync owns the same activities", async () => {
+    couch.on = true;
+    usePersonPreferencesSync("user_1");
+    await settle();
+    expect(moduleLoaded).not.toHaveBeenCalled();
+    expect(startMock).not.toHaveBeenCalled();
+  });
+
+  it("fences the legacy device-profile pull from the moment it is signed in, until the person goes", async () => {
+    usePersonPreferencesSync("user_1");
+    // At once, before the sync code has arrived.
+    expect(isPersonSyncActive()).toBe(true);
+    await settle();
+    expect(isPersonSyncActive()).toBe(true);
+    cleanup?.();
+    expect(isPersonSyncActive()).toBe(false);
+  });
+
+  it("does not fence anything signed out, while off, or while the CouchDB sync is on", async () => {
+    usePersonPreferencesSync(null);
+    expect(isPersonSyncActive()).toBe(false);
+    flags.ready = false;
+    usePersonPreferencesSync("user_1");
+    expect(isPersonSyncActive()).toBe(false);
+    flags.ready = true;
+    couch.on = true;
+    usePersonPreferencesSync("user_1");
+    expect(isPersonSyncActive()).toBe(false);
+    await settle();
+  });
+
+  it("starts the sync for the signed-in person", async () => {
+    usePersonPreferencesSync("user_1");
+    await settle();
+    expect(startMock).toHaveBeenCalledTimes(1);
+    expect(startMock).toHaveBeenCalledWith("user_1");
+  });
+
+  it("stops it when the person goes", async () => {
+    usePersonPreferencesSync("user_1");
+    await settle();
+    cleanup?.();
+    expect(stopMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("never starts it if the person went before the code arrived", async () => {
+    usePersonPreferencesSync("user_1");
+    cleanup?.();
+    await settle();
+    expect(startMock).not.toHaveBeenCalled();
+  });
+
+  it("survives a sync that cannot be loaded", async () => {
+    startMock.mockImplementation(() => {
+      throw new Error("chunk failed");
+    });
+    usePersonPreferencesSync("user_1");
+    await settle();
+    expect(() => cleanup?.()).not.toThrow();
+  });
+});

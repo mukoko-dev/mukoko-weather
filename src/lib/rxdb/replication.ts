@@ -19,6 +19,7 @@ import {
 import { fetchWorker } from "../weather-api";
 import { migrateSlugPrefs } from "../slug-migration";
 import { getDeviceId } from "./bridge";
+import { isPersonSyncActive } from "../person-preferences-state";
 import {
   createDeviceProfileClient,
   type DevicePrefsBody,
@@ -119,7 +120,15 @@ async function startPrefsReplication(): Promise<void> {
             selectedLocation: slugs.selectedLocation,
             savedLocations: slugs.savedLocations,
             locationLabels: slugs.locationLabels,
-            selectedActivities: serverPrefs.selectedActivities ?? [],
+            // While a signed-in person's activities are synced to their
+            // profile (person-preferences-sync.ts) this device-profile pull
+            // must not write them: it would overwrite what the person chose
+            // here with an older copy, and the profile sync would then record
+            // that as their removal. The push above is unchanged.
+            selectedActivities:
+              isPersonSyncActive() && localDoc
+                ? localDoc.selectedActivities
+                : (serverPrefs.selectedActivities ?? []),
             hasOnboarded: serverPrefs.hasOnboarded ?? false,
             selectedForecastModel:
               serverPrefs.selectedForecastModel ?? "best_match",
