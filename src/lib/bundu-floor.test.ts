@@ -24,7 +24,10 @@ const token = (name: string) =>
 /** The rule body for a selector at the start of a line (any indentation). */
 const rule = (selector: string) => {
   const at = css.search(
-    new RegExp(`^\\s*${selector.replace(/\./g, "\\.")} \\{`, "m"),
+    new RegExp(
+      `^\\s*${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\{`,
+      "m",
+    ),
   );
   expect(at, `no ${selector} rule`).toBeGreaterThan(-1);
   return css.slice(at, css.indexOf("}", at));
