@@ -16,7 +16,9 @@
  * logger carries no lint suppressions (this repo's lint allows console),
  * and `debug` lines are dropped in production builds. `LiveRegion` is kept
  * for API parity with upstream; this app announces through the shared
- * region instead.
+ * region instead. `REDUCED_QUERY` and `readReducedMotion` are exported so
+ * the modal sheet's pull-down (src/lib/sheet-drag.ts) asks the same
+ * reduced-motion question as the rest of the app and does not keep a copy.
  */
 
 import * as React from "react";
@@ -70,7 +72,7 @@ export function motionConfigFor(prefersReduced: boolean): MotionConfig {
   };
 }
 
-const REDUCED_QUERY = "(prefers-reduced-motion: reduce)";
+export const REDUCED_QUERY = "(prefers-reduced-motion: reduce)";
 
 function subscribeReducedMotion(onChange: () => void): () => void {
   if (typeof window === "undefined" || !window.matchMedia) return () => {};
@@ -79,7 +81,7 @@ function subscribeReducedMotion(onChange: () => void): () => void {
   return () => mq.removeEventListener("change", onChange);
 }
 
-function readReducedMotion(): boolean {
+export function readReducedMotion(): boolean {
   return typeof window !== "undefined" && !!window.matchMedia
     ? window.matchMedia(REDUCED_QUERY).matches
     : false;

@@ -26,12 +26,7 @@ import {
 } from "@/lib/activities";
 import type { ActivityCategoryDoc } from "@/lib/db";
 import { CATEGORIES } from "@/lib/seed-categories";
-import {
-  Dialog,
-  DialogContent,
-  DialogSheetHandle,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Button } from "@/components/ui/button";
@@ -200,18 +195,18 @@ export function MyWeatherModal() {
       }}
     >
       <DialogContent
-        aria-describedby={undefined}
-        className="flex h-[100dvh] flex-col p-0 sm:h-auto sm:max-h-[85vh]"
-      >
-        <DialogSheetHandle />
-        {/* Header */}
-        <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
-          <DialogTitle>My Weather</DialogTitle>
+        heading="My Weather"
+        actions={
           <Button size="sm" onClick={handleApply}>
             {hasPendingChange ? "Apply" : "Done"}
           </Button>
-        </div>
-
+        }
+        aria-describedby={undefined}
+        // Full height on a phone, but stopping short of the status bar so the
+        // sheet's rounded top corners show (the screen's own corners are
+        // hidden by hardware at the very top).
+        className="flex h-[calc(100dvh-var(--float-top))] flex-col p-0 sm:h-auto sm:max-h-[85vh]"
+      >
         {/* Tabs — Location (search + saved) first, then Activities, then Settings */}
         <Tabs
           value={activeTab}
