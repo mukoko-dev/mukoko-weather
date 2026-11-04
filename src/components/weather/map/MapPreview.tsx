@@ -1,23 +1,13 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import type { WeatherLocation } from "@/lib/locations";
-import { MAPTILER_KEY, maptilerStyleId } from "@/lib/map-layers";
 import { attributionForLayer } from "@/lib/map-sources";
-import {
-  allTilesFailed,
-  staticMapTiles,
-  STATIC_TILE_SIZE,
-  wantsRetinaTiles,
-} from "@/lib/static-map";
 import { MapCredits } from "./MapCredits";
-import { useMapIsDark } from "./use-map-style";
+import { StaticMapTiles, useStaticTileMap } from "./StaticTileMap";
 
 /** Same framing as the old interactive preview. */
 const PREVIEW_ZOOM = 10;
-
-const EMPTY: ReadonlySet<string> = new Set();
 
 interface MapPreviewProps {
   location: WeatherLocation;
@@ -31,45 +21,12 @@ interface MapPreviewProps {
  * map-sources.ts (`attributionForLayer(null)`: the base map's providers).
  */
 export function MapPreview({ location }: MapPreviewProps) {
-  const isDark = useMapIsDark();
-  // High-DPI screens get the documented @2x tiles (same area, twice the
-  // pixels); read once, on the client (this card only mounts there).
-  const [retina, setRetina] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      wantsRetinaTiles(window.devicePixelRatio),
-  );
-  // Failed tiles are tracked per tile, and only for the theme + density they
-  // failed under, so a theme change starts afresh. One bad tile leaves the
-  // others drawn; the text fallback shows only when none loaded.
-  const variant = `${isDark ? "dark" : "light"}:${retina ? "2x" : "1x"}`;
-  const [failures, setFailures] = useState<{
-    variant: string;
-    hrefs: ReadonlySet<string>;
-  }>({ variant, hrefs: new Set() });
-  const failed = failures.variant === variant ? failures.hrefs : EMPTY;
-
-  const picture = MAPTILER_KEY
-    ? staticMapTiles({
-        lat: location.lat,
-        lon: location.lon,
-        zoom: PREVIEW_ZOOM,
-        style: maptilerStyleId(isDark),
-        apiKey: MAPTILER_KEY,
-        retina,
-      })
-    : null;
-  const map = picture && !allTilesFailed(picture, failed) ? picture : null;
-
-  const onTileError = (href: string) => {
-    if (retina && failed.size === 0) {
-      // The @2x variant is the one thing here we cannot rely on being served
-      // for every key/style: retry once with the plain tiles before giving up.
-      setRetina(false);
-      return;
-    }
-    setFailures({ variant, hrefs: new Set([...failed, href]) });
-  };
+  const { picture, tilesShown, onTileError } = useStaticTileMap({
+    lat: location.lat,
+    lon: location.lon,
+    zoom: PREVIEW_ZOOM,
+  });
+  const map = tilesShown ? picture : null;
 
   return (
     <section aria-labelledby="map-preview-heading">
@@ -98,20 +55,7 @@ export function MapPreview({ location }: MapPreviewProps) {
               className="absolute inset-0 h-full w-full"
               aria-hidden="true"
             >
-              {map.tiles.map((t) => (
-                <image
-                  key={t.href}
-                  href={t.href}
-                  x={t.x}
-                  y={t.y}
-                  // One extra pixel overlaps the neighbour, hiding the hairline
-                  // seam that anti-aliasing leaves at fractional scales.
-                  width={STATIC_TILE_SIZE + 1}
-                  height={STATIC_TILE_SIZE + 1}
-                  preserveAspectRatio="none"
-                  onError={() => onTileError(t.href)}
-                />
-              ))}
+              <StaticMapTiles picture={map} onTileError={onTileError} />
               {/* Location marker, coloured from the primary token. */}
               <circle
                 cx={map.cx}

@@ -56,7 +56,10 @@ describe("MyWeatherModal — close cancels, primary button commits", () => {
     const apply = modal.slice(modal.indexOf("const handleApply"));
     expect(apply).toContain("completeOnboarding()");
     expect(apply).toContain("setSelectedLocation(pendingSlug)");
-    expect(apply).toContain("router.push(locationPath(pendingSlug))");
+    // In place through the place stage; the router is only the fallback.
+    expect(apply).toContain(
+      "navigateToPlace(locationPath(pendingSlug), (href) => router.push(href))",
+    );
   });
 
   it("primary button label is Apply only when there is a pending change", () => {

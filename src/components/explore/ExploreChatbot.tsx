@@ -15,6 +15,7 @@ import {
 } from "@/lib/store";
 import { getScrollBehavior } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
+import { postWorker, workerErrorMessage } from "@/lib/weather-api";
 import {
   fetchSuggestedRules,
   getExplorePrompts,
@@ -32,6 +33,12 @@ interface ChatMessage {
   content: string;
   references?: { slug: string; name: string; type: string }[];
   timestamp: Date;
+  /**
+   * A question that failed and the error shown for it: displayed, but never
+   * sent back as history. The Worker refuses a history turn that carries
+   * personal data, so a kept turn would fail every later question too.
+   */
+  unsent?: boolean;
 }
 
 interface ExploreResponse {
@@ -316,36 +323,36 @@ export function ExploreChatbot() {
         // is appended via setMessages above), which is correct — the new user
         // message is sent separately as `message` in the request body.
         // Slice to last 10 to match server cap and reduce payload size.
-        const history = messages.slice(-10).map((m) => ({
-          role: m.role,
-          content: m.content,
-        }));
+        const history = messages
+          .filter((m) => !m.unsent)
+          .slice(-10)
+          .map((m) => ({
+            role: m.role,
+            content: m.content,
+          }));
 
         // Cancel any previous in-flight request before starting a new one
         abortRef.current?.abort();
         const controller = new AbortController();
         abortRef.current = controller;
 
-        const res = await fetch("/api/py/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        // The Worker's chat (`POST /v1/ai/chat`, the one the mobile app
+        // calls); the Python chat route it replaced is gone. postWorker never
+        // retries a POST: a model call costs.
+        const res = await postWorker(
+          "ai/chat",
+          {
             message: trimmed,
             history,
             ...(selectedActivities.length > 0 && {
               activities: selectedActivities,
             }),
-          }),
-          signal: controller.signal,
-        });
+          },
+          { signal: controller.signal },
+        );
 
-        if (!res.ok) {
-          // Surface actionable messages (e.g. rate-limit "Too many requests")
-          const body = await res.json().catch(() => null);
-          throw new Error(
-            body?.response ?? body?.error ?? `Request failed (${res.status})`,
-          );
-        }
+        // Surface actionable messages (e.g. a rate limit's description)
+        if (!res.ok) throw new Error(await workerErrorMessage(res));
 
         const data: ExploreResponse = await res.json();
 
@@ -365,17 +372,29 @@ export function ExploreChatbot() {
         if (err instanceof DOMException && err.name === "AbortError") return;
         const fallback =
           "I'm having trouble connecting right now. Please try again in a moment.";
+        // The request's own timeout is a DOMException whose message ("signal
+        // timed out") is not meant for a reader.
+        const timedOut =
+          err instanceof DOMException && err.name === "TimeoutError";
         const errorMessage: ChatMessage = {
           id: `error-${Date.now()}`,
           role: "assistant",
           content:
-            err instanceof Error && err.message !== "Failed to fetch"
+            !timedOut &&
+            err instanceof Error &&
+            err.message !== "Failed to fetch"
               ? err.message
               : fallback,
           timestamp: new Date(),
+          unsent: true,
         };
         setMessages((prev) =>
-          [...prev, errorMessage].slice(-MAX_RENDERED_MESSAGES),
+          [
+            ...prev.map((m) =>
+              m.id === userMessage.id ? { ...m, unsent: true } : m,
+            ),
+            errorMessage,
+          ].slice(-MAX_RENDERED_MESSAGES),
         );
       } finally {
         setLoading(false);

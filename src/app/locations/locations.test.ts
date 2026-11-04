@@ -23,10 +23,6 @@ const searchSource = readFileSync(
 const loadingSource = readFileSync(resolve(__dirname, "loading.tsx"), "utf-8");
 const css = readFileSync(resolve(__dirname, "../globals.css"), "utf-8");
 const proxySource = readFileSync(resolve(__dirname, "../../proxy.ts"), "utf-8");
-const loadingSceneSource = readFileSync(
-  resolve(__dirname, "../../components/weather/WeatherLoadingScene.tsx"),
-  "utf-8",
-);
 const slugHelpers = readFileSync(
   resolve(__dirname, "../../lib/current-slug.ts"),
   "utf-8",
@@ -40,7 +36,7 @@ describe("locations page — route contract", () => {
   });
 
   it("declares its canonical URL", () => {
-    expect(pageSource).toContain("canonical: `${BASE_URL}/locations`");
+    expect(pageSource).toContain("canonical: `${SITE_URL}/locations`");
   });
 
   it("seeds My Location from the lastLocation cookie on the server", () => {
@@ -49,10 +45,8 @@ describe("locations page — route contract", () => {
     expect(pageSource).toContain("isLocationSlug(remembered)");
   });
 
-  it("wraps the list in the shared header, footer and main landmark", () => {
-    expect(pageSource).toContain("<Header />");
-    expect(pageSource).toContain("<Footer />");
-    expect(pageSource).toContain('id="main-content"');
+  it("wraps the list in the shared PageShell (header, footer, main landmark)", () => {
+    expect(pageSource).toContain("<PageShell");
   });
 });
 
@@ -133,9 +127,9 @@ describe("locations list — client", () => {
     );
     expect(menuSource).toContain("Edit list");
     expect(menuSource).toContain('openMyWeather("settings")');
-    expect(menuSource).toContain('href="/explore"');
-    expect(menuSource).toContain('href="/history"');
-    expect(menuSource).toContain('href="/aviation"');
+    // Destinations come from lib/nav-destinations (one list for every surface).
+    expect(menuSource).toContain('["explore", "history", "aviation"]');
+    expect(menuSource).toContain("navDestination(");
   });
 
   it("uses the global styles only (no inline styles or hardcoded colours)", () => {
@@ -148,17 +142,14 @@ describe("locations list — client", () => {
 
 describe("locations loading state", () => {
   it("announces loading with role=status and aria-label=Loading", () => {
-    expect(loadingSource).toMatch(/role="status"\s+aria-label="Loading"/);
+    expect(loadingSource).toContain("<PageShellSkeleton");
+    expect(loadingSource).toContain('label="Loading your locations"');
   });
 });
 
 describe("route names — locations is not a location slug", () => {
   it("proxy.ts treats /locations as an app route", () => {
     expect(proxySource).toMatch(/KNOWN_ROUTES[\s\S]*"locations"/);
-  });
-
-  it("WeatherLoadingScene treats /locations as an app route", () => {
-    expect(loadingSceneSource).toMatch(/KNOWN_ROUTES[\s\S]*"locations"/);
   });
 
   it("current-slug.ts treats /locations as an app route", () => {

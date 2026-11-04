@@ -8,6 +8,7 @@ import {
   locationClockLabel,
   resolveOffsetSeconds,
 } from "@/lib/location-time";
+import { WX_SERIES } from "@/lib/weather-scales";
 
 interface Props {
   hourly: HourlyWeather;
@@ -49,21 +50,21 @@ const SERIES: SeriesConfig[] = [
   {
     key: "temp",
     label: "Temperature",
-    color: "var(--chart-1)",
+    color: WX_SERIES.temp,
     fill: true,
     order: 1,
   },
   {
     key: "feelsLike",
     label: "Feels Like",
-    color: "var(--chart-3)",
+    color: WX_SERIES.feels,
     dashed: true,
     order: 2,
   },
   {
     key: "rain",
     label: "Rain %",
-    color: "var(--chart-2)",
+    color: WX_SERIES.rainProb,
     type: "bar",
     opacity: 0.35,
     yAxisID: "rain",

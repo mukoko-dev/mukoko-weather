@@ -6,7 +6,7 @@ use weather_core::jobs::{
 };
 use weather_core::places::resolve_seed;
 use weather_core::Place;
-use weather_edge::{now, now_ms};
+use weather_edge::{now, now_ms, service};
 use worker::{console_log, D1PreparedStatement, Env, Error, Response, Result};
 
 use crate::{enqueue, DB, FORECAST, RAW_BUCKET};
@@ -43,11 +43,8 @@ fn places(slugs: &[String]) -> Vec<&'static Place> {
 
 /// `GET` a path on the forecast Worker; `None` unless it answers `200`.
 async fn ask_forecast(env: &Env, path_and_query: &str) -> Result<Option<Response>> {
-    let fetcher = env.service(FORECAST)?;
-    Ok(fetcher
-        .fetch(format!("https://forecast{path_and_query}"), None)
-        .await
-        .ok()
+    Ok(service::ask(env, FORECAST, path_and_query)
+        .await?
         .filter(|r| r.status_code() == 200))
 }
 
@@ -73,7 +70,11 @@ async fn place_history(env: &Env, slugs: &[String]) -> Result<()> {
     let db = env.d1(DB)?;
     let mut statements: Vec<D1PreparedStatement> = Vec::new();
     for p in &places {
-        let q = format!("/weather?lat={}&lon={}", p.lat, p.lon);
+        // `failover=0`: MET Norway is not asked for a day that will not be
+        // recorded (the provider check below), so a history run over every
+        // seed place adds no traffic to it. A fresh stored `met-no` row can
+        // still come back from the cache; the check skips that too.
+        let q = format!("/weather?lat={}&lon={}&failover=0", p.lat, p.lon);
         let Some(mut resp) = ask_forecast(env, &q).await? else {
             continue;
         };
@@ -81,7 +82,11 @@ async fn place_history(env: &Env, slugs: &[String]) -> Result<()> {
             .headers()
             .get("X-Weather-Provider")?
             .unwrap_or_else(|| "unknown".to_owned());
-        if source == "fallback" {
+        // Only an Open-Meteo day is recorded. The seasonal estimate is not a
+        // forecast, and the MET Norway failover starts at the current hour
+        // (no past hours), so at 23:30 its "day" is a handful of late hours
+        // and a recorded day is permanent.
+        if source == "fallback" || source == weather_core::met_no::PROVIDER {
             continue;
         }
         let Ok(data) = resp.json::<Value>().await else {

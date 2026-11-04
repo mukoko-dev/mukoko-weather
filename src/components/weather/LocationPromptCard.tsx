@@ -3,14 +3,16 @@
 import { X } from "lucide-react";
 import { NavigationIcon } from "@/lib/weather-icons";
 import { Spinner } from "@/components/ui/spinner";
+import { FLOATING_CARD_CLASS } from "@/components/ui/floating-stack";
 
 /**
  * The ONE location ask on the home page.
  *
  * The page already shows weather for the server's best guess (last visited
  * place or IP location), so nothing blocks on this: it floats above the
- * mobile nav as a slim, dismissible card instead of a full-screen loader or a
- * banner that pushes the temperature below the fold. The browser's permission
+ * mobile nav (in the `FloatingStack` its page renders it in, so it never lies
+ * on top of the weather-load notice) as a slim, dismissible card instead of a
+ * full-screen loader or a banner that pushes the temperature below the fold. The browser's permission
  * prompt only appears after the visitor taps the button — never on page load —
  * so they know why it's being asked (the line under the place name says so).
  * Dismissing is "Not now", remembered on this device for a week; a block is
@@ -36,11 +38,12 @@ export function LocationPromptCard({
   onSearch: () => void;
 }) {
   return (
-    <section
-      aria-label="Use your location"
-      className="fixed inset-x-3 bottom-[var(--mobile-nav-clearance)] z-30 mx-auto max-w-md animate-fade-in-up rounded-[var(--radius-card)] border border-primary/25 bg-surface-card/95 p-3 shadow-lg backdrop-blur-xl sm:bottom-6"
-    >
-      <div className="flex items-center gap-3">
+    <section aria-label="Use your location" className={FLOATING_CARD_CLASS}>
+      {/* On a phone the text gets the whole card width and the buttons sit
+          under it; side by side they squeezed the text into a column about
+          120px wide that wrapped to seven lines and covered a quarter of the
+          screen. From `sm` the card is a row again. */}
+      <div className="flex flex-col gap-[var(--float-gap)] sm:flex-row sm:items-center">
         <div className="min-w-0 flex-1">
           <p className="text-sm text-text-primary">
             Showing weather for <strong>{placeName}</strong>
@@ -56,34 +59,40 @@ export function LocationPromptCard({
             </p>
           )}
         </div>
-        {message ? (
-          <button type="button" onClick={onSearch} className="kudu-sm shrink-0">
-            Search
-          </button>
-        ) : (
+        <div className="flex items-center gap-[var(--float-gap)]">
+          {message ? (
+            <button
+              type="button"
+              onClick={onSearch}
+              className="kudu-sm flex-1 sm:flex-none"
+            >
+              Search
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onUseLocation}
+              disabled={busy}
+              aria-busy={busy}
+              className="kudu-sm flex-1 sm:flex-none"
+            >
+              {busy ? (
+                <Spinner className="h-4 w-4" />
+              ) : (
+                <NavigationIcon size={14} aria-hidden="true" />
+              )}
+              {busy ? "Locating…" : "Use my location"}
+            </button>
+          )}
           <button
             type="button"
-            onClick={onUseLocation}
-            disabled={busy}
-            aria-busy={busy}
-            className="kudu-sm shrink-0"
+            onClick={onDismiss}
+            aria-label="Dismiss"
+            className="flex min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] shrink-0 items-center justify-center rounded-full text-text-tertiary hover:text-text-primary"
           >
-            {busy ? (
-              <Spinner className="h-4 w-4" />
-            ) : (
-              <NavigationIcon size={14} aria-hidden="true" />
-            )}
-            {busy ? "Locating…" : "Use my location"}
+            <X size={16} aria-hidden="true" />
           </button>
-        )}
-        <button
-          type="button"
-          onClick={onDismiss}
-          aria-label="Dismiss"
-          className="flex min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] shrink-0 items-center justify-center rounded-full text-text-tertiary hover:text-text-primary"
-        >
-          <X size={16} aria-hidden="true" />
-        </button>
+        </div>
       </div>
     </section>
   );

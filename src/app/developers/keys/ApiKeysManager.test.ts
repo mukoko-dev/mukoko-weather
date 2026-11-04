@@ -57,7 +57,7 @@ describe("ApiKeysManager component", () => {
   it("has accessibility affordances (aria-label / aria-labelledby / role)", () => {
     expect(manager).toContain("aria-labelledby");
     expect(manager).toContain("aria-label");
-    expect(manager).toContain('role="alert"');
+    expect(manager).toContain("<Alert");
   });
 });
 
@@ -67,9 +67,8 @@ describe("gated page", () => {
     expect(page).toContain('"/developers/keys"');
   });
 
-  it("renders within the site shell (Header + Footer)", () => {
-    expect(page).toContain("<Header />");
-    expect(page).toContain("<Footer />");
+  it("renders within the shared PageShell (Header + Footer)", () => {
+    expect(page).toContain("<PageShell");
   });
 
   it("is excluded from search indexing", () => {

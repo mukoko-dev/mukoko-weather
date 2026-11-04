@@ -27,9 +27,11 @@ function readComponent(relativePath: string) {
 const currentConditions = readComponent(
   "../components/weather/CurrentConditions.tsx",
 );
+const shareControl = readComponent("../components/weather/ShareControl.tsx");
 const chartErrorBoundary = readComponent(
   "../components/weather/ChartErrorBoundary.tsx",
 );
+const inlineError = readComponent("../components/ui/inline-error.tsx");
 const lazySection = readComponent("../components/weather/LazySection.tsx");
 const sectionSkeleton = readComponent(
   "../components/weather/SectionSkeleton.tsx",
@@ -67,14 +69,17 @@ describe("Sections — aria-labelledby", () => {
 });
 
 describe("Interactive elements — aria-label", () => {
-  it("CurrentConditions share button has descriptive aria-label", () => {
-    expect(currentConditions).toContain("Share weather for");
-    expect(currentConditions).toContain("aria-label");
+  it("the hero's share button has a descriptive aria-label", () => {
+    expect(shareControl).toContain("Share weather for");
+    expect(shareControl).toContain("aria-label");
   });
 
   it("ChartErrorBoundary retry button is inside a role=alert region", () => {
-    expect(chartErrorBoundary).toContain('role="alert"');
-    expect(chartErrorBoundary).toContain("Try again");
+    expect(chartErrorBoundary).toContain("<InlineError");
+    expect(inlineError).toContain('role="alert"');
+    // the retry control (default label "Try again") lives inside the alert
+    expect(inlineError).toContain('retryLabel = "Try again"');
+    expect(chartErrorBoundary).toContain("onRetry=");
   });
 });
 
@@ -101,7 +106,8 @@ describe('Loading states — role="status"', () => {
 
 describe('Error states — role="alert"', () => {
   it('ChartErrorBoundary fallback has role="alert"', () => {
-    expect(chartErrorBoundary).toContain('role="alert"');
+    expect(chartErrorBoundary).toContain("<InlineError");
+    expect(inlineError).toContain('role="alert"');
   });
 });
 
@@ -120,23 +126,25 @@ describe("Screen reader text — sr-only", () => {
   });
 
   it("CurrentConditions section is labelled by the visible place-name heading", () => {
-    expect(currentConditions).toContain(
-      '<h2\n          id="current-conditions-heading"',
-    );
+    expect(currentConditions).toContain('id="current-conditions-heading"');
     expect(currentConditions).toContain("sr-only");
     expect(currentConditions).toContain("degrees Celsius");
   });
 });
 
 describe("Touch targets — 56px minimum", () => {
-  it("CurrentConditions share button meets the touch target requirement", () => {
-    // Share is the .impala-plate Mzizi pill, which carries both minimums.
-    expect(currentConditions).toContain('className="impala-plate mt-3"');
+  it("the hero's share button meets the touch target requirement", () => {
+    // Share is a round .kestrel-round (on the sky) or .duiker (in the phone
+    // icon group) control; each carries both minimums.
+    expect(shareControl).toContain('"duiker"');
+    expect(shareControl).toContain('"kestrel-round"');
     const css = readFileSync(resolve(__dirname, "../app/globals.css"), "utf-8");
-    const rule = css.slice(css.indexOf(".impala-plate {"));
-    const body = rule.slice(0, rule.indexOf("}"));
-    expect(body).toContain("min-h-[var(--touch-target-min)]");
-    expect(body).toContain("min-w-[var(--touch-target-min)]");
+    for (const cls of [".kestrel-round {", ".duiker {"]) {
+      const rule = css.slice(css.indexOf(cls));
+      const body = rule.slice(0, rule.indexOf("}"));
+      expect(body, cls).toContain("w-[var(--touch-target-min)]");
+      expect(body, cls).toContain("h-[var(--touch-target-min)]");
+    }
   });
 });
 

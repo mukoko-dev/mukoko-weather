@@ -1,6 +1,19 @@
 // Pure geometry + formatting helpers for the metric-card visuals.
 // No React, no DOM — fully unit-testable from a .test.ts file.
 
+import {
+  bandCentreStops,
+  blendGradientCss,
+  evenStops,
+  type BlendStop,
+} from "@/lib/scale-blend";
+import {
+  AQI_SCALE,
+  TEMP_SCALE,
+  UV_SCALE,
+  UV_SCALE_MAX,
+} from "@/lib/weather-scales";
+
 export type Point = { x: number; y: number };
 
 /** Point on a circle. Angle in degrees, 0 = top (12 o'clock), clockwise. */
@@ -140,32 +153,38 @@ export function arcPoint(cx: number, cy: number, r: number, f: number): Point {
   };
 }
 
-/** Preset gradient ramps, expressed as CSS custom-property names. */
+/**
+ * Preset ramps, expressed as CSS custom-property names read off the weather
+ * scales (weather-scales.ts), so a bar and the scale's own swatches share one
+ * list: WHO UV, the six official EPA AQI colours and the temperature ramp.
+ * Never brand minerals or the severity ramp.
+ */
 export const GRADIENT_PRESETS = {
-  uv: [
-    "--color-severity-low",
-    "--color-severity-moderate",
-    "--color-severity-high",
-    "--color-severity-severe",
-    "--mineral-tanzanite",
-  ],
-  aqi: [
-    "--color-severity-low",
-    "--color-severity-moderate",
-    "--color-severity-high",
-    "--color-severity-severe",
-    "--mineral-tanzanite",
-  ],
-  temperature: [
-    "--color-severity-cold",
-    "--mineral-malachite",
-    "--color-severity-moderate",
-    "--color-severity-high",
-    "--color-severity-severe",
-  ],
-} as const;
+  uv: UV_SCALE.bands.map((band) => band.token),
+  aqi: AQI_SCALE.bands.map((band) => band.token),
+  // Every second temperature band: a five-colour ramp, cold to hot.
+  temperature: TEMP_SCALE.bands
+    .filter((_, i) => i % 2 === 0)
+    .map((band) => band.token),
+};
 
 export type GradientPreset = keyof typeof GRADIENT_PRESETS;
+
+/**
+ * Where each category sits on a bar, as the band EDGES in percent (one more
+ * entry than there are tokens). The bar BLENDS: each official colour is shown
+ * unmixed at the middle of its band and runs into its neighbours between the
+ * middles (`blendStops`). UV runs 0-14 so Extreme (11+) has room; AQI gives
+ * each EPA band an equal sixth (see aqiScalePct).
+ */
+export const GRADIENT_BREAKS: Partial<
+  Record<GradientPreset, readonly number[]>
+> = {
+  uv: [...UV_SCALE.bands.map((band) => band.from), UV_SCALE_MAX].map((v) =>
+    round((v / UV_SCALE_MAX) * 100),
+  ),
+  aqi: [0, 1, 2, 3, 4, 5, 6].map((v) => round((v / 6) * 100)),
+};
 
 const CUSTOM_PROP_RE = /^--[a-z0-9-]+$/;
 
@@ -245,4 +264,25 @@ export function barHeights(values: number[], max?: number): number[] {
   const finite = values.map((v) => (Number.isFinite(v) ? Math.max(0, v) : 0));
   const top = max && max > 0 ? max : Math.max(1e-9, ...finite);
   return finite.map((v) => round(Math.min(1, v / top) * 100, 2));
+}
+
+/**
+ * The blend for a `stops` prop: a preset with band edges (UV, AQI) puts each
+ * colour at the middle of its band; any other ramp spreads its colours evenly
+ * from the first at 0 to the last at 100. Positions are strictly ascending, so
+ * there is no hard seam anywhere on the bar.
+ */
+export function blendStops(
+  stops: GradientPreset | readonly string[],
+): BlendStop[] {
+  const colors = gradientTokens(stops);
+  const edges = typeof stops === "string" ? GRADIENT_BREAKS[stops] : undefined;
+  return edges ? bandCentreStops(colors, edges) : evenStops(colors);
+}
+
+/** The CSS gradient a scale bar paints on its track (tokens only, no hex). */
+export function blendGradient(
+  stops: GradientPreset | readonly string[],
+): string {
+  return blendGradientCss(blendStops(stops));
 }

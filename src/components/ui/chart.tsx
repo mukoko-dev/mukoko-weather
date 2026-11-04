@@ -72,6 +72,7 @@ const CSS_VAR_FALLBACKS_LIGHT: Record<string, string> = {
   "--chart-4": "#B8860B", // Gold
   "--chart-5": "#C1440E", // Terracotta
   "--chart-6": "#283593", // Sodalite
+  "--chart-7": "#8A4B2A", // Copper (Apple Weather series)
   "--color-primary": "#0047AB",
   "--color-text-primary": "#141413",
   "--color-text-secondary": "#52524E",
@@ -94,6 +95,24 @@ const CSS_VAR_FALLBACKS_LIGHT: Record<string, string> = {
   "--color-severity-severe": "#B3261E",
   "--color-severity-extreme": "#7F0000",
   "--color-severity-cold": "#0047AB",
+  "--wx-series-temp": "#D73027",
+  "--wx-series-temp-low": "#4575B4",
+  "--wx-series-feels": "#B8570B",
+  "--wx-series-rain": "#0B6FB8",
+  "--wx-series-rain-prob": "#08519C",
+  "--wx-series-wind": "#2A9D8F",
+  "--wx-series-gust": "#1B6A5F",
+  "--wx-series-cloud": "#6B7280",
+  "--wx-series-humidity": "#238B45",
+  "--wx-series-pressure": "#6A51A3",
+  "--wx-series-dew": "#0E7490",
+  "--wx-series-visibility": "#525252",
+  "--wx-series-storm": "#7B3294",
+  "--wx-uv-1": "#299501",
+  "--wx-uv-2": "#F7E400",
+  "--wx-uv-3": "#F85900",
+  "--wx-uv-4": "#D8001D",
+  "--wx-uv-5": "#6B49C8",
 };
 
 const CSS_VAR_FALLBACKS_DARK: Record<string, string> = {
@@ -103,6 +122,7 @@ const CSS_VAR_FALLBACKS_DARK: Record<string, string> = {
   "--chart-4": "#FFD740", // Gold light
   "--chart-5": "#D4A574", // Terracotta light
   "--chart-6": "#3D5AFE", // Sodalite light
+  "--chart-7": "#FF8A65", // Copper light
   "--color-primary": "#00B0FF",
   "--color-text-primary": "#F3F3F0",
   "--color-text-secondary": "#B5B5B0",
@@ -125,6 +145,24 @@ const CSS_VAR_FALLBACKS_DARK: Record<string, string> = {
   "--color-severity-severe": "#FF5252",
   "--color-severity-extreme": "#FF1744",
   "--color-severity-cold": "#42A5F5",
+  "--wx-series-temp": "#F4806F",
+  "--wx-series-temp-low": "#74ADD1",
+  "--wx-series-feels": "#FDAE61",
+  "--wx-series-rain": "#4FC3F7",
+  "--wx-series-rain-prob": "#9ECAE1",
+  "--wx-series-wind": "#5FD3C4",
+  "--wx-series-gust": "#8FE0D3",
+  "--wx-series-cloud": "#A1A1AA",
+  "--wx-series-humidity": "#74C476",
+  "--wx-series-pressure": "#B2A3E0",
+  "--wx-series-dew": "#67D1E6",
+  "--wx-series-visibility": "#A3A3A3",
+  "--wx-series-storm": "#C996DD",
+  "--wx-uv-1": "#299501",
+  "--wx-uv-2": "#F7E400",
+  "--wx-uv-3": "#F85900",
+  "--wx-uv-4": "#D8001D",
+  "--wx-uv-5": "#6B49C8",
 };
 
 function isDarkMode(): boolean {

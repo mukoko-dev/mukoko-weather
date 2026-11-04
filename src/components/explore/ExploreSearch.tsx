@@ -11,6 +11,7 @@ import { ShamwariCTA } from "@/components/weather/ShamwariCTA";
 import { useLocationQuickSearch } from "@/lib/use-location-quick-search";
 import { Spinner } from "@/components/ui/spinner";
 import { locationPath } from "@/lib/slug-migration";
+import { postWorker, workerErrorMessage } from "@/lib/weather-api";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -31,6 +32,8 @@ interface SearchResult {
 interface SearchResponse {
   locations: SearchResult[];
   summary: string;
+  /** `ai` when the model searched, `text` for the plain match. */
+  source?: "ai" | "text";
 }
 
 // ---------------------------------------------------------------------------
@@ -67,18 +70,11 @@ export function ExploreSearch() {
       setSearched(true);
 
       try {
-        const res = await fetch("/api/py/explore/search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: trimmed }),
-        });
+        // The Worker answers with the model's search, or with a plain text
+        // match when the model cannot (`source: "text"`).
+        const res = await postWorker("ai/explore/search", { query: trimmed });
 
-        if (!res.ok) {
-          const body = await res.json().catch(() => null);
-          throw new Error(
-            body?.detail || body?.error || `Request failed (${res.status})`,
-          );
-        }
+        if (!res.ok) throw new Error(await workerErrorMessage(res));
 
         const data: SearchResponse = await res.json();
         setResults(data.locations || []);

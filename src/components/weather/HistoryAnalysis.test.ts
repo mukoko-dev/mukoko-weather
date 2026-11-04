@@ -31,7 +31,7 @@ describe("HistoryAnalysis", () => {
       resolve(__dirname, "HistoryAnalysis.tsx"),
       "utf-8",
     );
-    expect(source).toContain("/api/py/history/analyze");
+    expect(source).toContain('postWorker("ai/history/analyze"');
   });
 
   it("includes location and days in request body", async () => {
@@ -121,8 +121,7 @@ describe("HistoryAnalysis", () => {
       resolve(__dirname, "HistoryAnalysis.tsx"),
       "utf-8",
     );
-    expect(source).toContain('role="status"');
-    expect(source).toContain("sr-only");
+    expect(source).toContain("<LoadingNotice");
   });
 
   it("uses global styles only — no hardcoded colors", async () => {
@@ -134,5 +133,20 @@ describe("HistoryAnalysis", () => {
     );
     expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}[^)]/);
     expect(source).not.toContain("style={{");
+  });
+});
+
+describe("HistoryAnalysis data source (#268)", () => {
+  it("asks only the Worker (it reads the same history the page shows): no Python fallback", async () => {
+    const { readFileSync } = await import("fs");
+    const { resolve } = await import("path");
+    const source = readFileSync(
+      resolve(__dirname, "HistoryAnalysis.tsx"),
+      "utf-8",
+    );
+    expect(source).toContain('postWorker("ai/history/analyze"');
+    expect(source).toContain("workerErrorMessage(res)");
+    expect(source).not.toContain("/api/py/");
+    expect(source).not.toContain("res.status >= 500");
   });
 });

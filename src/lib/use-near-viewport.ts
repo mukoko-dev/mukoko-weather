@@ -18,32 +18,39 @@ export function isNearViewport(entry: { isIntersecting: boolean }): boolean {
  *
  * Without IntersectionObserver (very old browsers) it is true at once, so
  * nothing is ever withheld.
+ *
+ * `resetKey` starts over when it changes (the observed content is for a new
+ * place), so a component that stays mounted behaves like a fresh mount.
  */
 export function useNearViewport(
   ref: RefObject<Element | null>,
   rootMargin = "800px",
   enabled = true,
+  resetKey?: string,
 ): boolean {
-  const [near, setNear] = useState(false);
+  const [nearFor, setNearFor] = useState<string | undefined | null>(null);
+  const near = nearFor !== null && nearFor === resetKey;
+  const setNear = () => setNearFor(resetKey);
   useEffect(() => {
     if (!enabled || near) return;
     const el = ref.current;
     if (!el) return;
     if (typeof IntersectionObserver === "undefined") {
-      const id = requestAnimationFrame(() => setNear(true));
+      const id = requestAnimationFrame(() => setNear());
       return () => cancelAnimationFrame(id);
     }
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry && isNearViewport(entry)) {
           observer.disconnect();
-          setNear(true);
+          setNear();
         }
       },
       { rootMargin },
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [ref, rootMargin, enabled, near]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ref, rootMargin, enabled, near, resetKey]);
   return near;
 }

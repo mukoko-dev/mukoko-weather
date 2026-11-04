@@ -1,4 +1,6 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
+import { readFileSync } from "fs";
+import { resolve } from "path";
 import {
   MAP_LAYERS,
   DEFAULT_LAYER,
@@ -8,6 +10,7 @@ import {
   WEATHER_OVERLAY_ID,
   WEATHER_OVERLAY_MIN_ZOOM,
   WEATHER_OVERLAY_MAX_ZOOM,
+  WEATHER_OVERLAY_TILE_SIZE,
   weatherOverlayTileUrl,
   buildWeatherOverlaySource,
   AIR_QUALITY_LAYER_ID,
@@ -18,6 +21,8 @@ import {
   timelineLabel,
   TIMELINE_STEPS,
   MAP_LAYER_STORAGE_KEY,
+  MAP_MAX_PIXEL_RATIO,
+  mapPixelRatioOverride,
   readStoredMapLayer,
   writeStoredMapLayer,
 } from "./map-layers";
@@ -143,16 +148,25 @@ describe("weatherOverlayTileUrl", () => {
 });
 
 describe("buildWeatherOverlaySource", () => {
-  it("is a 256px raster source pinned to the Tomorrow.io zoom range (1–12)", () => {
+  it("is a 512px raster source capped at z10 (#266)", () => {
     const src = buildWeatherOverlaySource("cloudCover");
     expect(src.type).toBe("raster");
-    expect(src.tileSize).toBe(256);
-    // Pinning maxzoom to 12 makes MapLibre overzoom instead of requesting
-    // z13+ tiles the proxy rejects (which would make the overlay vanish).
+    // 512 px display size: MapLibre fetches one zoom level shallower, about a
+    // quarter of the tiles per screen.
+    expect(src.tileSize).toBe(WEATHER_OVERLAY_TILE_SIZE);
+    expect(WEATHER_OVERLAY_TILE_SIZE).toBe(512);
+    // The maxzoom makes MapLibre overzoom instead of requesting deeper tiles
+    // (the proxy rejects z13+; z9 and deeper add no detail over the forecast
+    // grid and each is a request to a small shared quota).
     expect(src.minzoom).toBe(WEATHER_OVERLAY_MIN_ZOOM);
     expect(src.maxzoom).toBe(WEATHER_OVERLAY_MAX_ZOOM);
     expect(WEATHER_OVERLAY_MIN_ZOOM).toBe(1);
-    expect(WEATHER_OVERLAY_MAX_ZOOM).toBe(12);
+    expect(WEATHER_OVERLAY_MAX_ZOOM).toBe(8);
+  });
+
+  it("never asks for a zoom the proxy rejects", () => {
+    expect(WEATHER_OVERLAY_MAX_ZOOM).toBeLessThanOrEqual(12);
+    expect(WEATHER_OVERLAY_MIN_ZOOM).toBeGreaterThanOrEqual(1);
   });
 
   it("uses the proxied tile URL for the requested layer", () => {
@@ -344,14 +358,31 @@ describe("map overlay sources (satellite, model fields, timeline)", () => {
     }
   });
 
+  it("says how coarse the model fields and the air-quality grid really are", async () => {
+    const { MODEL_CHIPS } = await import("./map-layers");
+    // The picture is smoothed between samples: it must not read as sharper than
+    // the data. The Worker's model grid is 7 x 7 over +-120 km, 40 km apart.
+    for (const chip of MODEL_CHIPS) {
+      expect(chip.legend.note, chip.id).toMatch(/^Points 40 km apart/);
+    }
+    expect(
+      MODEL_CHIPS.find((c) => c.id === "modelPrecipitation")!.legend.note,
+    ).toContain("below 0.1 mm/h is left clear");
+    // CAMS: about 44 km worldwide, about 11 km over Europe; the grid samples
+    // it every 13 km.
+    expect(MAP_CHIPS.find((c) => c.id === "airQuality")!.legend.note).toBe(
+      "CAMS model, grid of about 10 to 40 km",
+    );
+  });
+
   it("gives every model legend band a token and an ascending start value", async () => {
     const { MODEL_CHIPS } = await import("./map-layers");
     for (const chip of MODEL_CHIPS) {
       let last = -Infinity;
       for (const seg of chip.legend.segments) {
-        expect(seg.token).toMatch(/^--color-/);
+        expect(seg.token).toMatch(/^--wx-(temp|rain|wind)-\d+$/);
         // The class and the token must name the same colour.
-        expect(seg.className).toBe(`bg-${seg.token!.replace("--color-", "")}`);
+        expect(seg.className).toBe(`bg-${seg.token!.replace(/^--/, "")}`);
         expect(seg.from!).toBeGreaterThanOrEqual(last);
         last = seg.from!;
       }
@@ -361,9 +392,10 @@ describe("map overlay sources (satellite, model fields, timeline)", () => {
   it("classifies values into legend bands", async () => {
     const { legendBandIndex, getMapChip: chip } = await import("./map-layers");
     const temp = chip("modelTemperature")!.legend;
-    expect(legendBandIndex(temp, -5)).toBe(0);
-    expect(legendBandIndex(temp, 10)).toBe(1);
-    expect(legendBandIndex(temp, 40)).toBe(temp.segments.length - 1);
+    expect(legendBandIndex(temp, -15)).toBe(0);
+    expect(legendBandIndex(temp, -5)).toBe(1);
+    expect(legendBandIndex(temp, 10)).toBe(3);
+    expect(legendBandIndex(temp, 45)).toBe(temp.segments.length - 1);
     expect(legendBandIndex(temp, null)).toBe(-1);
     expect(legendBandIndex(temp, Number.NaN)).toBe(-1);
     const rain = chip("modelPrecipitation")!.legend;
@@ -454,5 +486,36 @@ describe("MapTiler key and style ids (#266)", () => {
     expect(m.MAPTILER_STYLE_DARK).toContain(
       `/maps/${m.MAPTILER_STYLE_ID_DARK}/`,
     );
+  });
+});
+
+describe("mapPixelRatioOverride (#476)", () => {
+  it("caps a screen above 2x at 2x: a 3x phone's canvas would be 2.25x the memory", () => {
+    expect(MAP_MAX_PIXEL_RATIO).toBe(2);
+    expect(mapPixelRatioOverride(3)).toBe(2);
+    expect(mapPixelRatioOverride(4)).toBe(2);
+    expect(mapPixelRatioOverride(2.75)).toBe(2);
+  });
+
+  it("passes no option at or below 2x, so MapLibre keeps following the screen (a map made at 1x must not stay blurry on a retina display)", () => {
+    for (const ratio of [0.75, 1, 1.5, 2])
+      expect(mapPixelRatioOverride(ratio)).toBeUndefined();
+  });
+
+  it("passes no option for a screen that reports nothing usable", () => {
+    for (const ratio of [undefined, Number.NaN, Number.POSITIVE_INFINITY])
+      expect(mapPixelRatioOverride(ratio)).toBeUndefined();
+  });
+
+  it("is spread into the Map options only when it is set (an undefined key would still override)", () => {
+    const map = readFileSync(
+      resolve(__dirname, "../components/weather/map/MapLibreMap.tsx"),
+      "utf-8",
+    );
+    expect(map).toContain("mapPixelRatioOverride(");
+    expect(map).toMatch(
+      /\.\.\.\(pixelRatioOverride !== undefined && \{\s*pixelRatio: pixelRatioOverride,\s*\}\)/,
+    );
+    expect(map).not.toMatch(/^\s*pixelRatio: mapPixelRatio/m);
   });
 });

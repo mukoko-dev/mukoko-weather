@@ -59,13 +59,13 @@ describe("agricultureUrl", () => {
       ["crop-farming", "tobacco-farming"],
     );
     expect(url).toBe(
-      "/api/py/agriculture?lat=-17.83&lon=31.05&location=harare&country=ZW&crops=crop-farming%2Ctobacco-farming",
+      "https://weather-api.mukoko.com/v1/agriculture?lat=-17.83&lon=31.05&location=harare&country=ZW&crops=crop-farming%2Ctobacco-farming",
     );
   });
 
   it("omits empty country and crops", () => {
     expect(agricultureUrl({ slug: "x", lat: 1, lon: 2 })).toBe(
-      "/api/py/agriculture?lat=1&lon=2&location=x",
+      "https://weather-api.mukoko.com/v1/agriculture?lat=1&lon=2&location=x",
     );
   });
 });
@@ -144,9 +144,19 @@ describe("readiness + forecast slicing", () => {
   });
 });
 
-describe("mirrors the Python model", () => {
-  it("every AgricultureResponse field exists in api/py/_agriculture.py", () => {
-    const py = fs.readFileSync("api/py/_agriculture.py", "utf-8");
+describe("mirrors the Worker's answer", () => {
+  it("every AgricultureResponse field the app reads is in the pinned Worker answers", () => {
+    // tests/fixtures/agriculture-analysis.json holds the answers the Rust
+    // Worker gives (pinned to the former Python model by its tests).
+    const fixture = JSON.parse(
+      fs.readFileSync("tests/fixtures/agriculture-analysis.json", "utf-8"),
+    ) as { cases: { expected: Record<string, unknown> }[] };
+    const available = fixture.cases
+      .map((c) => c.expected)
+      .filter((e) => e.available === true);
+    expect(available.length).toBeGreaterThan(0);
+    const days = (e: Record<string, unknown>) =>
+      (e.daily as Record<string, unknown>[]) ?? [];
     for (const field of [
       "headline",
       "verdict",
@@ -157,12 +167,22 @@ describe("mirrors the Python model", () => {
       "calendar",
       "profile",
       "utcOffsetSeconds",
+    ]) {
+      expect(
+        available.every((e) => field in e),
+        field,
+      ).toBe(true);
+    }
+    for (const field of [
       "soilMoisture27to81",
       "soilTemp54",
       "leafWetHours",
       "sprayHours",
     ]) {
-      expect(py, field).toContain(`${field}:`);
+      expect(
+        available.some((e) => days(e).some((d) => field in d)),
+        field,
+      ).toBe(true);
     }
   });
 });

@@ -3,11 +3,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   AQI_ADVICE,
-  AQI_TEXT_CLASS,
+  AQI_LEVEL_BG_CLASS,
   DISPLAY_DEFAULT_LAYER,
   DISPLAY_REFRESH_MS,
   currentHourIndex,
   displayUrl,
+  emptyRetryDelayMs,
   isAirQuality,
   isDisplayWeather,
   nextHourIndexes,
@@ -84,12 +85,12 @@ describe("parseDisplayParams", () => {
 });
 
 describe("AQI advice", () => {
-  it("covers every EPA level with advice and a severity token", () => {
+  it("covers every EPA level with advice and an official EPA band fill", () => {
     for (const level of Object.keys(AQI_LEVEL_LABELS)) {
       expect(AQI_ADVICE[level as keyof typeof AQI_ADVICE]).toBeTruthy();
-      expect(AQI_TEXT_CLASS[level as keyof typeof AQI_TEXT_CLASS]).toMatch(
-        /^text-severity-/,
-      );
+      expect(
+        AQI_LEVEL_BG_CLASS[level as keyof typeof AQI_LEVEL_BG_CLASS],
+      ).toMatch(/^bg-wx-aqi-[1-6]$/);
     }
   });
 
@@ -172,15 +173,45 @@ describe("refresh cadence", () => {
   });
 });
 
+describe("the first read of an empty panel", () => {
+  it("is asked again after about 2 s, 5 s, 15 s, 30 s, then every minute", () => {
+    expect([0, 1, 2, 3, 4, 5, 20].map(emptyRetryDelayMs)).toEqual([
+      2_000, 5_000, 15_000, 30_000, 60_000, 60_000, 60_000,
+    ]);
+  });
+
+  it("never waits longer than the shortest refresh interval, so a retry is never a slower poll", () => {
+    for (const failures of [0, 1, 2, 3, 4, 50]) {
+      expect(emptyRetryDelayMs(failures)).toBeLessThan(
+        DISPLAY_REFRESH_MS.weather,
+      );
+    }
+  });
+
+  it("copes with a nonsense count", () => {
+    expect(emptyRetryDelayMs(-3)).toBe(2_000);
+    expect(emptyRetryDelayMs(Number.NaN)).toBe(60_000);
+  });
+
+  it("is what usePolledJson uses while there is no data, and stops once there is", () => {
+    const hook = readFileSync(
+      join(__dirname, "use-display-runtime.ts"),
+      "utf8",
+    );
+    expect(hook).toContain("emptyRetryDelayMs(failures)");
+    expect(hook).toMatch(/if \(!hasData\) \{[\s\S]*?emptyRetryDelayMs/);
+    expect(hook).toContain("hasData = true;");
+    // The retry timer is cleared on unmount and before every read.
+    expect(hook.match(/window\.clearTimeout\(retryTimer\)/g)?.length).toBe(2);
+  });
+});
+
 describe("display route wiring", () => {
   const root = join(__dirname, "..");
   const read = (p: string) => readFileSync(join(root, p), "utf8");
 
   it("is reserved so it never becomes the lastLocation cookie", () => {
     expect(read("proxy.ts")).toMatch(/"display"/);
-    expect(read("components/weather/WeatherLoadingScene.tsx")).toMatch(
-      /"display"/,
-    );
   });
 
   it("keeps the screen awake and reloads periodically", () => {

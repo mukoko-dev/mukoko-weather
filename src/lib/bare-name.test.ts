@@ -8,6 +8,7 @@ import {
   BARE_PER_VISITOR,
   bareNameQuery,
   isBareNameCandidate,
+  legacyCountrySlug,
   resetBareNameCache,
   resolveBareName,
 } from "./bare-name";
@@ -307,5 +308,98 @@ describe("resolveBareName", () => {
     expect(url).not.toContain("203.0.113.9");
     expect(JSON.stringify(init.headers ?? {})).not.toContain("203.0.113.9");
     expect(init.method ?? "GET").toBe("GET");
+  });
+});
+
+describe("the older {name}-{cc} community slug (london-gb)", () => {
+  const LONDON = buildSmartSlug("London", 51.50853, -0.12574);
+  const PARIS_FR = buildSmartSlug("Paris", 48.85341, 2.3488);
+  const PORTLAND_AU = buildSmartSlug("Portland", -38.34, 141.6);
+  const PORTLAND_US = buildSmartSlug("Portland", 45.52, -122.68);
+
+  it("is read as a name and a country", () => {
+    expect(legacyCountrySlug("london-gb")).toEqual({
+      name: "london",
+      country: "GB",
+    });
+    expect(legacyCountrySlug("koh-samui")).toBeNull();
+    expect(legacyCountrySlug("sembawang-sg")).toEqual({
+      name: "sembawang",
+      country: "SG",
+    });
+    expect(legacyCountrySlug("ab-cd")).toBeNull();
+  });
+
+  it("redirects to the geocoded spot when the name alone lists a place in that country", async () => {
+    const fetcher = vi.fn(async (url: string | URL) =>
+      String(url).includes("mode=resolve")
+        ? Response.json({ locations: [], resolve: "no_match" })
+        : Response.json({
+            locations: [
+              { slug: PARIS_FR, country: "FR" },
+              { slug: LONDON, country: "GB" },
+            ],
+          }),
+    ) as unknown as typeof fetch;
+    expect(await resolveBareName("london-gb", { fetcher, env: ENV })).toBe(
+      LONDON,
+    );
+    const asked = (
+      fetcher as unknown as ReturnType<typeof vi.fn>
+    ).mock.calls.map(
+      (c) => decodeURIComponent(String(c[0])).split("/v1/search?")[1],
+    );
+    expect(asked).toEqual(["mode=resolve&q=london gb", "q=london&limit=10"]);
+  });
+
+  it("takes the place in the slug's country even when another country's is the best match (portland-us)", async () => {
+    const fetcher = vi.fn(async (url: string | URL) =>
+      String(url).includes("mode=resolve")
+        ? Response.json({ locations: [], resolve: "no_match" })
+        : Response.json({
+            locations: [
+              { slug: PORTLAND_AU, country: "AU" },
+              { slug: PORTLAND_US, country: "US" },
+            ],
+          }),
+    ) as unknown as typeof fetch;
+    expect(await resolveBareName("portland-us", { fetcher, env: ENV })).toBe(
+      PORTLAND_US,
+    );
+  });
+
+  it("never redirects to a place in another country (london-ca is not London, England)", async () => {
+    const asks = vi.fn(async (url: string | URL) =>
+      String(url).includes("mode=resolve")
+        ? Response.json({ locations: [], resolve: "no_match" })
+        : Response.json({ locations: [{ slug: LONDON, country: "GB" }] }),
+    ) as unknown as typeof fetch;
+    expect(
+      await resolveBareName("london-ca", { fetcher: asks, env: ENV }),
+    ).toBeNull();
+  });
+
+  it("a budget-degraded list is not remembered as a miss for ten minutes", async () => {
+    const fetcher = vi.fn(async (url: string | URL) =>
+      String(url).includes("mode=resolve")
+        ? Response.json({ locations: [], resolve: "no_match" })
+        : Response.json(
+            { locations: [] },
+            { headers: { "Cache-Control": "no-store" } },
+          ),
+    ) as unknown as typeof fetch;
+    expect(
+      await resolveBareName("london-gb", { fetcher, env: ENV }),
+    ).toBeNull();
+    // Not cached as a miss: after the short backoff it asks again and finds it.
+    const now = Date.now() + BARE_BACKOFF_MS + 1;
+    const healthy = vi.fn(async (url: string | URL) =>
+      String(url).includes("mode=resolve")
+        ? Response.json({ locations: [], resolve: "no_match" })
+        : Response.json({ locations: [{ slug: LONDON, country: "GB" }] }),
+    ) as unknown as typeof fetch;
+    expect(
+      await resolveBareName("london-gb", { fetcher: healthy, env: ENV, now }),
+    ).toBe(LONDON);
   });
 });

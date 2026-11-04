@@ -47,26 +47,35 @@ describe("isPresetAnchor", () => {
 });
 
 describe("suggestPresetSlugs", () => {
-  it("suggests Harare and Bulawayo alone when there is no anchor", () => {
-    expect(suggestPresetSlugs(null)).toEqual([c("harare"), c("bulawayo")]);
-    expect(suggestPresetSlugs(undefined)).toEqual([c("harare"), c("bulawayo")]);
+  it("suggests Harare, Nairobi and Lagos alone when there is no anchor", () => {
+    const defaults = [c("harare"), c("nairobi-ke"), c("lagos-ng")];
+    expect(suggestPresetSlugs(null)).toEqual(defaults);
+    expect(suggestPresetSlugs(undefined)).toEqual(defaults);
   });
 
   it("treats an invalid anchor as no anchor", () => {
     expect(suggestPresetSlugs({ lat: 999, lon: 0 })).toEqual([
       c("harare"),
-      c("bulawayo"),
+      c("nairobi-ke"),
+      c("lagos-ng"),
     ]);
   });
 
-  it("adds the nearest seeded cities first, then Harare and Bulawayo", () => {
+  it("adds the nearest seeded cities first, then Harare, Nairobi and Lagos", () => {
     const list = suggestPresetSlugs(NAIROBI);
     expect(list).toHaveLength(
       PRESET_NEAREST_COUNT + PRESET_ALWAYS_SLUGS.length,
     );
-    expect(list.slice(-2)).toEqual([c("harare"), c("bulawayo")]);
-    // The nearest of the nearest is Nairobi itself (distance 0).
-    expect(list[0]).toBe(c("nairobi-ke"));
+    expect(list.slice(-3)).toEqual([
+      c("harare"),
+      c("nairobi-ke"),
+      c("lagos-ng"),
+    ]);
+    // The always-suggested cities are not repeated among the nearest.
+    const nearest = list.slice(0, PRESET_NEAREST_COUNT);
+    for (const slug of PRESET_ALWAYS_SLUGS) {
+      expect(nearest).not.toContain(c(slug));
+    }
   });
 
   it("orders the nearest cities by distance from the anchor", () => {

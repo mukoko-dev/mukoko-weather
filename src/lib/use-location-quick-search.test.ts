@@ -31,7 +31,7 @@ describe("useLocationQuickSearch — module structure", () => {
     expect(source).toContain("limit = 10");
   });
 
-  it("calls the shared search endpoint (Worker first, /api/py fallback)", () => {
+  it("calls the shared search endpoint on the Worker", () => {
     expect(source).toContain("fetchPlaces(");
     expect(source).toContain('"search"');
     expect(source).toContain("q=${encodeURIComponent(q)}");

@@ -1,13 +1,11 @@
-"use client";
-
 import * as React from "react";
-import { clampPct, gradientTokens, type GradientPreset } from "./geometry";
-import { useResolvedColors } from "./use-resolved-colors";
+import { trackWindow } from "@/lib/scale-blend";
+import { blendGradient, clampPct, type GradientPreset } from "./geometry";
 
 export interface GradientScaleProps {
   /** Marker position along the scale, 0–100. */
   positionPct: number;
-  /** A preset ramp or explicit CSS custom-property names (e.g. "--color-severity-low"). */
+  /** A preset ramp or explicit CSS custom-property names (e.g. "--wx-uv-1"). */
   stops: GradientPreset | readonly string[];
   /** Optional sub-range (e.g. a day's low→high). The gradient still spans 0–100. */
   rangeStartPct?: number;
@@ -17,8 +15,22 @@ export interface GradientScaleProps {
 }
 
 /**
- * Horizontal multi-colour bar with a dot marker. The marker is an outlined
- * dot (surface fill, text-coloured ring) so it stays visible on any stop.
+ * Horizontal bar that BLENDS from the low end to the high end, with a round
+ * marker at the value. The bar is one smooth gradient built from the scale's
+ * own `--wx-*` tokens (colour is shown unmixed at the middle of each band, see
+ * `blendStops`), so there are no seams and the colours stay the ones people
+ * expect for this quantity.
+ *
+ * Size is fixed by tokens (`--wx-scale-track-height`, `--wx-scale-marker-size`,
+ * `--wx-scale-max-width`), never a share of the card's width: the same thin
+ * bar and small marker on a phone and on a wide desktop card, left aligned and
+ * capped. The track carries the `--wx-outline` ring (non-text contrast, 3:1)
+ * and the marker is an outlined dot (surface fill, text-coloured ring) so it
+ * stays visible on any stop.
+ *
+ * Plain HTML and CSS rather than SVG: the gradient reads the CSS variables
+ * directly, so it follows the light/dark theme with no script and no flash of
+ * unresolved colour while hydrating.
  */
 export function GradientScale({
   positionPct,
@@ -27,69 +39,54 @@ export function GradientScale({
   rangeEndPct,
   label = "Scale",
 }: GradientScaleProps) {
-  const tokens = React.useMemo(() => gradientTokens(stops), [stops]);
-  const colors = useResolvedColors(tokens);
-  const rawId = React.useId();
-  const gradientId = `grad-scale-${rawId.replace(/[^a-zA-Z0-9]/g, "")}`;
   const pos = clampPct(positionPct);
+  const gradient = blendGradient(stops);
   const hasRange = rangeStartPct != null && rangeEndPct != null;
-  const rStart = hasRange ? clampPct(Math.min(rangeStartPct, rangeEndPct)) : 0;
-  const rEnd = hasRange ? clampPct(Math.max(rangeStartPct, rangeEndPct)) : 100;
-  const ramp = colors.length > 0 ? colors : tokens;
+  const win = hasRange ? trackWindow(rangeStartPct, rangeEndPct) : null;
 
   return (
-    <svg
-      viewBox="-6 -2 112 16"
-      className="h-auto w-full"
+    <div
       role="img"
       aria-label={`${label}: ${Math.round(pos)}% along the scale`}
+      className="w-full max-w-[var(--wx-scale-max-width)] px-[calc(var(--wx-scale-marker-size)/2)]"
     >
-      <defs>
-        <linearGradient
-          id={gradientId}
-          gradientUnits="userSpaceOnUse"
-          x1={0}
-          y1={0}
-          x2={100}
-          y2={0}
-        >
-          {ramp.map((c, i) => (
-            <stop
-              key={i}
-              offset={ramp.length === 1 ? 1 : i / (ramp.length - 1)}
-              stopColor={c}
+      {/* The span the marker travels: its ends are the ends of the track, so
+          the marker's left edge is exactly the value's position. */}
+      <div className="relative flex h-[var(--wx-scale-marker-size)] items-center">
+        {/* Track: the quiet fill shows if a browser drops the gradient */}
+        <div className="relative h-[var(--wx-scale-track-height)] w-full rounded-full bg-text-tertiary/15 ring-1 ring-wx-outline">
+          {win ? (
+            <div
+              className="absolute inset-y-0 overflow-hidden rounded-full"
+              style={{ left: `${win.left}%`, width: `${win.width}%` }}
+              data-range-window
+            >
+              <div
+                className="absolute inset-y-0"
+                style={{
+                  left: `${win.innerLeft}%`,
+                  width: `${win.innerWidth}%`,
+                  backgroundImage: gradient,
+                }}
+              />
+            </div>
+          ) : (
+            <div
+              className="absolute inset-0 rounded-full"
+              style={{ backgroundImage: gradient }}
+              data-gradient
             />
-          ))}
-        </linearGradient>
-      </defs>
-      {/* Track */}
-      <rect
-        x={0}
-        y={3}
-        width={100}
-        height={6}
-        rx={3}
-        className="fill-text-tertiary/15"
-      />
-      {/* Coloured bar (full span, or the sub-range) */}
-      <rect
-        x={rStart}
-        y={3}
-        width={Math.max(0, rEnd - rStart)}
-        height={6}
-        rx={3}
-        fill={`url(#${gradientId})`}
-      />
-      {/* Marker: outlined dot, readable on any stop */}
-      <circle
-        cx={pos}
-        cy={6}
-        r={4.6}
-        strokeWidth={1.6}
-        className="fill-surface-card stroke-text-primary"
-        data-marker-cx={pos}
-      />
-    </svg>
+          )}
+        </div>
+        {/* Marker: outlined dot, readable on any stop */}
+        <span
+          aria-hidden="true"
+          className="absolute top-1/2 size-[var(--wx-scale-marker-size)] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-text-primary bg-surface-card"
+          style={{ left: `${pos}%` }}
+          data-marker-pct={pos}
+        />
+      </div>
+    </div>
   );
 }
 

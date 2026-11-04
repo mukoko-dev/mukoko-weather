@@ -46,7 +46,7 @@ describe("geolocation source structure", () => {
   });
 
   it("passes autoCreate=true to the geo API", () => {
-    expect(source).toContain("autoCreate=true");
+    expect(source).toContain('autoCreate: autoCreate ? "true" : undefined');
   });
 
   it("passes the find-only synthesized flag through (#302)", () => {
@@ -67,10 +67,12 @@ describe("geolocation source structure", () => {
     expect(source).toContain("Math.round(distanceKm)");
   });
 
-  it("asks the geo endpoint through fetchPlaces (behaviour: geolocation-flow.test.ts)", () => {
-    expect(source).toContain("fetchPlaces(");
-    // GPS fixes reach /api/py/geo exactly: exact-place naming and OSM-ref identity depend on them
-    expect(source).toContain("lat=${latitude}&lon=${longitude}");
+  it("asks the geo endpoint through the shared store (behaviour: geolocation-flow.test.ts)", () => {
+    expect(source).toContain("workerData.read<");
+    expect(source).toContain('"geo"');
+    // GPS fixes reach /v1/geo exactly: exact-place naming and OSM-ref identity depend on them
+    expect(source).toContain("lat: latitude");
+    expect(source).toContain("exact: true");
     expect(source).not.toContain("roundCoord");
   });
 

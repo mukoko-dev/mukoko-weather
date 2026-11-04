@@ -29,9 +29,9 @@ import { detectUserLocation } from "@/lib/geolocation";
 import {
   AQI_BAND_LABELS,
   aqBubbles,
+  aqFieldRaster,
   aqiBand,
   fetchAirQualityGrid,
-  gridToGeoJSON,
   type AqGridResponse,
 } from "@/lib/aq-grid";
 import {
@@ -63,8 +63,7 @@ import {
 } from "@/lib/map-sources";
 import {
   fetchModelGrid,
-  modelGridToGeoJSON,
-  modelLegendTokens,
+  modelFieldRaster,
   type ModelGridResponse,
 } from "@/lib/model-grid";
 import { getFeatureFlag } from "@/lib/feature-flags";
@@ -82,8 +81,23 @@ const MapLibreMap = dynamic(
   { ssr: false, loading: () => <MapSkeleton fill className="rounded-none" /> },
 );
 
-/** Milliseconds per timeline stop while playing. */
+// Start downloading MapLibre as soon as this page's code runs, rather than
+// after hydration mounts the dynamic map component below (#266). The browser
+// guard keeps it out of the server render; the chunk is shared, so the map
+// component's own import() resolves from it.
+if (typeof window !== "undefined") {
+  import("maplibre-gl").catch(() => {
+    // The map component retries and shows its own error state.
+  });
+}
+
+/** Milliseconds each loaded timeline frame stays up while playing. */
 const TIMELINE_TICK_MS = 900;
+/**
+ * Longest a playing timeline waits for a frame's tiles before moving on
+ * anyway, so one slow or failed frame cannot stall playback.
+ */
+const TIMELINE_MAX_WAIT_MS = 8000;
 
 /** Storage handle, or null when the browser blocks localStorage (it can throw on access). */
 function getStorage(): Storage | null {
@@ -141,6 +155,11 @@ export function MapDashboard({ location }: MapDashboardProps) {
   const [sheetOpen, setSheetOpen] = useState(true);
   // null = the layer's default frame (Now for forecasts, newest for imagery).
   const [stepChoice, setStepChoice] = useState<number | null>(null);
+  // Set once the user plays or scrubs the timeline. Only then is the next
+  // frame preloaded: every preload spends real upstream tile requests.
+  const [timelineEngaged, setTimelineEngaged] = useState(false);
+  // Timestamp of the overlay frame that last finished loading on the map.
+  const [loadedTimestamp, setLoadedTimestamp] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   // Model picker: opens on the user's forecast-model preference. Picking a
   // model here only changes the map — the preference drives every location
@@ -292,19 +311,32 @@ export function MapDashboard({ location }: MapDashboardProps) {
     setStepChoice(null);
   }, []);
 
+  // The raster overlay frame on screen (none for model fields or air quality).
+  const rasterOverlay = !aqOn && !modelOn;
+  const weatherTimestamp =
+    timelineOn && !modelOn ? (frames[step]?.timestamp ?? "now") : "now";
+  const prefetchTimestamp =
+    rasterOverlay && timelineOn && timelineEngaged && frameCount > 1
+      ? (frames[(step + 1) % frameCount]?.timestamp ?? null)
+      : null;
+  const frameReady = !rasterOverlay || loadedTimestamp === weatherTimestamp;
+
+  // Playback waits for each frame to load, then shows it for one tick. The
+  // next frame is preloaded meanwhile, so on a fast connection this is a
+  // steady tick and on a slow one it never runs ahead of the tiles.
   useEffect(() => {
     if (!isPlaying || frameCount < 2) return;
-    const id = window.setInterval(
+    const id = window.setTimeout(
       () =>
         setStepChoice((s) => {
           // Continue from the frame on screen (imagery opens on the newest).
           const current = s ?? defaultStep;
           return (current + 1) % frameCount;
         }),
-      TIMELINE_TICK_MS,
+      frameReady ? TIMELINE_TICK_MS : TIMELINE_MAX_WAIT_MS,
     );
-    return () => window.clearInterval(id);
-  }, [isPlaying, frameCount, defaultStep]);
+    return () => window.clearTimeout(id);
+  }, [isPlaying, frameCount, defaultStep, step, frameReady]);
 
   const fieldOverlay: FieldOverlay | null = useMemo(() => {
     if (!modelOn) return null;
@@ -313,11 +345,10 @@ export function MapDashboard({ location }: MapDashboardProps) {
     const seriesIndex =
       modelGridData?.times.indexOf(frames[step]?.timestamp ?? "") ?? -1;
     if (seriesIndex < 0) return null;
-    const data = modelGridToGeoJSON(modelGridData, activeLayer, seriesIndex);
-    if (!data) return null;
+    const raster = modelFieldRaster(modelGridData, activeLayer, seriesIndex);
+    if (!raster) return null;
     return {
-      data,
-      tokens: modelLegendTokens(getMapChip(activeLayer)?.legend),
+      raster,
       attribution: attributionHtml(
         overlayAttribution(activeLayer, activeModel),
       ),
@@ -355,10 +386,8 @@ export function MapDashboard({ location }: MapDashboardProps) {
       ? "ready"
       : "error";
 
-  const aqFill = useMemo(
-    () => (grid?.available ? gridToGeoJSON(grid.points, grid.cellKm) : null),
-    [grid],
-  );
+  // The grid as one smooth, banded picture (interpolated between the samples).
+  const aqRaster = useMemo(() => aqFieldRaster(grid), [grid]);
   const bubbles = useMemo(() => (grid ? aqBubbles(grid) : null), [grid]);
   const centerAqi = grid?.center?.aqi ?? null;
   const centerBand = centerAqi === null ? null : aqiBand(centerAqi);
@@ -428,10 +457,10 @@ export function MapDashboard({ location }: MapDashboardProps) {
         zoom={8}
         interactive
         weatherLayer={aqOn || modelOn ? null : activeLayer}
-        weatherTimestamp={
-          timelineOn && !modelOn ? (frames[step]?.timestamp ?? "now") : "now"
-        }
-        aqiOverlay={aqOn ? aqFill : null}
+        weatherTimestamp={weatherTimestamp}
+        weatherPrefetchTimestamp={prefetchTimestamp}
+        onWeatherFrameLoaded={setLoadedTimestamp}
+        aqiOverlay={aqOn ? aqRaster : null}
         fieldOverlay={fieldOverlay}
         aqiBubbles={aqOn ? bubbles : null}
         navigationControl={false}
@@ -440,9 +469,10 @@ export function MapDashboard({ location }: MapDashboardProps) {
       />
 
       {/* Top-left: close (back to the location) and the shared breadcrumb
-          trail as a compact overlay pill. The column stops 7rem short of the
-          right edge, so neither can run under the control stack. */}
-      <div className="pointer-events-none absolute left-4 top-[max(1rem,env(safe-area-inset-top))] z-10 flex w-[min(20rem,calc(100%-7rem))] min-w-0 items-center gap-2">
+          trail as a compact overlay pill. The column's width is the screen
+          minus the float grid's side insets, one control and one gap, so
+          neither can run under the control stack. */}
+      <div className="pointer-events-none absolute left-[var(--float-left)] top-[var(--float-top)] z-10 flex w-[min(20rem,calc(100%-var(--float-left)-var(--float-right)-var(--touch-target-min)-var(--float-gap)))] min-w-0 items-center gap-[var(--float-gap)]">
         <Link
           href={`/${location.slug}`}
           aria-label={`Close map and return to ${location.name}`}
@@ -461,8 +491,8 @@ export function MapDashboard({ location }: MapDashboardProps) {
       </div>
 
       {/* Top-right: stacked controls (layer sheet, my location) and the list. */}
-      <div className="pointer-events-none absolute right-4 top-[max(1rem,env(safe-area-inset-top))] z-10 flex flex-col items-end gap-2">
-        <div className="serval pointer-events-auto flex flex-col overflow-hidden p-0.5">
+      <div className="pointer-events-none absolute right-[var(--float-right)] top-[var(--float-top)] z-10 flex flex-col items-end gap-[var(--float-gap)]">
+        <div className="serval pointer-events-auto relative flex flex-col gap-[var(--float-gap)] rounded-full">
           <button
             type="button"
             onClick={toggleSheet}
@@ -473,7 +503,10 @@ export function MapDashboard({ location }: MapDashboardProps) {
           >
             <Layers className={ICON_CLASS} aria-hidden="true" />
           </button>
-          <span aria-hidden="true" className="mx-2 h-px bg-border" />
+          <span
+            aria-hidden="true"
+            className="absolute inset-x-[var(--inset-floor)] top-1/2 h-px -translate-y-1/2 bg-[color:var(--float-border)]"
+          />
           <button
             type="button"
             onClick={handleLocate}
@@ -512,13 +545,10 @@ export function MapDashboard({ location }: MapDashboardProps) {
       <section
         aria-labelledby="map-legend-title"
         data-slot="map-sheet"
-        className="serval absolute inset-x-3 bottom-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] z-10 mx-auto flex max-h-[calc(100dvh-6rem)] max-w-xl flex-col overflow-y-auto px-4 pb-2 pt-3 [@media(max-height:500px)]:mr-auto [@media(max-height:500px)]:max-w-md"
+        className="serval absolute left-[var(--float-left)] right-[var(--float-right)] bottom-[var(--float-bottom)] z-10 mx-auto flex max-h-[calc(100dvh-var(--float-top)-var(--touch-target-min)-var(--float-gap)-var(--float-bottom))] max-w-xl flex-col overflow-y-auto p-[var(--space-card)] [@media(max-height:500px)]:mr-auto [@media(max-height:500px)]:max-w-md"
       >
         <div className="flex items-start gap-3">
-          <span
-            aria-hidden="true"
-            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary"
-          >
+          <span aria-hidden="true" className="hoopoe-lg mt-0.5 text-primary">
             <LayerIcon id={activeLayer} className={ICON_CLASS} />
           </span>
           <div className="min-w-0 flex-1">
@@ -536,7 +566,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
             {chip && chip.legend.segments.length > 0 && (
               <>
                 <div
-                  className="mt-1.5 flex h-2 gap-px overflow-hidden rounded-full"
+                  className="mt-1.5 flex h-2 gap-px overflow-hidden rounded-full ring-1 ring-wx-outline"
                   aria-hidden="true"
                 >
                   {chip.legend.segments.map((seg) => (
@@ -630,8 +660,14 @@ export function MapDashboard({ location }: MapDashboardProps) {
                   frames={frames}
                   step={step}
                   playing={isPlaying}
-                  onStepChange={setStepChoice}
-                  onPlayingChange={setPlaying}
+                  onStepChange={(next) => {
+                    setTimelineEngaged(true);
+                    setStepChoice(next);
+                  }}
+                  onPlayingChange={(next) => {
+                    setTimelineEngaged(true);
+                    setPlaying(next);
+                  }}
                   zone={timelineZone}
                   inputLabel={gibsLayer ? "Observation time" : "Forecast time"}
                 />

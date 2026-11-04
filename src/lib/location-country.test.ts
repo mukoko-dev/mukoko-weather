@@ -125,18 +125,19 @@ describe("placeLine", () => {
 describe("pages use the reconciled country", () => {
   const read = (p: string) => readFileSync(resolve(__dirname, p), "utf8");
 
-  it("location page reconciles after the weather fetch", () => {
+  it("the server pages name the country from the stored place only", () => {
+    // They hold no forecast, so they cannot reconcile against its time zone.
     const src = read("../app/[location]/page.tsx");
-    expect(src).toContain("reconcileCountry(storedLocation, weather.timezone)");
     expect(src).toContain("countryDisplayName(countryCode)");
+    expect(src).not.toContain("reconcileCountry(");
   });
 
-  it("home page and client swap reconcile too", () => {
-    expect(read("../app/page.tsx")).toContain(
-      "reconcileCountry(seededLocation, weather.timezone)",
+  it("the place stage reconciles once the visitor's forecast arrives", () => {
+    const controller = read("./place-controller.ts");
+    expect(controller).toContain(
+      "reconcileCountry(seed.location, weather.timezone)",
     );
-    expect(read("../app/CurrentLocationHome.tsx")).toContain(
-      "reconcileCountry(found, weather.timezone)",
-    );
+    // …and renames the country when the zone changed it.
+    expect(controller).toContain("countryDisplayName(location.country)");
   });
 });

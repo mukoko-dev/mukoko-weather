@@ -1,16 +1,18 @@
 "use client";
 
 import { lazy, Suspense } from "react";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
-import { Breadcrumb } from "@/components/layout/Breadcrumb";
-import { SeasonBadge } from "@/components/weather/SeasonBadge";
+import { PageShell } from "@/components/layout/PageShell";
 import { LazySection } from "@/components/weather/LazySection";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { SectionSkeleton } from "@/components/weather/SectionSkeleton";
+import { PageWeatherNotice } from "@/components/weather/PageWeatherNotice";
+import { SubRouteHeader } from "@/components/weather/SubRouteHeader";
+import { ForecastBodySkeleton } from "@/components/weather/SubRouteSkeletons";
+import { UpdatedAgo } from "@/components/weather/UpdatedAgo";
+import { usePageWeather } from "@/lib/use-page-weather";
 import { FrostAlertBanner } from "../FrostAlertBanner";
 import { WeatherUnavailableBanner } from "../WeatherUnavailableBanner";
-import type { WeatherData, FrostAlert, Season } from "@/lib/weather";
+import type { Season } from "@/lib/weather";
 import type { WeatherLocation } from "@/lib/locations";
 
 const HourlyForecast = lazy(() =>
@@ -30,53 +32,56 @@ const SunTimes = lazy(() =>
 );
 
 interface Props {
-  weather: WeatherData;
+  /** The place and its season. The server sends NO weather (issue #452). */
   location: WeatherLocation;
-  usingFallback: boolean;
-  frostAlert: FrostAlert | null;
   season: Season;
 }
 
-export function ForecastDashboard({
-  weather,
-  location,
-  usingFallback,
-  frostAlert,
-  season,
-}: Props) {
-  return (
-    <>
-      <Header />
+/**
+ * The forecast page. The server sends the heading, the place line and the
+ * skeleton; the forecast is the visitor's own request, painted over the copy
+ * stored on the device (`usePageWeather`). Render with `key={location.slug}`.
+ */
+export function ForecastDashboard({ location: seedLocation, season }: Props) {
+  const { state, view, retry } = usePageWeather({
+    location: seedLocation,
+    season,
+    countryName: "",
+  });
+  // The forecast corrects a placeholder height and a borrowed country.
+  const location = view?.location ?? seedLocation;
+  const weather = view?.weather;
 
-      <Breadcrumb
-        items={[
-          { label: "Home", href: "/" },
-          { label: location.name, href: `/${location.slug}` },
-          { label: "Forecast" },
-        ]}
+  return (
+    <PageShell
+      width="wide"
+      label={`Weather forecast for ${location.name}`}
+      className="overflow-x-clip"
+      breadcrumb={[
+        { label: "Home", href: "/" },
+        { label: location.name, href: `/${location.slug}` },
+        { label: "Forecast" },
+      ]}
+    >
+      <SubRouteHeader
+        title={`${location.name} Forecast`}
+        location={location}
+        season={season}
       />
 
-      <main
-        id="main-content"
-        className="mx-auto max-w-5xl overflow-x-clip px-4 py-8 pb-[var(--mobile-nav-clearance)] sm:pb-8 sm:px-6 md:px-8"
-        aria-label={`Weather forecast for ${location.name}`}
-      >
-        <h1 className="text-2xl font-bold text-text-primary font-heading sm:text-3xl">
-          {location.name} Forecast
-        </h1>
-        <p className="mt-1 text-base text-text-secondary">
-          {location.province} &middot; {location.elevation}m &middot;{" "}
-          {season.localName} ({season.name})
-        </p>
+      {view && state.device && (
+        <UpdatedAgo
+          fetchedAt={state.device.fetchedAt}
+          freshness={state.device.freshness}
+          weather={view.weather}
+          placeName={location.name}
+        />
+      )}
+      {view?.usingFallback && <WeatherUnavailableBanner onRetry={retry} />}
+      {view?.frostAlert && <FrostAlertBanner alert={view.frostAlert} />}
 
-        <div className="mt-4 mb-4">
-          <SeasonBadge season={season} />
-        </div>
-
-        {usingFallback && <WeatherUnavailableBanner />}
-        {frostAlert && <FrostAlertBanner alert={frostAlert} />}
-
-        {/* Forecast charts — 2-column grid on desktop, stacked on mobile */}
+      {weather ? (
+        /* Forecast charts — 2-column grid on desktop, stacked on mobile */
         <div className="mt-6 grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
           {/* Hourly forecast (24h) */}
           <ChartErrorBoundary name="hourly forecast">
@@ -107,9 +112,11 @@ export function ForecastDashboard({
             </ChartErrorBoundary>
           </LazySection>
         </div>
-      </main>
+      ) : (
+        <ForecastBodySkeleton />
+      )}
 
-      <Footer />
-    </>
+      <PageWeatherNotice state={state} retry={retry} />
+    </PageShell>
   );
 }

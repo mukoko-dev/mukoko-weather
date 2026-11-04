@@ -1,9 +1,14 @@
 /**
- * /[location] SSR — the independent lookups run alongside the weather fetch.
+ * /[location] SSR — the shell, the place and nothing that waits on data
+ * (issues #414 and #452).
  *
- * Country, season and the signed-in user don't depend on the weather, so
- * they must start before the weather await, not after it (a weather cache
- * miss is the slow part of this render).
+ * The page awaits its params and nothing else: the place comes from the seed
+ * or the slug (`localPlaceForSlug`), the season from the prebuilt table, the
+ * country name from the static list, and the signed-in person is read by the
+ * client from AuthKit's provider. It never awaits weather either. The
+ * pages-make-no-weather-call guard for the whole render path is
+ * src/app/place-pages-no-weather.test.ts; the behaviour guard for "no await in
+ * front of the shell" is src/app/shell-no-awaits.test.ts.
  */
 import { readFileSync } from "fs";
 import { resolve } from "path";
@@ -14,36 +19,64 @@ const body = page.slice(
   page.indexOf("export default async function LocationPage"),
 );
 
-describe("LocationPage — parallel SSR lookups", () => {
-  it("starts country, season and user before awaiting the weather", () => {
-    const started = body.indexOf("const sideData = Promise.all([");
-    const weather = body.indexOf("await getWeatherForLocation(");
-    expect(started).toBeGreaterThan(-1);
-    expect(weather).toBeGreaterThan(-1);
-    expect(started).toBeLessThan(weather);
-    const group = body.slice(started, body.indexOf("]);", started));
-    expect(group).toContain("loadCountry(storedCountry)");
-    expect(group).toContain("getCachedSeason(");
-    expect(group).toContain("getCurrentUser()");
+describe("LocationPage — what the render waits on", () => {
+  it("awaits only its params", () => {
+    const awaits = [...body.matchAll(/\bawait\b[^;\n]*/g)].map((m) => m[0]);
+    expect(awaits).toEqual(["await params"]);
   });
 
-  it("awaits the started group instead of a second Promise.all", () => {
-    expect(body).toContain("await sideData;");
-    // One early group; the only other is the re-read when the zone changed
-    // the country.
-    expect(body.match(/Promise\.all\(/g)).toHaveLength(2);
+  it("names the place from the seed or the slug, and hands anything else to the browser", () => {
+    expect(body).toContain("localPlaceForSlug(slug)");
+    expect(body).toContain("<PlaceResolver slug={slug} />");
+    expect(body).not.toContain("notFound(");
   });
 
-  it("re-reads country and season only when the forecast's zone changed the country", () => {
-    expect(body).toContain(
-      "const countryChanged = countryCode !== storedCountry;",
-    );
-    const reread = body.slice(body.indexOf("const countryChanged"));
-    expect(reread).toMatch(/countryChanged\s*\?\s*await Promise\.all\(\[/);
-    expect(reread).toContain("getCachedSeason(countryCode");
+  it("computes the season and the country name without a lookup", () => {
+    expect(body).toContain("localSeason(");
+    expect(body).toContain("countryDisplayName(");
+    expect(page).not.toContain("seasonWithinBudget");
+    expect(page).not.toContain("getCachedSeason");
+    expect(page).not.toContain("getCountryByCode");
   });
 
-  it("marks the early group handled so a rejection isn't reported as unhandled", () => {
-    expect(body).toContain("void sideData.catch(() => {});");
+  it("does not read the signed-in user on the server", () => {
+    expect(page).not.toContain("getCurrentUser");
+    expect(page).not.toContain("@/lib/auth");
+  });
+
+  it("hands the stage a place with no weather and no user", () => {
+    expect(body).toContain("<PlaceStage");
+    expect(body).toContain("seed={{ location, season, countryName }}");
+    expect(body).not.toContain("weather={");
+    expect(body).not.toContain("user={");
+  });
+
+  it("never reconciles against a forecast it does not have", () => {
+    expect(body).not.toContain("reconcileCountry(");
+    expect(body).not.toContain("reconcileElevation(");
+  });
+
+  it("keeps Place, BreadcrumbList and FAQPage structured data without observations", () => {
+    expect(body).toContain('"@type": "Place"');
+    expect(body).toContain("breadcrumbJsonLd(");
+    expect(body).toContain('"@type": "FAQPage"');
+    expect(body).not.toContain('"@type": "Observation"');
+    expect(body).not.toContain("weather.current");
+  });
+});
+
+describe("LocationPage.generateMetadata", () => {
+  const metadata = page.slice(
+    page.indexOf("export async function generateMetadata"),
+    page.indexOf("export default async function LocationPage"),
+  );
+
+  it("asks no store for a shipped place or a spot", () => {
+    expect(metadata).toContain("localPlaceForSlug(slug) ??");
+  });
+
+  it("takes the OG season from the prebuilt table, not a database read", () => {
+    expect(metadata).toContain("localSeason(");
+    expect(metadata).not.toContain("getCachedSeason");
   });
 });

@@ -10,7 +10,7 @@ Thank you for your interest in contributing to mukoko weather. This project prov
 4. Create a feature branch: `git checkout -b feature/your-feature`
 5. Start the dev server: `npm run dev`
 
-AI features are optional locally: without the AI env vars every AI endpoint uses its fallback. To enable them, set `WEATHER_SERVICE_URL` (`https://weather-internal.mukoko.com`, or a local `wrangler dev` of `workers/internal-api`) and the server-only service key `WEATHER_SERVICE_API_KEY` in `.env.local`. The backend never holds a Cloudflare AI token: the weather Worker runs the model through its Workers AI binding. Never prefix either with `NEXT_PUBLIC_` or read them outside `api/py`.
+AI features are optional locally: without the AI env vars every AI endpoint uses its fallback. To enable them, set `WEATHER_SERVICE_URL` (`https://weather-internal.mukoko.com`, or a local `wrangler dev` of `workers/internal-api`) and the server-only service key `WEATHER_SERVICE_API_KEY` in `.env.local`. The backend never holds a Cloudflare AI token: the weather Worker runs the model through its Workers AI binding. Never prefix either with `NEXT_PUBLIC_` or read them outside the `/api/ai` proxy.
 
 ## Development Workflow
 
@@ -25,7 +25,7 @@ AI features are optional locally: without the AI env vars every AI endpoint uses
 ### Code Standards
 
 - **TypeScript** — all frontend code must be typed; run `npx tsc --noEmit` before committing
-- **Python** — backend API code lives in `api/py/` (FastAPI); follow existing patterns for new endpoints
+- **Rust** — backend code lives in `workers/` (the pure logic in `workers/crates/weather-core`, the Workers beside it); the Python backend is gone (#333). Put every decision in `weather-core` with native tests, keep a Worker to I/O, and run the Workers checks below
 - **ESLint** — run `npm run lint` before committing; zero errors required (warnings acceptable)
 - **Tests** — run `npm test` and ensure all tests pass
 - **No hardcoded styles** — use Tailwind classes and CSS custom properties from `globals.css`, never inline `style={{}}` or hardcoded hex/rgba values
@@ -34,13 +34,21 @@ AI features are optional locally: without the AI env vars every AI endpoint uses
 - **Mobile-first** — design for mobile screens first, then scale up
 - **56px touch targets** — all interactive elements must meet the minimum touch target size
 
+### Commands that need care
+
+- **One test:** `npx vitest run src/lib/some.test.ts`, or `-t "name"` for one test in it.
+- **Formatting:** CI's `vite-plus / fmt` reads only the `fmt` block of `vite.config.ts` (print width 80, trailing commas `all`). A bare `npx oxfmt` ignores it and wants to reformat about 720 files, so write a throwaway JSON file with the same values and pass it: `npx oxfmt -c /tmp/oxfmt-repo.json --check src workers`. Markdown and JSON are checked by Prettier 3.9.4 (see the checklist below); `npx vp` is not a command.
+- **Dev server:** use `npx next dev --webpack`. Turbopack's `next dev` fails on a CSS parse error: Tailwind's automatic source scan reads the literal `rounded-[var(--radius-*)]` written in prose (a comment in `src/lib/mzizi-alignment.test.ts`) as a class, and Lightning CSS rejects the rule it generates (the webpack build only warns). It needs dummy WorkOS variables (`WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, a 32+ character `WORKOS_COOKIE_PASSWORD`, `NEXT_PUBLIC_WORKOS_REDIRECT_URI`) and writes an untracked `AGENTS.md` at the repo root, which must never be committed.
+- **Memory:** two `next build` processes at once on a 16 GB machine get killed; run one.
+- **`CLAUDE.md` is owner-only:** the `no agent-local files` check fails any pull request that adds or changes `CLAUDE.md` or `.claude/`, so a contributor's guidance for it goes to the owner as a patch, not in a PR.
+
 ### Data Standards
 
 All data models must align with **schema.org** vocabulary and **OpenAPI** standards. See the **Data Standards & Interoperability** section in `CLAUDE.md` for the full specification.
 
 - **Schema.org mapping** — new data entities must identify their schema.org equivalent before implementation (e.g., locations → `schema.org/Place`, weather → `schema.org/Observation`)
 - **ISO standards** — country codes use ISO 3166-1 alpha-2, dates use ISO 8601, coordinates use WGS 84, measurement units follow UN/CEFACT Recommendation 20
-- **OpenAPI contract** — all Python API endpoints must define Pydantic `BaseModel` request/response schemas. The auto-generated OpenAPI spec (available at `/api/py/docs` in dev) is the source of truth for API consumers
+- **API contract** — every Worker route has typed requests and responses in `weather-core`, documented in `workers/README.md` and, for the public routes, the `/developers` page; add the route to both in the same PR
 - **JSON-LD structured data** — all public-facing pages must include schema.org JSON-LD. New page types must add appropriate schemas
 
 ### Commit Messages
@@ -62,9 +70,7 @@ refactor: replace custom modal with shadcn Dialog
 npm test              # Run TypeScript tests (single run)
 npm run test:watch    # Run TypeScript tests in watch mode
 npm run test:coverage # Run TypeScript tests with v8 coverage reporting
-npm run test:python   # Run Python backend tests (pytest)
-npm run test:all      # Run both TypeScript and Python tests
-python -m pytest tests/py/ -v  # Run Python backend tests (direct)
+(cd workers && cargo test -p weather-core -p weather-mongo -p weather-webpush)  # Run the Rust Workers tests
 ```
 
 Write tests for:
@@ -78,11 +84,24 @@ Write tests for:
 
 Tests live next to the code they test (co-located). Use the `describe`/`it`/`expect` pattern.
 
+A change to the service worker, the offline page or how a place loads also gets the real-browser checks in `scripts/browser-check/` (Chromium, the production build; see its README). They exist because every unit test of the first PWA cut passed while the offline page could not start:
+
+```bash
+npm run build && npx next start -p 3100 &
+BASE=http://localhost:3100 node scripts/browser-check/pwa-check.mjs
+```
+
+A change that adds something to a place page or the map (a section, a chart, a map, a canvas, a script) also gets the memory budget, `scripts/browser-check/memory-budget.mjs` (#476). It is a manual, real-browser check, run before a release that touches the place page or the map; it is not a CI gate (Playwright is not a dependency of this repo, and it needs the production build and about eight minutes). It loads the page in a phone-sized Chromium, scrolls it, switches places, opens the detail sheets, plays the map and moves between pages, and fails with the number it reached when something holds more than the budget or keeps anything after the visitor has left it. It does not say how much a real phone allows a tab. A card the visitor cannot pan or zoom is a picture, not a MapLibre map:
+
+```bash
+BASE=http://localhost:3100 node scripts/browser-check/memory-budget.mjs
+```
+
 ## Architecture Guidelines
 
 ### Frontend / backend split
 
-Next.js serves as the **presentation layer only**. All data handling, AI operations, database CRUD, and rule evaluation run in **Python FastAPI** (`api/py/`), deployed as Vercel serverless functions. Routes are proxied via `vercel.json` rewrites (`/api/py/*` → `api/py/index.py`).
+Next.js serves as the **presentation layer only**. All data handling, AI operations, database access, and rule evaluation run in the **Rust Cloudflare Workers** (`workers/`, `weather-api.mukoko.com`); the Python FastAPI backend (`api/py`) was deleted in #333. `vercel.json` has one rewrite left, the old weather-station upload URL `/api/py/stations/ingest` to the stations Worker.
 
 Only two TypeScript API routes remain:
 
@@ -119,7 +138,7 @@ Follow the Netflix-style resilience pattern:
 2. **Always provide fallbacks.** Server-side data fetching must catch errors and return seasonal estimates
 3. **Log structured errors.** Use `logError`/`logWarn` from `src/lib/observability.ts` in API routes
 4. **Report client-side errors.** Use `reportErrorToAnalytics` from `src/lib/observability.ts` in error boundaries
-5. **Use circuit breakers.** External API calls in Python should use the circuit breaker system (`api/py/_circuit_breaker.py`)
+5. **Use circuit breakers.** External API calls in a Worker use the circuit breaker (`weather_core::breaker`) and a KV cache
 
 ### Lazy loading
 
@@ -153,7 +172,7 @@ Users can add locations at runtime via geolocation auto-detection, search, or co
 Before every commit, complete **all** of these steps:
 
 1. `npm test` — all TypeScript tests pass
-2. `python -m pytest tests/py/ -v` — all Python tests pass
+2. If you touched `workers/` or `tests/fixtures/`: `cd workers && cargo fmt --all -- --check && cargo clippy --workspace --target wasm32-unknown-unknown --all-targets -- -D warnings && cargo test -p weather-core -p weather-mongo -p weather-webpush`
 3. `npm run lint` — zero errors
 4. `npx tsc --noEmit` — zero type errors
 5. `npm run build` — production build succeeds
@@ -178,22 +197,28 @@ The old analyzer names may have silently fallen through to Atlas defaults — th
 1. Complete the Pre-Commit Checklist above
 2. Ensure the build succeeds: `npm run build`
 3. Submit a PR with a clear description of the change and why it's needed
-4. PRs are automatically checked by CI (lint → typecheck → tests), CodeQL security scanning (JS/TS, Python, Actions), and Claude AI code review — all visible as separate checks in the PR UI
+4. PRs are automatically checked by CI (lint → typecheck → tests), CodeQL security scanning (JS/TS, Rust, Actions), and Claude AI code review — all visible as separate checks in the PR UI
 5. On merge to `main`, the `db-init.yml` workflow automatically syncs seed data to MongoDB after Vercel deploys
 6. Address any review feedback before requesting merge
+
+## Dependency updates
+
+Dependabot is configured in `.github/dependabot.yml`: one grouped pull request a week for each of npm, Cargo and GitHub Actions, against `staging`, with a seven-day cooldown on new releases. Major versions are not proposed there; plan a major upgrade as its own issue.
+
+Security updates are the exception. Dependabot raises them against the default branch (`main`) only, so the "`main` takes releases only" check fails them. Retarget one with `gh pr edit <n> --base staging` and let its checks run again. A group of green Dependabot pull requests is merged through the merge queue like any other pull request, and the ones that fail for a reason the update did not cause (for example `npm audit` on a lockfile that already had advisories) are fixed in their own pull request first.
 
 ## GitHub Workflows
 
 All workflows use `concurrency` groups with `cancel-in-progress: true` — rapid pushes cancel stale runs instead of creating zombie checks.
 
-| Workflow             | Trigger                                                       | Purpose                                                                                                                                                   |
-| -------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ci.yml`             | Push/PR to `main`                                             | Single job: lint → typecheck → TypeScript tests → Python tests. All steps appear under one check in the GitHub PR UI.                                     |
-| `codeql.yml`         | Push/PR to `main`                                             | CodeQL security scanning for JavaScript/TypeScript, Python, and GitHub Actions workflows. Matrix strategy runs all 3 language analyses in parallel.       |
-| `db-init.yml`        | Vercel production deploy succeeds                             | Syncs seed data to MongoDB (locations, activities, rules, prompts)                                                                                        |
-| `release-pr.yml`     | Manual (`workflow_dispatch`)                                  | Cuts `release/<date>` from `staging`, asserts main's content is already in staging, records main with `git merge -s ours`, opens the release PR to `main` |
-| `workers.yml`        | Push/PR touching `workers/**`; called by `workers-deploy.yml` | Rust Workers: fmt, clippy (native + wasm32), test, and build every Worker bundle                                                                          |
-| `workers-deploy.yml` | Manual (`workflow_dispatch`)                                  | Builds and deploys the Rust Workers to Cloudflare in service-binding order, then smoke-checks each public `/health`                                       |
+| Workflow                   | Trigger                                                                              | Purpose                                                                                                                                                                                       |
+| -------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci.yml`                   | Push/PR to `main`                                                                    | Single job: lint → typecheck → TypeScript tests. All steps appear under one check in the GitHub PR UI.                                                                                        |
+| `db-init.yml`              | Vercel production deploy succeeds                                                    | Syncs seed data to MongoDB (locations, activities, rules, prompts)                                                                                                                            |
+| `release-pr.yml`           | Manual (`workflow_dispatch`)                                                         | Cuts `release/<date>` from `staging`, asserts main's content is already in staging, records main with `git merge -s ours`, removes `CLAUDE.md` and `.claude/`, opens the release PR to `main` |
+| `no-dev-files-on-main.yml` | PR to `main`; push to `main`                                                         | Fails when `CLAUDE.md` or a `.claude/` directory is tracked, so `main` never holds development-only files                                                                                     |
+| `workers.yml`              | Push/PR touching `workers/**` or `tests/fixtures/**`; called by `workers-deploy.yml` | Rust Workers: fmt, clippy (native + wasm32), test, and build every Worker bundle                                                                                                              |
+| `workers-deploy.yml`       | Push to `main` touching `workers/**`; manual (`workflow_dispatch`, from `main`)      | After the `workers.yml` gate, builds and deploys the Rust Workers to Cloudflare in service-binding order (all of them on a push), then smoke-checks each public `/health`                     |
 
 ## Releases
 
@@ -204,9 +229,12 @@ To open a release PR, never open `staging → main` by hand. Run the **Release P
 1. Creates `release/<date>` from `origin/staging`. It fails if that branch already exists.
 2. Asserts that main's content is already in staging. Each file on `main` must either match staging's blob at the same path or appear somewhere in staging's history. If neither holds, the workflow fails loudly and names each file, which usually means a hotfix landed on `main` without being merged back. Merge `main` into `staging` and rerun.
 3. Runs `git merge -s ours origin/main -m "chore: record main in release history"`. This records `main` as a parent while the tree stays exactly staging's, and the workflow verifies that.
-4. Pushes the branch and opens the PR to `main` with `RELEASE_BUMP_TOKEN`, so CI runs on it.
+4. Removes the development-only files in one extra commit: every `CLAUDE.md` and every `.claude/` directory, at any depth (matched case-insensitively). `main` never holds them, because they guide development and are not production code. `staging` keeps them, and the workflow fails if any is still tracked after the commit.
+5. Pushes the branch and opens the PR to `main` with `RELEASE_BUMP_TOKEN`, so CI runs on it.
 
 Squash-merge that PR. Because `main` is already in the branch's history, the squash is always clean.
+
+The `no-dev-files-on-main.yml` workflow backs step 4 up: it fails any PR to `main`, and any push to `main`, whose tree still tracks a `CLAUDE.md` or `.claude/` file. Make it a required status check on `main` in the repository's branch protection (an owner step) so a hand-opened PR cannot merge them. The Release PR workflow runs from `main`, so a change to it only takes effect after it has reached `main` once. That release has to remove the files by hand on its release branch.
 
 Once the release is on `main`, tag it with the `tag-release` workflow (Actions → tag-release → Run workflow). It tags the tip of `main` as the next version (`bump`, default patch, or an explicit `vX.Y.Z`) and publishes the GitHub release, using `RELEASE_BUMP_TOKEN`.
 
@@ -249,24 +277,78 @@ One or two optional sentences on what this release is about.
 
 ## Deploying the Workers
 
-The Rust Workers in `workers/` deploy by hand only, from **Actions → Workers deploy → Run workflow** (`.github/workflows/workers-deploy.yml`). Production deploys `main` only: dispatch the run on `main` (a guard job fails it on any other ref), and it deploys exactly the commit it was dispatched on. There is no `ref` input, so the job holding the Cloudflare secrets never checks out a caller-chosen ref. Inputs:
+The Rust Workers in `workers/` deploy to production from `main` automatically, and by hand when you need a redeploy (`.github/workflows/workers-deploy.yml`):
 
-- `worker`: `all` (default) or one Worker.
-- `environment`: `production`, the only environment the wrangler configs define. The job runs in the `workers-production` GitHub Environment, so required reviewers set there gate every deploy.
+- **A push to `main` that touches `workers/**` (or the workflow file) deploys all Workers**, in the service-binding order below, after the `workers.yml` gate (fmt, clippy, test, build) passes. That is the release path: the release PR from `staging`, squash-merged into `main`, deploys the Workers it changes together with the rest of the release. A push that changes nothing under `workers/` deploys nothing, and if the gate fails nothing deploys. No repository variable gates it.
+- **Actions → Workers deploy → Run workflow** still exists, for redeploying one Worker or all of them. Inputs: `worker` (`all`, the default, or one Worker) and `environment` (`production`, the only one; a push always deploys production).
 
-`all` first runs the `workers.yml` gate (fmt, clippy, test, build), then deploys in service-binding order: `forecast`, `aviation`, `places`, `stations`, `tiles`, then `ai`, `internal-api`, `jobs`, then `public-api`. Each Worker with a custom domain must answer `GET /health` with a 2xx, and the run summary lists every Worker's result. A single Worker skips the gate, so only deploy one alone when what it binds to is already live.
+Production deploys `main` only: a guard job fails a run on any other ref, and the run deploys exactly the commit it ran on. There is no `ref` input, so the job holding the Cloudflare secrets never checks out a caller-chosen ref. The job runs in the `workers-production` GitHub Environment, so any required reviewers or branch rules set there apply to every deploy, a push included: a run that needs approval waits, and nothing is deployed until it is approved. Check that Environment's settings in the repository before relying on the automatic deploy; they are not in this repo.
 
-The workflow needs the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets. The token needs **Account → Secrets Store → Edit** as well as Workers edit: binding a Secrets Store secret on deploy counts as a write. The Workers' own runtime secrets live in the account's Cloudflare Secrets Store (`56f84bfa8a564c54a95dbf4f4b4281b4`), never in the workflow. Each key is one store secret, bound by every Worker that needs it (`secrets_store_secrets` in each `wrangler.jsonc`):
+**Staging is preview builds.** `staging` has no automatic Worker deploy, and `workers-deploy.yml` never deploys from it. A Worker change is tested before `main` through the `workers.yml` builds on the pull request (fmt, clippy, tests, every Worker bundle built, with a size gate) and, where a Worker enables preview URLs, through a Cloudflare preview version (every wrangler config has `"preview_urls": false` today, and the automatic deploy does not change that). The app has Vercel previews. Production Workers change only from `main`.
 
-| Store secret                      | Bound by (`workers/<dir>`)                | Required | Value                                                                                                              |
-| --------------------------------- | ----------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
-| `MUKOKO_WEATHER_TOMORROW_API_KEY` | `forecast`, `tiles`                       | Required | Tomorrow.io key (today in Mongo `weather.api_keys` "tomorrow")                                                     |
-| `MUKOKO_WEATHER_NYUCHI_API_KEY`   | `forecast`, `places`, `ai`                | Required | This app's internal Nyuchi API key: places read, plus the `ai` scope for the guardrails read                       |
-| `MUKOKO_WEATHER_SERVICE_API_KEY`  | `internal-api`                            | Required | The bearer key nyuchi-api presents as `WEATHER_SERVICE_API_KEY` (e.g. `openssl rand -hex 32`)                      |
-| `MUKOKO_WEATHER_MONGODB_URI`      | none yet (plain `MONGODB_URI` until then) | Optional | MongoDB seed-list connection string for the Workers' read-only client (workers/README.md, "MongoDB from a Worker") |
-| `MUKOKO_WEATHER_CHECKWX_API_KEY`  | `aviation`                                | Optional | CheckWX key, the METAR fallback (today in Mongo `weather.api_keys` "checkwx")                                      |
+`all` first runs the `workers.yml` gate (fmt, clippy, test, build), then deploys in service-binding order: `forecast`, `aviation`, `mongo-bridge`, `places`, `stations`, `tiles`, then `ai`, `internal-api`, `jobs`, then `public-api`. `mongo-bridge` (TypeScript, `workers/mongo-bridge`) comes before `places` because `places` binds it as `MONGO_BRIDGE`: the bridge is the only writer of device profiles, community weather reports and the archive days of the weather history (MongoDB, never D1), and it has no route and no workers.dev address. `places` also comes before `ai`, which binds it (`PLACES`) so the history analysis reads the same history the app shows (#268). Each Worker with a custom domain must answer `GET /health` with a 2xx, and the run summary lists every Worker's result. A single Worker skips the gate, so only deploy one alone when what it binds to is already live.
 
-Create each one with `npx wrangler secrets-store secret create 56f84bfa8a564c54a95dbf4f4b4281b4 --name <NAME> --scopes workers --remote`, which prompts for the value (`workers/README.md`, "Owner steps"). Transition: until every value is confirmed in the store, the Workers fall back to the plain wrangler secret of the old name (`TOMORROW_API_KEY`, `NYUCHI_API_KEY`, `WEATHER_SERVICE_API_KEY`, `CHECKWX_API_KEY`) and log a warning once per isolate; the fallback is removed once the store is confirmed. Deploys share one `concurrency` group per environment and never cancel each other.
+**The Workers and the app go out on the same push.** Vercel deploys the app from the same push to `main`, and a full Worker deploy builds and ships ten Workers one after another, so for some minutes the new app can be live against the previous Workers, and the new Workers against the previous app. Every route is a Worker route (the Python backend is deleted) and the app calls `weather-api.mukoko.com` with no fallback (`src/lib/weather-api.ts`), so a route that does not exist yet answers `404` and the card it feeds renders nothing. Keep each side compatible with the other's previous version, and **expand, then contract**:
+
+- Add first. Release the Worker change so the previous app tolerates it (a new route, field or binding the app does not use yet), and release the app change that uses it in a later release, or make the app degrade when the route is missing.
+- Remove last. To remove or rename a route or field, stop the app using it in one release, then delete it from the Workers in the next.
+- Create first. A new binding, Secrets Store secret, store or D1 migration must exist before the release that uses it merges: the deploy applies none of them, and a binding to a store secret that does not exist fails the deploy (error 10182) at that Worker. The run stops there: the Workers before it in the order are on the new version, the rest on the old. Fix the cause, then run Workers deploy again (`all`, or the Workers that did not go out; the run summary lists each one).
+- To roll back, roll Vercel back first; a Worker rolled back past a ported route breaks the live app the same way.
+
+The workflow needs the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets; a missing one fails the run at its first step, on a push too, and is never skipped. The token needs **Account → Secrets Store → Edit** as well as Workers edit: binding a Secrets Store secret on deploy counts as a write. The Workers' own runtime secrets live in the account's Cloudflare Secrets Store (`56f84bfa8a564c54a95dbf4f4b4281b4`), never in the workflow. Each key is one store secret, bound by every Worker that needs it (`secrets_store_secrets` in each `wrangler.jsonc`):
+
+| Store secret                      | Bound by (`workers/<dir>`)                | Required | Value                                                                                                                |
+| --------------------------------- | ----------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------- |
+| `MUKOKO_WEATHER_TOMORROW_API_KEY` | `forecast`, `tiles`                       | Required | Tomorrow.io key (today in Mongo `weather.api_keys` "tomorrow")                                                       |
+| `MUKOKO_WEATHER_NYUCHI_API_KEY`   | `forecast`, `places`, `ai`                | Required | This app's internal Nyuchi API key: places read, plus the `ai` scope for the guardrails read                         |
+| `MUKOKO_WEATHER_SERVICE_API_KEY`  | `internal-api`                            | Required | The bearer key nyuchi-api presents as `WEATHER_SERVICE_API_KEY` (e.g. `openssl rand -hex 32`)                        |
+| `MUKOKO_WEATHER_MONGODB_URI`      | none yet (plain `MONGODB_URI` until then) | Optional | MongoDB seed-list connection string for the Workers' read-only client (workers/README.md, "MongoDB from a Worker")   |
+| `MUKOKO_MONGODB_RW_URI`           | `mongo-bridge`                            | Required | MongoDB read-write connection string for the bridge. Not weather-specific: one store secret for the whole Mukoko app |
+| `MUKOKO_WEATHER_CHECKWX_API_KEY`  | `aviation`                                | Optional | CheckWX key, the METAR fallback (today in Mongo `weather.api_keys` "checkwx")                                        |
+| `OPEN_METEO_API_KEY`              | `forecast`, `places`, `public-api`        | Optional | Open-Meteo paid-plan key (bound as `MUKOKO_WEATHER_OPEN_METEO_API_KEY`; below)                                       |
+
+Create each one with `npx wrangler secrets-store secret create 56f84bfa8a564c54a95dbf4f4b4281b4 --name <NAME> --scopes workers --remote`, which prompts for the value (`workers/README.md`, "Owner steps"). Transition: until every value is confirmed in the store, the Workers fall back to the plain wrangler secret of the old name (`TOMORROW_API_KEY`, `NYUCHI_API_KEY`, `WEATHER_SERVICE_API_KEY`, `CHECKWX_API_KEY`) and log a warning once per isolate; the fallback is removed once the store is confirmed. Deploys share one `concurrency` group (`workers-deploy-production`) and never cancel a deploy in flight. GitHub keeps only the newest waiting run, so a push superseded by a later push is cancelled before it starts (safe: the later run deploys every Worker at the later commit), but a one-Worker manual run can supersede a waiting push run, so after one, run `all` if the cancelled push changed other Workers.
+
+**The Open-Meteo paid plan (key `OPEN_METEO_API_KEY`).** The free Open-Meteo API is non-commercial and refuses the Workers' shared egress address with HTTP 429 (#434), so the Workers use the paid ("customer") hosts whenever a key is present and behave exactly as before when it is absent. The store secret is named `OPEN_METEO_API_KEY` (not `MUKOKO_WEATHER_`-prefixed: that is how it was created); the `secrets_store_secrets` binding on `forecast`, `places` and `public-api` is `MUKOKO_WEATHER_OPEN_METEO_API_KEY`, with `"secret_name": "OPEN_METEO_API_KEY"`. The store secret must exist (scope `workers`) before any of those three Workers deploys, or Cloudflare refuses the deploy (error 10182). With a key, `weather_edge::get_with_timeout` moves every call to `api.open-meteo.com` and `air-quality-api.open-meteo.com` to `customer-api.` and `customer-air-quality-api.` and appends `apikey=` (`weather_core::open_meteo`); no call site builds a keyed URL, and the key is in a query string, so it is never logged, cached or put in an error. Geocoding stays on its own host. **The archive host is opt-in:** the Standard plan does not include the historical weather API, so archive calls (the place history in `places`, climate normals and the place profile in `forecast`) stay on the free `archive-api.open-meteo.com` host, key or no key, until the plain Worker var `OPEN_METEO_ARCHIVE_LICENSED=1` is set. After upgrading to Professional (up to 10 minutes to take effect), set that var on `forecast` and `places` (the Cloudflare dashboard, which `keep_vars` preserves, or `vars` in their `wrangler.jsonc`) and redeploy or save the vars. `GET /health` on `forecast` and `places` reports `open_meteo_commercial` / `open_meteo_archive` (booleans, never the key); `GET /v1/status` probes the host in use.
+
+### Patch deploys, then the minor release
+
+The push deploy above is the normal path. This by-hand path predates it and stays for a fix that must reach the live Workers before a release. Deploy the Workers from `staging` by hand with wrangler, using the Cloudflare token from the environment (no GitHub Actions): `npm ci` in `workers/mongo-bridge`, then `npx wrangler@4.138.0 deploy` in each Worker directory in the order above, with `CLOUDFLARE_ACCOUNT_ID` set. There are no separate staging Workers, so this is a production deploy: record each Worker's live version first (`wrangler deployments list --name <script>`) as the rollback target, stop at the first failure, and check each custom domain's `/health` (and `/health?probe=mongo` on the public API) after it. Test the changed routes against the live Workers, and delete any test data you created. The release PR merged to `main` is the minor bump, tagged with `tag-release`, and its push deploys the Workers again from `main`.
+
+## Apple WeatherKit
+
+Apple Weather (`apple_weatherkit`) is a forecast model from the 500,000 WeatherKit calls a month the Apple Developer Program membership includes ([#408](https://github.com/mukoko-dev/mukoko-weather/issues/408)). The rules are `weather_core::weatherkit` (workers/README.md, "Apple WeatherKit"); it is served by Gwaihir, the weather server of the Nyuchi Servers API, not by a Cloudflare Worker, so no `wrangler` secret or Worker deploy is involved. The model is off in the app (`FLAGS.apple_weatherkit`) and in the My Weather picker until Gwaihir serves it.
+
+Owner steps (checked against Apple's account help on 2026-11-01; Apple changes these pages, so follow the page if it differs):
+
+1. In the Apple Developer account, as Account Holder or Admin, open **Certificates, Identifiers & Profiles → Keys**, add a key with a unique name and the **WeatherKit** checkbox ticked, confirm, and **download the `.p8` once** (Apple does not keep it and will not offer it again). Note the 10-character **Key ID** shown under the key name, and the 10-character **Team ID** from the membership details.
+2. Under **Identifiers**, add a **Services ID**: a description and a reverse-domain identifier such as `africa.nyuchi.mukoko.weatherkit`. All registered Services IDs are eligible for a WeatherKit-enabled key, so nothing is configured on the Services ID itself.
+3. Give the four values to the Servers API origin without pasting them anywhere. The names are the contract (`weather_core::weatherkit::SECRETS`); the origin may add its own prefix. The three identifiers are not secret. The private key goes in over stdin, so it is never in a command line (where `ps` would show it) or in shell history, and as the file's base64 on one line, because a multi-line value is not guaranteed to survive `fly secrets import` (the origin decodes a value that does not start with `-----BEGIN`):
+
+   ```bash
+   fly secrets set --app nyuchi-servers-api \
+     MUKOKO_WEATHER_WEATHERKIT_TEAM_ID=<Team ID> \
+     MUKOKO_WEATHER_WEATHERKIT_SERVICE_ID=<Services ID> \
+     MUKOKO_WEATHER_WEATHERKIT_KEY_ID=<Key ID>
+   { printf 'MUKOKO_WEATHER_WEATHERKIT_PRIVATE_KEY='; base64 < /path/to/AuthKey_<KeyID>.p8 | tr -d '\n'; printf '\n'; } \
+     | fly secrets import --app nyuchi-servers-api
+   ```
+
+   Then delete the `.p8` from the machine you downloaded it to, or keep it only in the owner's password manager. To rotate, create a new key tied to the Services ID, switch the secrets, then revoke the old key.
+
+4. Confirm in the Apple Developer Program licence and the WeatherKit terms that a 15-minute cache and the blended use (values filled from another model, insights derived from them) are allowed, and tell the maintainers. Until then nothing Apple is kept longer than the cache.
+5. Before the flag is switched on: wire Apple's official Weather mark (from the Attribution endpoint) into `forecast-sources.ts` and allow its host in the CSP, compare the first real response with the documented fixture, and check the usage report for what counts as a call.
+
+## Turning on the CouchDB sync
+
+The sync of preferences and activities with the person's own CouchDB database (#396) ships dark: `FLAGS.couch_sync` is `false`, and `POST /api/couch/session` answers `503 couch_unavailable` until the gateway will issue this app its credential. The design, the nyuchi-api code it was checked against and the not-verified list are in [docs/couchdb-sync.md](docs/couchdb-sync.md). The credential is the Nyuchi API's `couch:user` sync grant, made on the server with this app's existing key (`NYUCHI_APP_KEYS_API_KEY`, `identity app-keys weather`): no new secret and no new environment variable. Two owner steps turn it on, in this order, and neither is in this repository:
+
+1. On the Fly app `nyuchi-api`, add the client id of this app's key to `COUCH_SYNC_CLIENT_IDS`. It is the `nyk_…` part of `NYUCHI_APP_KEYS_API_KEY` before the dot (a public identifier; the `nys_…` secret never goes in the list), not the WorkOS client id. Without it the exchange is refused with `400 invalid_scope` and the site logs "Token exchange refused this app's key".
+2. Enable CouchDB's JWT handler as described in nyuchi-api `docs/architecture/couchdb-sync.md`. Until then CouchDB refuses every forwarded request with `401`.
+
+Then run the live check in the doc (flag on in one signed-in browser, watch the Network tab) before anyone flips the flag in code. Taking the client id off the list stops outstanding grants within minutes and the app falls back to local-only. Before the flag is turned on for more than a few people, read the limits note in the doc: the gateway allows 30 token exchanges a minute for this app's one key, which `/api/app-keys` shares, so roughly 72 visible tabs syncing at once is the ceiling until the gateway raises it (the number is derived from the sync budget in `src/lib/couch-session-budget.ts`, `SUPPORTED_VISIBLE_TABS`, and a test fails if this page or the doc quotes another).
+
+The documents the page writes are judged by the validator nyuchi-api installs in every person's database. A copy is pinned in `src/lib/rxdb/__fixtures__/` and the tests execute it on everything the client writes; re-pin it whenever nyuchi-api's `couch_validate_personal.js` changes (the steps and the exact `curl` line are in the doc, "Re-pinning the validator").
 
 ## Reporting Issues
 

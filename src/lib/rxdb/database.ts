@@ -3,20 +3,27 @@
  *
  * Returns null on server (no IndexedDB in Node). Uses Dexie storage adapter
  * (IndexedDB) which can be swapped to SQLite for Capacitor later.
+ *
+ * RxDB itself (about 130 KB gzipped with Dexie) is imported inside the init,
+ * not at the top: this module is reachable from the shell (the preferences
+ * store, the device-copy reads), and a static import put the whole database
+ * in every page's first-load JavaScript. It is fetched after first paint,
+ * when something first asks for the database.
  */
 
-import { createRxDatabase, type RxDatabase } from "rxdb";
-import { getRxStorageDexie } from "rxdb/plugins/storage-dexie";
+import type { RxDatabase } from "rxdb";
 import {
   migratePreferencesV2ToV3,
   preferencesSchema,
   type PreferencesDocV2,
   weatherCacheSchema,
   weatherHintSchema,
+  weatherPlaceSchema,
   suitabilityRuleSchema,
   type PreferencesDocType,
   type WeatherCacheDocType,
   type WeatherHintDocType,
+  type WeatherPlaceDocType,
   type SuitabilityRuleDocType,
 } from "./schemas";
 
@@ -30,6 +37,7 @@ export type MukokoCollections = {
   preferences: RxCollection<PreferencesDocType>;
   weather_cache: RxCollection<WeatherCacheDocType>;
   weather_hints: RxCollection<WeatherHintDocType>;
+  weather_places: RxCollection<WeatherPlaceDocType>;
   suitability_rules: RxCollection<SuitabilityRuleDocType>;
 };
 
@@ -114,12 +122,29 @@ async function wipeIndexedDb(name: string): Promise<void> {
   }
 }
 
+// The collections declare `migrationStrategies`; RxDB needs this plugin to
+// run them when a device holds data from an older schema version.
+let pluginsAdded = false;
+
 async function _initDb(): Promise<MukokoDatabase> {
+  const [{ addRxPlugin, createRxDatabase }, migration, dexie] =
+    await Promise.all([
+      import("rxdb"),
+      import("rxdb/plugins/migration-schema"),
+      import("rxdb/plugins/storage-dexie"),
+    ]);
+  if (!pluginsAdded) {
+    pluginsAdded = true;
+    addRxPlugin(migration.RxDBMigrationSchemaPlugin);
+  }
+  const { getRxStorageDexie } = dexie;
   const db = await createRxDatabase<MukokoCollections>({
     name: "mukoko_weather",
     storage: getRxStorageDexie(),
     multiInstance: false, // single-tab app — avoids DB9 leader-election conflicts
-    ignoreDuplicate: true, // singleton guard — swallow "duplicate DB" (DB9) races
+    // No `ignoreDuplicate`: outside RxDB dev-mode it ALWAYS throws DB9, so
+    // every production init failed and RxDB silently fell back to null
+    // (issue #269). The cached `dbPromise` singleton is the duplicate guard.
   });
 
   await db.addCollections({
@@ -143,6 +168,7 @@ async function _initDb(): Promise<MukokoDatabase> {
     },
     weather_cache: { schema: weatherCacheSchema },
     weather_hints: { schema: weatherHintSchema },
+    weather_places: { schema: weatherPlaceSchema },
     suitability_rules: {
       schema: suitabilityRuleSchema,
       // v0 → v1: added `fallback`. v0 docs never stored it, so returning

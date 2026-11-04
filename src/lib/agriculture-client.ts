@@ -106,7 +106,7 @@ export const AGRI_DATA_CLIENT_TTL_MS = 5 * 60 * 1000;
 const dataCache = new Map<string, { value: AgricultureResponse; at: number }>();
 const dataInflight = new Map<string, Promise<AgricultureResponse>>();
 
-/** GET `/api/py/agriculture…` once per URL (5-min memory cache + dedupe). */
+/** GET the Worker's `/v1/agriculture…` once per URL (5-min memory cache + dedupe). */
 export function fetchAgriculture(
   url: string,
   fetcher: typeof fetch = fetch,

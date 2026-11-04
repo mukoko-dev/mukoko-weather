@@ -1,0 +1,50 @@
+[
+  {
+    "code": "FVHP",
+    "obsAgeMinutes": 8,
+    "temperatureC": 28.61111111111111,
+    "dewpointC": 13.7,
+    "windDirDeg": 204,
+    "windSpeedKt": 6.951808,
+    "windGustKt": 14.772592,
+    "pressureQnhHpa": 1021.0981767,
+    "fogRisk": "none",
+    "onlineSinceDays": 24
+  },
+  {
+    "code": "INYANGA",
+    "obsAgeMinutes": 8,
+    "temperatureC": 21.166666666666664,
+    "dewpointC": 9.9,
+    "windDirDeg": 77,
+    "windSpeedKt": 1.62498512,
+    "windGustKt": 9.28066368,
+    "pressureQnhHpa": 1025.8052588,
+    "fogRisk": "none",
+    "onlineSinceDays": 5
+  },
+  {
+    "code": "ZBIKI",
+    "obsAgeMinutes": null,
+    "temperatureC": null,
+    "dewpointC": null,
+    "windDirDeg": null,
+    "windSpeedKt": null,
+    "windGustKt": null,
+    "pressureQnhHpa": null,
+    "fogRisk": null,
+    "onlineSinceDays": null
+  },
+  {
+    "code": "FVCD",
+    "obsAgeMinutes": 8,
+    "temperatureC": 37.94444444444444,
+    "dewpointC": 21.3,
+    "windDirDeg": 146,
+    "windSpeedKt": 3.8495636799999997,
+    "windGustKt": 2.27671712,
+    "pressureQnhHpa": 1009.5844506999999,
+    "fogRisk": "none",
+    "onlineSinceDays": 35
+  }
+]

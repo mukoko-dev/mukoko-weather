@@ -1,5 +1,5 @@
 // An in-memory stand-in for a MongoDB collection, implementing exactly the
-// operators the stores use ($in, $gte, $gt, $ne, equality; $set with dotted
+// operators the stores use ($in, $gte, $gt, $ne, $geoWithin/$centerSphere, equality; $set with dotted
 // paths, $setOnInsert, $addToSet, $inc; upsert), plus unique-index emulation
 // and a log of every call, so tests can assert the queries as well as results.
 import type { Coll, Doc } from "../src/stores";
@@ -25,6 +25,22 @@ function set(doc: Doc, path: string, value: unknown): void {
   o[keys[keys.length - 1]!] = value;
 }
 
+/** Great-circle distance in radians between two WGS 84 points (degrees). */
+function angularDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
+  const r = Math.PI / 180;
+  const a =
+    Math.sin(((lat2 - lat1) * r) / 2) ** 2 +
+    Math.cos(lat1 * r) *
+      Math.cos(lat2 * r) *
+      Math.sin(((lon2 - lon1) * r) / 2) ** 2;
+  return 2 * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
 const same = (a: unknown, b: unknown): boolean =>
   a instanceof Date && b instanceof Date
     ? a.getTime() === b.getTime()
@@ -32,6 +48,9 @@ const same = (a: unknown, b: unknown): boolean =>
 
 function matches(doc: Doc, filter: Doc): boolean {
   return Object.entries(filter).every(([k, cond]) => {
+    if (k === "$or") {
+      return (cond as Doc[]).some((f) => matches(doc, f));
+    }
     const v = get(doc, k);
     if (
       cond &&
@@ -45,6 +64,19 @@ function matches(doc: Doc, filter: Doc): boolean {
             return (arg as unknown[]).some((x) => same(x, v));
           case "$gte":
             return (v as Date) >= (arg as Date);
+          case "$geoWithin": {
+            const [[lon, lat], radius] = (
+              arg as { $centerSphere: [[number, number], number] }
+            ).$centerSphere;
+            const c = (v as { coordinates?: [number, number] } | undefined)
+              ?.coordinates;
+            if (!c) return false;
+            return angularDistance(lat, lon, c[1], c[0]) <= radius;
+          }
+          case "$regex":
+            return typeof v === "string" && new RegExp(arg as string).test(v);
+          case "$lte":
+            return (v as Date) <= (arg as Date);
           case "$gt":
             return (v as Date) > (arg as Date);
           case "$ne":
@@ -156,18 +188,34 @@ export class FakeColl implements Coll {
   ): Promise<Doc[]> {
     this.calls.push({ op: "findMany", filter, options });
     const [[field, dir]] = Object.entries(options.sort) as [[string, number]];
+    const key = (x: Doc): number | string => {
+      const v = x[field];
+      return v instanceof Date ? v.getTime() : (v as string);
+    };
     return this.docs
       .filter((x) => matches(x, filter))
-      .sort(
-        (a, b) =>
-          dir * ((a[field] as Date).getTime() - (b[field] as Date).getTime()),
-      )
+      .sort((a, b) => dir * (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0))
       .slice(0, options.limit)
       .map((x) => {
         const out: Doc = {};
         for (const k of Object.keys(options.projection))
-          out[k] = structuredClone(x[k]);
+          if (options.projection[k] === 1) out[k] = structuredClone(x[k]);
         return out;
       });
+  }
+
+  async insertIfAbsent(
+    items: { filter: Doc; doc: Doc }[],
+  ): Promise<{ inserted: number }> {
+    this.calls.push({ op: "insertIfAbsent", options: items });
+    let inserted = 0;
+    for (const { filter, doc } of items) {
+      if (this.docs.some((x) => matches(x, filter))) continue;
+      const stored: Doc = { ...structuredClone(doc) };
+      for (const [k, v] of Object.entries(filter)) stored[k] = v;
+      this.docs.push(stored);
+      inserted++;
+    }
+    return { inserted };
   }
 }

@@ -1,11 +1,11 @@
-import { loadLocation } from "../load-location";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { checkFrostRisk, createFallbackWeather } from "@/lib/weather";
-import { getWeatherForLocation, getSeasonForDate } from "@/lib/db";
-import { safeJsonLd } from "@/lib/json-ld";
+import { resolveLocationParam } from "@/lib/load-location";
+import { seasonWithinBudget } from "@/lib/place-seed-server";
+import { breadcrumbJsonLd } from "@/lib/json-ld";
+import { buildPageMetadata } from "@/lib/metadata";
+import { JsonLd } from "@/components/layout/JsonLd";
 import { ForecastDashboard } from "./ForecastDashboard";
-import { SITE_URL } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata({
@@ -13,16 +13,13 @@ export async function generateMetadata({
 }: {
   params: Promise<{ location: string }>;
 }): Promise<Metadata> {
-  const { location: slug } = await params;
-  const loc = await loadLocation(slug);
-  if (!loc) return { title: "Location not found" };
+  const loc = await resolveLocationParam(params);
+  if (!loc) return buildPageMetadata({ notFound: true });
 
-  const title = `${loc.name} 7-Day Forecast — Hourly & Daily Weather`;
-  const description = `Detailed 7-day weather forecast and 24-hour hourly predictions for ${loc.name}, ${loc.province}. Temperature charts, rain probability, sunrise/sunset times from mukoko weather.`;
-
-  return {
-    title,
-    description,
+  return buildPageMetadata({
+    title: `${loc.name} 7-Day Forecast — Hourly & Daily Weather`,
+    description: `Detailed 7-day weather forecast and 24-hour hourly predictions for ${loc.name}, ${loc.province}. Temperature charts, rain probability, sunrise/sunset times from mukoko weather.`,
+    path: `/${loc.slug}/forecast`,
     keywords: [
       `${loc.name} forecast`,
       `${loc.name} 7 day forecast`,
@@ -33,95 +30,50 @@ export async function generateMetadata({
       "weather forecast",
       "mukoko weather",
     ],
-    alternates: {
-      canonical: `${SITE_URL}/${loc.slug}/forecast`,
-    },
-    openGraph: {
+    og: {
       title: `${loc.name} Forecast | mukoko weather`,
       description: `7-day weather forecast for ${loc.name}, ${loc.province} — hourly & daily predictions with charts.`,
-      url: `${SITE_URL}/${loc.slug}/forecast`,
-      type: "website",
-      locale: "en",
-      siteName: "mukoko weather",
     },
-  };
+  });
 }
 
+/**
+ * The forecast page: the shell, the place and its structured data. It makes NO
+ * weather call (issue #452, the rule of #414): the forecast is fetched by the
+ * visitor's own browser and painted over the copy stored on the device, so the
+ * first byte never waits on the Worker or Open-Meteo.
+ *
+ * The only data it still waits for is the place (the lookup the layout shares)
+ * and the season, which has an 800 ms budget and then falls back to the
+ * hemisphere's default.
+ */
 export default async function ForecastPage({
   params,
 }: {
   params: Promise<{ location: string }>;
 }) {
-  const { location: slug } = await params;
-  const location = await loadLocation(slug);
-  if (!location) notFound();
-
-  let weather;
-  let weatherSource: string;
-  try {
-    const result = await getWeatherForLocation(
-      location.slug,
-      location.lat,
-      location.lon,
-      location.elevation,
-    );
-    weather = result.data;
-    weatherSource = result.source;
-  } catch {
-    weather = createFallbackWeather(
-      location.lat,
-      location.lon,
-      location.elevation,
-    );
-    weatherSource = "fallback";
-  }
-
-  const usingFallback = weatherSource === "fallback";
-  const frostAlert = usingFallback
-    ? null
-    : checkFrostRisk(weather.hourly, weather.utc_offset_seconds);
-  const season = await getSeasonForDate(
-    new Date(),
-    location.country ?? "",
+  const rawLocation = await resolveLocationParam(params);
+  if (!rawLocation) notFound();
+  // Strip the store's _id before the place crosses to the client component.
+  const { _id: _removed, ...location } = rawLocation as typeof rawLocation & {
+    _id?: unknown;
+  };
+  const season = await seasonWithinBudget(
+    (location.country ?? "").toUpperCase(),
     location.lat ?? 0,
   );
 
-  const breadcrumbSchema = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    itemListElement: [
-      {
-        "@type": "ListItem",
-        position: 1,
-        name: "mukoko weather",
-        item: SITE_URL,
-      },
-      {
-        "@type": "ListItem",
-        position: 2,
-        name: `${location.name} Weather`,
-        item: `${SITE_URL}/${location.slug}`,
-      },
-      {
-        "@type": "ListItem",
-        position: 3,
-        name: "Forecast",
-        item: `${SITE_URL}/${location.slug}/forecast`,
-      },
-    ],
-  };
+  const breadcrumbSchema = breadcrumbJsonLd([
+    { name: `${location.name} Weather`, path: `/${location.slug}` },
+    { name: "Forecast", path: `/${location.slug}/forecast` },
+  ]);
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: safeJsonLd([breadcrumbSchema]) }}
-      />
+      <JsonLd data={[breadcrumbSchema]} />
       <ForecastDashboard
-        weather={weather}
+        key={location.slug}
         location={location}
-        usingFallback={usingFallback}
-        frostAlert={frostAlert}
         season={season}
       />
     </>

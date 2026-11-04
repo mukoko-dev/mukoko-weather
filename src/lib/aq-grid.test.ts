@@ -1,27 +1,21 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { workerData } from "./worker-data";
+import { AQI_SCALE } from "./weather-scales";
+import { contourLines, NO_BAND } from "./field-raster";
 import {
   aqiBand,
-  gridToGeoJSON,
+  aqFieldRaster,
   fetchAirQualityGrid,
   AQI_BANDS,
+  AQI_BAND_EDGES,
   AQI_BAND_LABELS,
-  AQI_BAND_SEVERITY_TOKEN,
+  AQI_BAND_TOKEN,
   AQI_BAND_BG_CLASS,
+  AQI_BAND_FILL_CLASS,
   aqBubbles,
+  type AqGridPoint,
   type AqGridResponse,
 } from "./aq-grid";
-
-/** Great-circle distance in km (spherical Earth, R = 6371) — matches backend metric. */
-function haversineKm(a: readonly number[], b: readonly number[]): number {
-  const r = 6371;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(b[1] - a[1]);
-  const dLon = toRad(b[0] - a[0]);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(a[1])) * Math.cos(toRad(b[1])) * Math.sin(dLon / 2) ** 2;
-  return 2 * r * Math.asin(Math.sqrt(h));
-}
 
 describe("aqiBand — EPA breakpoints", () => {
   it.each([
@@ -61,116 +55,19 @@ describe("aqiBand — EPA breakpoints", () => {
     }
   });
 
-  it("maps every band to a severity token (no hardcoded colours)", () => {
-    for (const band of AQI_BANDS) {
-      expect(AQI_BAND_SEVERITY_TOKEN[band]).toMatch(
-        /^--color-severity-(low|moderate|high|severe|extreme)$/,
-      );
-    }
-    expect(AQI_BAND_SEVERITY_TOKEN.good).toBe("--color-severity-low");
-    expect(AQI_BAND_SEVERITY_TOKEN.hazardous).toBe("--color-severity-extreme");
-  });
-});
-
-describe("gridToGeoJSON — square cell geometry", () => {
-  const cellKm = 13.333;
-  const centre = { lat: 1.35, lon: 103.82, aqi: 90, pm2_5: null };
-  const fc = gridToGeoJSON([centre], cellKm);
-  const ring = (fc.features[0].geometry as GeoJSON.Polygon).coordinates[0];
-
-  it("returns a FeatureCollection with one Polygon per point", () => {
-    expect(fc.type).toBe("FeatureCollection");
-    expect(fc.features).toHaveLength(1);
-    expect(fc.features[0].geometry.type).toBe("Polygon");
-  });
-
-  it("closes the ring and winds counter-clockwise (RFC 7946)", () => {
-    expect(ring).toHaveLength(5);
-    expect(ring[0]).toEqual(ring[4]);
-    // Shoelace sign: positive means counter-clockwise in lon/lat space.
-    let area2 = 0;
-    for (let i = 0; i < 4; i++) {
-      area2 += ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1];
-    }
-    expect(area2).toBeGreaterThan(0);
-  });
-
-  it("centres each cell on its grid point", () => {
-    const lons = ring.slice(0, 4).map((c) => c[0]);
-    const lats = ring.slice(0, 4).map((c) => c[1]);
-    const midLon = (Math.min(...lons) + Math.max(...lons)) / 2;
-    const midLat = (Math.min(...lats) + Math.max(...lats)) / 2;
-    expect(midLon).toBeCloseTo(centre.lon, 9);
-    expect(midLat).toBeCloseTo(centre.lat, 9);
-  });
-
-  it("makes each side the requested cellKm on the ground (square, not stretched)", () => {
-    const [sw, se, ne, nw] = ring;
-    const west = haversineKm(sw, nw);
-    const east = haversineKm(se, ne);
-    const south = haversineKm(sw, se);
-    const north = haversineKm(nw, ne);
-    for (const side of [west, east, south, north]) {
-      expect(side).toBeCloseTo(cellKm, 1);
-    }
-  });
-
-  it("keeps cells square at high latitude (lon span widens by 1/cos(lat))", () => {
-    const hi = gridToGeoJSON(
-      [{ lat: 60, lon: 10, aqi: 10, pm2_5: null }],
-      cellKm,
-    );
-    const r = (hi.features[0].geometry as GeoJSON.Polygon).coordinates[0];
-    const lonSpan = r[1][0] - r[0][0];
-    const latSpan = r[2][1] - r[1][1];
-    // At 60°, 1° of longitude is half a degree of arc, so the lon span is ~2× the lat span.
-    expect(lonSpan / latSpan).toBeCloseTo(2, 2);
-  });
-
-  it("tags each cell with its aqi and EPA band", () => {
-    const fc2 = gridToGeoJSON(
-      [
-        { lat: 0, lon: 0, aqi: 42, pm2_5: null },
-        { lat: 0, lon: 1, aqi: 180, pm2_5: null },
-      ],
-      10,
-    );
-    expect(fc2.features[0].properties).toEqual({ aqi: 42, band: "good" });
-    expect(fc2.features[1].properties).toEqual({ aqi: 180, band: "unhealthy" });
-  });
-
-  it("keeps cells with no reading, with a null band", () => {
-    const fc3 = gridToGeoJSON([{ lat: 0, lon: 0, aqi: null, pm2_5: null }], 10);
-    expect(fc3.features).toHaveLength(1);
-    expect(fc3.features[0].properties).toEqual({ aqi: null, band: null });
-  });
-
-  it("produces a full 7×7 grid of 49 non-overlapping-centre cells", () => {
-    const points = [];
-    for (let r = 0; r < 7; r++) {
-      for (let c = 0; c < 7; c++) {
-        points.push({
-          lat: 1 + r * 0.1,
-          lon: 103 + c * 0.1,
-          aqi: 50,
-          pm2_5: null,
-        });
-      }
-    }
-    expect(gridToGeoJSON(points, 13.333).features).toHaveLength(49);
-  });
-
-  it("does not blow up at the pole (cos(lat) guard)", () => {
-    const pole = gridToGeoJSON([{ lat: 90, lon: 0, aqi: 1, pm2_5: null }], 10);
-    const coords = (pole.features[0].geometry as GeoJSON.Polygon)
-      .coordinates[0];
-    expect(
-      coords.every((c) => Number.isFinite(c[0]) && Number.isFinite(c[1])),
-    ).toBe(true);
+  it("maps every band to its own official-EPA weather-scale token", () => {
+    AQI_BANDS.forEach((band, i) => {
+      expect(AQI_BAND_TOKEN[band]).toBe(`--wx-aqi-${i + 1}`);
+    });
+    // six bands, six distinct colours (very unhealthy and hazardous no longer share one)
+    expect(new Set(Object.values(AQI_BAND_TOKEN)).size).toBe(6);
   });
 });
 
 describe("fetchAirQualityGrid", () => {
+  beforeEach(() => {
+    workerData.reset();
+  });
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -178,6 +75,7 @@ describe("fetchAirQualityGrid", () => {
   it("requests the grid endpoint with rounded coordinates, radius and n", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
+      status: 200,
       json: async () => ({
         available: true,
         center: null,
@@ -202,8 +100,9 @@ describe("fetchAirQualityGrid", () => {
       url.startsWith("https://weather-api.mukoko.com/v1/air-quality/grid?"),
     ).toBe(true);
     const params = new URL(url, "http://x").searchParams;
-    expect(params.get("lat")).toBe("1.3512");
-    expect(params.get("lon")).toBe("103.8249");
+    // Three decimals (~110 m): the app's coordinate privacy rule.
+    expect(params.get("lat")).toBe("1.351");
+    expect(params.get("lon")).toBe("103.825");
     expect(params.get("radiusKm")).toBe("40");
     expect(params.get("n")).toBe("7");
   });
@@ -218,18 +117,26 @@ describe("fetchAirQualityGrid", () => {
     );
   });
 
-  it("forwards the abort signal", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue({ ok: true, json: async () => ({}) });
+  it("an abort stops the caller waiting; the shared request is not cancelled", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ points: [] }),
+    });
     vi.stubGlobal("fetch", fetchMock);
     const controller = new AbortController();
-    await fetchAirQualityGrid({ lat: 0, lon: 0, signal: controller.signal });
-    // The Worker helper combines the caller's signal with its own timeout.
+    const first = fetchAirQualityGrid({
+      lat: 0,
+      lon: 0,
+      signal: controller.signal,
+    });
+    controller.abort();
+    await expect(first).rejects.toMatchObject({ name: "AbortError" });
+    // The next mount asks again and reuses the request that is out.
+    await fetchAirQualityGrid({ lat: 0, lon: 0 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     const sent = fetchMock.mock.calls[0][1].signal as AbortSignal;
     expect(sent.aborted).toBe(false);
-    controller.abort();
-    expect(sent.aborted).toBe(true);
   });
 });
 
@@ -282,11 +189,165 @@ describe("AQI bubbles (full-screen map)", () => {
     });
   });
 
-  it("gives every band a static background class from the severity tokens", () => {
+  it("gives every band a static background class from the weather-scale tokens", () => {
     for (const band of AQI_BANDS) {
-      expect(AQI_BAND_BG_CLASS[band]).toMatch(/^bg-severity-/);
+      expect(AQI_BAND_BG_CLASS[band]).toMatch(/^bg-wx-aqi-[1-6]$/);
     }
-    expect(AQI_BAND_BG_CLASS.good).toBe("bg-severity-low");
-    expect(AQI_BAND_BG_CLASS.hazardous).toBe("bg-severity-extreme");
+    expect(AQI_BAND_BG_CLASS.good).toBe("bg-wx-aqi-1");
+    expect(AQI_BAND_BG_CLASS.hazardous).toBe("bg-wx-aqi-6");
+  });
+});
+
+describe("AQI_BAND_FILL_CLASS (the static map's SVG fills)", () => {
+  it("names the same --wx-aqi token as the scale, band for band", () => {
+    for (const band of AQI_BANDS) {
+      // "--wx-aqi-3" -> "fill-wx-aqi-3": derived from the scale band's `fill`,
+      // which is spelled out in weather-scales.ts (Tailwind only generates what
+      // it finds); this keeps the map and the token in step.
+      expect(AQI_BAND_FILL_CLASS[band]).toBe(
+        `fill${AQI_BAND_TOKEN[band].replace(/^-/, "")}`,
+      );
+    }
+  });
+});
+
+describe("aqFieldRaster — the grid as one smooth, banded picture", () => {
+  const KM_PER_DEG = 111.195;
+
+  /** The Worker's 7 x 7 layout (north-west first), AQI from `f(row, col)`. */
+  function aqGrid(
+    f: (row: number, col: number) => number | null,
+    overrides: Partial<AqGridResponse> = {},
+  ): AqGridResponse {
+    const points: AqGridPoint[] = [];
+    const kmPerDegLon = KM_PER_DEG * Math.cos((-17.83 * Math.PI) / 180);
+    for (let row = 0; row < 7; row++) {
+      for (let col = 0; col < 7; col++) {
+        const aqi = f(row, col);
+        points.push({
+          lat: +(-17.83 + ((3 - row) * (40 / 3)) / KM_PER_DEG).toFixed(6),
+          lon: +(31.05 + ((col - 3) * (40 / 3)) / kmPerDegLon).toFixed(6),
+          aqi,
+          pm2_5: aqi === null ? null : aqi / 3,
+        });
+      }
+    }
+    return {
+      available: true,
+      center: { lat: -17.83, lon: 31.05, aqi: points[24].aqi },
+      cellKm: 13.333,
+      points,
+      fetchedAt: null,
+      source: "test",
+      ...overrides,
+    };
+  }
+
+  it("returns null when there is nothing to draw", () => {
+    expect(aqFieldRaster(null)).toBeNull();
+    expect(aqFieldRaster(undefined)).toBeNull();
+    expect(aqFieldRaster(aqGrid(() => 50, { available: false }))).toBeNull();
+    // A reading for every point missing: nothing to interpolate.
+    expect(aqFieldRaster(aqGrid(() => null))).toBeNull();
+    // Too few points to be a grid.
+    expect(aqFieldRaster(aqGrid(() => 50, { points: [] }))).toBeNull();
+  });
+
+  it("classifies every pixel with aqiBand, the rule the bubbles and legend use", () => {
+    // A constant field of v shows v's band everywhere, for every integer AQI.
+    for (let v = 0; v <= 500; v++) {
+      const r = aqFieldRaster(
+        aqGrid(() => v),
+        { side: 8 },
+      )!;
+      const expected = AQI_BANDS.indexOf(aqiBand(v));
+      expect(new Set(r.bands), `AQI ${v}`).toEqual(new Set([expected]));
+    }
+  });
+
+  it("paints with the six official EPA band tokens, in band order", () => {
+    const r = aqFieldRaster(
+      aqGrid(() => 80),
+      { side: 8 },
+    )!;
+    expect(r.tokens).toEqual(AQI_BANDS.map((b) => AQI_BAND_TOKEN[b]));
+    expect(r.tokens).toEqual([1, 2, 3, 4, 5, 6].map((n) => `--wx-aqi-${n}`));
+  });
+
+  it("outlines the bands at the continuous values where aqiBand changes", () => {
+    expect(AQI_BAND_EDGES).toEqual([50.5, 100.5, 150.5, 200.5, 300.5]);
+    expect(AQI_BAND_EDGES).toEqual(
+      AQI_SCALE.bands.slice(1).map((b) => b.from - 0.5),
+    );
+    // Either side of every edge aqiBand really does change band (and 50.5 rounds up).
+    AQI_BAND_EDGES.forEach((edge, i) => {
+      expect(AQI_BANDS.indexOf(aqiBand(edge - 0.001))).toBe(i);
+      expect(AQI_BANDS.indexOf(aqiBand(edge))).toBe(i + 1);
+    });
+    const r = aqFieldRaster(
+      aqGrid((_, c) => 20 + c * 30),
+      { side: 64 },
+    )!;
+    expect(r.levels).toEqual(AQI_BAND_EDGES);
+    expect(contourLines(r).features.length).toBeGreaterThan(0);
+  });
+
+  it("shows the bands BETWEEN two samples that the square cells hid", () => {
+    // Good (30) beside unhealthy (170): the old squares drew two blocks and one
+    // edge; the smooth field passes through moderate and unhealthy-for-sensitive
+    // on the way, and the picture shows them.
+    const r = aqFieldRaster(
+      aqGrid((_, c) => (c < 3 ? 30 : c > 3 ? 170 : 100)),
+      {
+        side: 96,
+      },
+    )!;
+    const row = Math.floor(r.height / 2);
+    const seen: number[] = [];
+    for (let x = 0; x < r.width; x++) {
+      const b = r.bands[row * r.width + x];
+      if (b !== NO_BAND && seen[seen.length - 1] !== b) seen.push(b);
+    }
+    // good -> moderate -> usg -> unhealthy, in order, no band skipped.
+    expect(seen).toEqual([0, 1, 2, 3]);
+  });
+
+  it("never invents a band the data did not reach (no overshoot)", () => {
+    // A single hot spike in clean air: nothing hotter than the spike appears.
+    const r = aqFieldRaster(
+      aqGrid((row, col) => (row === 3 && col === 3 ? 160 : 20)),
+      {
+        side: 96,
+      },
+    )!;
+    const bands = new Set(r.bands);
+    expect([...bands].sort()).toEqual([0, 1, 2, 3]); // good .. unhealthy (160), never very unhealthy
+    for (const v of r.values) {
+      if (!Number.isNaN(v)) {
+        expect(v).toBeLessThanOrEqual(160 + 1e-6);
+        expect(v).toBeGreaterThanOrEqual(20 - 1e-6);
+      }
+    }
+  });
+
+  it("leaves a hole at a missing reading and never paints it as zero (good)", () => {
+    const r = aqFieldRaster(
+      aqGrid((row, col) => (row === 3 && col === 4 ? null : 140)),
+      {
+        side: 96,
+      },
+    )!;
+    expect(r.bands.some((b) => b === NO_BAND)).toBe(true);
+    // Nothing near it dropped to the 'good' band: the missing reading does not pull it to 0.
+    expect(r.bands.some((b) => b === 0)).toBe(false);
+    expect(new Set([...r.bands].filter((b) => b !== NO_BAND))).toEqual(
+      new Set([2]),
+    );
+  });
+
+  it("keeps the raster bounded", () => {
+    const r = aqFieldRaster(aqGrid((row, col) => row * col))!;
+    expect(r.width).toBeLessThanOrEqual(128);
+    expect(r.height).toBeLessThanOrEqual(128);
   });
 });

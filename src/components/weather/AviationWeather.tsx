@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getFlightCategoryClass } from "@/lib/flight-category-styles";
-import { fetchWorker } from "@/lib/weather-api";
+import { workerData } from "@/lib/worker-data";
 
 interface CloudLayer {
   cover: string;
@@ -244,17 +244,13 @@ export function AviationWeather({ slug, lat, lon }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    // Shared reads: the nearest-airport search is keyed by the 0.05 degree
+    // cell and a picked station by its ICAO code, so remounting the section
+    // (LazySection) or revisiting a place costs no second call.
     (pickedIcao
-      ? fetchWorker("metar", `icao=${encodeURIComponent(pickedIcao)}`)
-      : fetchWorker(
-          "aviation/nearest-metar",
-          `lat=${encodeURIComponent(String(lat))}&lon=${encodeURIComponent(String(lon))}`,
-        )
+      ? workerData.json<StationResponse>("metar", { icao: pickedIcao })
+      : workerData.json<NearestResponse>("aviation/nearest-metar", { lat, lon })
     )
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
       .then((d: NearestResponse | StationResponse) => {
         if (cancelled) return;
         if (pickedIcao) {
@@ -391,7 +387,7 @@ export function AviationWeather({ slug, lat, lon }: Props) {
           <div className="mt-4" role="status" aria-label="Loading">
             <Skeleton className="h-4 w-full mb-2" />
             <Skeleton className="h-4 w-3/4 mb-4" />
-            <Skeleton className="h-32 w-full" />
+            <Skeleton className="h-32 w-full rounded-[var(--radius-card)]" />
           </div>
         )}
 
@@ -429,7 +425,7 @@ export function AviationWeather({ slug, lat, lon }: Props) {
                         Clouds &amp; Ceiling
                       </h3>
                       <span
-                        className={`inline-flex items-center justify-center rounded-[var(--radius-input)] px-2 py-0.5 text-xs font-bold min-w-[3rem] ${getFlightCategoryClass(latest.flight_category)}`}
+                        className={`inline-flex items-center justify-center rounded-[var(--radius-badge)] px-2 py-0.5 text-xs font-bold min-w-[3rem] ${getFlightCategoryClass(latest.flight_category)}`}
                         aria-label={`Flight category: ${latest.flight_category}`}
                       >
                         {latest.flight_category}

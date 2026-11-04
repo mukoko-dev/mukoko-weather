@@ -4,16 +4,19 @@ import { useRef, useEffect, useState } from "react";
 import {
   createWeatherScene,
   resolveScene,
-  skyClassName,
   skyPhase,
   type WeatherSceneConfig,
   type WeatherSceneHandle,
 } from "@/lib/weather-scenes";
+import { skyFamily, skyReachCss, skyTexture } from "@/lib/hero";
+import { WeatherSky } from "@/components/weather/WeatherSky";
+import { createCanvasScene } from "@/lib/weather-scenes/canvas/create-canvas-scene";
 import {
+  backdropMode,
   readBackdropHints,
   SCROLL_IDLE_MS,
-  shouldAnimateBackdrop,
   shouldRunBackdrop,
+  type BackdropMode,
 } from "@/lib/weather-scenes/backdrop-policy";
 
 interface Props {
@@ -35,11 +38,12 @@ interface Props {
 }
 
 /**
- * Condition-aware animated backdrop for the WHOLE location page — a fixed,
- * full-viewport sky behind all content (Apple Weather style), not confined
- * to the hero card. The sky is strongest at the top (behind the de-carded
- * CurrentConditions hero) and fades into the normal surface background
- * further down so charts and cards keep their usual contrast.
+ * Condition-aware animated backdrop for the location page — the
+ * sky at the top of the page, behind the header and the hero (Apple Weather
+ * style). It is solid through the first screen (hero + Conditions card),
+ * fades out over its last 6rem and scrolls away with the page, so charts,
+ * cards and headings further down keep their usual contrast on the ordinary
+ * surface.
  *
  * Performance discipline (the backdrop stays mounted for the whole page life):
  * - Three.js renderer pixel ratio is capped at 1 (`maxPixelRatio`).
@@ -51,18 +55,19 @@ interface Props {
  * - Everything is disposed on unmount, and the WebGL context is released.
  * - `prefers-reduced-motion`, Save-Data or ≤ 2 GB RAM skip
  *   Three.js entirely and show only the static sky gradient
- *   (shouldAnimateBackdrop).
+ *   (backdropMode). iPhone and iPad never get WebGL here; unless the person
+ *   asked for less motion or less data they get the 2D effects instead
+ *   (lib/weather-scenes/canvas): a random, bounded particle effect for every
+ *   weather scene on one small canvas, paused by the same tab-hidden, scroll
+ *   and scrolled-away rules as the 3D scene.
  *
- * Colour: every sky, cloud, particle and light colour is the real colour of
- * that weather at that time of day (src/lib/weather-scenes/palette.ts). The
- * static `.hornbill-sky-*` gradient under the canvas is built from the SAME
- * palette (mirrored as --weather-sky-* tokens in globals.css), so the
- * reduced-motion / WebGL-failure fallback is the same sky as the animation.
- *
- * Subdued on purpose (sky at opacity-80, particles at opacity-75 — 40 in
- * dark theme, matching the dimmed dark-theme sky tokens): the location
- * hero is a solid sky plate (see CurrentConditions / `.kori`), and the page
- * sky is texture behind it, never the hero itself.
+ * Colour: the static gradient is the page sky (`.kestrel-*`, `--sky-*` tokens
+ * in globals.css, family from src/lib/hero.ts): the owner's night and rain
+ * skies, day skies for light theme, deep dusk for dark. It carries faint
+ * static texture (stars at night, diagonal streaks in rain). The Three.js
+ * particle layer paints over it (opacity-30, 20 in dark theme) and is the only
+ * thing that moves; the reduced-motion / WebGL-failure fallback is the same
+ * sky without it.
  *
  * Purely decorative — marked `aria-hidden`. A WebGL/import failure degrades to
  * the static gradient (createWeatherScene returns a no-op handle on failure),
@@ -77,32 +82,85 @@ export function WeatherBackdrop({
   sunset,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const effectsRef = useRef<HTMLDivElement>(null);
+  const skyRef = useRef<HTMLDivElement>(null);
+
+  // Extend the sky with its content: it always reaches past the Conditions
+  // card (or the hero when the card is not directly under it), so large text,
+  // a short landscape viewport or a taller card never push the card into the
+  // fade. Re-measured when the page resizes or the card's size changes.
+  useEffect(() => {
+    const sky = skyRef.current;
+    if (!sky || typeof ResizeObserver === "undefined") return;
+    let observed: Element | null = null;
+    const measure = () => {
+      const target =
+        document.querySelector("[data-sky-card]") ??
+        document.querySelector("[data-sky-hero]");
+      if (target !== observed) {
+        if (observed) ro.unobserve(observed);
+        if (target) ro.observe(target);
+        observed = target;
+      }
+      const bottom = target
+        ? target.getBoundingClientRect().bottom + window.scrollY
+        : null;
+      const rootPx = parseFloat(
+        getComputedStyle(document.documentElement).fontSize,
+      );
+      const css = skyReachCss(bottom, rootPx);
+      if (css) sky.style.setProperty("--sky-reach", css);
+      else sky.style.removeProperty("--sky-reach");
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(document.body);
+    window.addEventListener("resize", measure);
+    measure();
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [weatherCode, isDay]);
 
   // Client-only media queries. Default to SSR-safe values, resolve on mount.
-  const [animate, setAnimate] = useState(false);
+  const [mode, setMode] = useState<BackdropMode>("static");
+  const animate = mode === "webgl";
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
+    let reduced: MediaQueryList | null = null;
+    const update = () => setMode(backdropMode(readBackdropHints()));
     const id = requestAnimationFrame(() => {
       try {
         // prefers-reduced-motion: reduce, Save-Data and low-end devices
-        // keep the static sky (see backdrop-policy.ts).
-        setAnimate(shouldAnimateBackdrop(readBackdropHints()));
+        // keep the static sky; iPhone and iPad get the 2D canvas effects
+        // (see backdrop-policy.ts).
+        update();
         setIsMobile(
           window.matchMedia("(hover: none), (pointer: coarse)").matches,
         );
+        // Turning Reduce Motion on or off while the page is open stops or
+        // starts the sky without a reload.
+        reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+        reduced.addEventListener("change", update);
       } catch {
         // matchMedia unavailable — keep the static gradient only.
       }
     });
-    return () => cancelAnimationFrame(id);
+    return () => {
+      cancelAnimationFrame(id);
+      reduced?.removeEventListener("change", update);
+    };
   }, []);
 
   const sceneType = resolveScene(weatherCode, windSpeed);
+  const family = skyFamily(weatherCode, isDay);
+  const texture = skyTexture(family);
   const phase = skyPhase(isDay, currentTime, sunrise, sunset);
 
   useEffect(() => {
-    if (!animate) return;
-    const el = containerRef.current;
+    if (mode === "static") return;
+    // The 3D scene fills the sky box; the 2D effects fill the bounded hero region.
+    const el = (mode === "webgl" ? containerRef : effectsRef).current;
     if (!el) return;
 
     let disposed = false;
@@ -148,10 +206,14 @@ export function WeatherBackdrop({
       phase,
       isMobile,
       windSpeed,
-      maxPixelRatio: 1,
+      // WebGL fills the whole sky box, so it stays at 1. The 2D effects are one
+      // bounded box of plain strokes and soft sprites, which stay crisp on a
+      // retina screen at 2 for a small fraction of the cost.
+      maxPixelRatio: mode === "webgl" ? 1 : 2,
     };
 
-    createWeatherScene(el, config)
+    const create = mode === "webgl" ? createWeatherScene : createCanvasScene;
+    create(el, config)
       .then((result) => {
         if (disposed) {
           result.dispose();
@@ -172,36 +234,27 @@ export function WeatherBackdrop({
       window.clearTimeout(scrollTimer);
       handle?.dispose();
     };
-  }, [animate, isMobile, isDay, phase, sceneType, windSpeed]);
+  }, [mode, isMobile, isDay, phase, sceneType, windSpeed]);
 
   return (
-    <div
-      aria-hidden="true"
-      // z-0 (not a negative z-index): iOS Safari paints fixed negative-z
-      // elements behind the body background when html/body use
-      // overflow-x:hidden, making the whole backdrop invisible on iPhone.
-      // Explicit stacking instead: backdrop z-0, page content wrapped in
-      // z-10 (see WeatherDashboard) — deterministic in every engine.
-      className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
+    <WeatherSky
+      ref={skyRef}
+      family={family}
+      // The 2D effects draw their own rain and stars, so the still streaks and
+      // stars would show twice under them.
+      texture={mode === "canvas" ? null : texture}
     >
-      {/* Static real-weather sky gradient — always painted; the reduced-motion
-          and WebGL-failure fallback, same palette as the animation. */}
-      <div
-        className={`absolute inset-0 opacity-80 ${skyClassName(sceneType, isDay, phase)}`}
-      />
       {/* Three.js particle layer (transparent) — only when motion is allowed. */}
       {animate && (
         <div
           ref={containerRef}
-          className="absolute inset-0 opacity-75 dark:opacity-40"
+          className="absolute inset-0 opacity-30 dark:opacity-20"
         />
       )}
-      {/* Readability veil behind the header + breadcrumb text that sits
-          directly on the sky (WCAG 4.5:1 for text-tertiary on every sky). */}
-      <div className="absolute inset-0 hornbill-veil" />
-      {/* Fade the sky into the normal surface background further down the
-          page so cards, charts and body text keep their usual contrast. */}
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent from-25% via-surface-base/70 via-65% to-surface-base" />
-    </div>
+      {/* The 2D effects (iPhone and iPad): a bounded box, faded at its foot. */}
+      {mode === "canvas" && (
+        <div ref={effectsRef} className="kestrel-effects" />
+      )}
+    </WeatherSky>
   );
 }

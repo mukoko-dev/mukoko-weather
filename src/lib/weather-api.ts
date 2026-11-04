@@ -3,11 +3,12 @@
  * `workers/`, public at `weather-api.mukoko.com`.
  *
  * Vercel is frontend only. Every route the Worker serves is called there and
- * nowhere else: there is no fallback to the frozen Python under `api/py`
- * (owner decision). A call retries once on a network error or a 5xx, and
- * every call carries a timeout; what the Worker itself falls back to (the
- * seasonal estimate, `X-Weather-Provider: fallback`) is the only degraded
- * answer a page shows.
+ * nowhere else: there is no Python backend to fall back to (`api/py` is deleted,
+ * #333; owner decision). A call retries once on a network error or a 5xx, and
+ * every call carries a timeout; when Open-Meteo refuses the Worker answers
+ * from MET Norway (`X-Weather-Provider: met-no`, a live forecast), and only
+ * what it falls back to after that (the seasonal estimate,
+ * `X-Weather-Provider: fallback`) is a degraded answer a page shows.
  *
  * The production origin is the default, so nothing has to be configured for
  * the app to work; `NEXT_PUBLIC_WEATHER_API_URL` overrides it (staging
@@ -52,6 +53,8 @@ export type WorkerRoute =
   | "geo"
   | "locations"
   | "history"
+  | "locations/profile"
+  | "agriculture"
   | "metar"
   | "airports/nearest"
   | "air-quality/grid"
@@ -59,9 +62,17 @@ export type WorkerRoute =
   | "sg-air"
   | "haze"
   | "normals"
+  | "normals/monthly"
   | "aviation/nearest-metar"
+  | "suitability"
+  | "ai/chat"
+  | "ai/history/analyze"
+  | "ai/explore/search"
   | "devices"
-  | `devices/${string}`;
+  | `devices/${string}`
+  | "reports"
+  | "reports/upvote"
+  | "reports/clarify";
 
 /** The Worker's URL for a route and its query string (no leading `?`). */
 export function workerUrl(
@@ -116,6 +127,64 @@ export async function fetchWorker(
     }
   }
   throw lastError;
+}
+
+/**
+ * A model call is slower than a read (the search makes up to three rounds),
+ * so the AI routes get a longer ceiling.
+ */
+export const WORKER_AI_TIMEOUT_MS = 40_000;
+
+/**
+ * POST JSON to a Worker route (the AI routes). Never retried: a model call
+ * costs, and an hourly budget counts every attempt.
+ */
+export function postWorker(
+  route: WorkerRoute,
+  body: unknown,
+  {
+    env = process.env,
+    fetcher = fetch,
+    timeoutMs = WORKER_AI_TIMEOUT_MS,
+    signal,
+  }: {
+    env?: Env;
+    fetcher?: typeof fetch;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+  } = {},
+): Promise<Response> {
+  return fetchWorker(
+    route,
+    "",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    },
+    { env, fetcher, timeoutMs, retries: 0 },
+  );
+}
+
+/**
+ * The sentence a failed Worker answer carries: the Workers' envelope
+ * (`error_description`, else `error`), else the status.
+ */
+export async function workerErrorMessage(res: Response): Promise<string> {
+  const body: unknown = await res.json().catch(() => null);
+  const field = (key: string): string | null => {
+    const value =
+      typeof body === "object" && body !== null
+        ? (body as Record<string, unknown>)[key]
+        : null;
+    return typeof value === "string" && value ? value : null;
+  };
+  return (
+    field("error_description") ??
+    field("error") ??
+    `Request failed (${res.status})`
+  );
 }
 
 /** A places call (`search`, `geo`, `locations`) on the Worker. */

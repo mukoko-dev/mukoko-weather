@@ -1,6 +1,4 @@
-import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
-import { resolve } from "path";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import {
   wmoToInsightHazards,
   checkFrostRisk,
@@ -17,6 +15,7 @@ import {
   FORECAST_MODEL_LABELS,
   COMPARISON_MODELS,
   normalizeForecastModel,
+  fetchWeather,
   type HourlyWeather,
 } from "./weather";
 
@@ -329,9 +328,16 @@ describe("uvLevel", () => {
     expect(uvLevel(15).label).toBe("Extreme");
   });
 
-  it("all levels have a color class", () => {
+  it("classifies the raw value, without rounding (upper bounds inclusive at 2, 5, 7, 10)", () => {
+    expect(uvLevel(2).label).toBe("Low");
+    expect(uvLevel(2.4).label).toBe("Moderate");
+    expect(uvLevel(5.5).label).toBe("High");
+    expect(uvLevel(10.4).label).toBe("Extreme");
+  });
+
+  it("all levels have a WHO swatch class", () => {
     for (const idx of [0, 3, 6, 8, 11]) {
-      expect(uvLevel(idx).color).toMatch(/^text-/);
+      expect(uvLevel(idx).swatch).toMatch(/^bg-wx-uv-/);
     }
   });
 });
@@ -547,6 +553,8 @@ describe("multi-model + minutely (Windy-style)", () => {
     expect(ForecastModel.AIFS).toBe("ecmwf_aifs025_single");
     expect(ForecastModel.ICON).toBe("icon_global");
     expect(ForecastModel.MeteoFrance).toBe("meteofrance_seamless");
+    // Not an Open-Meteo model: another provider serves it.
+    expect(ForecastModel.AppleWeatherKit).toBe("apple_weatherkit");
   });
 
   it("normalizeForecastModel maps legacy and unknown ids", () => {
@@ -557,6 +565,59 @@ describe("multi-model + minutely (Windy-style)", () => {
     expect(normalizeForecastModel(undefined)).toBe(ForecastModel.BestMatch);
   });
 
+  describe("Apple Weather (feature flag off by default)", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("is a valid preference only while it is offered", () => {
+      // The shipped default: a device carrying `apple_weatherkit` from a newer
+      // client reads as the blend, so the page never asks for a forecast the
+      // Worker does not have.
+      expect(normalizeForecastModel("apple_weatherkit")).toBe(
+        ForecastModel.BestMatch,
+      );
+      vi.stubGlobal("window", globalThis);
+      vi.stubGlobal("localStorage", {
+        getItem: (k: string) => (k === "ff:apple_weatherkit" ? "true" : null),
+      });
+      expect(normalizeForecastModel("apple_weatherkit")).toBe(
+        ForecastModel.AppleWeatherKit,
+      );
+      // Switching it on changes nothing for the others.
+      expect(normalizeForecastModel("ecmwf_ifs04")).toBe(ForecastModel.ECMWF);
+      expect(normalizeForecastModel("nope")).toBe(ForecastModel.BestMatch);
+    });
+
+    it("is never sent to Open-Meteo by the direct fallback", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          current: {},
+          hourly: { time: [] },
+          daily: { time: [] },
+        }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      await fetchWeather(-17.83, 31.05, [
+        "apple_weatherkit",
+        "ecmwf_ifs",
+        "best_match",
+      ]).catch(() => undefined);
+      const url = new URL(String(fetchMock.mock.calls[0][0]));
+      // Open-Meteo answers an unknown model with a 400 for the whole request.
+      expect(url.searchParams.get("models")).toBe("ecmwf_ifs");
+      // And with only Apple asked for, no `models` at all.
+      fetchMock.mockClear();
+      await fetchWeather(-17.83, 31.05, ["apple_weatherkit"]).catch(
+        () => undefined,
+      );
+      expect(
+        new URL(String(fetchMock.mock.calls[0][0])).searchParams.has("models"),
+      ).toBe(false);
+    });
+  });
+
   it("COMPARISON_MODELS is the ECMWF-led blend core", () => {
     expect(COMPARISON_MODELS[0]).toBe(ForecastModel.ECMWF);
     expect(COMPARISON_MODELS).toContain(ForecastModel.AIFS);
@@ -565,6 +626,13 @@ describe("multi-model + minutely (Windy-style)", () => {
   it("COMPARISON_MODELS excludes best_match", () => {
     expect(COMPARISON_MODELS).not.toContain(ForecastModel.BestMatch);
     expect(COMPARISON_MODELS).toContain(ForecastModel.ECMWF);
+  });
+
+  it("COMPARISON_MODELS leaves Apple Weather out: its budget is spent only when picked", () => {
+    // Every page view of the comparison would otherwise spend a WeatherKit
+    // call per cache miss; the model is added to the request only when it is
+    // the picked baseline.
+    expect(COMPARISON_MODELS).not.toContain(ForecastModel.AppleWeatherKit);
   });
 
   it("FORECAST_MODEL_LABELS has a label for every model", () => {
@@ -715,22 +783,5 @@ describe("windDirection points option", () => {
     expect(eight(270)).toBe("W");
     expect(eight(315)).toBe("NW");
     expect(eight(360)).toBe("N");
-  });
-});
-
-describe("WMO label parity with api/py/_wmo.py", () => {
-  it("WMO_LABELS matches weatherCodeToInfo for every shipped code", () => {
-    const py = readFileSync(
-      resolve(__dirname, "../../api/py/_wmo.py"),
-      "utf-8",
-    );
-    const pairs = [...py.matchAll(/^\s+(\d+): "([^"]+)",$/gm)].map((m) => [
-      Number(m[1]),
-      m[2],
-    ]);
-    expect(pairs.length).toBeGreaterThan(20);
-    for (const [code, label] of pairs) {
-      expect(weatherCodeToInfo(code as number).label).toBe(label);
-    }
   });
 });

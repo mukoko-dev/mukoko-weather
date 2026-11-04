@@ -8,7 +8,6 @@
 //! delivery. The in-app inbox is the record.
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 /// Push services we accept subscriptions from. An endpoint is a URL the
 /// server will POST to, so an open list would make the sender an SSRF tool.
@@ -24,12 +23,22 @@ const ALLOWED_SUFFIXES: &[&str] = &[
     ".notify.windows.com",
 ];
 
+/// The alert kind of a frost alert: in the dedupe key, the delivery log, the
+/// payload and the push `Topic`.
+pub const KIND_FROST: &str = "frost";
+
 /// At most this many pushes to one person in one local day.
 pub const MAX_PUSHES_PER_DAY: u32 = 2;
 /// At most this many of one kind to one person in one local night.
 pub const MAX_PUSHES_PER_KIND_PER_NIGHT: u32 = 1;
 /// Frost looks at the next 24 hourly values.
 pub const FROST_LOOKAHEAD_HOURS: usize = 24;
+/// An hour at or below this air temperature (C) inside the frost window is a
+/// frost hour. Shared with the station join (`station_alert`), so a forecast
+/// and an observation can never disagree about what frost is.
+pub const FROST_THRESHOLD_C: f64 = 3.0;
+/// Local hour at which the frost window opens (22:00).
+pub const NIGHT_START_HOUR: u8 = 22;
 /// Delivery log rows older than this many days are deleted.
 pub const DELIVERY_RETENTION_DAYS: u32 = 90;
 /// A person may hold this many active subscriptions (browsers or devices).
@@ -105,6 +114,16 @@ pub fn validate_endpoint(endpoint: &str) -> Result<(), PushError> {
     }
 }
 
+/// The origin (`https://host`) of an endpoint the sender may use: the VAPID
+/// `aud` claim names it (RFC 8292 section 2). The endpoint goes through
+/// [`validate_endpoint`] first, so a host outside the allow list never gets a
+/// token. A port is refused by that check (only the default is accepted), so
+/// the origin never carries one.
+pub fn endpoint_origin(endpoint: &str) -> Result<String, PushError> {
+    validate_endpoint(endpoint)?;
+    Ok(format!("https://{}", https_host(endpoint)?))
+}
+
 fn is_b64url(s: &str) -> bool {
     s.chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
@@ -139,7 +158,7 @@ pub fn validate_keys(p256dh: &str, auth: &str) -> Result<(), PushError> {
 /// The endpoint is canonicalised first (lower-case scheme and host, default
 /// port dropped) so the same subscription never hashes two ways.
 pub fn endpoint_id(endpoint: &str) -> String {
-    hex::encode(Sha256::digest(canonical_endpoint(endpoint).as_bytes()))
+    crate::crypto::sha256_hex(&canonical_endpoint(endpoint))
 }
 
 /// Lower-case the scheme and host and drop `:443`; the path and query keep
@@ -210,6 +229,74 @@ impl AlertPrefs {
         }
         Ok(())
     }
+
+    /// The planner's preferences, from what the Nyuchi API serves for one alert
+    /// target (`alert_kinds`, `quiet_start`, `quiet_end`, `place_slugs`; the
+    /// jobs Worker's client reads them, `nyuchi-api` `web_push.py`).
+    ///
+    /// The API's and this module's shapes differ, so this is the one place they
+    /// meet:
+    ///
+    /// - `alert_kinds` is a list; `frost` turns frost on. `severe` and any kind
+    ///   this build does not know change nothing here: the severe kind has its
+    ///   own gate (`severe_alert`), and a kind added to the API later must not
+    ///   make an old sender guess.
+    /// - Quiet hours are two different whole hours as `HH:00`, or both absent
+    ///   for none (stored here as two equal hours, which `in_quiet_hours` reads
+    ///   as no quiet time). In the API's model absent IS none: its view of a
+    ///   person with no stored preference is "no alerts, no quiet hours", and
+    ///   `validate_quiet_hours` says "both None for no quiet hours", so a person
+    ///   who never set any has none; the 22:00 to 06:00 of `Default` is the
+    ///   app's own, not the API's. The API refuses a half window, a quarter-hour, two
+    ///   equal hours and anything not `HH:00`; so does this, because a value the
+    ///   API would not store cannot be what a person asked for. A malformed
+    ///   value is an error, never a guess: the caller skips that target.
+    /// - The follow list is checked as [`AlertPrefs::validate`] does.
+    pub fn from_api(
+        kinds: &[&str],
+        quiet_start: Option<&str>,
+        quiet_end: Option<&str>,
+        places: &[String],
+    ) -> Result<AlertPrefs, PushError> {
+        let (quiet_start, quiet_end) = match (quiet_start, quiet_end) {
+            (None, None) => (0, 0),
+            (Some(start), Some(end)) => {
+                let (start, end) = (whole_hour(start)?, whole_hour(end)?);
+                if start == end {
+                    return Err(PushError::BadQuietHours);
+                }
+                (start, end)
+            }
+            _ => return Err(PushError::BadQuietHours),
+        };
+        let prefs = AlertPrefs {
+            frost: kinds.contains(&KIND_FROST),
+            quiet_start,
+            quiet_end,
+            places: places.to_vec(),
+        };
+        prefs.validate()?;
+        Ok(prefs)
+    }
+}
+
+/// A whole local hour written `HH:00`, `00:00` through `23:00`, exactly: no
+/// space, no seconds, no single-digit hour (the API's own rule).
+fn whole_hour(text: &str) -> Result<u8, PushError> {
+    let b = text.as_bytes();
+    if b.len() == 5
+        && b[2] == b':'
+        && b[3] == b'0'
+        && b[4] == b'0'
+        && b[0].is_ascii_digit()
+        && b[1].is_ascii_digit()
+    {
+        let hour = (b[0] - b'0') * 10 + (b[1] - b'0');
+        if hour <= 23 {
+            return Ok(hour);
+        }
+    }
+    Err(PushError::BadQuietHours)
 }
 
 /// Whether `hour` (0..=23, the place's local hour) falls in `[start, end)`,
@@ -262,12 +349,22 @@ fn parse_date(time: &str) -> Option<chrono::NaiveDate> {
     chrono::NaiveDate::parse_from_str(time.get(0..10)?, "%Y-%m-%d").ok()
 }
 
+/// Whether a local hour (0..=23) is inside the frost window: 22:00 through
+/// 08:59 (the hour that starts at 08:00 is included).
+pub fn in_frost_window(hour: u8) -> bool {
+    hour >= NIGHT_START_HOUR || hour <= NIGHT_END_HOUR
+}
+
 /// The date a frost night began on: hours 00..=08 belong to the previous
 /// evening's night.
-fn night_of(time: &str) -> Option<String> {
+pub(crate) fn night_of(time: &str) -> Option<String> {
     let date = parse_date(time)?;
     let hour = parse_hour(time)?;
-    let d = if hour <= 8 { date.pred_opt()? } else { date };
+    let d = if hour <= NIGHT_END_HOUR {
+        date.pred_opt()?
+    } else {
+        date
+    };
     Some(d.format("%Y-%m-%d").to_string())
 }
 
@@ -317,7 +414,7 @@ pub fn evaluate_frost(
             return None;
         }
         let Some(hour) = parse_hour(t) else { continue };
-        if !(hour >= 22 || hour <= 8) || !temp.is_finite() || temp > 3.0 {
+        if !in_frost_window(hour) || !temp.is_finite() || temp > FROST_THRESHOLD_C {
             continue;
         }
         let n = night_of(t)?;
@@ -347,8 +444,28 @@ pub fn evaluate_frost(
 }
 
 /// The dedupe key for one alert: one per cell, kind and local night.
+///
+/// The Nyuchi API's delivery log requires EXACTLY three non-empty parts split
+/// on `:`, with the kind in the middle (`validate_delivery` in
+/// `nyuchi-api/gateway/lib/web_push.py`; its tests use
+/// `-17.85_31.05:frost:2026-11-03`). [`crate::geo::cell_key`] is
+/// `cell:-17.85_31.05`, so the `cell:` prefix is dropped: with it the key had
+/// four parts and every claim would have been refused as `delivery_invalid`
+/// (found in code review of the severe-alert rules, 2026-11-04). The cell is
+/// then the coordinate half only, and a slug or other label with no colon is
+/// used as it is.
 pub fn dedupe_key(cell: &str, kind: &str, night: &str) -> String {
-    format!("{cell}:{kind}:{night}")
+    let place = cell.strip_prefix("cell:").unwrap_or(cell);
+    format!("{place}:{kind}:{night}")
+}
+
+/// The API's reading of a dedupe key, for the tests that pin the contract:
+/// exactly three non-empty parts, `(cell, kind, night-or-token)`.
+#[cfg(test)]
+pub(crate) fn split_dedupe_key(key: &str) -> Option<(&str, &str, &str)> {
+    let mut parts = key.split(':');
+    let (a, b, c) = (parts.next()?, parts.next()?, parts.next()?);
+    (parts.next().is_none() && !a.is_empty() && !b.is_empty() && !c.is_empty()).then_some((a, b, c))
 }
 
 /// What to do with one alert for one person.
@@ -396,13 +513,23 @@ pub struct DecisionInput<'a> {
 /// after 08:00 on a later local date, and, for non-severe frost, any time on
 /// a later local date at all (a moderate alert held by quiet hours must not
 /// arrive at 06:00 the next morning). Severe frost still under way before
-/// 08:00 is sent.
+/// 09:00 on the morning right after its night is sent; on any later date it is
+/// stale, whatever the hour.
 pub fn decide(i: &DecisionInput) -> Decision {
     if !i.prefs.frost || !i.prefs.places.iter().any(|p| p == i.slug) {
         return Decision::NotWanted;
     }
-    if i.local_date > i.night && (i.local_hour > NIGHT_END_HOUR || i.risk != Risk::Severe) {
-        return Decision::Stale;
+    if i.local_date > i.night {
+        // Past the night's own date. The one thing still sent is severe frost
+        // under way before 09:00 on the morning right after its night: not a
+        // later morning, which would be about a night two days gone.
+        let morning_after = chrono::NaiveDate::parse_from_str(i.night, "%Y-%m-%d")
+            .ok()
+            .and_then(|d| d.succ_opt())
+            .is_some_and(|d| d.format("%Y-%m-%d").to_string() == i.local_date);
+        if !(i.risk == Risk::Severe && morning_after && i.local_hour <= NIGHT_END_HOUR) {
+            return Decision::Stale;
+        }
     }
     if i.already_sent_this_night {
         return Decision::Duplicate;
@@ -442,13 +569,157 @@ pub fn frost_payload(place_name: &str, slug: &str, a: &FrostAlert) -> Payload {
     };
     Payload {
         v: 1,
-        kind: "frost",
+        kind: KIND_FROST,
         slug: slug.to_string(),
         night: a.night.clone(),
         title: format!("Frost alert for {place_name}"),
         body,
         url: format!("/{slug}"),
     }
+}
+
+/// The `Urgency` header of a Web Push request (RFC 8030 section 5.3). It tells
+/// the push service how hard to try to wake a device that is saving power: on
+/// Android a `normal` message may wait for the next maintenance window, and
+/// only `high` is delivered at once.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Urgency {
+    VeryLow,
+    Low,
+    Normal,
+    High,
+}
+
+impl Urgency {
+    /// The header value, exactly as RFC 8030 spells it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Urgency::VeryLow => "very-low",
+            Urgency::Low => "low",
+            Urgency::Normal => "normal",
+            Urgency::High => "high",
+        }
+    }
+}
+
+/// The longest `TTL` we ask for: 36 hours. The forecast looks 24 hours ahead
+/// ([`FROST_LOOKAHEAD_HOURS`]) and a frost night runs another 11 (22:00 to
+/// 08:59), so no alert [`evaluate_frost`] can raise lives longer than this; the
+/// bound only keeps a malformed night far in the future from asking a push
+/// service to hold a message for days.
+pub const MAX_PUSH_TTL_SECONDS: u32 = 36 * 3600;
+
+/// The length of a `Topic` (RFC 8030 section 5.4): at most 32 characters of
+/// the URL-safe base64 alphabet.
+pub const MAX_TOPIC_LEN: usize = 32;
+
+/// What a frost alert asks of the push service: how long to keep it, how hard
+/// to try, and which message it replaces. The sender sets the three headers
+/// from this and the delivery log records them as sent (`pushTtl`,
+/// `pushUrgency`, `pushTopic` in data-infra ADR-0003).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PushOptions {
+    /// The `TTL` header, in seconds. After this long the push service drops
+    /// the message instead of showing a "tonight" alert the next day.
+    pub ttl_seconds: u32,
+    pub urgency: Urgency,
+    /// The `Topic` header: a newer message with the same topic replaces one the
+    /// push service still holds, so a retry never leaves two copies queued.
+    pub topic: String,
+}
+
+/// Why no push options could be built.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OptionsError {
+    /// The alert's night is already over: nothing is left to say "tonight" about.
+    NightOver,
+    /// The night is not a date, or the offset is not a time zone.
+    Invalid,
+}
+
+/// How urgent a frost alert is. Severe frost (0 C or below) is a safety matter
+/// for crops and bypasses quiet hours, so it is the only one that asks to wake
+/// a sleeping device; moderate and high frost are `normal`, which a device may
+/// hold until its next maintenance window.
+pub fn frost_urgency(risk: Risk) -> Urgency {
+    match risk {
+        Risk::Severe => Urgency::High,
+        Risk::Moderate | Risk::High => Urgency::Normal,
+    }
+}
+
+/// A `Topic` for one alert: its kind and the night it is about, such as
+/// `frost-2026-07-10` (16 characters). A new alert for the same night replaces
+/// one the push service still holds for that subscription; the next night's is
+/// a different message. It carries **no place, cell or person**, and no hash of
+/// one: the cell grid is public, so a hash of it would let the push service
+/// read the place back by trying every cell. (A person is sent at most one
+/// frost alert a night, so the night alone separates the messages.)
+///
+/// `None` when the result would not be a valid `Topic`: longer than
+/// [`MAX_TOPIC_LEN`] or outside `[A-Za-z0-9_-]`.
+pub fn topic_for(kind: &str, night: &str) -> Option<String> {
+    let topic = format!("{kind}-{night}");
+    let valid = !kind.is_empty()
+        && topic.len() <= MAX_TOPIC_LEN
+        && topic
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+    valid.then_some(topic)
+}
+
+/// The instant a frost alert stops being useful, as a UTC unix timestamp, where
+/// [`decide`] stops sending it. Severe frost still under way is sent until
+/// 09:00 local on the morning after its night (the frost window includes the
+/// hour that starts at 08:00); moderate and high frost are dropped as stale
+/// from midnight, because their copy says "tonight". `None` for a night that
+/// is not a date or an offset outside -12 to +14 hours.
+fn night_end_unix(night: &str, risk: Risk, utc_offset_seconds: i32) -> Option<i64> {
+    if !(-12 * 3600..=14 * 3600).contains(&utc_offset_seconds) {
+        return None;
+    }
+    let morning = chrono::NaiveDate::parse_from_str(night, "%Y-%m-%d")
+        .ok()?
+        .succ_opt()?;
+    let end_hour = match risk {
+        Risk::Severe => u32::from(NIGHT_END_HOUR) + 1,
+        Risk::Moderate | Risk::High => 0,
+    };
+    let end_local = morning.and_hms_opt(end_hour, 0, 0)?;
+    Some(end_local.and_utc().timestamp() - i64::from(utc_offset_seconds))
+}
+
+/// The push options for one frost alert, planned at `now` for a place whose
+/// clock is `utc_offset_seconds` from UTC.
+///
+/// **TTL.** The message expires where [`decide`] would stop sending it: 09:00
+/// local on the morning after for severe frost, midnight for moderate and high
+/// frost, at most [`MAX_PUSH_TTL_SECONDS`]. A push held by a phone that is off
+/// or out of coverage is then dropped instead of arriving after its night,
+/// saying "tonight" about a night that is over.
+///
+/// An error means nothing is built, and a caller sends nothing: a push without
+/// these options is never made.
+pub fn frost_push_options(
+    alert: &FrostAlert,
+    now: chrono::DateTime<chrono::Utc>,
+    utc_offset_seconds: i32,
+) -> Result<PushOptions, OptionsError> {
+    let end = night_end_unix(&alert.night, alert.risk, utc_offset_seconds)
+        .ok_or(OptionsError::Invalid)?;
+    let topic = topic_for(KIND_FROST, &alert.night).ok_or(OptionsError::Invalid)?;
+    let left = end - now.timestamp();
+    if left <= 0 {
+        return Err(OptionsError::NightOver);
+    }
+    Ok(PushOptions {
+        ttl_seconds: u32::try_from(left)
+            .unwrap_or(MAX_PUSH_TTL_SECONDS)
+            .min(MAX_PUSH_TTL_SECONDS),
+        urgency: frost_urgency(alert.risk),
+        topic,
+    })
 }
 
 /// What a push service said.
@@ -463,6 +734,20 @@ pub enum Outcome {
     Retry,
     /// Any other 4xx: our request was refused; do not retry.
     Failed,
+}
+
+impl Outcome {
+    /// The `AlertDeliveryStatus` value for the delivery log
+    /// (`platform.alertDeliveries.status`, nyuchi/data-infra
+    /// `schemas/model/notifications.yaml`). `skipped_quiet` and
+    /// `skipped_cap` come from [`Decision`], not from a push service.
+    pub fn delivery_status(self) -> &'static str {
+        match self {
+            Self::Accepted => "sent",
+            Self::Expired => "gone",
+            Self::Retry | Self::Failed => "failed",
+        }
+    }
 }
 
 pub fn classify_status(status: u16) -> Outcome {
@@ -620,6 +905,106 @@ mod tests {
     }
 
     #[test]
+    fn prefs_from_the_apis_target_shape() {
+        let places = vec!["harare".to_string(), "place--ksy4d".to_string()];
+        let p = AlertPrefs::from_api(&["frost", "severe"], Some("22:00"), Some("06:00"), &places)
+            .unwrap();
+        assert!(p.frost);
+        assert_eq!((p.quiet_start, p.quiet_end), (22, 6));
+        assert_eq!(p.places, places);
+        // Severe alone does not turn frost on; no kinds at all is nothing wanted.
+        assert!(
+            !AlertPrefs::from_api(&["severe"], None, None, &places)
+                .unwrap()
+                .frost
+        );
+        assert!(
+            !AlertPrefs::from_api(&[], None, None, &places)
+                .unwrap()
+                .frost
+        );
+        // A kind this build does not know changes nothing, and is not an error.
+        let p = AlertPrefs::from_api(&["flood", "frost"], None, None, &places).unwrap();
+        assert!(p.frost);
+        // Midnight and 23:00 are whole hours.
+        let p = AlertPrefs::from_api(&["frost"], Some("00:00"), Some("23:00"), &places).unwrap();
+        assert_eq!((p.quiet_start, p.quiet_end), (0, 23));
+    }
+
+    #[test]
+    fn no_quiet_hours_from_the_api_means_no_quiet_time_at_all() {
+        let p = AlertPrefs::from_api(&["frost"], None, None, &[]).unwrap();
+        assert_eq!(p.quiet_start, p.quiet_end);
+        // Not the default 22:00 to 06:00: the person said none.
+        for hour in 0..=23u8 {
+            assert!(!in_quiet_hours(hour, p.quiet_start, p.quiet_end), "{hour}");
+        }
+    }
+
+    #[test]
+    fn quiet_hours_the_api_would_refuse_are_refused_here_too() {
+        let places: Vec<String> = Vec::new();
+        for (start, end) in [
+            (Some("22:00"), None),
+            (None, Some("06:00")),
+            (Some("22:00"), Some("22:00")),
+            (Some("22:30"), Some("06:00")),
+            (Some("22:15"), Some("06:00")),
+            (Some("7:00"), Some("22:00")),
+            (Some("24:00"), Some("06:00")),
+            (Some("99:00"), Some("06:00")),
+            (Some("22:00:00"), Some("06:00")),
+            (Some(" 22:00"), Some("06:00")),
+            (Some("22:00\n"), Some("06:00")),
+            (Some("22.00"), Some("06:00")),
+            (Some("２２:00"), Some("06:00")), // full-width digits
+            (Some(""), Some("")),
+            (Some("22:00"), Some("")),
+        ] {
+            assert_eq!(
+                AlertPrefs::from_api(&["frost"], start, end, &places),
+                Err(PushError::BadQuietHours),
+                "{start:?} {end:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_follow_list_from_the_api_is_checked_like_any_other() {
+        let bad = vec!["Har are".to_string()];
+        assert_eq!(
+            AlertPrefs::from_api(&["frost"], None, None, &bad),
+            Err(PushError::BadSlug)
+        );
+        let many: Vec<String> = (0..11).map(|i| format!("p{i}")).collect();
+        assert_eq!(
+            AlertPrefs::from_api(&["frost"], None, None, &many),
+            Err(PushError::TooManyPlaces)
+        );
+    }
+
+    /// Every whole hour the API accepts parses to itself, and nothing else does:
+    /// a walk over every two-digit pair, not a few examples.
+    #[test]
+    fn whole_hours_are_exactly_00_to_23() {
+        for h in 0..=99u32 {
+            let text = format!("{h:02}:00");
+            let got = whole_hour(&text);
+            if h <= 23 {
+                assert_eq!(got, Ok(h as u8), "{text}");
+            } else {
+                assert_eq!(got, Err(PushError::BadQuietHours), "{text}");
+            }
+        }
+        for m in 1..=59u32 {
+            assert_eq!(
+                whole_hour(&format!("12:{m:02}")),
+                Err(PushError::BadQuietHours)
+            );
+        }
+    }
+
+    #[test]
     fn prefs_are_validated() {
         let mut p = AlertPrefs {
             frost: true,
@@ -748,8 +1133,27 @@ mod tests {
     fn dedupe_key_is_cell_kind_night() {
         assert_eq!(
             dedupe_key("cell:-17.85_31.05", "frost", "2026-07-10"),
-            "cell:-17.85_31.05:frost:2026-07-10"
+            "-17.85_31.05:frost:2026-07-10"
         );
+        // A label with no prefix is used as it is.
+        assert_eq!(
+            dedupe_key("-17.85_31.05", "frost", "2026-07-10"),
+            "-17.85_31.05:frost:2026-07-10"
+        );
+    }
+
+    #[test]
+    fn a_real_cell_key_gives_the_three_parts_the_api_requires() {
+        // Four parts (the shape before the fix) is refused by the delivery log.
+        for (lat, lon) in [(-17.83, 31.05), (51.5, -0.12), (0.0, 0.0), (-33.9, 151.2)] {
+            let key = dedupe_key(&crate::geo::cell_key(lat, lon), "frost", "2026-07-10");
+            let (cell, kind, night) = split_dedupe_key(&key).unwrap_or_else(|| panic!("{key}"));
+            assert_eq!((kind, night), ("frost", "2026-07-10"), "{key}");
+            assert!(!cell.contains(':') && !cell.starts_with("cell"), "{key}");
+        }
+        assert_eq!(split_dedupe_key("cell:-17.85_31.05:frost:2026-07-10"), None);
+        assert_eq!(split_dedupe_key("a::c"), None);
+        assert_eq!(split_dedupe_key("a:frost"), None);
     }
 
     fn input<'a>(prefs: &'a AlertPrefs) -> DecisionInput<'a> {
@@ -857,6 +1261,39 @@ mod tests {
     }
 
     #[test]
+    fn the_origin_is_the_allowed_host_in_lower_case_and_nothing_else() {
+        assert_eq!(
+            endpoint_origin("https://FCM.googleapis.com/fcm/send/abc?x=1").as_deref(),
+            Ok("https://fcm.googleapis.com")
+        );
+        assert_eq!(
+            endpoint_origin("https://fcm.googleapis.com:443/fcm/send/abc").as_deref(),
+            Ok("https://fcm.googleapis.com")
+        );
+        // a refused endpoint never yields an origin to sign for
+        assert_eq!(
+            endpoint_origin("https://evil.example/x"),
+            Err(PushError::HostNotAllowed)
+        );
+        assert_eq!(
+            endpoint_origin("http://fcm.googleapis.com/x"),
+            Err(PushError::NotHttps)
+        );
+        assert_eq!(
+            endpoint_origin("https://fcm.googleapis.com:8443/x"),
+            Err(PushError::BadEndpoint)
+        );
+    }
+
+    #[test]
+    fn outcomes_map_onto_the_delivery_log_statuses() {
+        assert_eq!(Outcome::Accepted.delivery_status(), "sent");
+        assert_eq!(Outcome::Expired.delivery_status(), "gone");
+        assert_eq!(Outcome::Retry.delivery_status(), "failed");
+        assert_eq!(Outcome::Failed.delivery_status(), "failed");
+    }
+
+    #[test]
     fn push_service_answers_are_classified() {
         assert_eq!(classify_status(201), Outcome::Accepted);
         assert_eq!(classify_status(404), Outcome::Expired);
@@ -869,5 +1306,257 @@ mod tests {
         assert_eq!(classify_status(0), Outcome::Retry);
         assert_eq!(classify_status(400), Outcome::Failed);
         assert_eq!(classify_status(413), Outcome::Failed);
+    }
+    #[test]
+    fn severe_frost_is_only_sent_through_the_morning_right_after_its_night() {
+        let prefs = AlertPrefs {
+            frost: true,
+            quiet_start: 22,
+            quiet_end: 6,
+            places: vec!["harare".into()],
+        };
+        let at = |date: &str, hour: u8| {
+            decide(&DecisionInput {
+                prefs: &prefs,
+                slug: "harare",
+                risk: Risk::Severe,
+                local_hour: hour,
+                local_date: date,
+                night: "2026-07-10",
+                already_sent_this_night: false,
+                sent_today: 0,
+                sent_kind_tonight: 0,
+            })
+        };
+        // the night itself, and the small hours of the morning after
+        assert_eq!(at("2026-07-10", 23), Decision::Send);
+        assert_eq!(at("2026-07-11", 2), Decision::Send);
+        assert_eq!(at("2026-07-11", 8), Decision::Send);
+        // after dawn on the morning after, and every hour of any later day
+        assert_eq!(at("2026-07-11", 9), Decision::Stale);
+        assert_eq!(at("2026-07-12", 2), Decision::Stale);
+        assert_eq!(at("2026-08-01", 3), Decision::Stale);
+        // a month boundary: the 31st's night ends on the 1st
+        let month = decide(&DecisionInput {
+            prefs: &prefs,
+            slug: "harare",
+            risk: Risk::Severe,
+            local_hour: 3,
+            local_date: "2026-08-01",
+            night: "2026-07-31",
+            already_sent_this_night: false,
+            sent_today: 0,
+            sent_kind_tonight: 0,
+        });
+        assert_eq!(month, Decision::Send);
+    }
+
+    fn utc(s: &str) -> chrono::DateTime<chrono::Utc> {
+        chrono::DateTime::parse_from_rfc3339(s)
+            .unwrap()
+            .with_timezone(&chrono::Utc)
+    }
+
+    fn frost_on(night: &str, risk: Risk) -> FrostAlert {
+        FrostAlert {
+            risk,
+            lowest: -1.0,
+            start: format!("{night}T23:00"),
+            end: format!("{night}T06:00"),
+            night: night.to_string(),
+        }
+    }
+
+    #[test]
+    fn urgency_is_spelled_as_rfc_8030_spells_it() {
+        // the type models the whole header; frost only uses two of its values
+        assert_eq!(Urgency::VeryLow.as_str(), "very-low");
+        assert_eq!(Urgency::Low.as_str(), "low");
+        assert_eq!(Urgency::Normal.as_str(), "normal");
+        assert_eq!(Urgency::High.as_str(), "high");
+        // the serde form is the header form
+        assert_eq!(
+            serde_json::to_value(Urgency::VeryLow).unwrap(),
+            serde_json::json!("very-low")
+        );
+    }
+
+    #[test]
+    fn only_severe_frost_asks_to_wake_a_sleeping_device() {
+        assert_eq!(frost_urgency(Risk::Severe), Urgency::High);
+        assert_eq!(frost_urgency(Risk::High), Urgency::Normal);
+        assert_eq!(frost_urgency(Risk::Moderate), Urgency::Normal);
+    }
+
+    #[test]
+    fn the_topic_is_the_kind_and_the_night_and_names_no_place_or_person() {
+        let t = topic_for(KIND_FROST, "2026-07-10").unwrap();
+        assert_eq!(t, "frost-2026-07-10");
+        assert!(t.len() <= MAX_TOPIC_LEN);
+        // the next night is another message
+        assert_ne!(t, topic_for(KIND_FROST, "2026-07-11").unwrap());
+        // nothing in it comes from a place, a cell or a person; the options
+        // for two places on one night share it, so it tells a push service
+        // nothing about where either device is
+        let a = frost_push_options(
+            &frost_on("2026-07-10", Risk::Severe),
+            utc("2026-07-10T17:30:00Z"),
+            7200,
+        )
+        .unwrap();
+        assert_eq!(a.topic, t);
+        // only the URL-safe base64 alphabet and at most 32 characters, else none
+        assert_eq!(topic_for("frost", "2026-07-10 22:00"), None);
+        assert_eq!(topic_for("frost", "x/y"), None);
+        assert_eq!(topic_for("frost", &"9".repeat(40)), None);
+        assert_eq!(topic_for("", "2026-07-10"), None);
+    }
+
+    #[test]
+    fn a_severe_frost_push_lives_until_9am_local_the_morning_after() {
+        let a = frost_on("2026-07-10", Risk::Severe);
+        // Harare, UTC+2. The night ends 2026-07-11 09:00 local = 07:00Z.
+        let at = |now: &str| frost_push_options(&a, utc(now), 7200);
+        // 19:30 local: 13.5 hours
+        let evening = at("2026-07-10T17:30:00Z").unwrap();
+        assert_eq!(evening.ttl_seconds, 48_600);
+        assert_eq!(evening.urgency, Urgency::High);
+        assert_eq!(evening.topic, "frost-2026-07-10");
+        // 03:00 local: 6 hours
+        assert_eq!(at("2026-07-11T01:00:00Z").unwrap().ttl_seconds, 21_600);
+        // 08:30 local: half an hour
+        assert_eq!(at("2026-07-11T06:30:00Z").unwrap().ttl_seconds, 1_800);
+        // 08:59:59 local: one second
+        assert_eq!(at("2026-07-11T06:59:59Z").unwrap().ttl_seconds, 1);
+        // 09:00 local and after: the night is over, nothing is built
+        assert_eq!(at("2026-07-11T07:00:00Z"), Err(OptionsError::NightOver));
+        assert_eq!(at("2026-07-12T00:00:00Z"), Err(OptionsError::NightOver));
+    }
+
+    #[test]
+    fn a_moderate_or_high_frost_push_lives_until_midnight_where_decide_stops_sending() {
+        for risk in [Risk::Moderate, Risk::High] {
+            let a = frost_on("2026-07-10", risk);
+            // Harare, UTC+2: the push is useful until 00:00 local on the 11th
+            // (22:00Z on the 10th), not until the morning.
+            let at = |now: &str| frost_push_options(&a, utc(now), 7200);
+            // 21:30 local: 2.5 hours
+            let o = at("2026-07-10T19:30:00Z").unwrap();
+            assert_eq!(o.ttl_seconds, 9_000, "{risk:?}");
+            assert_eq!(o.urgency, Urgency::Normal);
+            // 23:50 local: ten minutes, so a phone that is off at 23:50 never
+            // shows "frost tonight" at breakfast
+            assert_eq!(at("2026-07-10T21:50:00Z").unwrap().ttl_seconds, 600);
+            // midnight local and after
+            assert_eq!(at("2026-07-10T22:00:00Z"), Err(OptionsError::NightOver));
+            assert_eq!(at("2026-07-11T01:00:00Z"), Err(OptionsError::NightOver));
+        }
+    }
+
+    /// The TTL ends where `decide` stops sending: for every risk, at every ten
+    /// minutes across two days, options exist exactly when the alert is not
+    /// `Stale`. One boundary, two functions, no way to disagree.
+    #[test]
+    fn a_push_has_options_exactly_while_decide_would_still_send_it() {
+        let prefs = AlertPrefs {
+            frost: true,
+            quiet_start: 0,
+            quiet_end: 0,
+            places: vec!["harare".into()],
+        };
+        let offset = 7200;
+        for risk in [Risk::Moderate, Risk::High, Risk::Severe] {
+            let alert = frost_on("2026-07-10", risk);
+            let mut now = utc("2026-07-10T04:00:00Z");
+            let stop = utc("2026-07-12T04:00:00Z");
+            let mut checked = 0;
+            while now < stop {
+                let local = now + chrono::Duration::seconds(i64::from(offset));
+                let date = local.format("%Y-%m-%d").to_string();
+                let hour = local.format("%H").to_string().parse::<u8>().unwrap();
+                let decision = decide(&DecisionInput {
+                    prefs: &prefs,
+                    slug: "harare",
+                    risk,
+                    local_hour: hour,
+                    local_date: &date,
+                    night: &alert.night,
+                    already_sent_this_night: false,
+                    sent_today: 0,
+                    sent_kind_tonight: 0,
+                });
+                let options = frost_push_options(&alert, now, offset);
+                assert_eq!(
+                    options.is_ok(),
+                    decision != Decision::Stale,
+                    "{risk:?} at {now}: {decision:?} vs {options:?}"
+                );
+                if let Ok(o) = &options {
+                    assert!(o.ttl_seconds >= 1 && o.ttl_seconds <= MAX_PUSH_TTL_SECONDS);
+                }
+                now += chrono::Duration::minutes(10);
+                checked += 1;
+            }
+            assert_eq!(checked, 288);
+        }
+    }
+
+    #[test]
+    fn the_offset_moves_the_end_of_the_night_both_ways() {
+        // UTC-5: the night of 2026-01-10 ends, for high frost, at 2026-01-11
+        // 00:00 local = 05:00Z.
+        let a = frost_on("2026-01-10", Risk::High);
+        let o = frost_push_options(&a, utc("2026-01-11T01:00:00Z"), -5 * 3600).unwrap();
+        assert_eq!(o.ttl_seconds, 4 * 3600);
+        // UTC+14: midnight local on the 11th is 10:00Z on the 10th.
+        let o = frost_push_options(&a, utc("2026-01-10T04:00:00Z"), 14 * 3600).unwrap();
+        assert_eq!(o.ttl_seconds, 6 * 3600);
+        // severe frost in the same zone runs on to 09:00 local
+        let s = frost_on("2026-01-10", Risk::Severe);
+        let o = frost_push_options(&s, utc("2026-01-10T04:00:00Z"), 14 * 3600).unwrap();
+        assert_eq!(o.ttl_seconds, 15 * 3600);
+    }
+
+    #[test]
+    fn no_alert_the_forecast_can_raise_reaches_the_ttl_cap() {
+        // The longest case: 08:00 local, severe frost from 22:00 tonight to
+        // 08:59 tomorrow (the lookahead reaches 24 hours): 25 hours to 09:00.
+        let a = frost_on("2026-07-10", Risk::Severe);
+        let o = frost_push_options(&a, utc("2026-07-10T06:00:00Z"), 7200).unwrap();
+        assert_eq!(o.ttl_seconds, 25 * 3600);
+        assert!(o.ttl_seconds < MAX_PUSH_TTL_SECONDS);
+        // a night days away is capped, not held for days
+        let far = frost_on("2026-07-14", Risk::Severe);
+        let o = frost_push_options(&far, utc("2026-07-10T08:00:00Z"), 0).unwrap();
+        assert_eq!(o.ttl_seconds, MAX_PUSH_TTL_SECONDS);
+    }
+
+    #[test]
+    fn push_options_fail_closed_and_say_why() {
+        let now = utc("2026-07-10T17:30:00Z");
+        let a = frost_on("2026-07-10", Risk::Severe);
+        assert!(frost_push_options(&a, now, 7200).is_ok());
+        // an offset outside -12h..=+14h is not a time zone
+        for offset in [15 * 3600, -13 * 3600] {
+            assert_eq!(
+                frost_push_options(&a, now, offset),
+                Err(OptionsError::Invalid)
+            );
+        }
+        // a night that is not a date
+        for bad in ["", "tomorrow", "2026-13-01", "2026-07-10T22:00"] {
+            let mut b = a.clone();
+            b.night = bad.to_string();
+            assert_eq!(
+                frost_push_options(&b, now, 7200),
+                Err(OptionsError::Invalid),
+                "{bad}"
+            );
+        }
+        // a night that has ended is a normal morning, told apart from a bug
+        assert_eq!(
+            frost_push_options(&a, utc("2026-07-12T00:00:00Z"), 7200),
+            Err(OptionsError::NightOver)
+        );
     }
 }

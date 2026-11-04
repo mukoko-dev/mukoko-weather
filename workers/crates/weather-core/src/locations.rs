@@ -9,7 +9,11 @@
 //! 2. a `{name}--{geohash}` slug, which carries its own coordinate (the app's
 //!    `src/lib/smart-slug.ts`), so a spot needs no record to exist;
 //! 3. the Nyuchi API's canonical places (`/v1/places`), adapted here;
-//! 4. geocoding (Open-Meteo forward, Nominatim reverse), adapted here.
+//! 4. the places the community created, which the platform keeps in
+//!    `places.placesGeo` stamped with the app's own slug: the Worker holds no
+//!    database connection, so `mukoko-weather-mongo-bridge` answers one
+//!    validated slug at a time ([`community_lookup`]);
+//! 5. geocoding (Open-Meteo forward, Nominatim reverse), adapted here.
 //!
 //! The JSON shape is the app's `LocationDoc` (`src/lib/locations.ts`).
 
@@ -348,6 +352,60 @@ impl LocationDoc {
         })
     }
 
+    /// The `place` of the bridge's `GET /places?slug=` answer: a community
+    /// place from `places.placesGeo`, found by the slug the app stamped on it.
+    /// The bridge has already bounded every field; this refuses anything that
+    /// still is not a place (no name, a coordinate off the globe), so a bad
+    /// document is "unavailable", never a made-up location.
+    pub fn from_community_place(place: &Value) -> Option<LocationDoc> {
+        let slug = place.get("slug")?.as_str()?;
+        let name = place.get("name")?.as_str()?.trim();
+        let (lat, lon) = (place.get("lat")?.as_f64()?, place.get("lon")?.as_f64()?);
+        if name.is_empty() || !crate::slug::valid_slug(slug) || !valid_coordinates(lat, lon) {
+            return None;
+        }
+        let country = place
+            .get("country")
+            .and_then(Value::as_str)
+            .filter(|c| c.len() == 2)
+            .map(str::to_uppercase);
+        let province = place
+            .get("province")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim()
+            .to_owned();
+        let tags = place
+            .get("tags")
+            .and_then(Value::as_array)
+            .map(|t| {
+                t.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default();
+        Some(LocationDoc {
+            slug: slug.to_owned(),
+            name: name.to_owned(),
+            province_slug: (!province.is_empty())
+                .then(|| province_slug(&province, country.as_deref().unwrap_or(""))),
+            province,
+            lat,
+            lon,
+            // The record has no measured height unless the app stamped one.
+            elevation: place
+                .get("elevation")
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0),
+            tags,
+            country,
+            source: "community".into(),
+            nominatim_address: None,
+            area: None,
+        })
+    }
+
     /// One Open-Meteo geocoding result (`/v1/search`).
     ///
     /// The slug is `{name}--{geohash}` of the hit, never `{name}-{country}`:
@@ -530,30 +588,33 @@ fn normalize_admin1(address: &Map<String, Value>, country: &str, country_name: &
     first(&["state_district", "city_district", "region", "county"])
 }
 
-/// One `/api/py/history` record from a `place_daily` row.
-pub fn history_record(
-    slug: &str,
-    recorded_at_ms: i64,
-    current: Option<&str>,
-    daily: Option<&str>,
-    insights: Option<&str>,
-) -> Value {
-    let parse = |s: Option<&str>| s.and_then(|s| serde_json::from_str::<Value>(s).ok());
-    let at = chrono::DateTime::from_timestamp_millis(recorded_at_ms)
-        .unwrap_or_default()
-        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    let mut rec = json!({
-        "locationSlug": slug,
-        "recordedAt": at,
-        "current": parse(current).unwrap_or_else(|| json!({})),
-    });
-    if let Some(d) = parse(daily) {
-        rec["daily"] = d;
+/// What the bridge said about a community place.
+#[derive(Debug, Clone, PartialEq)]
+pub enum CommunityLookup {
+    /// The place stamped with the slug.
+    Found(Box<LocationDoc>),
+    /// The platform holds no place with that slug: a real "not found".
+    NotFound,
+    /// The read failed, is not permitted, or answered something that is not a
+    /// place. NEVER "not found": the caller fails closed.
+    Unavailable,
+}
+
+/// Read the bridge's answer to `GET /places?slug=` (`status` is the HTTP
+/// status it sent, `body` its JSON). Only `200 {place}` and `404` are
+/// answers; every other status, and a `200` whose place does not pass
+/// [`LocationDoc::from_community_place`], is `Unavailable`.
+pub fn community_lookup(status: u16, body: &Value) -> CommunityLookup {
+    match status {
+        200 => body
+            .get("place")
+            .and_then(LocationDoc::from_community_place)
+            .map_or(CommunityLookup::Unavailable, |l| {
+                CommunityLookup::Found(Box::new(l))
+            }),
+        404 => CommunityLookup::NotFound,
+        _ => CommunityLookup::Unavailable,
     }
-    if let Some(i) = parse(insights).filter(|v| !v.is_null()) {
-        rec["insights"] = i;
-    }
-    rec
 }
 
 #[cfg(test)]
@@ -569,6 +630,80 @@ mod tests {
         assert_eq!(h.source, "seed");
         assert!(tag_counts().get("city").copied().unwrap_or(0) > 10);
         assert!(stats()["totalCountries"].as_u64().unwrap() > 1);
+    }
+
+    /// The bridge's answer for the community place production holds as
+    /// `windsor-avenue-zw` (placesGeo `windsor-avenue-00fc5a`).
+    fn windsor() -> Value {
+        json!({"place": {
+            "slug": "windsor-avenue-zw", "name": "Windsor Avenue",
+            "lat": -17.810708454768136, "lon": 31.075910797793007,
+            "elevation": 1493, "province": "Harare", "country": "ZW",
+            "tags": ["city"]
+        }})
+    }
+
+    #[test]
+    fn a_community_place_becomes_a_catalogue_location() {
+        let CommunityLookup::Found(l) = community_lookup(200, &windsor()) else {
+            panic!("a place was expected");
+        };
+        assert_eq!(l.slug, "windsor-avenue-zw");
+        assert_eq!(l.name, "Windsor Avenue");
+        assert_eq!((l.lat, l.lon), (-17.810708454768136, 31.075910797793007));
+        assert_eq!(l.elevation, 1493.0);
+        assert_eq!(l.country.as_deref(), Some("ZW"));
+        assert_eq!(l.province, "Harare");
+        assert_eq!(l.province_slug.as_deref(), Some("harare-zw"));
+        assert_eq!(l.tags, vec!["city"]);
+        assert_eq!(l.source, "community");
+        // It is a stored place, so reports keep its own slug.
+        assert!(crate::community::is_catalogue(&l.source));
+    }
+
+    #[test]
+    fn a_missing_height_and_country_stay_unknown() {
+        let body = json!({"place": {
+            "slug": "a-b", "name": "A", "lat": 1.0, "lon": 2.0,
+            "elevation": null, "province": "", "country": null, "tags": []
+        }});
+        let CommunityLookup::Found(l) = community_lookup(200, &body) else {
+            panic!("a place was expected");
+        };
+        assert_eq!(l.country, None);
+        assert_eq!(l.province_slug, None);
+        assert_eq!(l.elevation, 0.0);
+    }
+
+    #[test]
+    fn only_a_200_place_and_a_404_are_answers() {
+        assert_eq!(
+            community_lookup(404, &json!({"error": "not_found"})),
+            CommunityLookup::NotFound
+        );
+        // Closed: a refusal, an outage or any other status is never "not found".
+        for status in [400, 401, 403, 500, 502, 503, 504, 301] {
+            assert_eq!(
+                community_lookup(status, &json!({"error": "unavailable"})),
+                CommunityLookup::Unavailable,
+                "{status}"
+            );
+        }
+        // A 200 that is not a place is not trusted either.
+        for body in [
+            json!({}),
+            json!({"place": null}),
+            json!({"place": {"slug": "a", "name": "", "lat": 1, "lon": 2}}),
+            json!({"place": {"slug": "a", "name": "A", "lat": 91, "lon": 2}}),
+            json!({"place": {"slug": "A_B", "name": "A", "lat": 1, "lon": 2}}),
+            json!({"place": {"slug": "a", "name": "A", "lat": "1", "lon": 2}}),
+        ] {
+            assert_eq!(
+                community_lookup(200, &body),
+                CommunityLookup::Unavailable,
+                "{body}"
+            );
+        }
     }
 
     #[test]
@@ -690,21 +825,5 @@ mod tests {
         );
         assert_eq!(l.country.as_deref(), Some("ZW"));
         assert_eq!(l.source, "places");
-    }
-
-    #[test]
-    fn history_rows_keep_the_python_shape() {
-        let r = history_record(
-            "harare",
-            1_759_622_400_000,
-            Some(r#"{"temperature_2m": 25}"#),
-            Some(r#"{"date": "2025-10-05", "tempMax": 29}"#),
-            None,
-        );
-        assert_eq!(r["locationSlug"], "harare");
-        assert_eq!(r["recordedAt"], "2025-10-05T00:00:00Z");
-        assert_eq!(r["current"]["temperature_2m"], 25);
-        assert_eq!(r["daily"]["tempMax"], 29);
-        assert!(r.get("insights").is_none());
     }
 }

@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   CompassDial,
   GradientScale,
@@ -42,19 +44,74 @@ describe("CompassDial", () => {
 describe("GradientScale", () => {
   it("places the marker at positionPct", () => {
     const html = render(h(GradientScale, { positionPct: 42, stops: "uv" }));
-    expect(html).toContain('data-marker-cx="42"');
+    expect(html).toContain('data-marker-pct="42"');
+    // The marker's left edge IS the value's position along the track.
+    expect(html).toContain("left:42%");
+  });
+
+  it("paints one smooth gradient from the scale's tokens, not stepped bands", () => {
+    const aqi = render(h(GradientScale, { positionPct: 30, stops: "aqi" }));
+    // The six official EPA tokens, in order, at the middle of their bands.
+    const stops = [...aqi.matchAll(/var\(--wx-aqi-(\d)\) ([\d.]+)%/g)].map(
+      (m) => [Number(m[1]), Number(m[2])],
+    );
+    expect(stops).toEqual([
+      [1, 8.33],
+      [2, 25],
+      [3, 41.67],
+      [4, 58.33],
+      [5, 75],
+      [6, 91.67],
+    ]);
+    const uv = render(h(GradientScale, { positionPct: 30, stops: "uv" }));
+    expect([...uv.matchAll(/var\(--wx-uv-(\d)\) ([\d.]+)%/g)]).toHaveLength(5);
+    // One gradient element, no per-band rectangles (the old hard seams).
+    expect(aqi.match(/linear-gradient\(/g)).toHaveLength(1);
+    expect(aqi).not.toContain("data-band");
+    expect(aqi).not.toContain("<rect");
+    // No hard seam: no two adjacent stops share a position.
+    const positions = stops.map(([, pct]) => pct);
+    positions.forEach((p, i) => {
+      if (i > 0) expect(p).toBeGreaterThan(positions[i - 1]);
+    });
   });
 
   it("clamps the marker into 0–100", () => {
     expect(
       render(h(GradientScale, { positionPct: 150, stops: "aqi" })),
-    ).toContain('data-marker-cx="100"');
+    ).toContain('data-marker-pct="100"');
     expect(
       render(h(GradientScale, { positionPct: -5, stops: "aqi" })),
-    ).toContain('data-marker-cx="0"');
+    ).toContain('data-marker-pct="0"');
   });
 
-  it("draws a sub-range and uses an outlined marker", () => {
+  it("keeps the accessible text: a named image with the position", () => {
+    const html = render(
+      h(GradientScale, { positionPct: 24.7, stops: "aqi", label: "US AQI 74" }),
+    );
+    expect(html).toContain('role="img"');
+    expect(html).toContain('aria-label="US AQI 74: 25% along the scale"');
+  });
+
+  it("sizes the track and marker by token, never by the card's width", () => {
+    const html = render(h(GradientScale, { positionPct: 50, stops: "aqi" }));
+    expect(html).toContain("h-[var(--wx-scale-track-height)]");
+    expect(html).toContain("size-[var(--wx-scale-marker-size)]");
+    expect(html).toContain("max-w-[var(--wx-scale-max-width)]");
+    // No viewBox that scales with the container (the 85px marker bug).
+    expect(html).not.toContain("<svg");
+    expect(html).not.toContain("viewBox");
+    expect(html).not.toContain("h-auto");
+  });
+
+  it("keeps the 3:1 outline on the track and an outlined marker", () => {
+    const html = render(h(GradientScale, { positionPct: 50, stops: "aqi" }));
+    expect(html).toContain("ring-wx-outline");
+    expect(html).toContain("border-text-primary");
+    expect(html).toContain("bg-surface-card");
+  });
+
+  it("draws a sub-range as a window onto the same full-track gradient", () => {
     const html = render(
       h(GradientScale, {
         positionPct: 60,
@@ -63,9 +120,31 @@ describe("GradientScale", () => {
         rangeEndPct: 80,
       }),
     );
-    expect(html).toContain('x="20"');
-    expect(html).toContain("stroke-text-primary");
-    expect(html).toContain("fill-surface-card");
+    // Window: 20% to 80% of the track; the gradient inside is the full track
+    // (100 / 0.6 = 166.67% of the window) starting 20/60 = 33.33% to the left.
+    expect(html).toContain("left:20%;width:60%");
+    expect(html).toContain("left:-33.33%;width:166.67%");
+    expect(html).toContain("var(--wx-temp-1) 0%");
+    expect(html).toContain("var(--wx-temp-9) 100%");
+  });
+});
+
+describe("GradientScale source", () => {
+  const src = readFileSync(join(__dirname, "GradientScale.tsx"), "utf8");
+
+  it("has no hex, rgba or hard-coded size", () => {
+    expect(src).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(src).not.toMatch(/rgba?\(/);
+    // The only inline styles are computed positions and the token gradient.
+    expect(src).not.toMatch(/style=\{\{[^}]*(color|fill|stroke)/);
+    expect(src).not.toMatch(/\b(?:h|w|size)-\[\d/);
+  });
+
+  it("never sizes the track or marker as a share of the container", () => {
+    const sizing = src.match(/className="[^"]*"/g)!.join(" ");
+    expect(sizing).not.toMatch(/\bh-(full|auto|screen)\b/);
+    expect(sizing).not.toMatch(/\b(?:h|size)-\[?\d+%/);
+    expect(sizing).not.toMatch(/\baspect-/);
   });
 });
 
@@ -81,7 +160,7 @@ describe("ScaleReadout", () => {
     );
     expect(html).toContain(">114<");
     expect(html).toContain("Unhealthy");
-    expect(html).toContain('data-marker-cx="40"');
+    expect(html).toContain('data-marker-pct="40"');
   });
 });
 
@@ -188,10 +267,12 @@ describe("InsightCard", () => {
     expect(html).not.toContain("dove leading-snug");
   });
 
-  it("InsightGrid is 2 columns on mobile and 4 on large screens", () => {
+  it("InsightGrid is 2 columns, and 4 only when its own column is wide (container query, not the viewport)", () => {
     const html = render(h(InsightGrid, null, h("div", null, "a")));
+    expect(html).toContain("@container");
     expect(html).toContain("grid-cols-2");
-    expect(html).toContain("lg:grid-cols-4");
+    expect(html).toContain("@3xl:grid-cols-4");
+    expect(html).not.toContain("lg:grid-cols-4");
   });
 
   it("InsightCardSkeleton is a labelled status region", () => {
@@ -202,7 +283,11 @@ describe("InsightCard", () => {
   });
 
   it("maps sizes to layout classes", () => {
-    expect(insightCardSizeClass("square")).toBe("aspect-square");
+    // A minimum height, never a fixed 1:1 box: a square at phone width is
+    // ~170px and the content overflowed it.
+    expect(insightCardSizeClass("square")).toBe(
+      "min-h-[var(--size-insight-square-min)]",
+    );
     expect(insightCardSizeClass("wide")).toBe("col-span-full");
     expect(insightCardSizeClass("hero")).toContain(
       "max-h-[var(--size-insight-hero-max)]",

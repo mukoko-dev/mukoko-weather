@@ -10,6 +10,11 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 
 const source = readFileSync(resolve(__dirname, "Header.tsx"), "utf-8");
+const menu = readFileSync(resolve(__dirname, "PhoneMenu.tsx"), "utf-8");
+const acct = readFileSync(
+  resolve(__dirname, "../ui/app-account-menu.tsx"),
+  "utf-8",
+);
 const nav = readFileSync(resolve(__dirname, "MobileNav.tsx"), "utf-8");
 const css = readFileSync(resolve(__dirname, "../../app/globals.css"), "utf-8");
 /** The body of one `@layer components` rule in globals.css. */
@@ -18,7 +23,7 @@ function rule(name: string): string {
   return m ? m[1] : "";
 }
 
-const pager = readFileSync(resolve(__dirname, "LocationPager.tsx"), "utf-8");
+const lane = readFileSync(resolve(__dirname, "PlaceLane.tsx"), "utf-8");
 const bottomNav = readFileSync(
   resolve(__dirname, "../ui/mzizi-bottom-nav.tsx"),
   "utf-8",
@@ -36,6 +41,15 @@ describe("Header — mounts the mobile navigation", () => {
     expect(source).toContain(
       "const savedLocations = useAppStore((s) => s.savedLocations);",
     );
+  });
+
+  it("has exactly one navigation landmark per list: no nav wraps the desktop nav", () => {
+    // The header wrapper is a div; "Main navigation" is the only nav in it.
+    expect(source).not.toContain('aria-label="Primary navigation"');
+    expect(source.match(/<nav[\s>]/g)).toHaveLength(1);
+    expect(source).toContain('aria-label="Main navigation"');
+    // Nothing from the bottom bar's places lane is a nav (it nests inside MziziBottomNav's nav).
+    expect(lane.match(/<nav[\s>]/g)).toBeNull();
   });
 
   it("is a sibling of <header>, never inside it (a backdrop-filter header would capture a fixed child)", () => {
@@ -58,10 +72,11 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
   });
 
   it("floats like mukoko-news's island: inset from the edges, lifted, max-w-md, pill, token border, shadow, blur", () => {
-    expect(bottomNav).toContain("fixed inset-x-4");
+    // The same inset on the sides and the bottom, from the one float grid.
     expect(bottomNav).toContain(
-      "bottom-[calc(env(safe-area-inset-bottom,0px)+var(--mobile-nav-inset))]",
+      "fixed left-[var(--float-left)] right-[var(--float-right)]",
     );
+    expect(bottomNav).toContain("bottom-[var(--float-bottom)]");
     expect(bottomNav).toContain("z-50 mx-auto");
     expect(bottomNav).toContain("max-w-md");
     // Never docked: no full-width edge-to-edge bar, no top-border-only bar.
@@ -74,22 +89,101 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
     expect(bottomNav).toContain("backdrop-blur-xl");
   });
 
-  it("is 4rem tall; --mobile-nav-height is bar + gap + the pager pill; clearance adds the lift and safe area", () => {
+  it("is 4.5rem tall; --mobile-nav-clearance is the bar plus the lift, the safe area and a breath", () => {
     expect(bottomNav).toContain("h-[var(--mobile-nav-bar-height)]");
-    expect(bottomNav).toContain("h-[var(--touch-target-min)] max-w-full");
-    expect(css).toContain("--mobile-nav-bar-height: 4rem;");
-    expect(css).toContain("--mobile-nav-inset: 0.75rem;");
-    expect(css).toMatch(
-      /--mobile-nav-height: calc\(\s*var\(--mobile-nav-bar-height\) \+ var\(--mobile-nav-gap\) \+\s*var\(--touch-target-min\)\s*\);/,
+    expect(css).toContain("--mobile-nav-bar-height: 4.5rem;");
+    // The lift is the grid's bottom (inset plus the safe area), so the bar
+    // sits as far from the bottom edge as from the sides, and there is no
+    // second token for it.
+    expect(css).not.toContain("--mobile-nav-inset");
+    expect(css).toContain("--float-inset: 1rem;");
+    // The inset plus a small lift (owner, 2026-11-04), safe area included.
+    expect(css.replace(/\s+/g, " ")).toContain(
+      "--float-bottom: calc( env(safe-area-inset-bottom, 0px) + var(--float-inset) + var(--float-lift) );",
     );
-    expect(css).toMatch(
-      /--mobile-nav-clearance: calc\(\s*env\(safe-area-inset-bottom, 0px\) \+ var\(--mobile-nav-inset\) \+\s*var\(--mobile-nav-height\)/,
+    expect(css.replace(/\s+/g, " ")).toContain(
+      "--mobile-nav-clearance: calc( var(--float-bottom) + var(--mobile-nav-bar-height) + 0.5rem );",
     );
   });
 
-  it("the nav wrapper lets taps through; only the pills catch them", () => {
-    expect(bottomNav).toContain("pointer-events-none fixed");
-    expect(bottomNav).toContain("pointer-events-auto rounded-full");
+  it("gives the pinned items one preset width, wide enough for the longest label (owner, 2026-11-05)", () => {
+    expect(css).toContain("--mobile-nav-item-width: 6rem;");
+    expect(bottomNav).toContain("w-[var(--mobile-nav-item-width)]");
+    // Rem, so it follows the label's text size; the real browser check
+    // (scripts/browser-check/bottom-bar.mjs) measures that "Locations" fits.
+    expect(css).toMatch(/--mobile-nav-item-width:\s*[\d.]+rem;/);
+  });
+
+  it("is in proportion (owner, 2026-11-04): 14px labels, 18px icons, pill-sized targets, 8px between them", () => {
+    // At 16px labels and 21px icons the content filled the 64px bar edge to
+    // edge: 56px of item in 64px, and chips 48px in 64px, with 4px between.
+    expect(css).toContain("--text-nav-label: 0.875rem;");
+    expect(css).not.toContain("--text-nav-label: 1rem;");
+    expect(bottomNav).toContain("size-[18px]");
+    expect(bottomNav).not.toContain("size-[21px]");
+    // A pinned item is a pill about as tall as a chip, not a bar-high oval
+    // (its focus ring and hover follow its shape); the bar-high part is the
+    // tappable area, from .plover.
+    const link = bottomNav.match(/"(plover [^"]*)",\s*hasLane/);
+    expect(link).not.toBeNull();
+    expect(link?.[1]).toContain("min-h-[var(--touch-target-min)]");
+    expect(link?.[1]).not.toMatch(/(^|\s)h-full(\s|$)/);
+    expect(bottomNav).toContain(
+      '"gap-[var(--float-gap)] px-[var(--float-gap)]"',
+    );
+  });
+
+  it("every target's tappable area is the bar's height, derived from the token, and fits inside the bar", () => {
+    // One rule serves the pinned items (.plover) and the lane's chips (.lark).
+    const hit = css.match(/\.plover::after,\s*\.lark::after\s*\{([^}]*)\}/);
+    expect(hit).not.toBeNull();
+    const body = hit?.[1] ?? "";
+    // Stretched to exactly the bar, centred on the link: no hard-coded px or
+    // rem guess at the bar's size, so changing the token moves the area too.
+    expect(body).toContain(
+      "inset-block: calc((100% - var(--mobile-nav-bar-height)) / 2);",
+    );
+    expect(body).toMatch(/inset-inline:\s*0;/);
+    // The link's own box is a touch target tall and its content fits the bar,
+    // so the area is an extension and never a shrink.
+    const bar = css.match(/--mobile-nav-bar-height:\s*([\d.]+)rem;/);
+    const touch = css.match(/--target-floor:\s*(\d+)px;/);
+    expect(bar).not.toBeNull();
+    expect(touch).not.toBeNull();
+    expect(Number(bar?.[1]) * 16).toBeGreaterThan(Number(touch?.[1]));
+    expect(rule("lark")).toContain("min-h-[var(--touch-target-min)]");
+    // Both kinds of target carry it.
+    expect(bottomNav).toMatch(/"plover relative /);
+  });
+
+  it("the current item is a soft pill fill (Apple's tab bars), not a line on the bar's top edge", () => {
+    // No accent bar span and no hand-set colour: the look is one shared rule.
+    const code = bottomNav.replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(code).not.toContain("h-[2.5px]");
+    expect(code).not.toContain("text-[var(--brand-accent");
+    expect(bottomNav).not.toContain("-top-[3px]");
+    // The rule serves a pinned item and a lane chip alike: ONE "you are here".
+    const at = css.indexOf(
+      '.plover:is([aria-current]:not([aria-current="false"])),',
+    );
+    expect(at).toBeGreaterThan(-1);
+    const rule = css.slice(at, css.indexOf("}", at));
+    expect(rule).toContain(
+      '.lark:is([aria-current]:not([aria-current="false"]))',
+    );
+    expect(rule).toContain("bg-container-cobalt");
+    expect(rule).toContain("text-on-container-cobalt");
+  });
+
+  it("is ONE surface: the nav landmark is the pill, with no second pill and no leftover tokens", () => {
+    const code = bottomNav.replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(code.match(/FLOATING_SURFACE/g)).toHaveLength(2); // the const and its one use
+    expect(code).not.toContain("indicator");
+    expect(code).not.toContain("--mobile-nav-gap");
+    expect(code).not.toContain("--mobile-nav-height");
+    expect(code).not.toContain("flex-col items-center gap-");
+    expect(css).not.toContain("--mobile-nav-gap");
+    expect(css).not.toContain("--mobile-nav-height");
   });
 
   it("items are next/link with aria-current and the 48px touch-target floor", () => {
@@ -111,15 +205,17 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
   });
 });
 
-describe("MobileNav — items and page dots", () => {
-  it("has Map, My Location and Locations, in that order", () => {
-    const order = ['id: "map"', 'id: "my-location"', 'id: "locations"'].map(
-      (k) => nav.indexOf(k),
-    );
+describe("MobileNav — pinned items and the places lane", () => {
+  it("pins Map at the start and Locations at the end, with the lane between them", () => {
+    const order = ['id: "map"', 'id: "locations"'].map((k) => nav.indexOf(k));
     expect(order.every((i) => i > 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(nav).toContain("leading={leading}");
+    expect(nav).toContain("trailing={trailing}");
+    expect(nav).toContain("lane={");
+    // My Location is the lane's first chip, not a bar item.
+    expect(nav).not.toContain('id: "my-location"');
     expect(nav).toContain("href: mapHref");
-    expect(nav).toContain("href: MY_LOCATION_HREF");
     expect(nav).toContain('href: "/locations"');
     expect(nav).toContain('? "Weather map"');
     expect(nav).toContain('ariaLabel: "All locations"');
@@ -127,23 +223,22 @@ describe("MobileNav — items and page dots", () => {
 
   it("marks the current page explicitly (Map never lights up on /explore)", () => {
     expect(nav).toContain("activeId={mobileNavActiveId(pathname)}");
-    expect(nav).toContain('return "none";');
+    expect(nav).toContain('pathname === "/locations" ? "locations" : "none"');
   });
 
-  it("shows the place sequence as tappable LocationPager dots above the items, behind a harness boundary", () => {
-    expect(nav).toContain("indicator={");
-    expect(nav).toContain("<LocationPager");
-    expect(nav).toMatch(/<MziziHarness\s+name="location-pager"/);
-    expect(pager).toContain("<Link");
-    expect(pager).toContain('aria-current={isActive ? "page" : undefined}');
-    expect(pager).toContain("aria-label={name}");
-    expect(pager).toContain(
-      "h-[var(--touch-target-min)] min-w-[var(--touch-target-min)]",
-    );
-    expect(pager).toContain('method: "saved"');
+  it("shows the place sequence as tappable chips in the lane, behind a harness boundary that keeps a My Location link", () => {
+    expect(nav).toContain("<PlaceLane");
+    expect(nav).toMatch(/<MziziHarness\s+name="place-lane"/);
+    expect(nav).toContain("fallback={<LaneFallback />}");
+    expect(nav).not.toContain("LocationPager");
+    expect(lane).toContain("<Link");
+    expect(lane).toContain('aria-current={isActive ? "page" : undefined}');
+    expect(lane).toContain("trackPlaceChange(chip.href, chip.slug, from)");
+    // The chips are .lark: one touch target tall (see globals.css).
+    expect(rule("lark")).toContain("min-h-[var(--touch-target-min)]");
   });
 
-  it("labels use the 16px --text-nav-label token, not upstream's 10px", () => {
+  it("labels use the 14px (Mzizi body-sm) --text-nav-label token, not upstream's 10px or the 16px that read as too large", () => {
     expect(bottomNav).toContain("text-[length:var(--text-nav-label)]");
     expect(bottomNav).not.toContain("text-[10px]");
   });
@@ -165,52 +260,183 @@ describe("MobileNav — items and page dots", () => {
   });
 });
 
-describe("Header — mobile ⋯ menu holds the moved destinations", () => {
-  it("has a labelled disclosure button that controls the menu", () => {
-    expect(source).toContain('aria-label="More options"');
-    expect(source).toContain('aria-controls="mobile-more-menu"');
-    expect(source).toContain("aria-expanded={menuOpen}");
-    expect(source).toContain('id="mobile-more-menu"');
-    expect(source).toContain("import { Ellipsis");
+describe("Header — the phone menu is the Mzizi account menu, filled with the header's rows", () => {
+  it("PhoneMenu is a thin wrapper around the vendored Mzizi app-account-menu (no custom menu left)", () => {
+    expect(menu).toContain('from "@/components/ui/app-account-menu"');
+    expect(menu).toContain("<AccountMenu");
+    // The disclosure, outside-click, Escape and focus return are the Mzizi
+    // component's; the wrapper keeps none of its own.
+    expect(menu).not.toMatch(
+      /document\.addEventListener|menuOpen|menuRef|menuButtonRef/,
+    );
+    expect(menu).not.toContain("mobile-more-menu");
   });
 
-  it("is mobile-only, sitting inside the existing icon pill", () => {
-    expect(source).toContain(
-      '<div className="relative sm:hidden" ref={menuRef}>',
-    );
+  it("the vendored component is a <details> disclosure with a per-instance id, a POST sign-out form and a documented header", () => {
+    expect(acct).toContain("<details");
+    expect(acct).toContain("<summary");
+    expect(acct).toContain("const panelId = useId();");
+    expect(acct).toContain("aria-controls={panelId}");
+    expect(acct).toContain('method="post"');
+    expect(acct).toContain("https://api.mzizi.dev/v1/ui/app-account-menu");
+    expect(acct).toContain("780457ae94afd5229a78a5d7ba5146bda8260812");
+    // Each deviation is listed in the header (numbered), like mzizi-bottom-nav.
+    expect(acct).toMatch(/Local changes from upstream/);
+    for (let n = 1; n <= 11; n++) expect(acct).toContain(` * ${n}. `);
   });
 
-  it("contains Explore, History, Aviation, My Weather and Use my location", () => {
-    expect(source).toMatch(/href="\/explore"[\s\S]*?\n\s*Explore\s*<\/Link>/);
-    expect(source).toMatch(/href="\/history"[\s\S]*?\n\s*History\s*<\/Link>/);
-    expect(source).toMatch(/href="\/aviation"[\s\S]*?\n\s*Aviation\s*<\/Link>/);
-    expect(source).toMatch(
-      /openMyWeather\(\);[\s\S]*?\n\s*My Weather\s*<\/button>/,
+  it("closes on Escape (focus returns to the trigger), an outside click and a chosen row", () => {
+    expect(acct).toContain('e.key !== "Escape"');
+    expect(acct).toContain('querySelector<HTMLElement>("summary")?.focus()');
+    expect(acct).toContain(
+      'document.addEventListener("pointerdown", onPointerDown)',
     );
-    expect(source).toMatch(/void handleMyLocation\(\);[\s\S]*?Use my location/);
+    expect(acct).toContain(
+      'document.removeEventListener("pointerdown", onPointerDown)',
+    );
+    // iOS Safari synthesises no mouse events for a tap on a non-clickable
+    // element, so a mousedown listener never fires there.
+    expect(acct).not.toContain('"mousedown"');
+    expect(acct).toContain('closest("a, [data-close-menu]")');
+    // The two action rows opt in to closing; Notifications expands in place.
+    expect(menu.match(/data-close-menu/g)).toHaveLength(2);
   });
 
-  it("keeps Shamwari in the menu behind the shamwari_chat flag", () => {
-    expect(source).toContain("{shamwariEnabled && (");
-    expect(source).toContain('href="/shamwari"');
+  it("closes when focus moves to an element outside the menu, and ignores a null relatedTarget", () => {
+    // Tab / Shift+Tab out of the open panel: relatedTarget is the next element.
+    expect(acct).toContain("onBlur={(e) => {");
+    expect(acct).toContain("const next = e.relatedTarget;");
+    expect(acct).toContain(
+      "next instanceof Node && !e.currentTarget.contains(next)",
+    );
+    // A null relatedTarget (a click on the panel's padding, the window losing
+    // focus) must NOT close it: the guard requires a real Node.
+    expect(acct).not.toMatch(/relatedTarget\s*(===|==|!==)\s*null/);
+    // Escape still hands focus back to the trigger.
+    expect(acct).toContain('querySelector<HTMLElement>("summary")?.focus()');
   });
 
-  it("closes on item activation, outside click and Escape (returning focus)", () => {
-    expect(source).toContain("onClick={() => setMenuOpen(false)}");
-    expect(source).toContain(
-      "setMenuOpen(false);\n                            openMyWeather();",
+  it("is mobile-only in the header, sitting inside the existing icon pill (ellipsis trigger)", () => {
+    expect(source).toContain('<div className="relative sm:hidden">');
+    expect(source).toContain("<PhoneMenu");
+    expect(source).toContain('trigger="ellipsis"');
+    expect(source).toContain('buttonClassName="bee"');
+    expect(menu).toContain('"More options"');
+  });
+
+  it("lists the header's destinations from the shared list (Shamwari behind its flag)", () => {
+    expect(menu).toContain("visibleHeaderDestinations(isFeatureEnabled)");
+    expect(menu).toContain("destinations.map(");
+    expect(source).toContain("visibleHeaderDestinations(isFeatureEnabled)");
+    expect(source).toContain("destinations.map(");
+  });
+
+  it("has My Weather and Use my location rows that close the menu", () => {
+    expect(menu).toMatch(
+      /data-close-menu\s+onClick=\{\(\) => openMyWeather\(\)\}[\s\S]*?My Weather/,
     );
-    expect(source).toContain('e.key === "Escape"');
-    expect(source).toContain("menuButtonRef.current?.focus()");
-    expect(source).toContain(
-      'document.removeEventListener("mousedown", handleClick)',
-    );
+    expect(menu).toMatch(/void handleMyLocation\(\)[\s\S]*?Use my location/);
   });
 
   it("the Use my location item keeps the busy state and double-tap guard", () => {
-    expect(source).toContain("disabled={locating}");
-    expect(source).toContain("aria-busy={locating}");
-    expect(source).toContain("if (locating) return;");
+    expect(menu).toContain("disabled={locating}");
+    expect(menu).toContain("aria-busy={locating}");
+    expect(menu).toContain("if (locating) return;");
+  });
+
+  it("rows are 48px and grouped under labelled sections (Account, Weather, Pages)", () => {
+    expect(acct).toContain("min-h-[var(--touch-target-min)]");
+    expect(menu).toContain("ACCOUNT_MENU_ROW_CLASS");
+    for (const name of ["account", "weather", "pages"]) {
+      expect(menu).toContain('groupLabel("' + name + '")');
+    }
+  });
+});
+
+describe("Header — nothing the header offers is lost in the phone menu", () => {
+  const nav = readFileSync(
+    resolve(__dirname, "../../lib/header-nav.ts"),
+    "utf-8",
+  );
+
+  it("every header nav destination (from the shared list) is in the phone menu, flags included", async () => {
+    const { HEADER_DESTINATIONS, visibleHeaderDestinations } =
+      await import("@/lib/header-nav");
+    // Both surfaces render the same function over the same list, so they
+    // cannot drift; this pins that wiring and the list's content.
+    expect(source).toContain("visibleHeaderDestinations(isFeatureEnabled)");
+    expect(menu).toContain("visibleHeaderDestinations(isFeatureEnabled)");
+    expect(HEADER_DESTINATIONS.map((d) => d.href)).toEqual([
+      "/explore",
+      "/shamwari",
+      "/history",
+      "/aviation",
+    ]);
+    expect(visibleHeaderDestinations(() => true)).toHaveLength(4);
+    expect(visibleHeaderDestinations(() => false).map((d) => d.href)).toEqual([
+      "/explore",
+      "/history",
+      "/aviation",
+    ]);
+    // The header must not hard-code a destination outside the shared list.
+    for (const d of HEADER_DESTINATIONS) {
+      expect(source, d.href).not.toContain(`href: "${d.href}"`);
+    }
+  });
+
+  it("every action in the header source has its phone-menu counterpart", () => {
+    // Derived from the header's own source: its internal links, its labelled
+    // controls and its My Weather button.
+    const headerHrefs = [...source.matchAll(/href="(\/[^"]*)"/g)]
+      .map((m) => m[1])
+      .filter((h) => h !== "/"); // "/" is the brand mark, not an action
+    expect(headerHrefs.sort()).toEqual(["/auth/signin", "/profile"].sort());
+    expect(menu).toContain('href="/profile"');
+    expect(menu).toContain('signInHref="/auth/signin"');
+
+    // Map: the header links mapHref (weatherMapHref) — the menu does too.
+    expect(source).toContain("href={mapHref}");
+    expect(source).toContain("weatherMapHref(mapSlug)");
+    expect(menu).toContain("href={weatherMapHref(mapSlug)}");
+    expect(menu).toContain("Choose a location for the weather map");
+
+    // Notifications: the header's bell and the menu row show the same copy.
+    expect(source).toContain('aria-label="Notifications"');
+    expect(menu).toContain("Notifications");
+    expect(source).toContain("{NOTIFICATIONS_EMPTY_TEXT}");
+    expect(menu).toContain("{NOTIFICATIONS_EMPTY_TEXT}");
+    expect(nav).toContain('"No notifications yet"');
+
+    // My Weather and Use my location.
+    expect(source).toContain("openMyWeather()");
+    expect(menu).toContain("openMyWeather()");
+    expect(menu).toContain("Use my location");
+  });
+
+  it("sign-out is the Mzizi POST form, handled by /auth/signout", () => {
+    expect(menu).toContain('signOutAction="/auth/signout"');
+    const route = readFileSync(
+      resolve(__dirname, "../../app/auth/signout/route.ts"),
+      "utf-8",
+    );
+    expect(route).toContain("export const POST");
+    expect(route).toContain("isSameOrigin(request)");
+    expect(route).toContain("status: 303");
+    // The Location is relative: an absolute one built from request.url can be
+    // http://localhost:PORT behind a TLS-terminating proxy. The behaviour is
+    // pinned in src/app/auth/signout/signout-route.test.ts.
+    expect(route).toContain('location: "/auth/signout"');
+    expect(route).not.toContain("new URL(");
+  });
+
+  it("the hero's phone trigger is the profile button: photo, initials or the user icon", () => {
+    expect(menu).toContain('trigger === "ellipsis"');
+    expect(menu).toContain(
+      "initials={authedUser ? initialsFor(authedUser) : undefined}",
+    );
+    expect(menu).toContain("imageUrl={authedUser?.profilePictureUrl ?? null}");
+    expect(acct).toContain("isValidImageUrl(imageUrl)");
+    expect(acct).toContain("<User size={20}");
   });
 });
 
@@ -227,28 +453,28 @@ describe("Header — header pill on phones", () => {
 
 describe("Header — My Location (GPS) action", () => {
   it("uses the shared geolocation flow with auto-create (same as My Weather modal)", () => {
-    expect(source).toContain('await import("@/lib/geolocation")');
-    expect(source).toContain("detectUserLocation({ autoCreate: true })");
+    expect(menu).toContain('await import("@/lib/geolocation")');
+    expect(menu).toContain("detectUserLocation({ autoCreate: true })");
   });
 
   it("selects the detected location and returns to the home page (no slug URL)", () => {
-    expect(source).toContain("setSelectedLocation(result.location.slug)");
-    expect(source).toContain('router.push("/")');
-    expect(source).not.toContain("router.push(`/${result.location.slug}`)");
+    expect(menu).toContain("setSelectedLocation(result.location.slug)");
+    expect(menu).toContain('router.push("/")');
+    expect(menu).not.toContain("router.push(`/${result.location.slug}`)");
   });
 
   it("only accepts a valid location slug from geolocation", () => {
-    expect(source).toContain("isLocationSlug(result.location.slug)");
+    expect(menu).toContain("isLocationSlug(result.location.slug)");
   });
 
   it("falls back to the My Weather modal on denial or failure", () => {
-    expect(source).toMatch(/} else \{\s*openMyWeather\(\);/);
+    expect(menu).toMatch(/} else \{\s*openMyWeather\(\);/);
   });
 
   it("tracks geolocation_result and location_changed analytics events", () => {
-    expect(source).toContain('trackEvent("geolocation_result"');
-    expect(source).toContain('trackEvent("location_changed"');
-    expect(source).toContain('method: "geolocation"');
+    expect(menu).toContain('trackEvent("geolocation_result"');
+    expect(menu).toContain('trackEvent("location_changed"');
+    expect(menu).toContain('method: "geolocation"');
   });
 });
 
@@ -295,8 +521,8 @@ describe("Header — weather map link", () => {
   });
 
   it("derives the slug from the current location (first path segment or store)", () => {
-    expect(source).toMatch(
-      /import \{[^}]*currentLocationSlug[^}]*isLocationSlug[^}]*\} from "@\/lib\/current-slug"/,
+    expect(source).toContain(
+      'import { currentLocationSlug } from "@/lib/current-slug"',
     );
     expect(source).toContain(
       "const mapSlug = currentLocationSlug(pathname, selectedLocation);",
@@ -304,9 +530,7 @@ describe("Header — weather map link", () => {
   });
 
   it("links to /{slug}/map when a location is known, otherwise to /explore", () => {
-    expect(source).toContain(
-      'const mapHref = mapSlug ? `/${mapSlug}/map` : "/explore";',
-    );
+    expect(source).toContain("const mapHref = weatherMapHref(mapSlug);");
     expect(source).toContain("href={mapHref}");
     expect(source).toContain("Choose a location for the weather map");
   });
@@ -314,8 +538,93 @@ describe("Header — weather map link", () => {
 
 describe("Header — My Location button", () => {
   it("seeds the home page with the found place and refreshes it in place on /", () => {
-    expect(source).toContain("writeLastLocationCookie(result.location.slug)");
-    expect(source).toContain("new CustomEvent(CURRENT_LOCATION_EVENT");
-    expect(source).toContain('router.push("/")');
+    expect(menu).toContain("writeLastLocationCookie(result.location.slug)");
+    expect(menu).toContain("new CustomEvent(CURRENT_LOCATION_EVENT");
+    expect(menu).toContain('router.push("/")');
+  });
+});
+
+describe("PhoneMenu — one menu, two homes", () => {
+  const hero = readFileSync(
+    resolve(__dirname, "../weather/CurrentConditions.tsx"),
+    "utf-8",
+  );
+
+  it("is the header's phone menu and the hero's, from one component", () => {
+    expect(source).toContain("<PhoneMenu");
+    expect(hero).toContain("<PhoneMenu");
+    // In the hero it is the profile trigger, a round card-surface control in
+    // the fixed phone icon group (.hadeda) beside Share.
+    expect(hero).toContain(
+      '<PhoneMenu trigger="profile" buttonClassName="duiker" />',
+    );
+  });
+
+  it("lists the account (Account when signed in, Sign in otherwise)", () => {
+    expect(menu).toContain('href="/profile"');
+    expect(acct).toContain('signInLabel = "Sign in"');
+  });
+});
+
+describe("Header over the sky hero", () => {
+  it("is marked so CSS can hide it on phones and make it transparent from sm", () => {
+    expect(source).toContain("data-site-header");
+    expect(source).toContain('data-scrolled={isScrolled ? "" : undefined}');
+    expect(css).toContain("body:has([data-sky-hero]) [data-site-header]");
+    const phone = css.slice(css.indexOf("@media (max-width: 639.98px)"));
+    expect(phone.slice(0, phone.indexOf("\n}\n"))).toContain("display: none");
+  });
+
+  it("keeps the bottom controls: only the <header> is hidden, never MobileNav", () => {
+    expect(css).not.toMatch(/\[data-sky-hero\][^{]*MobileNav/);
+    expect(source).toContain("<MobileNav");
+  });
+
+  it("gains its blurred surface only after scroll (unchanged)", () => {
+    expect(source).toContain("bg-surface-base/70 backdrop-blur-xl");
+  });
+});
+
+describe("Header over the sky: white text never reaches the popovers", () => {
+  it("scopes the sky-ink override to the brand mark and desktop links, not the <header>", () => {
+    const at = css.indexOf("[data-header-ink] {");
+    expect(at).toBeGreaterThan(-1);
+    // The selector that sets the text tokens ends in [data-header-ink].
+    const sel = css.slice(
+      css.lastIndexOf("body:has", at),
+      at + "[data-header-ink]".length,
+    );
+    expect(sel).toContain("[data-site-header]:not([data-scrolled])");
+    expect(sel).toMatch(/\[data-header-ink\]$/);
+    // No rule sets the text tokens directly on the header root.
+    expect(css).not.toMatch(
+      /\[data-site-header\]:not\(\[data-scrolled\]\)\s*\{[^}]*--color-text-/,
+    );
+  });
+
+  it("marks only the logo wrapper and the desktop nav as sky ink", () => {
+    expect(source.match(/data-header-ink/g)).toHaveLength(2);
+    expect(source).toMatch(
+      /<div data-header-ink className="flex min-w-0 items-center">/,
+    );
+    expect(source).toMatch(
+      /<nav\s+data-header-ink\s+className="hidden sm:flex/,
+    );
+  });
+
+  it("keeps the notifications popover and the ⋯ menu outside the ink scopes, on a card surface", () => {
+    const popover = source.indexOf(
+      'aria-label="Notifications"\n                    className=',
+    );
+    const dialog = source.indexOf('role="dialog"');
+    expect(dialog).toBeGreaterThan(-1);
+    // The popover opens after both ink elements have closed (the action pill
+    // follows the nav), and sits on bg-surface-card.
+    expect(source.indexOf("</nav>")).toBeLessThan(dialog);
+    expect(source.slice(dialog, dialog + 400)).toContain("bg-surface-card");
+    expect(popover === -1 || popover > source.indexOf("</nav>")).toBe(true);
+    expect(acct).toContain("bg-popover");
+    expect(menu).not.toContain("data-header-ink");
+    expect(acct).not.toContain("data-header-ink");
   });
 });

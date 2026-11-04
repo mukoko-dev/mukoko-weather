@@ -1,8 +1,10 @@
 // mukoko-weather-ai: Shamwari Weather (mukoko-dev/mukoko-weather#148).
 // No route and no workers.dev address. Reached over service bindings
 // (AI_SERVICE) only: mukoko-weather-api forwards /v1/ai/*, and
-// mukoko-weather-internal forwards the Python backend's model calls
-// (service key checked there) to /internal/chat/completions.
+// mukoko-weather-internal forwards the signed-in app's calls
+// (/internal/summary, ...) after checking its service key. (It also forwards
+// /internal/chat/completions, the deleted Python backend's model passthrough,
+// which has no caller left in this repository.)
 //
 // Every model call goes through the `shamwari` AI Gateway (Guardrails on,
 // logging off) to an open-weights Workers AI model. The guardrails block
@@ -23,7 +25,9 @@
   "workers_dev": false,
   "preview_urls": false,
   "keep_vars": true,
-  // Invocation metadata only. The code logs no prompts, answers or keys.
+  // Invocation metadata, and one warn line per failed model call (route,
+  // class, stage, error code and status: weather_core::ai::failure). The code
+  // logs no prompts, answers, error messages or keys.
   "observability": {
     "enabled": true,
     "redact_query_string": true,
@@ -50,21 +54,36 @@
     "AI_MODEL": "@cf/zai-org/glm-5.3-flash",
   },
   "ai": { "binding": "AI" },
-  "services": [{ "binding": "FORECAST", "service": "mukoko-weather-forecast" }],
+  "services": [
+    { "binding": "FORECAST", "service": "mukoko-weather-forecast" },
+    // The history analysis reads the same history the app shows (recorded days,
+    // archive days, and a fetch for the rest). Deploy places BEFORE this Worker.
+    { "binding": "PLACES", "service": "mukoko-weather-places" },
+  ],
   "kv_namespaces": [
-    // Summaries (30 min, 1 min for fallback text) and history analyses (1 h).
+    // Summaries (30, 60 or 120 min by tag, 1 min for fallback text) and
+    // history analyses (1 h).
     { "binding": "AI_CACHE", "id": "b0576f0244c0465d96a816a776e44e18" },
   ],
   "d1_databases": [
     {
-      // place_daily, written by mukoko-weather-jobs; read for history.
+      // rate_events (migration 0002) holds the hourly model budgets
+      // (weather_core::budget): the signed-in person's ai-summary,
+      // ai-followup and ai-agriculture, and the visitor's AI location
+      // search (15 an hour per client), history analysis (10 an hour
+      // per client) and the report wizard's follow-up questions (10 an
+      // hour per client; over it the fixed questions answer). Rows hold
+      // a hash of the person id or IP, never the
+      // id. This Worker only counts and inserts rows; the table and its
+      // migrations belong to the places and stations Workers.
       "binding": "WEATHER_DB",
       "database_name": "mukoko-weather",
       "database_id": "9a8846ea-ee34-4479-bc4c-790ee2beabee",
       "migrations_dir": "../d1/migrations",
     },
   ],
-  // Per client IP (CF-Connecting-IP, passed on by mukoko-weather-api).
+  // Per client IP (CF-Connecting-IP, passed on by mukoko-weather-api): the
+  // public routes only.
   "ratelimits": [
     {
       "name": "RATE_LIMITER",

@@ -16,11 +16,12 @@
  *   7. Footer        — product + version line
  */
 
-import Link from "next/link";
-import { ChevronRight, LogOut, SlidersHorizontal } from "lucide-react";
+import { LogOut, SlidersHorizontal } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import type { ProfileOrganization } from "@/lib/profile";
 import { ProfileIdentity } from "@/components/profile/ProfileIdentity";
+import { ProfileGroup } from "@/components/profile/ProfileGroup";
+import { GroupedRow } from "@/components/profile/GroupedRow";
 import { ProfileOrganizations } from "@/components/profile/ProfileOrganizations";
 import { ProfileDevices } from "@/components/profile/ProfileDevices";
 import { ProfileAppearance } from "@/components/profile/ProfileAppearance";
@@ -43,6 +44,9 @@ export function ProfileClient({
   organizations: ProfileOrganization[];
 }) {
   const openMyWeather = useAppStore((s) => s.openMyWeather);
+  const savedCount = useAppStore((s) => s.savedLocations.length);
+  const activityCount = useAppStore((s) => s.selectedActivities.length);
+  const preferencesValue = `${savedCount} ${savedCount === 1 ? "place" : "places"} · ${activityCount} ${activityCount === 1 ? "activity" : "activities"}`;
 
   return (
     <>
@@ -53,33 +57,14 @@ export function ProfileClient({
         pictureUrl={user.pictureUrl}
       />
 
-      <section aria-labelledby="preferences-heading" className="guineafowl">
-        <h2 id="preferences-heading" className="guineafowl-heading">
-          Preferences
-        </h2>
-        <button
-          type="button"
+      <ProfileGroup id="preferences-heading" title="Preferences">
+        <GroupedRow
+          icon={SlidersHorizontal}
+          label="My Weather"
+          value={preferencesValue}
           onClick={() => openMyWeather()}
-          className="guineafowl-row"
-        >
-          <span className="flex min-w-0 items-center gap-3">
-            <SlidersHorizontal
-              className="h-5 w-5 shrink-0 text-primary"
-              aria-hidden="true"
-            />
-            <span className="min-w-0">
-              <span className="block font-medium">My Weather</span>
-              <span className="block text-xs text-text-tertiary">
-                Your saved location, activities, and app settings
-              </span>
-            </span>
-          </span>
-          <ChevronRight
-            className="h-4 w-4 shrink-0 text-text-tertiary"
-            aria-hidden="true"
-          />
-        </button>
-      </section>
+        />
+      </ProfileGroup>
 
       <ProfileOrganizations organizations={organizations} />
 
@@ -89,14 +74,16 @@ export function ProfileClient({
 
       <ProfileNavigation />
 
-      <Link
-        href="/auth/signout"
-        prefetch={false}
-        className="impala mt-6 flex w-full items-center justify-center gap-2"
-      >
-        <LogOut className="h-4 w-4" aria-hidden="true" />
-        Sign out
-      </Link>
+      <div className="guineafowl-card">
+        <GroupedRow
+          icon={LogOut}
+          label="Sign out"
+          href="/auth/signout"
+          prefetch={false}
+          tone="danger"
+          chevron={false}
+        />
+      </div>
 
       <div className="dove mt-8 text-center">
         <p>{APP_VERSION_LABEL}</p>

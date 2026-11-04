@@ -13,6 +13,14 @@ export interface BreadcrumbItem {
   plain?: boolean;
 }
 
+/** The leading "Home" item every trail starts with. */
+export const HOME_CRUMB: BreadcrumbItem = { label: "Home", href: "/" };
+
+/** A full trail: Home, then the given items. */
+export function trail(...rest: BreadcrumbItem[]): BreadcrumbItem[] {
+  return [HOME_CRUMB, ...rest];
+}
+
 interface BreadcrumbProps {
   items: BreadcrumbItem[];
   className?: string;
@@ -48,15 +56,15 @@ export function BreadcrumbSkeleton({ className }: { className?: string }) {
       className={cn("mx-auto max-w-5xl px-4 pt-4 sm:px-6 md:px-8", className)}
     >
       <div className="flex items-center gap-1">
-        <div className="h-3 w-10 animate-pulse rounded bg-text-tertiary/15" />
+        <div className="h-3 w-10 animate-pulse rounded-[var(--radius-sm)] bg-text-tertiary/15" />
         <span aria-hidden="true" className="text-text-tertiary/30">
           /
         </span>
-        <div className="h-3 w-14 animate-pulse rounded bg-text-tertiary/15" />
+        <div className="h-3 w-14 animate-pulse rounded-[var(--radius-sm)] bg-text-tertiary/15" />
         <span aria-hidden="true" className="text-text-tertiary/30">
           /
         </span>
-        <div className="h-3 w-16 animate-pulse rounded bg-text-tertiary/15" />
+        <div className="h-3 w-16 animate-pulse rounded-[var(--radius-sm)] bg-text-tertiary/15" />
       </div>
     </div>
   );
@@ -94,7 +102,7 @@ export function Breadcrumb({
                   {item.href ? (
                     <Link
                       href={item.href}
-                      className="flex min-h-[var(--touch-target-min)] min-w-0 items-center truncate transition-colors hover:text-text-secondary focus-visible:rounded focus-visible:outline-2 focus-visible:outline-primary"
+                      className="flex min-h-[var(--touch-target-min)] min-w-0 items-center truncate transition-colors hover:text-text-secondary focus-visible:rounded-[var(--radius-sm)] focus-visible:outline-2 focus-visible:outline-primary"
                     >
                       <span className="truncate">{item.label}</span>
                     </Link>
@@ -134,7 +142,7 @@ export function Breadcrumb({
                 {item.href ? (
                   <Link
                     href={item.href}
-                    className="dik-dik hover:text-text-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:rounded"
+                    className="dik-dik hover:text-text-secondary transition-colors focus-visible:outline-2 focus-visible:outline-primary focus-visible:rounded-[var(--radius-sm)]"
                   >
                     {item.label}
                   </Link>

@@ -104,7 +104,9 @@ describe("AviationWeather — station chip row layout stability", () => {
       resolve(__dirname, "../../app/globals.css"),
       "utf-8",
     );
-    expect(css).toMatch(/--touch-target-min:\s*48px/);
+    // The touch target is the Bundu floor's hit region (49px).
+    expect(css).toMatch(/--target-floor:\s*49px/);
+    expect(css).toMatch(/--touch-target-min:\s*var\(--target-floor\)/);
   });
 });
 
@@ -184,7 +186,7 @@ describe("AviationWeather — nearest-report wiring", () => {
   });
 
   it("still supports picking a specific station via /api/py/metar", () => {
-    expect(src).toContain('fetchWorker("metar"');
+    expect(src).toContain('workerData.json<StationResponse>("metar"');
     expect(src).not.toContain("/api/py/metar");
   });
 

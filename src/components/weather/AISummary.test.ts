@@ -52,7 +52,7 @@ describe("AISummary — Phase 1D auth gating", () => {
   });
 });
 
-describe("AISummary — request body matches the /api/py/ai contract", () => {
+describe("AISummary — request body matches the AI Worker's contract", () => {
   it("sends activity IDS, not the /api/py/activities?labels= map", () => {
     // That endpoint returns { labels: { id: label } }. Sent as `activities`
     // it failed the backend's list[str] validation with a 422, so signed-in

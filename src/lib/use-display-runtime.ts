@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { DISPLAY_REFRESH_MS } from "@/lib/display";
+import { DISPLAY_REFRESH_MS, emptyRetryDelayMs } from "@/lib/display";
 
 /**
  * Keeps an unattended display's screen on. Uses the Screen Wake Lock API
@@ -57,7 +57,12 @@ export type PolledState<T> =
 /**
  * Fetches `url` now and every `intervalMs`, keeping the last good value on a
  * failed refresh (a wall display should show slightly old data rather than a
- * blank panel). `initial` seeds the first render, e.g. from the server.
+ * blank panel). `initial` seeds the first render, e.g. from a stored copy.
+ *
+ * Until there is data, a failed read is not left for the next interval (10
+ * minutes or more of an empty panel): it is read again after about 2 s, 5 s,
+ * 15 s, 30 s and then every minute (`emptyRetryDelayMs`), so a screen whose
+ * first read was refused or dropped fills in as soon as the service is back.
  */
 export function usePolledJson<T>(
   url: string | null,
@@ -73,12 +78,17 @@ export function usePolledJson<T>(
   const validateRef = useRef(validate);
   validateRef.current = validate;
   const skipFirst = useRef(initial !== undefined);
+  const seeded = useRef(initial !== undefined);
 
   useEffect(() => {
     if (!url) return;
     let controller: AbortController | null = null;
+    let retryTimer: number | undefined;
+    let hasData = seeded.current;
+    let failures = 0;
 
     const load = async () => {
+      window.clearTimeout(retryTimer);
       controller?.abort();
       const current = new AbortController();
       controller = current;
@@ -94,6 +104,8 @@ export function usePolledJson<T>(
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json: unknown = await res.json();
         if (!validateRef.current(json)) throw new Error("bad shape");
+        hasData = true;
+        failures = 0;
         setState({ status: "ready", data: json, updatedAt: Date.now() });
       } catch (err) {
         // Superseded or unmounted: not a failure. A timeout is.
@@ -109,6 +121,11 @@ export function usePolledJson<T>(
               ? prev
               : { status: "error" },
         );
+        // Nothing to show yet: ask again soon, not at the next interval.
+        if (!hasData) {
+          retryTimer = window.setTimeout(load, emptyRetryDelayMs(failures));
+          failures += 1;
+        }
       } finally {
         window.clearTimeout(timer);
       }
@@ -120,6 +137,7 @@ export function usePolledJson<T>(
     const id = window.setInterval(load, intervalMs);
     return () => {
       window.clearInterval(id);
+      window.clearTimeout(retryTimer);
       controller?.abort();
     };
   }, [url, intervalMs]);

@@ -1,84 +1,207 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { NO_BAND, contourLines } from "./field-raster";
 import {
   fetchModelGrid,
-  modelGridToGeoJSON,
+  modelFieldRaster,
   modelLegendTokens,
+  type ModelGridPoint,
   type ModelGridResponse,
 } from "./model-grid";
-import { getMapChip } from "./map-layers";
+import { getMapChip, legendBandIndex } from "./map-layers";
 
-function grid(overrides: Partial<ModelGridResponse> = {}): ModelGridResponse {
+const KM_PER_DEG = 111.195;
+
+type Field = (row: number, col: number, step: number) => number | null;
+
+/**
+ * The Worker's 7 x 7 layout (north-west first, 40 km apart), two timeline
+ * steps. Each variable is read from the `fields` given, else a constant.
+ */
+function grid(
+  fields: {
+    temperature?: Field;
+    precipitation?: Field;
+    windSpeed?: Field;
+  } = {},
+  overrides: Partial<ModelGridResponse> = {},
+): ModelGridResponse {
+  const kmPerDegLon = KM_PER_DEG * Math.cos((-17.5 * Math.PI) / 180);
+  const series = (
+    f: Field | undefined,
+    fallback: number,
+    row: number,
+    col: number,
+  ) => [0, 1].map((step) => (f ? f(row, col, step) : fallback));
+  const points: ModelGridPoint[] = [];
+  for (let row = 0; row < 7; row++) {
+    for (let col = 0; col < 7; col++) {
+      points.push({
+        lat: +(-17.5 + ((3 - row) * 40) / KM_PER_DEG).toFixed(6),
+        lon: +(31 + ((col - 3) * 40) / kmPerDegLon).toFixed(6),
+        temperature: series(fields.temperature, 20, row, col),
+        precipitation: series(fields.precipitation, 0, row, col),
+        windSpeed: series(fields.windSpeed, 10, row, col),
+        windDirection: [90, 180],
+      });
+    }
+  }
   return {
     available: true,
     model: "ecmwf_ifs",
     cellKm: 40,
     times: ["2026-10-11T07:00Z", "2026-10-11T10:00Z"],
-    points: [
-      {
-        lat: -17.5,
-        lon: 31,
-        temperature: [8, 24],
-        precipitation: [0, 2.5],
-        windSpeed: [5, 70],
-        windDirection: [90, 180],
-      },
-      {
-        lat: -18,
-        lon: 31,
-        temperature: [null, 31],
-        precipitation: [0.05, null],
-        windSpeed: [12, null],
-        windDirection: [null, null],
-      },
-    ],
+    points,
     fetchedAt: null,
     ...overrides,
   };
 }
 
-describe("modelGridToGeoJSON", () => {
-  it("colours each cell by the chip legend band for the step", () => {
-    const fc = modelGridToGeoJSON(grid(), "modelTemperature", 1)!;
-    expect(fc.features).toHaveLength(2);
-    // 24 °C → band "22" (index 3); 31 °C → band "30" (index 4).
-    expect(fc.features.map((f) => f.properties.band)).toEqual([3, 4]);
-    expect(fc.features[0].properties.value).toBe(24);
+describe("modelFieldRaster — a model field as one smooth, banded picture", () => {
+  it("uses the legend's own band rule for every pixel of a constant field", () => {
+    const legend = getMapChip("modelTemperature")!.legend;
+    for (const t of [
+      -25, -10, -3, 0, 7.9, 8, 15.9, 16, 24, 30, 36, 41.9, 42, 55,
+    ]) {
+      const r = modelFieldRaster(
+        grid({ temperature: () => t }),
+        "modelTemperature",
+        0,
+        { side: 8 },
+      )!;
+      expect(new Set(r.bands), `${t} °C`).toEqual(
+        new Set([legendBandIndex(legend, t)]),
+      );
+    }
   });
 
-  it("leaves out nulls and values below the first band", () => {
-    const rain = modelGridToGeoJSON(grid(), "modelPrecipitation", 0)!;
-    // 0 and 0.05 mm/h are under the 0.1 mm/h first band.
-    expect(rain.features).toHaveLength(0);
-    const rainLater = modelGridToGeoJSON(grid(), "modelPrecipitation", 1)!;
-    expect(rainLater.features).toHaveLength(1);
-    const temp = modelGridToGeoJSON(grid(), "modelTemperature", 0)!;
-    expect(temp.features).toHaveLength(1);
+  it("agrees with the legend about what NO_BAND means", () => {
+    expect(NO_BAND).toBe(-1);
+    const legend = getMapChip("modelPrecipitation")!.legend;
+    expect(legendBandIndex(legend, 0.05)).toBe(NO_BAND);
+  });
+
+  it("paints with the chip's tokens and outlines the chip's band starts", () => {
+    const r = modelFieldRaster(
+      grid({ temperature: (_, c) => 10 + 4 * c }),
+      "modelTemperature",
+      0,
+    )!;
+    const legend = getMapChip("modelTemperature")!.legend;
+    expect(r.tokens).toEqual(modelLegendTokens(legend));
+    expect(r.levels).toEqual(
+      legend.segments.map((s) => s.from).filter((f) => Number.isFinite(f)),
+    );
+    // The first band starts at -Infinity: that is not a contour level.
+    expect(r.levels.every((l) => Number.isFinite(l))).toBe(true);
+    const lines = contourLines(r);
+    expect(lines.features.length).toBeGreaterThan(0);
+    // Only the levels the field really crosses (10 .. 34 °C) get a line.
+    for (const f of lines.features) {
+      expect(f.properties.level).toBeGreaterThan(10);
+      expect(f.properties.level).toBeLessThan(34);
+    }
+  });
+
+  it("reads the series for the step asked", () => {
+    const g = grid({ temperature: (_r, _c, step) => (step === 0 ? 8 : 31) });
+    const first = modelFieldRaster(g, "modelTemperature", 0, { side: 8 })!;
+    const second = modelFieldRaster(g, "modelTemperature", 1, { side: 8 })!;
+    // 8 °C is the "8" band (index 3); 31 °C is the "30" band (index 6).
+    expect(new Set(first.bands)).toEqual(new Set([3]));
+    expect(new Set(second.bands)).toEqual(new Set([6]));
+  });
+
+  it("leaves values below the first band clear, but not as holes", () => {
+    // Drizzle under 0.1 mm/h: nothing to colour, yet the field is known there.
+    const r = modelFieldRaster(
+      grid({ precipitation: () => 0.05 }),
+      "modelPrecipitation",
+      0,
+      { side: 8 },
+    )!;
+    expect(new Set(r.bands)).toEqual(new Set([NO_BAND]));
+    expect(r.values.every((v) => !Number.isNaN(v))).toBe(true);
+    const rain = modelFieldRaster(
+      grid({ precipitation: (_, c) => (c >= 3 ? 2.5 : 0) }),
+      "modelPrecipitation",
+      0,
+    )!;
+    expect(rain.bands.some((b) => b === NO_BAND)).toBe(true);
+    expect(rain.bands.some((b) => b >= 0)).toBe(true);
+  });
+
+  it("outlines where rain starts: the first band's lower bound is a level", () => {
+    const rain = modelFieldRaster(
+      grid({ precipitation: (_, c) => (c >= 3 ? 2.5 : 0) }),
+      "modelPrecipitation",
+      0,
+    )!;
+    expect(rain.levels[0]).toBe(0.1);
+    const lines = contourLines(rain);
+    expect(lines.features.map((f) => f.properties.level)).toContain(0.1);
+  });
+
+  it("leaves a hole where a reading is missing, never a band", () => {
+    const r = modelFieldRaster(
+      grid({ temperature: (row, col) => (row === 3 && col === 3 ? null : 20) }),
+      "modelTemperature",
+      0,
+    )!;
+    const holes = [...r.values].filter(Number.isNaN).length;
+    expect(holes).toBeGreaterThan(0);
+    expect(holes).toBeLessThan((r.width * r.height) / 10);
+    // Holes are NO_BAND, and nothing around them was dragged toward 0 °C.
+    expect(
+      r.bands.every(
+        (b) =>
+          b === NO_BAND ||
+          b === legendBandIndex(getMapChip("modelTemperature")!.legend, 20),
+      ),
+    ).toBe(true);
   });
 
   it("reads wind speed for the wind chip", () => {
-    const fc = modelGridToGeoJSON(grid(), "modelWind", 1)!;
-    expect(fc.features).toHaveLength(1);
-    expect(fc.features[0].properties.band).toBe(4); // 70 km/h → 60+
+    const r = modelFieldRaster(grid({ windSpeed: () => 70 }), "modelWind", 0, {
+      side: 8,
+    })!;
+    expect(new Set(r.bands)).toEqual(
+      new Set([legendBandIndex(getMapChip("modelWind")!.legend, 70)]),
+    ); // 70 km/h: 62+ (gale)
+    expect(r.bands[0]).toBe(5);
   });
 
-  it("builds closed square polygons", () => {
-    const fc = modelGridToGeoJSON(grid(), "modelTemperature", 1)!;
-    const ring = fc.features[0].geometry.coordinates[0];
-    expect(ring).toHaveLength(5);
-    expect(ring[0]).toEqual(ring[4]);
-  });
-
-  it("returns null for unavailable grids and non-model layers", () => {
+  it("returns null when there is nothing to draw", () => {
     expect(
-      modelGridToGeoJSON(grid({ available: false }), "modelWind", 0),
+      modelFieldRaster(grid({}, { available: false }), "modelWind", 0),
     ).toBeNull();
-    expect(modelGridToGeoJSON(null, "modelWind", 0)).toBeNull();
-    expect(modelGridToGeoJSON(grid(), "temperature", 0)).toBeNull();
+    expect(modelFieldRaster(null, "modelWind", 0)).toBeNull();
+    expect(modelFieldRaster(undefined, "modelWind", 0)).toBeNull();
+    // Not a model layer.
+    expect(modelFieldRaster(grid(), "temperature", 0)).toBeNull();
+    // A step beyond the series: no readings.
+    expect(modelFieldRaster(grid(), "modelTemperature", 9)).toBeNull();
+    // Every reading missing at this step.
+    expect(
+      modelFieldRaster(
+        grid({ temperature: () => null }),
+        "modelTemperature",
+        0,
+      ),
+    ).toBeNull();
   });
 
-  it("handles a step beyond the series", () => {
-    const fc = modelGridToGeoJSON(grid(), "modelTemperature", 9)!;
-    expect(fc.features).toHaveLength(0);
+  it("fades the box's edge instead of leaving a hard rectangle", () => {
+    const r = modelFieldRaster(grid(), "modelTemperature", 0)!;
+    expect(r.alpha[0]).toBeLessThan(8);
+    expect(
+      r.alpha[Math.floor(r.height / 2) * r.width + Math.floor(r.width / 2)],
+    ).toBe(255);
+  });
+
+  it("is bounded in size", () => {
+    const r = modelFieldRaster(grid(), "modelTemperature", 0)!;
+    expect(r.width).toBeLessThanOrEqual(128);
+    expect(r.height).toBeLessThanOrEqual(128);
   });
 });
 
@@ -87,7 +210,7 @@ describe("modelLegendTokens", () => {
     const legend = getMapChip("modelTemperature")!.legend;
     const tokens = modelLegendTokens(legend);
     expect(tokens).toHaveLength(legend.segments.length);
-    for (const t of tokens) expect(t).toMatch(/^--color-/);
+    for (const t of tokens) expect(t).toMatch(/^--wx-/);
   });
 
   it("is empty without a legend", () => {

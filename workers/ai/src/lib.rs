@@ -4,12 +4,26 @@
 //! the `AI_SERVICE` binding with the caller's `CF-Connecting-IP`.
 //!
 //! ```text
-//! POST /v1/ai, /v1/ai/summary   {weatherData, location, activities} → {insight, cached, generatedAt}
-//! POST /v1/ai/followup          {message, locationName, locationSlug, weatherSummary,
+//! POST /internal/summary        {location: {slug, name, lat, lon, elevation, country, tags},
+//!                                activities} → {insight, cached, generatedAt}
+//!                               Only from mukoko-weather-internal (service key checked
+//!                               there), for the signed-in app: counted against the
+//!                               person's hour (`X-Mukoko-User-Id`, `X-Mukoko-Client-IP`).
+//! POST /internal/followup       {message, locationName, locationSlug, weatherSummary,
 //!                                activities, season, history} → {response}
+//!                               The same caller and budget as the summary.
+//! POST /internal/agriculture    {location: {slug, name, country, elevation, lat, lon},
+//!                                activities, mode: "snapshot" | "briefing"}
+//!                               → {text, source, cached, mode, generatedAt}
+//!                               The same caller and budget as the summary.
 //! POST /v1/ai/chat              {message, history, activities} → {response, references}
 //! POST /v1/ai/history/analyze   {location, days 7..365, activities}
 //!                               → {analysis, stats, cached, dataPoints}
+//! POST /v1/ai/explore/search    {query} → {locations, summary, source}
+//!                               (the model with two tools, else a text match)
+//! POST /v1/reports/clarify      {reportType, locationSlug?} → {questions, source}
+//!                               (the report wizard's one or two follow-up
+//!                               questions: the model's, else a fixed pair)
 //! POST /internal/chat/completions  OpenAI-style {messages, tools?, max_tokens?, model?}
 //!                               → an OpenAI chat completion. Only from
 //!                                 mukoko-weather-internal (service key checked
@@ -23,19 +37,21 @@
 //! guardrails_unavailable`. Messages carrying personal data are refused
 //! before any call (`422 personal_data_detected`).
 
+mod clarify;
+mod explore;
 mod gateway;
 mod handlers;
 mod passthrough;
+mod profile;
 
-use weather_edge::{error, json};
+use weather_edge::budget::Caller;
+use weather_edge::{error, json, responses};
 use worker::{event, Context, Env, Method, Request, Response, Result};
 
 pub(crate) const FORECAST_BINDING: &str = "FORECAST";
 pub(crate) const CACHE_BINDING: &str = "AI_CACHE";
-pub(crate) const DB_BINDING: &str = "WEATHER_DB";
+pub(crate) const PLACES_BINDING: &str = "PLACES";
 const RATE_LIMITER: &str = "RATE_LIMITER";
-/// Bodies larger than this are refused before parsing.
-const MAX_BODY_BYTES: usize = 64 * 1024;
 /// The backend passthrough carries whole tool loops (forecasts as JSON).
 const MAX_INTERNAL_BODY_BYTES: usize = 512 * 1024;
 
@@ -50,36 +66,41 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
                 "status": "ok",
                 "ai": env.ai("AI").is_ok(),
                 "cache": env.kv(CACHE_BINDING).is_ok(),
-                "history_db": env.d1(DB_BINDING).is_ok(),
+                "history": env.service(PLACES_BINDING).is_ok(),
+                "budget": env.d1("WEATHER_DB").is_ok(),
             }),
         );
     }
     let route = match path.as_str() {
-        "/v1/ai" | "/v1/ai/summary" => Route::Summary,
-        "/v1/ai/followup" => Route::Followup,
+        "/internal/summary" => Route::Summary,
+        "/internal/followup" => Route::Followup,
+        "/internal/agriculture" => Route::Agriculture,
         "/v1/ai/chat" => Route::Chat,
         "/v1/ai/history/analyze" => Route::History,
+        "/v1/ai/explore/search" => Route::Explore,
+        "/v1/reports/clarify" => Route::Clarify,
         "/internal/chat/completions" => Route::Completions,
         _ => return error(404, "not_found", "No such route."),
     };
     if req.method() != Method::Post {
         return error(405, "method_not_allowed", "Only POST is served.");
     }
-    // The per-IP limit is for the app's own /v1/ai/* callers. Backend calls
-    // all arrive with one key, so a shared bucket would throttle the whole
-    // site; the backend rate-limits per visitor itself.
-    let internal = matches!(route, Route::Completions);
-    if !internal {
+    // The per-IP limit is for the public /v1/ai/* callers. Internal calls all
+    // arrive with one key, so a shared bucket would throttle the whole site:
+    // the backend passthrough rate-limits per visitor itself, and the
+    // signed-in app routes spend the person's hourly D1 budget.
+    if !route.internal() {
         if let Some(limited) = rate_limited(&req, &env).await {
             return limited;
         }
     }
 
     let text = req.text().await.unwrap_or_default();
-    let cap = if internal {
-        MAX_INTERNAL_BODY_BYTES
-    } else {
-        MAX_BODY_BYTES
+    // Only the backend passthrough carries whole tool loops; the app's routes
+    // are a location and a few ids.
+    let cap = match route {
+        Route::Completions => MAX_INTERNAL_BODY_BYTES,
+        _ => weather_core::ai::public_body_cap(&path),
     };
     if text.len() > cap {
         return error(413, "payload_too_large", "The request body is too large.");
@@ -87,6 +108,20 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     let Ok(body) = serde_json::from_str::<serde_json::Value>(&text) else {
         return error(400, "invalid_request", "The body must be JSON.");
     };
+
+    // The search is the one route that still answers without the model (the
+    // text match), so it decides for itself what a missing block means.
+    if matches!(route, Route::Explore) {
+        let guardrails = gateway::guardrails(&env).await;
+        return explore::handle(&env, guardrails, &Caller::from_request(&req), body).await;
+    }
+
+    // The report questions answer a fixed pair when the model cannot be used,
+    // so a missing guardrails block is not an error here either.
+    if matches!(route, Route::Clarify) {
+        let guardrails = gateway::guardrails(&env).await;
+        return clarify::handle(&env, guardrails, &Caller::from_request(&req), body).await;
+    }
 
     // Fail closed: no guardrails block, no model call on any route.
     let Some(guardrails) = gateway::guardrails(&env).await else {
@@ -96,49 +131,76 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
             "Shamwari is unavailable right now. Please try again shortly.",
         );
     };
+    // The person behind an internal app route, named by the app's server after
+    // it checked the WorkOS session and `mukoko-weather-internal` checked the
+    // service key. These paths are not reachable from the public API, which
+    // forwards `/v1/ai/*` only and builds its own request.
+    let caller = if route.app() {
+        let subject = req
+            .headers()
+            .get(weather_core::ai::USER_ID_HEADER)
+            .ok()
+            .flatten()
+            .and_then(|s| weather_core::ai::valid_subject(&s));
+        Some(Caller::with_subject(&req, subject))
+    } else if matches!(route, Route::History) {
+        // The public history analysis is keyed by the visitor's address.
+        Some(Caller::from_request(&req))
+    } else {
+        None
+    };
     let ctx = handlers::Ctx {
         env: &env,
         guardrails,
+        client_ip: weather_edge::client_ip(&req),
+        caller,
     };
     match route {
         Route::Summary => handlers::summary(&ctx, body).await,
         Route::Followup => handlers::followup(&ctx, body).await,
+        Route::Agriculture => handlers::agriculture(&ctx, body).await,
         Route::Chat => handlers::chat(&ctx, body).await,
         Route::History => handlers::history(&ctx, body).await,
         Route::Completions => passthrough::handle(&env, &ctx.guardrails, &body).await,
+        // Answered above, before the guardrails gate.
+        Route::Explore | Route::Clarify => error(404, "not_found", "No such route."),
     }
 }
 
 enum Route {
     Summary,
     Followup,
+    Agriculture,
     Chat,
     History,
+    Explore,
+    Clarify,
     Completions,
+}
+
+impl Route {
+    /// The signed-in app's routes: reached through `mukoko-weather-internal`,
+    /// counted against the person's hour.
+    fn app(&self) -> bool {
+        matches!(self, Route::Summary | Route::Followup | Route::Agriculture)
+    }
+
+    /// Every route that is not public (no per-IP limiter).
+    fn internal(&self) -> bool {
+        self.app() || matches!(self, Route::Completions)
+    }
 }
 
 /// `Some(429)` when the client is over its limit. A missing limiter binding
 /// (local dev) does not block.
 async fn rate_limited(req: &Request, env: &Env) -> Option<Result<Response>> {
     let limiter = env.rate_limiter(RATE_LIMITER).ok()?;
-    let key = req
-        .headers()
-        .get("CF-Connecting-IP")
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| "service-binding".to_owned());
+    let key = weather_edge::client_ip(req).unwrap_or_else(|| "service-binding".to_owned());
     match limiter.limit(key).await {
-        Ok(outcome) if !outcome.success => {
-            let resp = error(
-                429,
-                "rate_limited",
-                "Too many requests. Please wait a moment.",
-            );
-            if let Ok(r) = &resp {
-                let _ = r.headers().set("Retry-After", "60");
-            }
-            Some(resp)
-        }
+        Ok(outcome) if !outcome.success => Some(responses::rate_limited(
+            60,
+            "Too many requests. Please wait a moment.",
+        )),
         _ => None,
     }
 }

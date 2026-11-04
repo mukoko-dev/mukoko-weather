@@ -37,7 +37,7 @@ describe("LocationWeatherCard — structure", () => {
 
   it("sets the temperature in the Noto Serif display face and the label in mono", () => {
     expect(source).toContain("font-display");
-    expect(source).toContain("font-mono");
+    expect(source).toContain("oribi");
   });
 });
 

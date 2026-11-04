@@ -1,14 +1,21 @@
 /**
  * Air quality grid helpers for the Air Quality Map card.
  *
- * `/api/py/airquality/grid` returns current US AQI on a regular n×n grid. This
- * module turns those points into square GeoJSON cells (one per grid point) for
- * a MapLibre fill layer, classifies AQI into EPA bands, and fetches the grid.
- * Everything except `fetchAirQualityGrid` is pure and unit-tested.
+ * `/v1/air-quality/grid` (the Rust Worker) returns current US AQI on a regular n×n grid. This
+ * module turns those points into one smooth, banded raster for a MapLibre
+ * image source (field-raster.ts interpolates between the samples), classifies
+ * AQI into EPA bands, and fetches the grid. Everything except
+ * `fetchAirQualityGrid` is pure and unit-tested.
  */
 
-import type { Feature, FeatureCollection, Polygon } from "geojson";
-import { fetchWorker } from "@/lib/weather-api";
+import { workerData } from "@/lib/worker-data";
+import { AQI_SCALE } from "@/lib/weather-scales";
+import {
+  buildFieldRaster,
+  hasReadings,
+  sampleGridFrom,
+  type FieldRaster,
+} from "@/lib/field-raster";
 
 /** EPA US AQI categories, lowest to highest severity. */
 export type AqiBand =
@@ -38,32 +45,48 @@ export const AQI_BAND_LABELS: Record<AqiBand, string> = {
 };
 
 /**
- * CSS custom property per band. The map paints with these resolved to concrete
- * colours (MapLibre paint values cannot read var()). Six bands share five
- * severity tokens, so very_unhealthy and hazardous share the extreme token.
+ * The scale band behind each AqiBand: the six official US EPA AQI categories
+ * (weather-scales.ts), so the map fill, bubbles, gauge and legend share one
+ * source and cannot drift.
  */
-export const AQI_BAND_SEVERITY_TOKEN: Record<AqiBand, string> = {
-  good: "--color-severity-low",
-  moderate: "--color-severity-moderate",
-  usg: "--color-severity-high",
-  unhealthy: "--color-severity-severe",
-  very_unhealthy: "--color-severity-extreme",
-  hazardous: "--color-severity-extreme",
+const BAND_INDEX: Record<AqiBand, number> = {
+  good: 0,
+  moderate: 1,
+  usg: 2,
+  unhealthy: 3,
+  very_unhealthy: 4,
+  hazardous: 5,
 };
 
+function scaleBandOf(band: AqiBand) {
+  return AQI_SCALE.bands[BAND_INDEX[band]];
+}
+
 /**
- * Static Tailwind classes for a band's bubble fill. Built from the same severity
- * tokens as AQI_BAND_SEVERITY_TOKEN, so the map fill, the bubbles and the legend
- * cannot drift apart.
+ * CSS custom property per band. The map paints with these resolved to concrete
+ * colours (MapLibre paint values cannot read var()).
  */
-export const AQI_BAND_BG_CLASS: Record<AqiBand, string> = {
-  good: "bg-severity-low",
-  moderate: "bg-severity-moderate",
-  usg: "bg-severity-high",
-  unhealthy: "bg-severity-severe",
-  very_unhealthy: "bg-severity-extreme",
-  hazardous: "bg-severity-extreme",
-};
+export const AQI_BAND_TOKEN: Record<AqiBand, string> = Object.fromEntries(
+  AQI_BANDS.map((b) => [b, scaleBandOf(b).token]),
+) as Record<AqiBand, string>;
+
+/** Static Tailwind fill classes for a band (bubbles, swatches). */
+export const AQI_BAND_BG_CLASS: Record<AqiBand, string> = Object.fromEntries(
+  AQI_BANDS.map((b) => [b, scaleBandOf(b).bg]),
+) as Record<AqiBand, string>;
+
+/**
+ * Static Tailwind SVG fill classes for a band (the static air quality map's
+ * cells), from the scale band's own `fill`.
+ */
+export const AQI_BAND_FILL_CLASS: Record<AqiBand, string> = Object.fromEntries(
+  AQI_BANDS.map((b) => [b, scaleBandOf(b).fill ?? ""]),
+) as Record<AqiBand, string>;
+
+/** Foreground class that passes 4.5:1 on the band's fill (bubble numbers). */
+export const AQI_BAND_FG_CLASS: Record<AqiBand, string> = Object.fromEntries(
+  AQI_BANDS.map((b) => [b, scaleBandOf(b).on]),
+) as Record<AqiBand, string>;
 
 /** One AQI bubble on the full-screen map. `isCenter` marks the "my location" bubble. */
 export interface AqBubble {
@@ -147,58 +170,40 @@ export interface AqGridResponse {
   source: string;
 }
 
-export interface AqCellProperties {
-  aqi: number | null;
-  band: AqiBand | null;
-}
-
-/** Metres-per-degree constants match the backend (spherical Earth, R = 6371 km). */
-const KM_PER_DEG = 111.195;
+/**
+ * Where one EPA band ends and the next starts on the CONTINUOUS field. An
+ * interpolated value is rounded to a whole index before it is classified
+ * (aqiBand), so the band that starts at 51 starts at 50.5, and so on. The map
+ * outlines the bands at these values.
+ */
+export const AQI_BAND_EDGES: readonly number[] = AQI_SCALE.bands
+  .slice(1)
+  .map((band) => band.from - 0.5);
 
 /**
- * Square polygon cells, one per grid point, centred on the point. `cellKm` is
- * the side length in metres-on-the-ground: longitude spacing is corrected for
- * latitude so cells are square on the map, not stretched.
+ * The grid as one smooth, banded picture for the map: the 7 x 7 readings
+ * interpolated onto a finer raster (field-raster.ts), every pixel classified
+ * into its EPA band with `aqiBand`, the same function the bubbles, the gauge
+ * and the legend use. A reading the model did not return leaves a hole. Null
+ * when the grid is unavailable or has too few points to interpolate.
  *
- * Rings are counter-clockwise (RFC 7946 exterior-ring convention) and closed.
+ * Smoother, not more detailed: the data is still the 49 samples.
  */
-export function gridToGeoJSON(
-  points: readonly (Omit<AqGridPoint, "pm2_5"> & { pm2_5?: number | null })[],
-  cellKm: number,
-): FeatureCollection<Polygon, AqCellProperties> {
-  const halfKm = cellKm / 2;
-  const halfLatDeg = halfKm / KM_PER_DEG;
-
-  const features: Feature<Polygon, AqCellProperties>[] = points.map((p) => {
-    const cosLat = Math.cos((p.lat * Math.PI) / 180);
-    // Guard the pole: cos → 0 would divide by zero. Clamp to a tiny positive value.
-    const halfLonDeg = halfKm / (KM_PER_DEG * Math.max(cosLat, 1e-6));
-    const w = p.lon - halfLonDeg;
-    const e = p.lon + halfLonDeg;
-    const s = p.lat - halfLatDeg;
-    const n = p.lat + halfLatDeg;
-    return {
-      type: "Feature",
-      properties: {
-        aqi: p.aqi,
-        band: p.aqi === null ? null : aqiBand(p.aqi),
-      },
-      geometry: {
-        type: "Polygon",
-        coordinates: [
-          [
-            [w, s],
-            [e, s],
-            [e, n],
-            [w, n],
-            [w, s],
-          ],
-        ],
-      },
-    };
+export function aqFieldRaster(
+  grid: AqGridResponse | null | undefined,
+  options: { side?: number } = {},
+): FieldRaster | null {
+  if (!grid?.available) return null;
+  const samples = sampleGridFrom(
+    grid.points.map((p) => ({ lat: p.lat, lon: p.lon, value: p.aqi })),
+  );
+  if (!samples || !hasReadings(samples)) return null;
+  return buildFieldRaster(samples, {
+    classify: (aqi) => AQI_BANDS.indexOf(aqiBand(aqi)),
+    tokens: AQI_BANDS.map((band) => AQI_BAND_TOKEN[band]),
+    levels: AQI_BAND_EDGES,
+    side: options.side,
   });
-
-  return { type: "FeatureCollection", features };
 }
 
 /**
@@ -213,16 +218,16 @@ export async function fetchAirQualityGrid(options: {
   n?: number;
   signal?: AbortSignal;
 }): Promise<AqGridResponse> {
-  const params = new URLSearchParams({
-    lat: options.lat.toFixed(4),
-    lon: options.lon.toFixed(4),
-    radiusKm: String(options.radiusKm ?? 40),
-    n: String(options.n ?? 7),
-  });
-  const res = await fetchWorker("air-quality/grid", params.toString(), {
-    signal: options.signal,
-    headers: { Accept: "application/json" },
-  });
-  if (!res.ok) throw new Error(`air quality grid HTTP ${res.status}`);
-  return (await res.json()) as AqGridResponse;
+  // Shared read: one grid per route + 0.05 degree cell + size, however often
+  // the card is mounted (LazySection) and however many cards ask at once.
+  return workerData.json<AqGridResponse>(
+    "air-quality/grid",
+    {
+      lat: options.lat,
+      lon: options.lon,
+      radiusKm: options.radiusKm ?? 40,
+      n: options.n ?? 7,
+    },
+    { signal: options.signal },
+  );
 }

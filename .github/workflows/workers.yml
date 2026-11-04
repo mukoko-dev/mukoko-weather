@@ -3,11 +3,15 @@ name: Workers
 # The Rust weather backend in workers/ (mukoko-dev/mukoko-weather#148):
 # format, lint (native and wasm32), test, and build every Worker bundle, plus
 # typecheck and test of the TypeScript MongoDB bridge (workers/mongo-bridge).
+# tests/fixtures/ is in the paths: the fixtures are the oracle the Rust tests
+# assert (the Python that produced them is gone, #333), so a fixture change
+# alone must run them.
 on:
   push:
     branches: [main, staging]
     paths:
       - "workers/**"
+      - "tests/fixtures/**"
       - "src/lib/locations.ts"
       - "src/lib/locations-global.ts"
       - "src/lib/icao-codes.ts"
@@ -16,6 +20,7 @@ on:
     branches: [main, staging]
     paths:
       - "workers/**"
+      - "tests/fixtures/**"
       - "src/lib/locations.ts"
       - "src/lib/locations-global.ts"
       - "src/lib/icao-codes.ts"
@@ -25,10 +30,13 @@ on:
   # main commit the deploy builds, never a caller-chosen ref.
   workflow_call:
 
-# The event name keeps a deploy's gate out of the push/PR group, so a push
-# can never cancel a gate that a deploy is waiting on.
+# In a called workflow the github context is the CALLER's, so github.workflow
+# is "Workers" for this workflow's own runs and "Workers deploy" for the gate
+# a deploy calls. That keeps the gate out of the standalone push/PR group: a
+# push to main starts both, and the standalone run must never cancel the gate
+# a deploy is waiting on.
 concurrency:
-  group: workers-${{ github.event_name }}-${{ github.ref }}
+  group: workers-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -44,7 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -54,7 +62,7 @@ jobs:
             --component rustfmt,clippy --target wasm32-unknown-unknown
           rustup default stable
 
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -62,7 +70,7 @@ jobs:
             workers/target
           key: workers-check-${{ hashFiles('workers/Cargo.lock') }}
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
 
@@ -74,17 +82,21 @@ jobs:
         working-directory: .
         run: node --experimental-strip-types workers/scripts/gen-reference-data.mjs --check
 
+      - name: Season calendars are current
+        working-directory: .
+        run: node --experimental-strip-types workers/scripts/gen-seasons.mjs --check
+
       - name: Format
         run: cargo fmt --all -- --check
 
       - name: Clippy (native, logic)
-        run: cargo clippy -p weather-core -p weather-mongo --all-targets -- -D warnings
+        run: cargo clippy -p weather-core -p weather-mongo -p weather-webpush --all-targets -- -D warnings
 
       - name: Clippy (wasm32, every Worker)
         run: cargo clippy --workspace --target wasm32-unknown-unknown --all-targets -- -D warnings
 
       - name: Test
-        run: cargo test -p weather-core -p weather-mongo
+        run: cargo test -p weather-core -p weather-mongo -p weather-webpush
 
   # The TypeScript Worker: typecheck and tests. It is bundled by wrangler at
   # deploy time (workers-deploy.yml), so there is no separate build here.
@@ -96,11 +108,11 @@ jobs:
       run:
         working-directory: workers/mongo-bridge
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -122,9 +134,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        worker: [ai, forecast, internal-api, places, public-api, stations, aviation, jobs, tiles]
+        worker: [ai, forecast, internal-api, places, public-api, push, stations, aviation, jobs, tiles]
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -133,7 +145,7 @@ jobs:
           rustup toolchain install stable --profile minimal --target wasm32-unknown-unknown
           rustup default stable
 
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry

@@ -5,15 +5,21 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogSheetHandle,
   DialogHeader,
-  DialogTitle,
   DialogDescription,
   DialogClose,
 } from "@/components/ui/dialog";
 import { useAppStore } from "@/lib/store";
 import { trackEvent } from "@/lib/analytics";
 import { REPORT_TYPES } from "@/lib/report-types";
+import {
+  CLARIFY_TIMEOUT_MS,
+  clarifyQuestions,
+  forgetReports,
+  reportRefusal,
+  reportsSubmitUrl,
+} from "@/lib/reports-api";
+import { postWorker } from "@/lib/weather-api";
 
 const SEVERITIES = [
   { id: "mild", label: "Mild", description: "Noticeable but not disruptive" },
@@ -70,18 +76,14 @@ export function WeatherReportModal() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/py/reports/clarify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          locationSlug: selectedLocation,
-          reportType: typeId,
-        }),
-      });
+      const res = await postWorker(
+        "reports/clarify",
+        { locationSlug: selectedLocation, reportType: typeId },
+        { timeoutMs: CLARIFY_TIMEOUT_MS },
+      );
 
       if (res.ok) {
-        const data = await res.json();
-        setQuestions(data.questions || []);
+        setQuestions(clarifyQuestions(await res.json()));
       }
     } catch {
       // Clarification is optional — continue without it
@@ -98,7 +100,7 @@ export function WeatherReportModal() {
     setError(null);
 
     try {
-      const res = await fetch("/api/py/reports", {
+      const res = await fetch(reportsSubmitUrl(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -111,9 +113,11 @@ export function WeatherReportModal() {
 
       if (!res.ok) {
         const body = await res.json().catch(() => null);
-        throw new Error(body?.detail || "Failed to submit report");
+        throw new Error(reportRefusal(body, "Failed to submit report"));
       }
 
+      // The kept list for this place is now out of date.
+      forgetReports(selectedLocation);
       setSubmitted(true);
       setStep("confirm");
       trackEvent("report_submitted", {
@@ -138,14 +142,12 @@ export function WeatherReportModal() {
         else handleClose();
       }}
     >
-      <DialogContent className="sm:max-w-md">
-        <DialogSheetHandle />
-
-        {/* Title + description */}
-        <DialogHeader className="px-5">
-          <DialogTitle>
-            {step === "confirm" ? "Report Submitted" : "Report Weather"}
-          </DialogTitle>
+      <DialogContent
+        heading={step === "confirm" ? "Report Submitted" : "Report Weather"}
+        className="sm:max-w-md"
+      >
+        {/* Description (the title is pinned in the top bar) */}
+        <DialogHeader className="px-5 py-3">
           <DialogDescription className="mt-0.5 text-base text-text-secondary">
             {step === "select" && "What are you experiencing right now?"}
             {step === "clarify" &&

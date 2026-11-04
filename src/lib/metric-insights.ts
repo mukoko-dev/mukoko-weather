@@ -14,6 +14,7 @@
 import type { WeatherData, HourlyWeather, DailyWeather } from "./weather";
 import { windDirection, uvLevel } from "./weather";
 import { cloudLabel } from "./weather-labels";
+import { UV_SCALE_MAX } from "./weather-scales";
 import { dewPointFromTempHumidity } from "./activity-feasibility";
 import {
   hasZone,
@@ -61,8 +62,6 @@ const RAIN_DAY_MM_THRESHOLD = 1;
 const PRESSURE_TREND_HPA = 1;
 /** Hours ahead the pressure card compares against. */
 const PRESSURE_SPAN_HOURS = 3;
-/** Full-scale UV index used for the gauge position. */
-const UV_SCALE_MAX = 11;
 /** Dew point (°C) at which the air is described as muggy. */
 const MUGGY_DEW_POINT_C = 20;
 

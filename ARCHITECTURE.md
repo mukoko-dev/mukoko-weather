@@ -2,6 +2,16 @@
 
 This document describes the key architectural patterns in mukoko weather. For the full project context (routes, components, styling, testing), see [CLAUDE.md](CLAUDE.md).
 
+## Platform direction (decided 2026-11-04)
+
+These are owner decisions, not proposals. Nothing in this repo should read as if they were open.
+
+- **The web app moves to Astro.** The owner's words: "It is not an open decision. It is decided this is how we build our entire platform." Today the app is Next.js 16 on Vercel; the target is Astro with React islands on Cloudflare, next to the Workers. The plan and its phases are in [#475](https://github.com/mukoko-dev/mukoko-weather/issues/475). Until it is done: no new `next/*` import outside a thin adapter, decisions in pure modules (`src/lib`, `weather-core`) and policy as data (as `src/lib/security-headers.ts` already is), and new pages and components written so they move unchanged.
+- **Speed, one global layout and simplicity are the product.** They decide whether people stay on the app and come back. Work that simplifies the layout, the page frame or a page-to-page switch is in scope, not scope creep.
+- **Low-memory crashes are fixed at the root, not worked around.** The mount queue below, the `deviceMemory` and Save-Data gates and the memory-pressure hook limit what is alive at once; they do not say why a phone runs out. Measure (heap after garbage collection, DOM nodes, WebGL contexts, repeated place switches), name what is retained and remove it ([#476](https://github.com/mukoko-dev/mukoko-weather/issues/476)).
+- **Extra background requests are an accepted cost.** Warming the next saved places while a place is read (up to four extra forecast requests per place view, through the shared Worker read) is approved.
+- **Apple's design principles, applied through Mzizi.** Clarity, deference to content, consistent spacing, safe areas and large touch targets across the whole app, built from Mzizi tokens, fauna classes and registry components, never hand-rolled sizes, radii or colours.
+
 ## Search Architecture
 
 ### Atlas Search (Fuzzy Text Search)
@@ -84,9 +94,9 @@ Vector Search infrastructure is in place but requires an embedding pipeline to b
 
 ## Resilience Patterns
 
-### Circuit Breaker System
+### Circuit Breakers
 
-`api/py/_circuit_breaker.py` — Netflix Hystrix-inspired circuit breaker for external API resilience. Python implementation with in-memory state that persists across Vercel warm function starts (~5-15 minutes).
+`weather_core::breaker` — Netflix Hystrix-inspired circuit breaker for external API resilience, in the Rust Workers. It is pure (time is passed in) and its state lives in the Worker isolate's memory, so it protects a provider from a burst of calls while it is failing, without any storage round trip. (The Python implementation in `api/py/_circuit_breaker.py` was deleted with the Python backend, #333.)
 
 ```
 CLOSED ──(failures >= threshold)──> OPEN ──(cooldown expires)──> HALF_OPEN
@@ -97,34 +107,48 @@ CLOSED ──(failures >= threshold)──> OPEN ──(cooldown expires)──>
   OPEN <──────────────(failure)──────────────────────────────────────+
 ```
 
-**Per-provider singletons:**
+**Per-provider breakers** (only a 5xx, a 429, a transport error, a timeout or an unreadable body counts as a failure; a 4xx never does):
 
-| Breaker              | Provider        | Failure Threshold | Cooldown | Window | Timeout |
-| -------------------- | --------------- | :---------------: | :------: | :----: | :-----: |
-| `tomorrow_breaker`   | Tomorrow.io API |         3         |  2 min   | 5 min  |   5s    |
-| `open_meteo_breaker` | Open-Meteo API  |         5         |  5 min   | 5 min  |   8s    |
-| `ai_breaker`         | AI Worker (GLM) |         3         |  5 min   | 10 min |   15s   |
+| Breaker      | Providers                                                      | Failure Threshold | Cooldown | Window |
+| ------------ | -------------------------------------------------------------- | :---------------: | :------: | :----: |
+| `TOMORROW`   | Tomorrow.io (insights enrichment, map tiles)                   |         3         |  2 min   | 5 min  |
+| `MET_NO`     | MET Norway Locationforecast (the failover forecast)            |         3         |  5 min   | 5 min  |
+| `OPEN_METEO` | Open-Meteo (forecast, grids, air quality, haze, history, ERA5) |         5         |  5 min   | 5 min  |
+| `NASA_POWER` | NASA POWER (history archive)                                   |         3         |  2 min   | 5 min  |
+| `SOILGRIDS`  | ISRIC SoilGrids                                                |         3         |  15 min  | 10 min |
+| `DEFAULT`    | NOAA CPC, NEA data.gov.sg, Aviation Weather Center             |         3         |  2 min   | 5 min  |
 
-AI is called only from the Python backend (`api/py/_ai_gateway.py`), and only through the weather Worker: `POST {WEATHER_SERVICE_URL}/internal/ai/chat/completions` with `Authorization: Bearer WEATHER_SERVICE_API_KEY`. `mukoko-weather-internal` checks the key and forwards over a service binding to `mukoko-weather-ai`, which runs Workers AI GLM through the `shamwari` AI Gateway with the native `env.AI` binding. No Cloudflare AI token exists on Vercel.
+The AI Worker has no breaker: a model call is bounded by the D1 budgets, a timeout and the gateway's own limits.
+
+`MET_NO` is the one breaker that can be tripped at once: MET Norway's terms say to stop traffic immediately when it answers `429` (and a `403` means the client is blocked), so either opens the circuit for the full cooldown (`Breaker::trip`).
+
+AI runs only in the AI Worker, `mukoko-weather-ai`: Workers AI GLM through the `shamwari` AI Gateway with the native `env.AI` binding, the Nyuchi guardrails first in every prompt. No Cloudflare AI token exists on Vercel. The signed-in app reaches it through its own server: the Next.js `/api/ai` proxy checks the WorkOS session (`withAuth()`), then calls `{WEATHER_SERVICE_URL}/internal/ai/summary` with `Authorization: Bearer WEATHER_SERVICE_API_KEY` and the person's id and address. `mukoko-weather-internal` checks the key and forwards over a service binding; the AI Worker caches the answer in KV (30/60/120 min by tag) and counts only the calls that reach the model against the person's hour in D1 (`weather_core::budget`). No Python calls a model any more: the report wizard's follow-up questions, the last Python AI route, are `POST /v1/reports/clarify` on the AI Worker.
 
 ### Weather Fallback Chain
 
-4-stage fallback ensures weather data is always available:
+The forecast Worker's chain always ends in an answer, and says which stage served it (`X-Weather-Provider`):
 
 ```
-1. MongoDB cache (15-min TTL)
-    |── hit ──> return cached data
-    |── miss
+1. KV cache (wx:v2:<lat>_<lon>, fresh 15 min; 5 min for a best_match answer; kept 24 h)
+    |── fresh hit ──> return cached data
+    |── miss, or past its fresh lifetime (kept as the last resort)
     v
-2. Tomorrow.io API (primary)
+2. Open-Meteo Africa-weighted blend of nine global models (served only when at least four return data)
+    |── success ──> cache + return (Tomorrow.io enrichment merged on top when its budget allows)
+    |── too few members, or the request fails
+    v
+3. Open-Meteo best_match (labelled as not a blend)
     |── success ──> cache + return
-    |── rate-limited (429) or error
+    |── error, or the breaker is open
     v
-3. Open-Meteo API (fallback)
-    |── success ──> cache + return
-    |── error
+4. MET Norway Locationforecast (`met-no`, keyless failover, converted at the edge; only reached here)
+    |── success ──> cache 15 min + return (the blend is asked first again after that)
+    |── error, throttled or breaker open
     v
-4. createFallbackWeather (seasonal estimates)
+5. The stored forecast past its fresh lifetime, if any (`X-Cache: STALE`)
+    |── none
+    v
+6. Seasonal estimate (labelled `fallback`, added by the public API)
     |── always succeeds ──> return
 ```
 
@@ -148,22 +172,18 @@ A chart crash, API timeout, or rendering error in any section only affects that 
 
 ### Shamwari Chatbot Resilience
 
-The Shamwari chatbot (`/api/py/chat`) has multiple resilience layers:
+The Shamwari chat is `POST /v1/ai/chat` on the Rust AI Worker (`workers/ai`); the Python `/api/py/chat` and its tool loop were deleted with the Python backend. The Worker's layers:
 
-| Layer             | Mechanism                                           | Scope        |
-| ----------------- | --------------------------------------------------- | ------------ |
-| Rate limiter      | 20 req/hour/IP (MongoDB-backed)                     | Per-client   |
-| Input validation  | Type + length checks, slug regex, tag allowlist     | Per-request  |
-| Circuit breaker   | `ai_breaker` on all AI gateway calls                | Per-provider |
-| Tool timeout      | 15s per tool execution                              | Per-tool     |
-| Tool loop bound   | Max 5 iterations                                    | Per-request  |
-| Tool result cap   | `list_locations_by_tag` capped to 20 results        | Per-tool     |
-| Weather cache     | `Map<string, WeatherResult>`                        | Per-request  |
-| Rules cache       | `rulesCache` ref                                    | Per-request  |
-| Location context  | Module-level, 5-min TTL                             | Per-instance |
-| Activity context  | Module-level, 5-min TTL (dynamic prompt list)       | Per-instance |
-| Singleton client  | Module-level with hash-based key-rotation detection | Per-instance |
-| Markdown boundary | `MarkdownErrorBoundary` in chatbot UI               | Per-message  |
+| Layer              | Mechanism                                                                     | Scope       |
+| ------------------ | ----------------------------------------------------------------------------- | ----------- |
+| Rate limiter       | 10 requests a minute per client (Workers rate-limit binding)                  | Per-client  |
+| Input validation   | Message 1 to 2000 characters, last 10 turns, roles `user`/`assistant`         | Per-request |
+| Personal data      | Email, phone and card numbers refused (`422`), never sent to a model          | Per-request |
+| Guardrails         | The Nyuchi API's compiled block first in the system prompt; `503` without one | Per-isolate |
+| Gateway            | `shamwari` AI Gateway: Guardrails and DLP blocks answered politely            | Per-call    |
+| Weather for places | The seed places named in the message, up to three, from the forecast Worker   | Per-request |
+| Place profile      | Each named place's profile block and the grounding rule                       | Per-request |
+| Markdown boundary  | `MarkdownErrorBoundary` in the chatbot UI                                     | Per-section |
 
 ## Lazy Loading (TikTok-Style Sequential)
 
@@ -183,31 +203,32 @@ Scroll direction ──>
 
 Sections also UNMOUNT when scrolled 1500px past the viewport (bidirectional), reclaiming memory on long pages.
 
+This queue is a workaround for memory pressure, not the design (see Platform direction above). The Astro move replaces it: below-the-fold sections become islands that load when visible.
+
 ## Database Schema
 
 ### Collections
 
-| Collection            |        TTL         | Purpose                                             |
-| --------------------- | :----------------: | --------------------------------------------------- |
-| `weather_cache`       |       15 min       | Weather API responses, keyed by 0.05° grid cell     |
-| `ai_summaries`        |   30/60/120 min    | Cached AI weather summaries (tiered by location)    |
-| `weather_history`     |        None        | Permanent historical weather records                |
-| `history_analysis`    |       1 hour       | Cached AI history analysis results                  |
-| `locations`           |        None        | Seed + community locations                          |
-| `activities`          |        None        | Activity definitions (30+ activities, 6 categories) |
-| `activity_categories` |        None        | Category metadata with mineral color styles         |
-| `suitability_rules`   |        None        | Condition-based weather suitability rules           |
-| `tags`                |        None        | Tag metadata (slug, label, icon, featured)          |
-| `regions`             |        None        | Supported geographic regions (bounding boxes)       |
-| `seasons`             |        None        | Country-specific season definitions                 |
-| `countries`           |        None        | Country metadata (54 AU + ASEAN)                    |
-| `provinces`           |        None        | Province/state metadata                             |
-| `ai_prompts`          |        None        | Database-driven AI system prompts                   |
-| `ai_suggested_rules`  |        None        | Dynamic suggested prompt rules                      |
-| `weather_reports`     | TTL on `expiresAt` | Community weather reports (24h/48h/72h by severity) |
-| `device_profiles`     |        None        | Cross-device preference sync (anonymous UUID)       |
-| `rate_limits`         | TTL on `expiresAt` | IP rate limiting (atomic findOneAndUpdate)          |
-| `api_keys`            |        None        | Third-party API keys (Tomorrow.io, Stytch)          |
+| Collection            |        TTL         | Purpose                                                                                   |
+| --------------------- | :----------------: | ----------------------------------------------------------------------------------------- |
+| `ai_summaries`        |   30/60/120 min    | Cached AI weather summaries (tiered by location). Now KV in the AI Worker; no longer read |
+| `weather_history`     |        None        | Permanent historical weather records                                                      |
+| `history_analysis`    |       1 hour       | Unused: AI history analyses are cached in the AI Worker's KV (`history:v1:`)              |
+| `locations`           |        None        | Seed + community locations                                                                |
+| `activities`          |        None        | Activity definitions (30+ activities, 6 categories)                                       |
+| `activity_categories` |        None        | Category metadata with mineral color styles                                               |
+| `suitability_rules`   |        None        | Condition-based weather suitability rules                                                 |
+| `tags`                |        None        | Tag metadata (slug, label, icon, featured)                                                |
+| `regions`             |        None        | Supported geographic regions (bounding boxes)                                             |
+| `seasons`             |        None        | Country-specific season definitions                                                       |
+| `countries`           |        None        | Country metadata (54 AU + ASEAN)                                                          |
+| `provinces`           |        None        | Province/state metadata                                                                   |
+| `ai_prompts`          |        None        | Database-driven AI system prompts                                                         |
+| `ai_suggested_rules`  |        None        | Dynamic suggested prompt rules                                                            |
+| `weather_reports`     | TTL on `expiresAt` | Community weather reports (24h/48h/72h by severity); written by the MongoDB bridge Worker |
+| `device_profiles`     |        None        | Cross-device preference sync (anonymous UUID); written by the MongoDB bridge Worker       |
+| `rate_limits`         | TTL on `expiresAt` | IP rate limiting (atomic findOneAndUpdate)                                                |
+| `api_keys`            |        None        | Third-party API keys (Tomorrow.io, Stytch)                                                |
 
 ### Atlas Search Indexes
 

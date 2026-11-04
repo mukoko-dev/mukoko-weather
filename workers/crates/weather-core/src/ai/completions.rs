@@ -1,4 +1,5 @@
-//! The OpenAI-style `chat/completions` passthrough the Python backend uses.
+//! The OpenAI-style `chat/completions` passthrough the (deleted, #333) Python
+//! backend used; no caller is left in this repository.
 //!
 //! `POST weather-internal.mukoko.com/internal/ai/chat/completions` (service
 //! key) is forwarded over a service binding to `mukoko-weather-ai`, which

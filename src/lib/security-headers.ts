@@ -7,6 +7,8 @@
  * CLAUDE.md (Security headers).
  */
 
+import { parseBareOrigin } from "./bare-origin";
+
 /** Where report-only violations are sent (same-origin, see api/csp-report). */
 export const CSP_REPORT_PATH = "/api/csp-report";
 
@@ -60,6 +62,9 @@ export const CSP_DIRECTIVES: Record<string, string[]> = {
     // The Rust weather Worker (NEXT_PUBLIC_WEATHER_API_URL, src/lib/weather-api.ts).
     "https://weather-api.mukoko.com",
     "https://weather-tiles.mukoko.com",
+    // CouchDB sync replicates with the Nyuchi API (src/lib/rxdb/couch-sync.ts),
+    // only while FLAGS.couch_sync is on; the origin comes from /api/couch/session.
+    "https://api.nyuchi.com",
     "https://api.tomorrow.io",
     "https://gibs.earthdata.nasa.gov",
     "https://api.workos.com",
@@ -77,8 +82,38 @@ export const CSP_DIRECTIVES: Record<string, string[]> = {
   "manifest-src": ["'self'"],
 };
 
-export function buildCsp(reportPath: string = CSP_REPORT_PATH): string {
-  const parts = Object.entries(CSP_DIRECTIVES).map(
+/**
+ * The Nyuchi API origin the CouchDB sync replicates with, from the environment
+ * the CALLER passes (`next.config.ts` hands over the process's variables; this
+ * module reads none, so the table stays pure data): the value `NYUCHI_API_URL`
+ * has, by the same rule `/api/couch/session` applies before it hands the
+ * origin to the page. Empty when the variable is unset or unusable (the route
+ * answers 503 then). The default entry in `connect-src` above is the
+ * production origin; this keeps the CSP matching the host the page is actually
+ * told about when the variable points somewhere else (a staging gateway).
+ */
+export function couchApiConnectSrc(
+  env: Readonly<Record<string, string | undefined>>,
+): string[] {
+  const origin = parseBareOrigin(env.NYUCHI_API_URL?.trim());
+  return origin ? [origin] : [];
+}
+
+/**
+ * The policy string. `extraConnectSrc` adds hosts to `connect-src` only (and
+ * never twice); everything else is the table.
+ */
+export function buildCsp(
+  reportPath: string = CSP_REPORT_PATH,
+  extraConnectSrc: readonly string[] = [],
+): string {
+  const directives: Record<string, string[]> = {
+    ...CSP_DIRECTIVES,
+    "connect-src": [
+      ...new Set([...CSP_DIRECTIVES["connect-src"], ...extraConnectSrc]),
+    ],
+  };
+  const parts = Object.entries(directives).map(
     ([k, v]) => `${k} ${v.join(" ")}`,
   );
   parts.push(`report-uri ${reportPath}`);
@@ -99,7 +134,12 @@ export const BASELINE_HEADERS = [
 
 export const FRAME_HEADER = { key: "X-Frame-Options", value: "SAMEORIGIN" };
 
-/** Origins allowed to call the first-party API cross-origin (Python CORS list). */
+/**
+ * Origins allowed to call the first-party API cross-origin: the Workers'
+ * `CORS_ORIGINS` (`workers/public-api` and `workers/stations`), which echo the
+ * origin themselves. This table is the data the tests and the docs check them
+ * against; nothing on Vercel answers a cross-origin API call any more.
+ */
 export const FIRST_PARTY_ORIGINS = [
   "https://weather.mukoko.com",
   "https://weatherstations.nyuchi.com",
@@ -109,22 +149,22 @@ export const FIRST_PARTY_ORIGINS = [
 /**
  * CORS policy as data (framework-agnostic, reusable by the Astro/Workers app).
  *
- * `open` routes are the documented public browser API (developers page) and the
- * embed endpoints: `Access-Control-Allow-Origin: *`, never with credentials.
- * Every other route is same-origin plus {@link FIRST_PARTY_ORIGINS}, echoed by
- * the API layer (FastAPI CORSMiddleware).
+ * `open` routes are the embed endpoints: `Access-Control-Allow-Origin: *`,
+ * never with credentials. The documented public browser API (developers page:
+ * weather, air quality, geo and search) is on the Rust API Worker now
+ * (`weather_core::cors::OPEN_READ_ROUTES`), which carries the same policy.
+ * Every other route is same-origin here; the Workers echo
+ * {@link FIRST_PARTY_ORIGINS} on their own routes.
  */
 export const CORS_POLICY = {
-  open: [
-    "/api/py/weather",
-    "/api/py/geo",
-    "/api/py/search",
-    "/api/py/airquality/:path*",
-    "/api/embed/:path*",
-    "/embed/:path*",
-  ],
+  open: ["/api/embed/:path*", "/embed/:path*"],
   allowlist: FIRST_PARTY_ORIGINS,
-  /** Hardware ingest is not a browser: no CORS needed. */
+  /**
+   * Hardware ingest is not a browser: no CORS needed. This is the one
+   * `/api/py` path left: the upload URL consoles in the field are configured
+   * with, which `vercel.json` rewrites to the stations Worker (and that Worker
+   * also takes as a route on this host).
+   */
   noCors: ["/api/py/stations/ingest"],
   headers: [
     { key: "Access-Control-Allow-Origin", value: "*" },

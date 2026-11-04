@@ -337,7 +337,7 @@ describe("palette — globals.css mirrors it exactly", () => {
 describe("palette — text over the sky stays readable", () => {
   // WeatherBackdrop: sky at opacity 0.8 (opacity-80) over the page surface,
   // then the .hornbill-veil (surface-card) under the header + breadcrumb.
-  // WeatherLoadingScene: same sky, text on a surface-card/85 panel.
+  // LocationSkeleton: the same sky (WeatherSky), bars only, no text.
   const veil = Number(
     globals.match(
       /\.hornbill-veil\s*\{[\s\S]*?var\(--color-surface-card\)\s*(\d+)%/,

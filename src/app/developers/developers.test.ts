@@ -15,7 +15,7 @@ describe("developers page — metadata", () => {
   });
 
   it("sets the canonical URL to /developers", () => {
-    expect(pageSource).toContain("https://weather.mukoko.com/developers");
+    expect(pageSource).toContain("${SITE_URL}/developers");
     expect(pageSource).toContain("canonical:");
   });
 });
@@ -36,7 +36,7 @@ describe("developers page — structure", () => {
   });
 
   it("includes JSON-LD structured data (TechArticle)", () => {
-    expect(pageSource).toContain("application/ld+json");
+    expect(pageSource).toContain("<JsonLd data={articleSchema} />");
     expect(pageSource).toContain("TechArticle");
   });
 
@@ -57,11 +57,11 @@ describe("developers page — structure", () => {
 describe("developers page — documented public endpoints", () => {
   const endpoints = [
     "/api/embed/current",
-    "/api/py/weather?lat=",
-    "/api/py/geo?lat=",
-    "/api/py/locations?slug=",
-    "/api/py/search?q=",
-    "/api/py/airquality?lat=",
+    "/v1/weather?lat=",
+    "/v1/geo?lat=",
+    "/v1/locations?slug=",
+    "/v1/search?q=",
+    "/v1/air-quality?lat=",
     "/v1/airports/nearest?lat=",
   ];
 
@@ -69,13 +69,46 @@ describe("developers page — documented public endpoints", () => {
     expect(pageSource).toContain(endpoint);
   });
 
-  it("notes the open CORS policy", () => {
+  it("names exactly the CORS-open routes (the Worker's OPEN_READ_ROUTES)", () => {
     expect(pageSource).toContain("Access-Control-Allow-Origin: *");
+    for (const open of [
+      "/v1/weather",
+      "/v1/air-quality",
+      "/v1/air-quality/grid",
+      "/v1/geo",
+      "/v1/search",
+    ]) {
+      expect(pageSource, open).toContain(
+        `<code className="termite">${open}</code>`,
+      );
+    }
+  });
+
+  it("does not claim the closed routes are CORS-open", () => {
+    // Location lookup and nearest airports answer first-party origins only.
+    const intro = pageSource.slice(
+      pageSource.indexOf("are served with"),
+      pageSource.indexOf("All coordinates are WGS 84"),
+    );
+    expect(intro).not.toContain("/v1/locations");
+    expect(intro).not.toContain("/v1/airports");
+    expect(intro).toContain("our own sites only");
   });
 
   it("mentions the weather provider response headers", () => {
     expect(pageSource).toContain("X-Weather-Provider");
     expect(pageSource).toContain("X-Current-Source");
+  });
+
+  it("documents the MET Norway failover provider and credits it (#434)", () => {
+    const text = pageSource.replace(/\s+/g, " ");
+    // The header value, what it means and what it is not.
+    expect(text).toContain('<code className="termite">met-no</code>');
+    expect(text).toContain("served only while Open-Meteo is unavailable");
+    expect(text).toContain("clear-sky index");
+    // The licence asks for the source, a licence note and a note of changes.
+    expect(text).toContain("MET Norway");
+    expect(text).toContain("CC BY 4.0, converted to our format");
   });
 
   it("links to Shamwari for the AI endpoints, gated behind the shamwari_chat feature flag", () => {

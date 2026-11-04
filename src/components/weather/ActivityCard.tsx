@@ -5,7 +5,7 @@ import type { Activity } from "@/lib/activities";
 import type { WeatherData, WeatherInsights } from "@/lib/weather";
 import type { CategoryStyle } from "@/lib/suitability-cache";
 import type { SuitabilityRuleDoc } from "@/lib/db";
-import { ActivityIcon } from "@/lib/weather-icons";
+import { ActivityIcon } from "@/lib/activity-icon";
 import { evaluateSuitability } from "@/lib/suitability";
 import { feasibilitySeries } from "@/lib/activity-feasibility";
 import { getActivityTips } from "@/lib/activity-tips";
@@ -26,6 +26,11 @@ const DEFAULT_STYLE: CategoryStyle = {
 // ActivityCard — suitability card for a single activity: current rating
 // badge + detail, a 24h feasibility trend line, and weather-driven tips
 // ---------------------------------------------------------------------------
+
+/** DOM id of an activity's card; the advice sheet scrolls to it. */
+export function activityCardAnchorId(activityId: string): string {
+  return `activity-card-box-${activityId}`;
+}
 
 export interface ActivityCardProps {
   activity: Activity;
@@ -75,7 +80,9 @@ export function ActivityCard({
 
   return (
     <div
-      className={`baobab ${style.border}`}
+      id={activityCardAnchorId(activity.id)}
+      tabIndex={-1}
+      className={`baobab scroll-mt-4 ${style.border}`}
       role="group"
       aria-labelledby={headingId}
     >

@@ -2,17 +2,24 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import {
-  PLATE_CLASS,
+  SKY_CLASS,
   activityDotClass,
   currentHourIndex,
+  formatHighLowParts,
+  skyTexture,
+  heroLocalTime,
+  skyReachCss,
+  SKY_CLEARANCE_REM,
+  SKY_FADE_REM,
+  SKY_MIN_REM,
   formatHighLow,
   heroActivityClause,
   heroBadgeLabel,
   heroEyebrowBadges,
   heroOutlook,
   isHomeLocation,
-  plateFamily,
-  type PlateFamily,
+  skyFamily,
+  type SkyFamily,
 } from "./hero";
 import { contrastRatio } from "./contrast";
 import type { HourlyWeather } from "./weather";
@@ -85,40 +92,142 @@ describe("formatHighLow", () => {
   });
 });
 
-describe("plateFamily", () => {
-  it("maps clear skies to the day or night clear plate", () => {
-    expect(plateFamily(0, true)).toBe("clear-day");
-    expect(plateFamily(1, true)).toBe("clear-day");
-    expect(plateFamily(0, false)).toBe("clear-night");
+describe("formatHighLowParts", () => {
+  it("splits the line so it can wrap between H and L", () => {
+    expect(formatHighLowParts(34.4, 24.6)).toEqual(["H:34°", "L:25°"]);
   });
 
-  it("maps overcast and partly cloudy codes to the cloudy plates", () => {
-    expect(plateFamily(2, true)).toBe("cloudy-day");
-    expect(plateFamily(3, true)).toBe("cloudy-day");
-    expect(plateFamily(3, false)).toBe("cloudy-night");
-  });
-
-  it("maps fog and mist to the fog plate at any hour", () => {
-    expect(plateFamily(45, true)).toBe("fog");
-    expect(plateFamily(48, false)).toBe("fog");
-  });
-
-  it("maps drizzle, rain and showers to the rain plate", () => {
-    expect(plateFamily(51, true)).toBe("rain");
-    expect(plateFamily(63, false)).toBe("rain");
-    expect(plateFamily(81, true)).toBe("rain");
-  });
-
-  it("maps storms, snow and unknown codes to their families", () => {
-    expect(plateFamily(95, false)).toBe("storm");
-    expect(plateFamily(73, true)).toBe("snow");
-    expect(plateFamily(10, true)).toBe("cloudy-day");
+  it("returns null when either value is missing or not finite (missing is never zero)", () => {
+    expect(formatHighLowParts(undefined, 25)).toBeNull();
+    expect(formatHighLowParts(34, null)).toBeNull();
+    expect(formatHighLowParts(Number.NaN, 25)).toBeNull();
   });
 });
 
-describe("PLATE_CLASS", () => {
-  it("has a modifier class for every plate family", () => {
-    const families: PlateFamily[] = [
+describe("heroLocalTime", () => {
+  it("reads the clock in the PLACE's offset, never the viewer's", () => {
+    const now = new Date("2026-10-31T15:03:00Z");
+    expect(heroLocalTime(now, 7200)).toBe("17:03 LOCAL");
+    expect(heroLocalTime(now, 28800)).toBe("23:03 LOCAL");
+    expect(heroLocalTime(now, -18000)).toBe("10:03 LOCAL");
+  });
+
+  it("wraps across midnight and pads", () => {
+    expect(heroLocalTime(new Date("2026-10-31T23:30:00Z"), 7200)).toBe(
+      "01:30 LOCAL",
+    );
+  });
+
+  it("is null until there is a client clock", () => {
+    expect(heroLocalTime(null, 7200)).toBeNull();
+    expect(heroLocalTime(new Date(Number.NaN), 7200)).toBeNull();
+  });
+});
+
+describe("skyReachCss — the sky extends with its content", () => {
+  it("is the larger of one screen + 8rem, the floor and the content bottom + clearance + fade", () => {
+    const css = skyReachCss(700, 16);
+    const px = Math.ceil(700 + (SKY_CLEARANCE_REM + SKY_FADE_REM) * 16);
+    expect(css).toBe(`max(100svh + 8rem, ${SKY_MIN_REM}rem, ${px}px)`);
+    expect(px).toBe(820);
+  });
+
+  it("the floor keeps the Conditions card out of the fade before anything is measured", () => {
+    // Measured card bottoms (rem): 44 at 100% text, 51 at 200% text, with the
+    // outlook line. The floor must clear them plus clearance and the fade.
+    for (const cardBottomRem of [44, 46, 51]) {
+      expect(SKY_MIN_REM).toBeGreaterThanOrEqual(
+        cardBottomRem + SKY_CLEARANCE_REM + SKY_FADE_REM,
+      );
+    }
+    const css = readFileSync(resolve(__dirname, "../app/globals.css"), "utf-8");
+    expect(css).toContain(
+      `--sky-reach: max(100svh + 8rem, ${SKY_MIN_REM}rem);`,
+    );
+  });
+
+  it("grows with text zoom: the margin is in root-font units", () => {
+    const normal = skyReachCss(700, 16)!;
+    const zoomed = skyReachCss(700, 32)!;
+    const n = (s: string) => parseInt(s.match(/, (\d+)px/)![1], 10);
+    expect(n(zoomed) - n(normal)).toBe(
+      Math.ceil((SKY_CLEARANCE_REM + SKY_FADE_REM) * 32) -
+        Math.ceil((SKY_CLEARANCE_REM + SKY_FADE_REM) * 16),
+    );
+  });
+
+  it("always leaves the whole fade (6rem) below the content, so content never sits in it", () => {
+    for (const rootPx of [12, 16, 24, 32]) {
+      for (const bottom of [300, 667, 900, 1500]) {
+        const px = parseInt(
+          skyReachCss(bottom, rootPx)!.match(/, (\d+)px/)![1],
+          10,
+        );
+        expect(px - bottom).toBeGreaterThanOrEqual(SKY_FADE_REM * rootPx);
+      }
+    }
+  });
+
+  it("returns null with nothing to measure or a bad root size (keep the CSS default)", () => {
+    expect(skyReachCss(null, 16)).toBeNull();
+    expect(skyReachCss(undefined, 16)).toBeNull();
+    expect(skyReachCss(Number.NaN, 16)).toBeNull();
+    expect(skyReachCss(500, 0)).toBeNull();
+    expect(skyReachCss(500, Number.NaN)).toBeNull();
+  });
+
+  it("mirrors the --sky-fade token", () => {
+    const css = readFileSync(resolve(__dirname, "../app/globals.css"), "utf-8");
+    expect(css).toContain(`--sky-fade: ${SKY_FADE_REM}rem;`);
+  });
+});
+
+describe("skyTexture", () => {
+  it("puts stars on the night skies and streaks on rain and storms, nothing else", () => {
+    expect(skyTexture("clear-night")).toBe("stars");
+    expect(skyTexture("cloudy-night")).toBe("stars");
+    expect(skyTexture("rain")).toBe("streaks");
+    expect(skyTexture("storm")).toBe("streaks");
+    for (const f of ["clear-day", "cloudy-day", "fog", "snow"] as const) {
+      expect(skyTexture(f)).toBeNull();
+    }
+  });
+});
+
+describe("skyFamily", () => {
+  it("maps clear skies to the day or night clear plate", () => {
+    expect(skyFamily(0, true)).toBe("clear-day");
+    expect(skyFamily(1, true)).toBe("clear-day");
+    expect(skyFamily(0, false)).toBe("clear-night");
+  });
+
+  it("maps overcast and partly cloudy codes to the cloudy plates", () => {
+    expect(skyFamily(2, true)).toBe("cloudy-day");
+    expect(skyFamily(3, true)).toBe("cloudy-day");
+    expect(skyFamily(3, false)).toBe("cloudy-night");
+  });
+
+  it("maps fog and mist to the fog plate at any hour", () => {
+    expect(skyFamily(45, true)).toBe("fog");
+    expect(skyFamily(48, false)).toBe("fog");
+  });
+
+  it("maps drizzle, rain and showers to the rain plate", () => {
+    expect(skyFamily(51, true)).toBe("rain");
+    expect(skyFamily(63, false)).toBe("rain");
+    expect(skyFamily(81, true)).toBe("rain");
+  });
+
+  it("maps storms, snow and unknown codes to their families", () => {
+    expect(skyFamily(95, false)).toBe("storm");
+    expect(skyFamily(73, true)).toBe("snow");
+    expect(skyFamily(10, true)).toBe("cloudy-day");
+  });
+});
+
+describe("SKY_CLASS", () => {
+  it("has a modifier class for every sky family", () => {
+    const families: SkyFamily[] = [
       "clear-day",
       "clear-night",
       "cloudy-day",
@@ -129,7 +238,7 @@ describe("PLATE_CLASS", () => {
       "snow",
     ];
     for (const f of families) {
-      expect(PLATE_CLASS[f]).toBe(`kori-${f}`);
+      expect(SKY_CLASS[f]).toBe(`kestrel-${f}`);
     }
   });
 });
@@ -229,7 +338,7 @@ describe("heroActivityClause", () => {
   });
 });
 
-describe("sky plate tokens — contrast", () => {
+describe("sky tokens — contrast", () => {
   // globals.css @imports the Mzizi tokens (the --color-<mineral> sources the
   // plate tokens resolve through), so read both in cascade order. The Mzizi
   // light block is `:root, [data-theme="light"]`; normalise it to `:root`.
@@ -239,7 +348,10 @@ describe("sky plate tokens — contrast", () => {
       "utf-8",
     ).replace(/:root,\s*\[data-theme="light"\] \{/g, ":root {") +
     "\n" +
-    readFileSync(resolve(__dirname, "../app/globals.css"), "utf-8");
+    readFileSync(resolve(__dirname, "../app/globals.css"), "utf-8").replace(
+      /:root,\s*\[data-theme="light"\] \{/g,
+      ":root {",
+    );
 
   /** Body of the first top-level block whose selector matches. */
   function blockBody(selector: string): string {
@@ -306,43 +418,183 @@ describe("sky plate tokens — contrast", () => {
     return raw.toLowerCase();
   }
 
-  const families = Object.keys(PLATE_CLASS) as PlateFamily[];
+  /** A custom property's literal value from :root. */
+  const resolveRaw = (name: string) => rootVars.get(name);
 
-  it("declares every plate family's colour and foreground token in both themes", () => {
+  const families = Object.keys(SKY_CLASS) as SkyFamily[];
+  const FG = "#ffffff";
+
+  /** WCAG relative luminance of a #rrggbb colour. */
+  function luminance(hex: string): number {
+    const [r, g, b] = [1, 3, 5]
+      .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+
+  it("declares the white sky foreground once", () => {
+    expect(resolveColour("--sky-fg", "light")).toBe(FG);
+    expect(resolveColour("--sky-fg", "dark")).toBe(FG);
+  });
+
+  const STOPS = ["top", "mid", "bottom"] as const;
+
+  it("declares every sky family's top, mid and bottom stop in both themes", () => {
     for (const f of families) {
       for (const scope of ["light", "dark"] as const) {
-        expect(() => resolveColour(`--plate-${f}`, scope)).not.toThrow();
-        expect(() => resolveColour(`--plate-${f}-fg`, scope)).not.toThrow();
+        for (const stop of STOPS) {
+          expect(() =>
+            resolveColour(`--sky-${f}-${stop}`, scope),
+          ).not.toThrow();
+        }
       }
     }
   });
 
-  it("wires each family modifier class to its plate token", () => {
-    const body = blockBody(".kori-clear-day");
-    expect(body).toContain("--kori-bg: var(--plate-clear-day)");
+  it("wires each family modifier class to its sky stops", () => {
     for (const f of families) {
-      expect(css).toContain(`.kori-${f} {`);
-      expect(css).toContain(`--kori-bg: var(--plate-${f});`);
+      const body = blockBody(`.kestrel-${f}`);
+      expect(body).toContain(`--kestrel-top: var(--sky-${f}-top)`);
+      expect(body).toContain(`--kestrel-mid: var(--sky-${f}-mid)`);
+      expect(body).toContain(`--kestrel-bottom: var(--sky-${f}-bottom)`);
     }
   });
 
-  it("keeps body text on every plate at WCAG AA 4.5:1 in light and dark", () => {
+  it("keeps white text at WCAG AA 4.5:1 on EVERY gradient stop (8 families x light/dark x 3 stops)", () => {
+    let checked = 0;
     for (const f of families) {
       for (const scope of ["light", "dark"] as const) {
-        const ratio = contrastRatio(
-          resolveColour(`--plate-${f}`, scope),
-          resolveColour(`--plate-${f}-fg`, scope),
-        );
-        expect(ratio, `${f} ${scope}`).toBeGreaterThanOrEqual(4.5);
+        for (const stop of STOPS) {
+          const bg = resolveColour(`--sky-${f}-${stop}`, scope);
+          for (const fg of ["--sky-fg", "--sky-fg-dim"]) {
+            const ratio = contrastRatio(bg, resolveColour(fg, scope));
+            expect(
+              ratio,
+              `${fg} on ${f} ${scope} ${stop} ${bg}`,
+            ).toBeGreaterThanOrEqual(4.5);
+            checked++;
+          }
+        }
       }
     }
+    expect(checked).toBe(96);
   });
 
-  it("uses only solid mineral values: no gradients or translucent plates", () => {
-    const kori = css.slice(
-      css.indexOf(".kori {"),
-      css.indexOf(".kori-clear-day {"),
+  it("draws the keyboard focus ring on the sky in --sky-fg: >= 3:1 on every gradient stop (WCAG 1.4.11), where the page ring (--focus-ring) is not", () => {
+    let pageRingLost = 0;
+    for (const f of families) {
+      for (const scope of ["light", "dark"] as const) {
+        for (const stop of STOPS) {
+          const bg = resolveColour(`--sky-${f}-${stop}`, scope);
+          expect(
+            contrastRatio(resolveColour("--sky-fg", scope), bg),
+            `sky ring on ${f} ${scope} ${stop} ${bg}`,
+          ).toBeGreaterThanOrEqual(3);
+          if (contrastRatio(resolveColour("--focus-ring", scope), bg) < 3) {
+            pageRingLost++;
+          }
+        }
+      }
+    }
+    // The page ring vanishes on most sky stops (the reason the sky re-points
+    // --focus-ring); if the palette ever changes so it no longer does, this
+    // guard can be revisited rather than silently kept.
+    expect(pageRingLost).toBeGreaterThan(0);
+  });
+
+  it("uses the owner's mockup values for the night and rain skies", () => {
+    expect(resolveColour("--sky-clear-night-top", "dark")).toBe("#0b1026");
+    expect(resolveColour("--sky-clear-night-mid", "dark")).toBe("#151c42");
+    expect(resolveColour("--sky-clear-night-bottom", "dark")).toBe("#1c2550");
+    expect(resolveColour("--sky-rain-top", "dark")).toBe("#3a4656");
+    expect(resolveColour("--sky-rain-mid", "dark")).toBe("#4a5768");
+    expect(resolveColour("--sky-rain-bottom", "dark")).toBe("#3e4a5a");
+    expect(blockBody(".kestrel-clear-night")).toContain(
+      "--kestrel-mid-at: 55%",
     );
-    expect(kori).not.toMatch(/gradient|blur|rgba/);
+    expect(blockBody(".kestrel-rain")).toContain("--kestrel-mid-at: 45%");
+  });
+
+  it("makes dark a real night/dusk design, never lighter than light, never a bright slab", () => {
+    for (const f of families) {
+      for (const stop of STOPS) {
+        const light = luminance(resolveColour(`--sky-${f}-${stop}`, "light"));
+        const dark = luminance(resolveColour(`--sky-${f}-${stop}`, "dark"));
+        expect(dark, `${f} ${stop}`).toBeLessThanOrEqual(light);
+      }
+      expect(
+        luminance(resolveColour(`--sky-${f}-bottom`, "dark")),
+        f,
+      ).toBeLessThan(0.1);
+    }
+    // The day sky is a different design in light and dark.
+    expect(resolveColour("--sky-clear-day-top", "dark")).not.toBe(
+      resolveColour("--sky-clear-day-top", "light"),
+    );
+  });
+
+  it("paints a three-stop vertical gradient, static (no glass, shadow, blur or animation)", () => {
+    const band = blockBody(".kestrel");
+    expect(band).toContain("linear-gradient(");
+    expect(band).toContain("var(--kestrel-mid) var(--kestrel-mid-at)");
+    expect(band).not.toMatch(/blur|rgba|box-shadow|animation|transition/);
+    expect(band).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+
+  it("carries faint static texture: stars on night, streaks on rain (top 340px, 105deg, 14px gaps)", () => {
+    expect(blockBody(".kestrel-stars")).toContain("radial-gradient(");
+    const streaks = blockBody(".kestrel-streaks");
+    expect(streaks).toContain("height: 340px");
+    expect(streaks).toContain("105deg");
+    expect(streaks).toContain("1px 14px");
+    for (const sel of [".kestrel-stars", ".kestrel-streaks"]) {
+      expect(blockBody(sel)).not.toMatch(/animation|transition|blur/);
+    }
+  });
+
+  it("the Conditions card is a translucent bordered card: ~7% fill, hairline, 22px, no shadow, no blur", () => {
+    const at = css.indexOf("  .kestrel-card {\n    background-color");
+    const card = css.slice(at, css.indexOf("}", at));
+    expect(card).toContain("var(--sky-fg) 7%, transparent");
+    expect(card).toContain("border: 1px solid");
+    expect(card).toContain("border-radius: var(--radius-sky-card)");
+    expect(card).toContain("padding: var(--space-card)");
+    expect(card).not.toMatch(/shadow|blur|backdrop/);
+    expect(resolveRaw("--radius-sky-card")).toBe("1.375rem");
+  });
+
+  it("re-points the text tokens inside the sky card and the hero's season line", () => {
+    const at = css.indexOf("  .kestrel-ink,");
+    const ink = css.slice(at, css.indexOf("}", at));
+    expect(ink).toContain(".kestrel-card");
+    for (const t of [
+      "--color-text-primary",
+      "--color-text-secondary",
+      "--color-primary",
+      "--color-border",
+    ]) {
+      expect(ink).toContain(`${t}:`);
+    }
+  });
+
+  it("the round control (Share, ⋯) is 48px, round, bordered, shadowless", () => {
+    const round = blockBody(".kestrel-round");
+    expect(round).toContain("w-[var(--touch-target-min)]");
+    expect(round).toContain("h-[var(--touch-target-min)]");
+    expect(round).toContain("rounded-full");
+    expect(round).toContain("border");
+    expect(round).not.toMatch(/shadow|blur/);
+  });
+
+  it("the sky box starts at the top of the page, is one screen + 8rem tall (60rem at least) and fades out over 6rem", () => {
+    expect(resolveRaw("--sky-fade")).toBe("6rem");
+    expect(resolveRaw("--sky-reach")).toBe("max(100svh + 8rem, 60rem)");
+    const reach = blockBody(".kestrel-reach");
+    expect(reach).toContain("position: absolute");
+    expect(reach).toContain("top: 0");
+    expect(reach).toContain("height: var(--sky-reach)");
+    expect(reach).toContain("mask-image");
+    // It scrolls away with the page: never fixed.
+    expect(reach).not.toContain("fixed");
   });
 });

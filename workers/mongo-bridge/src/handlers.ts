@@ -8,17 +8,30 @@
 //   POST /reports           a validated report          → 201 {id, verified, expiresIn}
 //   GET  /reports?slug=..[&slug=..][&hours=][&limit=]   → 200 {reports}
 //   POST /reports/upvote    {reportId, voter}           → 200 {upvoted[, reason]}
+//   GET  /history?slug=..[&slug=..]&start=&end=[&aliases=1&lat=&lon=]  → 200 {days}  (weather.weather_history;
+//        aliases=1 also reads the days under the place's platform slugs, found in places.placesGeo near lat/lon)
+//   POST /history/days      {slug, days:[archive day]}  → 200 {inserted, existing}  (insert-only)
+//   GET  /places?slug=..    one community place         → 200 {place} | 404 | 503  (places.placesGeo, READ ONLY;
+//        found by sourceProvenance.mukokoSlug; 503 when the read is not permitted: it fails closed)
 //
 // Errors use the Workers' envelope: {error, error_description}.
 
-import type { DeviceStore, ReportStore } from "./stores";
+import type {
+  DeviceStore,
+  HistoryStore,
+  PlaceAliasStore,
+  ReportStore,
+} from "./stores";
 import {
   isRecord,
   ttlSeconds,
   validDeviceId,
   validatePatch,
   validatePreferences,
+  validateHistoryRead,
+  validateHistoryWrite,
   validateListQuery,
+  validatePlaceQuery,
   validateReport,
   validateUpvote,
 } from "./validate";
@@ -26,6 +39,9 @@ import {
 export interface Stores {
   devices: DeviceStore;
   reports: ReportStore;
+  history: HistoryStore;
+  /** Read only: `places.placesGeo`, for the platform aliases of a place. */
+  places: PlaceAliasStore;
 }
 
 export interface Result {
@@ -64,7 +80,10 @@ export function needsStores(path: string): boolean {
     path === "/devices" ||
     path.startsWith("/devices/") ||
     path === "/reports" ||
-    path === "/reports/upvote"
+    path === "/reports/upvote" ||
+    path === "/history" ||
+    path === "/history/days" ||
+    path === "/places"
   );
 }
 
@@ -91,6 +110,19 @@ export async function route(call: Call, deps: Deps): Promise<Result> {
     return method === "POST"
       ? upvoteReport(call, deps)
       : notAllowed("POST /reports/upvote");
+  }
+  if (path === "/history") {
+    return method === "GET"
+      ? readHistory(call, deps)
+      : notAllowed("GET /history");
+  }
+  if (path === "/history/days") {
+    return method === "POST"
+      ? writeHistoryDays(call, deps)
+      : notAllowed("POST /history/days");
+  }
+  if (path === "/places") {
+    return method === "GET" ? getPlace(call, deps) : notAllowed("GET /places");
   }
   return fail(404, "not_found", "No such route.");
 }
@@ -204,4 +236,44 @@ async function upvoteReport(call: Call, deps: Deps): Promise<Result> {
       ? { upvoted: true }
       : { upvoted: false, reason: "Already upvoted or report not found" },
   };
+}
+
+async function readHistory(call: Call, deps: Deps): Promise<Result> {
+  const q = validateHistoryRead(call.query);
+  if (!q.ok) return badRequest(q.detail);
+  // A place's platform aliases come from its record, and add keys: the
+  // history query itself is always `$in` over plain, validated slugs.
+  const aliases = q.value.aliases
+    ? await deps.stores.places.aliasesOf(
+        q.value.keys[0]!,
+        q.value.aliases.lat,
+        q.value.aliases.lon,
+      )
+    : [];
+  const keys = [...new Set([...q.value.keys, ...aliases])];
+  const days = await deps.stores.history.read(keys, q.value.start, q.value.end);
+  return { status: 200, body: { days } };
+}
+
+async function writeHistoryDays(call: Call, deps: Deps): Promise<Result> {
+  const now = deps.now();
+  const w = validateHistoryWrite(call.body, now.toISOString().slice(0, 10));
+  if (!w.ok) return badRequest(w.detail);
+  const res = await deps.stores.history.insertArchiveDays(
+    w.value.key,
+    w.value.days,
+    now,
+  );
+  return { status: 200, body: res };
+}
+
+async function getPlace(call: Call, deps: Deps): Promise<Result> {
+  const q = validatePlaceQuery(call.query);
+  if (!q.ok) return badRequest(q.detail);
+  const found = await deps.stores.places.bySlug(q.value.slug);
+  if (found.kind === "found")
+    return { status: 200, body: { place: found.place } };
+  if (found.kind === "none") return fail(404, "not_found", "Place not found");
+  // The read is not permitted, or the store is down: answer closed, never "none".
+  return fail(503, "unavailable", "The data store is unavailable.");
 }

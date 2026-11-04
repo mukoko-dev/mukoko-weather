@@ -13,6 +13,7 @@ const read = (p: string) => readFileSync(resolve(__dirname, p), "utf-8");
 const sectionSkeleton = read("SectionSkeleton.tsx");
 const uiSkeleton = read("../ui/skeleton.tsx");
 const mapSkeleton = read("map/MapSkeleton.tsx");
+const subRouteSkeletons = read("SubRouteSkeletons.tsx");
 const forecastLoading = read("../../app/[location]/forecast/loading.tsx");
 const atmosphereLoading = read("../../app/[location]/atmosphere/loading.tsx");
 const mapLoading = read("../../app/[location]/map/loading.tsx");
@@ -44,15 +45,19 @@ describe("ui/skeleton — removed unused exports", () => {
 });
 
 describe("sub-route loading boundaries compose shared skeletons", () => {
-  it("forecast renders HourlyForecastSkeleton and DailyForecastSkeleton", () => {
-    expect(forecastLoading).toContain("<HourlyForecastSkeleton />");
-    expect(forecastLoading).toContain("<DailyForecastSkeleton />");
+  it("forecast renders the shared body skeleton (HourlyForecastSkeleton and DailyForecastSkeleton in the page's grid)", () => {
+    // The same body the dashboard shows while its forecast is on the way
+    // (issue 452), so the loader and the page cannot drift apart.
+    expect(forecastLoading).toContain("<ForecastBodySkeleton />");
+    expect(subRouteSkeletons).toContain("<HourlyForecastSkeleton />");
+    expect(subRouteSkeletons).toContain("<DailyForecastSkeleton />");
     expect(forecastLoading).not.toContain("pangolin");
   });
 
-  it("atmosphere renders MetricCardSkeleton grid and ChartSkeleton", () => {
-    expect(atmosphereLoading).toContain("<MetricCardSkeleton");
-    expect(atmosphereLoading).toContain("<ChartSkeleton");
+  it("atmosphere renders the shared body skeleton (MetricCardSkeleton grid and ChartSkeleton)", () => {
+    expect(atmosphereLoading).toContain("<AtmosphereBodySkeleton />");
+    expect(subRouteSkeletons).toContain("<MetricCardSkeleton");
+    expect(subRouteSkeletons).toContain("<ChartSkeleton");
     expect(atmosphereLoading).not.toContain("pangolin");
   });
 
@@ -64,10 +69,11 @@ describe("sub-route loading boundaries compose shared skeletons", () => {
     expect(mapLoading).not.toContain("grid-cols-4");
   });
 
-  it("forecast and atmosphere loading boundaries keep the header and breadcrumb skeletons", () => {
+  it("forecast and atmosphere loading boundaries use PageShellSkeleton with the breadcrumb row", () => {
     for (const src of [forecastLoading, atmosphereLoading]) {
-      expect(src).toContain("<HeaderSkeleton />");
-      expect(src).toContain("<BreadcrumbSkeleton");
+      expect(src).toContain("<PageShellSkeleton");
+      expect(src).toContain("breadcrumb");
+      expect(src).not.toContain("<HeaderSkeleton />");
     }
   });
 

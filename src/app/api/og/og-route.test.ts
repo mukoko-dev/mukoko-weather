@@ -380,23 +380,39 @@ describe("OG image wiring in metadata", () => {
     expect(locationPageSource).toContain("province: loc.province");
   });
 
-  it("[location]/page.tsx uses local season from DB with error handling", () => {
-    // Season comes from getSeasonForDate (DB-driven), not getDefaultSeason (generic fallback)
-    expect(locationPageSource).toContain("getSeasonForDate");
-    // Wrapped in try/catch so DB failure doesn't break all metadata
+  it("[location]/page.tsx takes the OG season from the prebuilt season table, with no read to fail", () => {
+    // Issue #452: the page's shell does not wait on the database. The season
+    // is the seed table (the same rows the database is filled from), with the
+    // hemisphere default for a country it does not hold, so there is nothing
+    // to wrap in try/catch and no per-request dedupe to do.
+    expect(locationPageSource).toContain("localSeason(");
     expect(locationPageSource).toContain("seasonName");
-    expect(locationPageSource).toContain("season.name");
+    expect(locationPageSource).not.toContain("getCachedSeason");
+    const local = readFileSync(
+      resolve(__dirname, "../../../lib/season-local.ts"),
+      "utf-8",
+    );
+    expect(local).toContain('from "./seed-seasons"');
+    expect(local).toContain("getDefaultSeason(date, lat)");
   });
 
-  it("[location]/page.tsx deduplicates season calls with React cache()", () => {
-    expect(locationPageSource).toContain("getCachedSeason");
-    // Uses React cache() for per-request deduplication (generateMetadata + page component)
-    expect(locationPageSource).toContain("cache(");
-    expect(locationPageSource).toContain("getSeasonForDate");
+  it("the other pages still read the database season once per request (React cache())", () => {
+    // The sub-routes (agriculture, map) keep the shared, deduplicated read.
+    const payload = readFileSync(
+      resolve(__dirname, "../../../lib/place-seed-server.ts"),
+      "utf-8",
+    );
+    expect(payload).toContain("cache((");
+    expect(payload).toContain("getSeasonForDate");
   });
 
   it("[location]/page.tsx passes OG image to openGraph.images", () => {
-    expect(locationPageSource).toMatch(/images: \[\s*\{\s*url: ogImageUrl/);
+    expect(locationPageSource).toMatch(/image: \{\s*url: ogImageUrl/);
+    const metadata = readFileSync(
+      resolve(__dirname, "../../../lib/metadata.ts"),
+      "utf-8",
+    );
+    expect(metadata).toContain("images: [input.og.image]");
   });
 
   it("[location]/page.tsx passes OG image to twitter.images", () => {

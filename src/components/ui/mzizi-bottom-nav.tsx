@@ -15,13 +15,13 @@
  *    slow-load the v0.10.0 fix removes.
  * 2. The active item carries `aria-current="page"` (upstream marks it only
  *    visually).
- * 3. Items are at least `--touch-target-min` (48px) tall. Upstream items are
- *    `py-1` + a 21px icon + a 10px label, about 47px.
- * 4. (Superseded by 9.) Upstream's `h-20` bar left only 46px for the 48px
+ * 3. Items are at least `--touch-target-min` (the 49px Bundu floor) tall. Upstream items are
+ *    `py-1` + a 21px icon + a 10px label, about 47px. Here the icon is 18px
+ *    and the label 14px, so the item is about 51px, and its tappable area
+ *    (`.plover`, globals.css) runs the bar's whole height.
+ * 4. (Superseded by 9.) Upstream's `h-20` bar left only 46px for the 48px (then)
  *    items on an iPhone.
- * 5. An optional `label` (the landmark's aria-label) and `indicator`: a row
- *    one touch target tall directly above the items, on the bar's own
- *    surface (this app puts the location pager there — tappable dots).
+ * 5. An optional `label` (the landmark's aria-label).
  * 6. Icons come from lucide-react (this app has no `@/lib/icons` shim). The
  *    upstream literal colour fallbacks (a hex blue and an rgba glow) are dropped for
  *    the `--color-primary` token and `shadow-md`, since this repo forbids
@@ -29,28 +29,61 @@
  * 7. Hidden from `md` up as upstream; this app also passes `sm:hidden`,
  *    because its desktop header nav takes over from `sm`.
  *
- * 8. Labels use this repo's `--text-nav-label` token (1rem). Upstream's
- *    10px label size is under this app's hard 16px minimum font size.
+ * 8. Labels use this repo's `--text-nav-label` token (0.875rem, the Mzizi
+ *    body-sm size). Upstream's 10px label is too small to read comfortably;
+ *    16px (this token's value until 2026-11-04) read as out of proportion
+ *    in the bar.
  *
  * 9. FLOATING, not docked (owner decision 2026-10-17, mukoko-news is the
  *    source of truth: src/components/layout/bottom-nav.tsx there). The bar is
  *    no longer `inset-x-0 bottom-0` with a top border; it is a pill inset 1rem
- *    from both screen edges (`left-4 right-4 mx-auto max-w-md`), lifted
- *    `--mobile-nav-inset` plus the safe-area inset off the bottom, `4rem`
- *    tall (`--mobile-nav-bar-height`), `rounded-full`, a solid 0.5px token
+ *    from the sides and the bottom alike (`--float-left`, `--float-right` and
+ *    `--float-bottom`, the one float grid in globals.css, which add the
+ *    safe-area insets; `mx-auto max-w-md`),
+ *    `--mobile-nav-bar-height` tall (4.5rem; 4rem until 2026-11-04),
+ *    `rounded-full`, a solid 0.5px token
  *    border (`--border-width-rest`), `shadow-lg` and `backdrop-blur-xl` on a
  *    translucent card surface. A floating bar clears the browser toolbar and
  *    the home-indicator gesture zone, which a full-width bar welded to the
  *    viewport does not. Upstream's `5rem + safe area` height (change 4) and
  *    `pb-[env(safe-area-inset-bottom)]` are gone: the lift carries the inset.
- * 10. The `indicator` row is its own small floating pill, one touch target
- *    tall and `--mobile-nav-gap` above the bar (a two-row pill would stop
- *    being a pill). The `<nav>` landmark is the transparent fixed wrapper
- *    for both and lets taps through between them (`pointer-events-none`).
+ *    The `<nav>` landmark IS that pill (one element, one surface).
+ * 10. A LANE between pinned items (owner decision 2026-11-02, option B: one
+ *    bar instead of a bar plus a pager pill above it). New optional slots,
+ *    mutually exclusive with `items` (the props are a union, so TypeScript
+ *    refuses a mix):
+ *      - `leading`  pinned items at the start edge,
+ *      - `lane`     a node in the middle that takes all the remaining width
+ *                   (`flex-1 min-w-0`, so it may shrink and scroll),
+ *      - `trailing` pinned items at the end edge.
+ *    The component owns the layout only (pinned items never shrink, the lane
+ *    does); what scrolls, snaps or fades inside the lane is the consumer's
+ *    (this app: components/layout/PlaceLane.tsx, which also keeps its own
+ *    first chip pinned and its current chip in view). With a lane the pinned
+ *    items all take ONE preset width (`--mobile-nav-item-width`, globals.css:
+ *    the longest label plus the Bundu floor's 14px inline inset), whatever
+ *    their label says, so Map and Locations are the same size (they were as
+ *    wide as their text, 53pt and 85pt, owner 2026-11-05); a label longer than
+ *    the preset is cut with an ellipsis, never widens the button. Their
+ *    labels collapse to screen-reader-only below 360px, where the items are
+ *    one touch target wide, so the lane keeps the width on a small phone; the bar uses
+ *    `--float-gap` between its parts and as its side padding. Pinned items stay pill-sized (about 53px with the border) and
+ *    take `.plover`, so the whole bar height is their tappable area, and their
+ *    icon is 18px. Without `lane` the bar is exactly the registry's single
+ *    `items` row.
+ *    This replaces the earlier `indicator` pill (a second floating pill one
+ *    touch target tall above the bar, with a `--mobile-nav-gap` between): the
+ *    bar is now the only floating surface and both are gone.
  *
- * `--mobile-nav-height` in globals.css is the bar (4rem) + the gap + the
- * indicator pill (one touch target), without the lift or the safe area, so
- * `--mobile-nav-clearance` always matches it.
+ * 11. The current item is marked by a SOFT PILL FILL (Apple's tab bars; the
+ *    owner's Find My reference, 2026-11-04), not by a line on the bar's top
+ *    edge. The fill is the one a current chip in the lane wears (the cobalt
+ *    container), so the bar has one look for "you are here"; it is a rule on
+ *    `.plover` in globals.css, which also sets the text colour, so this file
+ *    sets none for the current item. `aria-current="page"` stays.
+ *
+ * `--mobile-nav-clearance` in globals.css is the bar (4.5rem) plus the lift,
+ * the safe area and a breath, so page content always matches the one bar.
  */
 
 import * as React from "react";
@@ -78,16 +111,34 @@ export interface BottomNavItem {
   ariaLabel?: string;
 }
 
-interface MziziBottomNavProps {
-  items: BottomNavItem[];
+/**
+ * What the bar shows: either the registry's single row of `items`, or pinned
+ * `leading` and `trailing` items around a `lane` (local addition 10).
+ */
+type MziziBottomNavLayout =
+  | {
+      items: BottomNavItem[];
+      leading?: undefined;
+      lane?: undefined;
+      trailing?: undefined;
+    }
+  | {
+      items?: undefined;
+      /** Pinned at the start edge, before the lane. */
+      leading?: BottomNavItem[];
+      /** The middle: takes the remaining width and may scroll (local addition). */
+      lane: React.ReactNode;
+      /** Pinned at the end edge, after the lane. */
+      trailing?: BottomNavItem[];
+    };
+
+type MziziBottomNavProps = MziziBottomNavLayout & {
   /** Override active detection (useful for client-side routing) */
   activeId?: string;
   className?: string;
   /** Landmark label (local addition). */
   label?: string;
-  /** Decorative row along the bottom edge of the bar (local addition). */
-  indicator?: React.ReactNode;
-}
+};
 
 /** Upstream active-item rule: `/` matches only exactly, others by prefix. */
 export function isBottomNavItemActive(
@@ -101,21 +152,89 @@ export function isBottomNavItemActive(
 }
 
 /**
- * The floating pill surface, shared by the bar and the indicator pill:
- * pill radius, a solid 0.5px border on all four sides (the Mzizi border
- * rule), lifted shadow, translucent card fill with blur (mukoko-news island).
+ * The floating pill surface: pill radius, a solid 0.5px border on all four
+ * sides (the Mzizi border rule), lifted shadow, translucent card fill with
+ * blur (mukoko-news island).
  */
 const FLOATING_SURFACE =
-  "pointer-events-auto rounded-full border-solid border-border border-[length:var(--border-width-rest)] bg-card/90 shadow-lg backdrop-blur-xl";
+  "rounded-full border-solid border-[color:var(--float-border)] border-[length:var(--border-width-rest)] bg-card/90 shadow-lg backdrop-blur-xl";
 
 export function MziziBottomNav({
   items,
+  leading,
+  lane,
+  trailing,
   activeId,
   className,
   label,
-  indicator,
 }: MziziBottomNavProps) {
   const pathname = usePathname() ?? "";
+  // The props are a union: `items` (the registry row) or a lane layout.
+  const hasLane = items === undefined;
+
+  function renderItem(item: BottomNavItem) {
+    const active = isBottomNavItemActive(item, pathname, activeId);
+
+    /* ── Center FAB ───────────────────────────────────────── */
+    if (item.isFab) {
+      return (
+        <button
+          key={item.id}
+          type="button"
+          onClick={item.onFabClick}
+          aria-label={item.ariaLabel ?? item.label}
+          className={cn(
+            "flex size-[52px] -translate-y-6 items-center justify-center rounded-full",
+            "bg-[var(--brand-accent,var(--color-primary))] shadow-md",
+            "transition-transform active:scale-95",
+          )}
+        >
+          <Plus className="size-[26px] text-background" strokeWidth={2.5} />
+        </button>
+      );
+    }
+
+    /* ── Standard nav item ────────────────────────────────── */
+    const Icon = active && item.activeIcon ? item.activeIcon : item.icon;
+    return (
+      <Link
+        key={item.id}
+        href={item.href}
+        prefetch={false}
+        aria-current={active ? "page" : undefined}
+        aria-label={item.ariaLabel}
+        className={cn(
+          "plover relative flex min-h-[var(--touch-target-min)] flex-col items-center justify-center gap-1 rounded-full py-1",
+          hasLane
+            ? "w-[var(--mobile-nav-item-width)] min-w-[var(--touch-target-min)] max-[359px]:w-[var(--touch-target-min)] shrink-0 px-[var(--inset-floor)]"
+            : "min-w-[60px] px-[var(--inset-floor)]",
+          "text-[length:var(--text-nav-label)] font-medium transition-colors",
+          // The current item is marked by `.plover`'s aria-current rule (a
+          // soft pill fill, the same one a current chip in the lane wears),
+          // so no colour is set here for it.
+          !active && "text-muted-foreground",
+        )}
+      >
+        <Icon
+          className={cn(
+            "size-[18px]",
+            active ? "stroke-[2.2]" : "stroke-[1.8]",
+          )}
+        />
+        {/* Below 360px a lane needs the width more than the label does; the
+            accessible name stays (`ariaLabel`, else this text). */}
+        <span
+          className={
+            hasLane
+              ? "min-w-0 max-w-full truncate max-[359px]:sr-only"
+              : undefined
+          }
+        >
+          {item.label}
+        </span>
+      </Link>
+    );
+  }
 
   return (
     <nav
@@ -123,88 +242,29 @@ export function MziziBottomNav({
       data-portal="https://mzizi.dev/components/mzizi-bottom-nav"
       aria-label={label}
       className={cn(
-        "pointer-events-none fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom,0px)+var(--mobile-nav-inset))] z-50 mx-auto flex max-w-md flex-col items-center gap-[var(--mobile-nav-gap)] md:hidden",
+        "fixed left-[var(--float-left)] right-[var(--float-right)] bottom-[var(--float-bottom)] z-50 mx-auto flex h-[var(--mobile-nav-bar-height)] max-w-md items-center md:hidden",
+        FLOATING_SURFACE,
+        hasLane
+          ? "gap-[var(--float-gap)] px-[var(--float-gap)]"
+          : "justify-around px-[var(--float-gap)]",
+        "[&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-2 [&_a]:focus-visible:outline-primary [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-offset-2 [&_button]:focus-visible:outline-primary",
         className,
       )}
     >
-      {indicator && (
-        <div
-          data-slot="mzizi-bottom-nav-indicator"
-          className={cn(
-            FLOATING_SURFACE,
-            "flex h-[var(--touch-target-min)] max-w-full items-center px-2",
-          )}
-        >
-          {indicator}
-        </div>
+      {items ? (
+        items.map(renderItem)
+      ) : (
+        <>
+          {leading?.map(renderItem)}
+          <div
+            data-slot="mzizi-bottom-nav-lane"
+            className="flex h-full min-w-0 flex-1 items-center"
+          >
+            {lane}
+          </div>
+          {trailing?.map(renderItem)}
+        </>
       )}
-      <div
-        data-slot="mzizi-bottom-nav-bar"
-        className={cn(
-          FLOATING_SURFACE,
-          "flex h-[var(--mobile-nav-bar-height)] w-full items-center justify-around px-2 [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-2 [&_a]:focus-visible:outline-primary [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-offset-2 [&_button]:focus-visible:outline-primary",
-        )}
-      >
-        {items.map((item) => {
-          const active = isBottomNavItemActive(item, pathname, activeId);
-
-          /* ── Center FAB ─────────────────────────────────────── */
-          if (item.isFab) {
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={item.onFabClick}
-                aria-label={item.ariaLabel ?? item.label}
-                className={cn(
-                  "flex size-[52px] -translate-y-6 items-center justify-center rounded-full",
-                  "bg-[var(--brand-accent,var(--color-primary))] shadow-md",
-                  "transition-transform active:scale-95",
-                )}
-              >
-                <Plus
-                  className="size-[26px] text-background"
-                  strokeWidth={2.5}
-                />
-              </button>
-            );
-          }
-
-          /* ── Standard nav item ──────────────────────────────── */
-          const Icon = active && item.activeIcon ? item.activeIcon : item.icon;
-          return (
-            <Link
-              key={item.id}
-              href={item.href}
-              prefetch={false}
-              aria-current={active ? "page" : undefined}
-              aria-label={item.ariaLabel}
-              className={cn(
-                "relative flex min-h-[var(--touch-target-min)] min-w-[60px] flex-col items-center justify-center gap-[3px] rounded-full px-3 py-1",
-                "text-[length:var(--text-nav-label)] font-medium transition-colors",
-                active
-                  ? "text-[var(--brand-accent,var(--color-primary))]"
-                  : "text-muted-foreground",
-              )}
-            >
-              {/* Active top accent bar — brand identity marker */}
-              {active && (
-                <span
-                  aria-hidden="true"
-                  className="absolute -top-[3px] h-[2.5px] w-7 rounded-full bg-[var(--brand-accent,var(--color-primary))]"
-                />
-              )}
-              <Icon
-                className={cn(
-                  "size-[21px]",
-                  active ? "stroke-[2.2]" : "stroke-[1.8]",
-                )}
-              />
-              <span>{item.label}</span>
-            </Link>
-          );
-        })}
-      </div>
     </nav>
   );
 }

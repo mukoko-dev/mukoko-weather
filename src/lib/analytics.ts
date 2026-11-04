@@ -59,7 +59,12 @@ export type AnalyticsEvents = {
   };
   /** User opened a modal */
   modal_opened: {
-    modal: "my-weather" | "saved-locations" | "weather-report" | "pwa_install";
+    modal:
+      | "my-weather"
+      | "saved-locations"
+      | "weather-report"
+      | "pwa_install"
+      | "activities";
   };
 };
 

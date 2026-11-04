@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AuthKitProvider } from "@workos-inc/authkit-nextjs/components";
 import { withAuth } from "@workos-inc/authkit-nextjs";
 import { MineralsStripe } from "@/components/brand/MineralsStripe";
+import { AppChrome } from "@/components/layout/AppChrome";
 import { ThemeProvider } from "@/components/brand/ThemeProvider";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { PWAInstallPrompt } from "@/components/weather/PWAInstallPrompt";
@@ -11,6 +12,8 @@ import { isFeatureEnabled } from "@/lib/feature-flags";
 import { Noto_Sans, Noto_Serif, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { SITE_URL } from "@/lib/site";
+import { breadcrumbJsonLd } from "@/lib/json-ld";
+import { JsonLd } from "@/components/layout/JsonLd";
 
 // Brand typography, self-hosted through next/font (served from /_next/static,
 // no request to Google at runtime). Never put a fonts.googleapis.com
@@ -45,7 +48,7 @@ export const metadata: Metadata = {
     template: "%s | mukoko weather",
   },
   description:
-    "AI-powered global weather intelligence. Accurate forecasts, frost alerts, and actionable insights for farming, mining, travel, and daily life across 265+ locations worldwide.",
+    "Global weather intelligence. Accurate forecasts, frost alerts, and actionable insights for farming, mining, travel, and daily life across 265+ locations worldwide.",
   keywords: [
     "global weather",
     "weather forecast",
@@ -75,7 +78,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "mukoko weather — Global Weather Intelligence",
     description:
-      "AI-powered global weather intelligence. Accurate forecasts, frost alerts, and actionable insights for farming, mining, travel, and daily life across 265+ locations worldwide.",
+      "Global weather intelligence. Accurate forecasts, frost alerts, and actionable insights for farming, mining, travel, and daily life across 265+ locations worldwide.",
     type: "website",
     locale: "en",
     url: SITE_URL,
@@ -93,7 +96,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "mukoko weather — Global Weather Intelligence",
     description:
-      "AI-powered global weather intelligence. Forecasts for farming, mining, travel, and daily life across 265+ locations worldwide.",
+      "Global weather intelligence. Forecasts for farming, mining, travel, and daily life across 265+ locations worldwide.",
     creator: "@mukokoafrica",
     site: "@mukokoafrica",
     images: [
@@ -165,7 +168,7 @@ export default async function RootLayout({
     name: "mukoko weather",
     alternateName: "Mukoko Weather",
     description:
-      "AI-powered global weather intelligence platform providing actionable forecasts for farming, mining, travel, and daily life across 265+ locations worldwide.",
+      "Global weather intelligence platform providing actionable forecasts for farming, mining, travel, and daily life across 265+ locations worldwide.",
     url: SITE_URL,
     applicationCategory: "WeatherApplication",
     operatingSystem: "Any",
@@ -313,19 +316,10 @@ export default async function RootLayout({
   };
 
   // BreadcrumbList for site hierarchy — root level
-  const breadcrumbSchema = {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    "@id": `${SITE_URL}/#breadcrumb`,
-    itemListElement: [
-      {
-        "@type": "ListItem",
-        position: 1,
-        name: "Home",
-        item: SITE_URL,
-      },
-    ],
-  };
+  const breadcrumbSchema = breadcrumbJsonLd([], {
+    root: "Home",
+    id: `${SITE_URL}/#breadcrumb`,
+  });
 
   return (
     <html
@@ -361,17 +355,14 @@ export default async function RootLayout({
         <meta name="format-detection" content="telephone=no" />
         <link rel="manifest" href="/manifest.json" />
         {/* Favicons come from `metadata.icons` above, which is the mukoko-news set. */}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify([
-              webAppSchema,
-              orgSchema,
-              webSiteSchema,
-              siteNavSchema,
-              breadcrumbSchema,
-            ]),
-          }}
+        <JsonLd
+          data={[
+            webAppSchema,
+            orgSchema,
+            webSiteSchema,
+            siteNavSchema,
+            breadcrumbSchema,
+          ]}
         />
       </head>
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
@@ -387,7 +378,7 @@ export default async function RootLayout({
           <ThemeProvider>
             <MineralsStripe />
             <div className="overflow-x-clip pl-0 min-[480px]:pl-2">
-              {children}
+              <AppChrome>{children}</AppChrome>
             </div>
             <PWAInstallPrompt />
           </ThemeProvider>

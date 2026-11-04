@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { SafeMarkdown } from "@/components/ui/safe-markdown";
 import { useAppStore } from "@/lib/store";
 import { trackEvent } from "@/lib/analytics";
+import { postWorker, workerErrorMessage } from "@/lib/weather-api";
 import { ShamwariCTA } from "./ShamwariCTA";
-import { Spinner } from "@/components/ui/spinner";
+import { LoadingNotice } from "@/components/ui/loading-notice";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,24 +41,17 @@ export function HistoryAnalysis({
     setError(null);
 
     try {
-      const res = await fetch("/api/py/history/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          location: locationSlug,
-          days,
-          ...(selectedActivities.length > 0 && {
-            activities: selectedActivities,
-          }),
+      // The Worker reads the same history the page shows (recorded days,
+      // archive days, and a fetch for the rest). There is no other route.
+      const res = await postWorker("ai/history/analyze", {
+        location: locationSlug,
+        days,
+        ...(selectedActivities.length > 0 && {
+          activities: selectedActivities,
         }),
       });
 
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(
-          body?.detail || body?.error || `Request failed (${res.status})`,
-        );
-      }
+      if (!res.ok) throw new Error(await workerErrorMessage(res));
 
       const data = await res.json();
       setAnalysis(data.analysis);
@@ -116,13 +110,11 @@ export function HistoryAnalysis({
       )}
 
       {loading && (
-        <div className="mt-3 flex items-center gap-2" role="status">
-          <Spinner />
-          <span className="text-base text-text-secondary">
-            Analyzing {days}-day history...
-          </span>
-          <span className="sr-only">Shamwari is analyzing weather history</span>
-        </div>
+        <LoadingNotice
+          className="mt-3"
+          label={`Analyzing ${days}-day history...`}
+          textClassName="text-base text-text-secondary"
+        />
       )}
 
       {error && (

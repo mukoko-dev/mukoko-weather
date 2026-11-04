@@ -9,7 +9,9 @@
 //! GET /v1/map-tiles?…                  the same, under the API's prefix
 //! GET /health
 //! 200 image/png   X-Cache: HIT | MISS | STALE, X-Map-Layer; or the 1x1
-//!                 transparent tile (X-Map-Tile: empty) when nothing can be served
+//!                 transparent tile (X-Map-Tile: empty, kept thirty seconds: it
+//!                 says the provider could not be asked, nothing about the
+//!                 place) when nothing can be served
 //! 400 bad layer, zoom, tile or timestamp   422 missing or non-integer z/x/y/layer
 //! 429 over the per-IP limit                503 no Tomorrow.io key configured
 //! ```
@@ -28,9 +30,10 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use weather_core::breaker::{self, Breaker};
-use weather_core::cors::origin_allowed;
-use weather_core::tiles::{self, TileRequest};
-use weather_edge::{config, error, get_with_timeout, json, now, now_ms, query_pairs, secret};
+use weather_core::tiles::{self, TileKind, TileRequest};
+use weather_edge::{
+    cors, error, get_with_timeout, json, now, now_ms, query_pairs, responses, secret,
+};
 use worker::{event, Cache, Context, Env, Method, Request, Response, Result};
 
 const KV_BINDING: &str = "TILE_CACHE";
@@ -52,12 +55,10 @@ struct Meta {
 #[event(fetch)]
 pub async fn fetch(req: Request, env: Env, ctx: Context) -> Result<Response> {
     let origin = req.headers().get("Origin")?.unwrap_or_default();
-    let allowed = config(&env, "CORS_ORIGINS").unwrap_or_default();
-    let allow_local = config(&env, "ENVIRONMENT").as_deref() != Some("production");
-    let cors = origin_allowed(&origin, &allowed, allow_local).then_some(origin);
+    let cors = cors::allowed_origin(&env, &origin);
 
     let resp = if req.method() == Method::Options {
-        preflight(cors.is_some())
+        cors::preflight(cors.is_some(), "GET, OPTIONS", "Content-Type")
     } else if req.method() != Method::Get {
         error(405, "method_not_allowed", "Only GET is served.")
     } else {
@@ -73,51 +74,23 @@ pub async fn fetch(req: Request, env: Env, ctx: Context) -> Result<Response> {
             _ => error(404, "not_found", "No such route."),
         }
     }?;
-    with_cors(resp, cors.as_deref())
-}
-
-fn preflight(allowed: bool) -> Result<Response> {
-    let resp = Response::empty()?.with_status(if allowed { 204 } else { 403 });
-    if allowed {
-        let h = resp.headers();
-        h.set("Access-Control-Allow-Methods", "GET, OPTIONS")?;
-        h.set("Access-Control-Allow-Headers", "Content-Type")?;
-        h.set("Access-Control-Max-Age", "86400")?;
-    }
-    Ok(resp)
-}
-
-fn with_cors(resp: Response, origin: Option<&str>) -> Result<Response> {
-    let h = resp.headers();
-    h.append("Vary", "Origin")?;
-    if let Some(o) = origin {
-        h.set("Access-Control-Allow-Origin", o)?;
-        h.set(
-            "Access-Control-Expose-Headers",
-            "X-Cache, X-Map-Layer, X-Map-Tile",
-        )?;
-    }
-    Ok(resp)
+    cors::apply(
+        resp,
+        cors.as_deref(),
+        Some("X-Cache, X-Map-Layer, X-Map-Tile"),
+    )
 }
 
 /// `Some(429)` when the client is over its limit. A missing limiter binding
 /// (local dev) does not block.
 async fn rate_limited(req: &Request, env: &Env) -> Option<Result<Response>> {
     let limiter = env.rate_limiter(RATE_LIMITER).ok()?;
-    let key = req
-        .headers()
-        .get("CF-Connecting-IP")
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| "unknown".to_owned());
+    let key = weather_edge::client_ip(req).unwrap_or_else(|| "unknown".to_owned());
     match limiter.limit(key).await {
-        Ok(outcome) if !outcome.success => {
-            let resp = error(429, "rate_limited", "Too many tile requests; slow down.");
-            if let Ok(r) = &resp {
-                let _ = r.headers().set("Retry-After", "60");
-            }
-            Some(resp)
-        }
+        Ok(outcome) if !outcome.success => Some(responses::rate_limited(
+            60,
+            "Too many tile requests; slow down.",
+        )),
         _ => None,
     }
 }
@@ -131,14 +104,14 @@ fn png(bytes: Vec<u8>, cache_control: &str) -> Result<Response> {
 }
 
 fn tile_response(bytes: Vec<u8>, layer: &str, cache: &str) -> Result<Response> {
-    let resp = png(bytes, tiles::TILE_CACHE_CONTROL)?;
+    let resp = png(bytes, tiles::cache_control(TileKind::Fresh))?;
     resp.headers().set("X-Map-Layer", layer)?;
     resp.headers().set("X-Cache", cache)?;
     Ok(resp)
 }
 
 fn stale_response(bytes: Vec<u8>, layer: &str) -> Result<Response> {
-    let resp = png(bytes, tiles::FALLBACK_CACHE_CONTROL)?;
+    let resp = png(bytes, tiles::cache_control(TileKind::Stale))?;
     resp.headers().set("X-Map-Layer", layer)?;
     resp.headers().set("X-Cache", "STALE")?;
     Ok(resp)
@@ -147,7 +120,7 @@ fn stale_response(bytes: Vec<u8>, layer: &str) -> Result<Response> {
 fn empty_response() -> Result<Response> {
     let resp = png(
         tiles::TRANSPARENT_PNG.to_vec(),
-        tiles::FALLBACK_CACHE_CONTROL,
+        tiles::cache_control(TileKind::Empty),
     )?;
     resp.headers().set("X-Cache", "MISS")?;
     resp.headers().set("X-Map-Tile", "empty")?;
