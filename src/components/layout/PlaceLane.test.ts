@@ -238,7 +238,7 @@ describe("PlaceLane — styling comes from tokens", () => {
     const at = css.indexOf(".lark:focus-visible {");
     expect(at).toBeGreaterThan(-1);
     const r = css.slice(at, css.indexOf("}", at));
-    expect(r).toContain("border-radius: 9999px;");
+    expect(r).toContain("border-radius: var(--radius-full);");
     // Inset: the lane's scroller clips anything drawn outside it.
     expect(r).toContain("outline-offset: -3px;");
   });

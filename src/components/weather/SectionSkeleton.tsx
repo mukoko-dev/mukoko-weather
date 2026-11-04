@@ -153,7 +153,7 @@ export function AISummarySkeleton() {
     >
       {/* Header: icon + title */}
       <div className="flex items-center gap-2">
-        <Skeleton className="h-5 w-5 rounded" />
+        <Skeleton className="h-5 w-5 rounded-[var(--radius-sm)]" />
         <Skeleton className="h-6 w-56" />
       </div>
       {/* Markdown content lines */}
@@ -183,10 +183,10 @@ export function AISummaryChatSkeleton() {
       {/* Collapsed header */}
       <div className="flex items-center justify-between px-4 py-3 min-h-[var(--touch-target-min)]">
         <div className="flex items-center gap-2">
-          <Skeleton className="h-5 w-5 rounded" />
+          <Skeleton className="h-5 w-5 rounded-[var(--radius-sm)]" />
           <Skeleton className="h-5 w-48" />
         </div>
-        <Skeleton className="h-5 w-5 rounded" />
+        <Skeleton className="h-5 w-5 rounded-[var(--radius-sm)]" />
       </div>
     </div>
   );

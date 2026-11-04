@@ -190,12 +190,12 @@ describe("button fauna focus-visible rings (WCAG 2.4.7)", () => {
     }
   });
 
-  it("forces a pill radius back on focus (global :focus-visible forces 4px)", () => {
+  it("forces a pill radius back on focus (global :focus-visible forces --radius-sm)", () => {
     expect(groups.find((g) => g.selectors.includes("kudu"))!.body).toContain(
       "border-radius: var(--radius-button)",
     );
     expect(groups.find((g) => g.selectors.includes("bee"))!.body).toContain(
-      "border-radius: 9999px",
+      "border-radius: var(--radius-full)",
     );
   });
 
@@ -266,8 +266,8 @@ describe("focus on the sky (WCAG 1.4.11, 3:1)", () => {
     ).toBeDefined();
     expect(group!.body).toContain("solid var(--sky-fg)");
     expect(group!.body).toContain("var(--focus-ring-width");
-    // The global rule forces border-radius: 4px on focus.
-    expect(group!.body).toContain("border-radius: 9999px");
+    // The global rule forces border-radius: var(--radius-sm) on focus.
+    expect(group!.body).toContain("border-radius: var(--radius-full)");
   });
 
   it("keeps no .kestrel-round:focus-visible rule inside @layer (it would lose to the global rule)", () => {
