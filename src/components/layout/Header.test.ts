@@ -88,13 +88,44 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
     expect(bottomNav).toContain("backdrop-blur-xl");
   });
 
-  it("is 4rem tall; --mobile-nav-clearance is the bar plus the lift, the safe area and a breath", () => {
+  it("is 4.5rem tall; --mobile-nav-clearance is the bar plus the lift, the safe area and a breath", () => {
     expect(bottomNav).toContain("h-[var(--mobile-nav-bar-height)]");
-    expect(css).toContain("--mobile-nav-bar-height: 4rem;");
+    expect(css).toContain("--mobile-nav-bar-height: 4.5rem;");
     expect(css).toContain("--mobile-nav-inset: 0.75rem;");
     expect(css).toMatch(
       /--mobile-nav-clearance: calc\(\s*env\(safe-area-inset-bottom, 0px\) \+ var\(--mobile-nav-inset\) \+\s*var\(--mobile-nav-bar-height\) \+ 0\.5rem\s*\);/,
     );
+  });
+
+  it("is in proportion (owner, 2026-11-04): 14px labels, 18px icons, items as tall as the bar, 8px between targets", () => {
+    // At 16px labels and 21px icons the content filled the 64px bar edge to
+    // edge: 56px of item in 64px, and chips 48px in 64px, with 4px between.
+    expect(css).toContain("--text-nav-label: 0.875rem;");
+    expect(css).not.toContain("--text-nav-label: 1rem;");
+    expect(bottomNav).toContain("size-[18px]");
+    expect(bottomNav).not.toContain("size-[21px]");
+    expect(bottomNav).toMatch(
+      /relative flex h-full min-h-\[var\(--touch-target-min\)\]/,
+    );
+    expect(bottomNav).toContain('hasLane ? "gap-2 px-2"');
+  });
+
+  it("a chip's tappable area runs the bar's height and still fits inside it", () => {
+    const bar = css.match(/--mobile-nav-bar-height:\s*([\d.]+)rem;/);
+    const hit = css.match(
+      /\.lark::after\s*\{[^}]*inset-block:\s*-([\d.]+)rem;/,
+    );
+    expect(bar).not.toBeNull();
+    expect(hit).not.toBeNull();
+    const barPx = Number(bar?.[1]) * 16;
+    const chipPx = 48; // --touch-target-min
+    const extendPx = Number(hit?.[1]) * 16;
+    // The expanded link must not stick out of the bar, or the lane's scroller
+    // would clip it and the extra area would be a lie.
+    expect(chipPx + 2 * extendPx).toBeLessThanOrEqual(barPx);
+    // And the chips stay a full touch target tall.
+    expect(css).toContain("--touch-target-min: 48px;");
+    expect(rule("lark")).toContain("min-h-[var(--touch-target-min)]");
   });
 
   it("is ONE surface: the nav landmark is the pill, with no second pill and no leftover tokens", () => {
@@ -160,7 +191,7 @@ describe("MobileNav — pinned items and the places lane", () => {
     expect(rule("lark")).toContain("min-h-[var(--touch-target-min)]");
   });
 
-  it("labels use the 16px --text-nav-label token, not upstream's 10px", () => {
+  it("labels use the 14px (Mzizi body-sm) --text-nav-label token, not upstream's 10px or the 16px that read as too large", () => {
     expect(bottomNav).toContain("text-[length:var(--text-nav-label)]");
     expect(bottomNav).not.toContain("text-[10px]");
   });

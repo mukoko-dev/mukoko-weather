@@ -16,7 +16,8 @@
  * 2. The active item carries `aria-current="page"` (upstream marks it only
  *    visually).
  * 3. Items are at least `--touch-target-min` (48px) tall. Upstream items are
- *    `py-1` + a 21px icon + a 10px label, about 47px.
+ *    `py-1` + a 21px icon + a 10px label, about 47px. Here they fill the
+ *    bar's height and their icon is 18px.
  * 4. (Superseded by 9.) Upstream's `h-20` bar left only 46px for the 48px
  *    items on an iPhone.
  * 5. An optional `label` (the landmark's aria-label).
@@ -27,15 +28,17 @@
  * 7. Hidden from `md` up as upstream; this app also passes `sm:hidden`,
  *    because its desktop header nav takes over from `sm`.
  *
- * 8. Labels use this repo's `--text-nav-label` token (1rem). Upstream's
- *    10px label size is under this app's hard 16px minimum font size.
+ * 8. Labels use this repo's `--text-nav-label` token (0.875rem, the Mzizi
+ *    body-sm size). Upstream's 10px label is too small to read comfortably;
+ *    16px (this token's value until 2026-11-04) read as out of proportion
+ *    in the bar.
  *
  * 9. FLOATING, not docked (owner decision 2026-10-17, mukoko-news is the
  *    source of truth: src/components/layout/bottom-nav.tsx there). The bar is
  *    no longer `inset-x-0 bottom-0` with a top border; it is a pill inset 1rem
  *    from both screen edges (`left-4 right-4 mx-auto max-w-md`), lifted
  *    `--mobile-nav-inset` plus the safe-area inset off the bottom, `4rem`
- *    tall (`--mobile-nav-bar-height`), `rounded-full`, a solid 0.5px token
+ *    tall (`--mobile-nav-bar-height`; 4.5rem since 2026-11-04), `rounded-full`, a solid 0.5px token
  *    border (`--border-width-rest`), `shadow-lg` and `backdrop-blur-xl` on a
  *    translucent card surface. A floating bar clears the browser toolbar and
  *    the home-indicator gesture zone, which a full-width bar welded to the
@@ -57,13 +60,14 @@
  *    items are as narrow as a touch target allows (`min-w` 48px, `px-2`, not
  *    60px and `px-3`) and their labels collapse to screen-reader-only below
  *    360px, so the lane keeps the width on a small phone; the bar uses
- *    `gap-1` between its parts. Without `lane` the bar is exactly the
+ *    `gap-2` between its parts. Pinned items fill the bar's height (`h-full`),
+ *    so the whole bar height is their touch target, and their icon is 18px. Without `lane` the bar is exactly the
  *    registry's single `items` row.
  *    This replaces the earlier `indicator` pill (a second floating pill one
  *    touch target tall above the bar, with a `--mobile-nav-gap` between): the
  *    bar is now the only floating surface and both are gone.
  *
- * `--mobile-nav-clearance` in globals.css is the bar (4rem) plus the lift,
+ * `--mobile-nav-clearance` in globals.css is the bar (4.5rem) plus the lift,
  * the safe area and a breath, so page content always matches the one bar.
  */
 
@@ -185,7 +189,7 @@ export function MziziBottomNav({
         aria-current={active ? "page" : undefined}
         aria-label={item.ariaLabel}
         className={cn(
-          "relative flex min-h-[var(--touch-target-min)] flex-col items-center justify-center gap-[3px] rounded-full py-1",
+          "relative flex h-full min-h-[var(--touch-target-min)] flex-col items-center justify-center gap-1 rounded-full py-1",
           hasLane
             ? "min-w-[var(--touch-target-min)] shrink-0 px-2"
             : "min-w-[60px] px-3",
@@ -204,7 +208,7 @@ export function MziziBottomNav({
         )}
         <Icon
           className={cn(
-            "size-[21px]",
+            "size-[18px]",
             active ? "stroke-[2.2]" : "stroke-[1.8]",
           )}
         />
@@ -225,7 +229,7 @@ export function MziziBottomNav({
       className={cn(
         "fixed inset-x-4 bottom-[calc(env(safe-area-inset-bottom,0px)+var(--mobile-nav-inset))] z-50 mx-auto flex h-[var(--mobile-nav-bar-height)] max-w-md items-center md:hidden",
         FLOATING_SURFACE,
-        hasLane ? "gap-1 px-1.5" : "justify-around px-2",
+        hasLane ? "gap-2 px-2" : "justify-around px-2",
         "[&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-2 [&_a]:focus-visible:outline-primary [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-offset-2 [&_button]:focus-visible:outline-primary",
         className,
       )}
