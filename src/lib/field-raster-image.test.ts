@@ -121,6 +121,14 @@ describe("rasterDataUrl", () => {
     ]);
   });
 
+  it("asks for a software canvas: a GPU-backed canvas read back keeps an ~8 MB transfer buffer alive", () => {
+    const { canvases } = stubDocument();
+    rasterDataUrl(raster(), palette);
+    expect(canvases[0].getContext).toHaveBeenCalledWith("2d", {
+      willReadFrequently: true,
+    });
+  });
+
   it("sizes the canvas to the raster, and releases its backing store afterwards", () => {
     const { canvases, readAt } = stubDocument();
     rasterDataUrl(raster(), palette);

@@ -48,7 +48,10 @@ export function rasterDataUrl(
     canvas = document.createElement("canvas");
     canvas.width = raster.width;
     canvas.height = raster.height;
-    const ctx = canvas.getContext("2d");
+    // willReadFrequently keeps the canvas in software: a GPU-backed canvas read
+    // back with toDataURL holds a transfer buffer of about 8 MB in the GPU
+    // process for as long as the page lives (measured, #476), for a 96 x 96 image.
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) return null;
     const image = ctx.createImageData(raster.width, raster.height);
     image.data.set(paintRaster(raster, palette));
