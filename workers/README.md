@@ -173,8 +173,7 @@ node --experimental-strip-types workers/scripts/gen-seed-locations.mjs
 ```
 
 CI (`.github/workflows/workers.yml`) fails if any generated file is stale
-(`seed-locations.json`, `airports.json`, `slug-migration.json` and the Python copy
-`api/py/data/slug_migration.json`).
+(`seed-locations.json`, `airports.json` and `slug-migration.json`).
 
 ## Owner steps
 

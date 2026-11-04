@@ -66,8 +66,8 @@ const airports = AIRPORTS.map((a) => ({
 }));
 
 // The pinned legacy → canonical slug table (src/lib/slug-migration-data.ts),
-// for the Python backend and the Rust Workers: both accept the legacy and the
-// canonical slug of a seed and key durable data by the legacy one.
+// for the Rust Workers: they accept the legacy and the canonical slug of a
+// seed and key durable data by the legacy one.
 const { SEED_SLUG_TABLE } = await import(
   pathToFileURL(resolve(root, "src/lib/slug-migration-data.ts")).href
 );
@@ -82,12 +82,7 @@ const outputs = [
   [
     resolve(root, "workers/crates/weather-core/data/slug-migration.json"),
     slugMigration,
-    `${SEED_SLUG_TABLE.length} slug pairs (Rust)`,
-  ],
-  [
-    resolve(root, "api/py/data/slug_migration.json"),
-    slugMigration,
-    `${SEED_SLUG_TABLE.length} slug pairs (Python)`,
+    `${SEED_SLUG_TABLE.length} slug pairs`,
   ],
   [out, json, `${rows.length} locations`],
   [

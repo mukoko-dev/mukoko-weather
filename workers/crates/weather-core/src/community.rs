@@ -103,18 +103,22 @@ pub fn spot_cell_key(slug: &str) -> Option<String> {
     Some(format!("geo:{}", &hash[..hash.len().min(7)]))
 }
 
-/// The key a report is stored under: a catalogue slug as it is, a spot by its
-/// cell.
+/// The key a report is stored under: a catalogue slug as it is (a shipped
+/// seed under its LEGACY slug, where every report written before the move to
+/// canonical slugs lives, #317), a spot by its cell.
 pub fn storage_slug(slug: &str, is_catalogue: bool) -> String {
     if is_catalogue {
-        return slug.to_owned();
+        return crate::slug_migration::storage_key_slug(slug).to_owned();
     }
     spot_cell_key(slug).unwrap_or_else(|| slug.to_owned())
 }
 
-/// Every key a list should read for a slug: the slug itself and its cell.
+/// Every key a list should read for a slug: the slug itself (a shipped seed's
+/// canonical slug reads its legacy key, #317) and its cell. A canonical seed
+/// slug is a spot by grammar, so its cell key is read too, for a report filed
+/// while that URL was only a coordinate; nothing is ever written there.
 pub fn read_keys(slug: &str) -> Vec<String> {
-    let mut keys = vec![slug.to_owned()];
+    let mut keys = vec![crate::slug_migration::storage_key_slug(slug).to_owned()];
     keys.extend(spot_cell_key(slug));
     keys
 }
@@ -771,6 +775,16 @@ mod tests {
         assert_eq!(storage_slug("harare", false), "harare");
         assert_eq!(read_keys("harare"), vec!["harare"]);
         assert_eq!(read_keys(spot), vec![spot.to_owned(), "geo:kqwy4dd".into()]);
+        // A shipped seed's canonical slug (#317) is stored and read under its
+        // legacy slug; its cell key is read as well, never written.
+        let canonical = crate::slug_migration::canonical_slug("harare");
+        assert_ne!(canonical, "harare");
+        assert_eq!(storage_slug(canonical, true), "harare");
+        assert_eq!(storage_slug("harare", true), "harare");
+        assert_eq!(
+            read_keys(canonical),
+            vec!["harare".to_owned(), "geo:ksy4dd1".into()]
+        );
         assert_eq!(spot_cell_key("a--abc"), None, "under five characters");
     }
 

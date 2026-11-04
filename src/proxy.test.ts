@@ -563,6 +563,7 @@ describe("proxy — bare place names resolve instead of 404 (#317)", () => {
 });
 
 describe("the app shell the service worker may keep (x-mukoko-shell)", () => {
+  const HARARE = canonicalSlug("harare");
   const anonymous = () =>
     vi.mocked(authkit).mockResolvedValueOnce({
       headers: new Headers(),
@@ -577,8 +578,8 @@ describe("the app shell the service worker may keep (x-mukoko-shell)", () => {
     // The cookie already names the place, so nothing is set and the page is keepable.
     anonymous();
     const place = await proxy(
-      new NextRequest("https://weather.mukoko.com/harare", {
-        headers: { cookie: "lastLocation=harare" },
+      new NextRequest(`https://weather.mukoko.com/${HARARE}`, {
+        headers: { cookie: `lastLocation=${HARARE}` },
       }),
     );
     expect(place.headers.getSetCookie()).toEqual([]);
@@ -588,14 +589,14 @@ describe("the app shell the service worker may keep (x-mukoko-shell)", () => {
   it("does not mark a response that sets a cookie (a new place)", async () => {
     anonymous();
     const res = await proxy(
-      new NextRequest("https://weather.mukoko.com/harare", {
-        headers: { cookie: "lastLocation=bulawayo" },
+      new NextRequest(`https://weather.mukoko.com/${HARARE}`, {
+        headers: { cookie: `lastLocation=${canonicalSlug("bulawayo")}` },
       }),
     );
     expect(
       res.headers
         .getSetCookie()
-        .some((c) => c.startsWith("lastLocation=harare")),
+        .some((c) => c.startsWith(`lastLocation=${HARARE}`)),
     ).toBe(true);
     expect(res.headers.get("x-mukoko-shell")).toBeNull();
   });
@@ -603,16 +604,16 @@ describe("the app shell the service worker may keep (x-mukoko-shell)", () => {
   it("sets the lastLocation cookie only when it changes", async () => {
     anonymous();
     const same = await proxy(
-      new NextRequest("https://weather.mukoko.com/harare", {
-        headers: { cookie: "lastLocation=harare" },
+      new NextRequest(`https://weather.mukoko.com/${HARARE}`, {
+        headers: { cookie: `lastLocation=${HARARE}` },
       }),
     );
     expect(same.headers.getSetCookie()).toEqual([]);
     const fresh = await proxy(
-      new NextRequest("https://weather.mukoko.com/harare"),
+      new NextRequest(`https://weather.mukoko.com/${HARARE}`),
     );
     expect(fresh.headers.getSetCookie().join("\n")).toContain(
-      "lastLocation=harare",
+      `lastLocation=${HARARE}`,
     );
   });
 
@@ -633,7 +634,7 @@ describe("the app shell the service worker may keep (x-mukoko-shell)", () => {
 
   it("never marks sub-routes, other routes or an unknown place", async () => {
     for (const path of [
-      "/harare/forecast",
+      `/${HARARE}/forecast`,
       "/explore",
       "/profile",
       "/auth/signin",
