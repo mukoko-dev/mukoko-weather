@@ -37,8 +37,9 @@
  * 9. FLOATING, not docked (owner decision 2026-10-17, mukoko-news is the
  *    source of truth: src/components/layout/bottom-nav.tsx there). The bar is
  *    no longer `inset-x-0 bottom-0` with a top border; it is a pill inset 1rem
- *    from both screen edges (`left-4 right-4 mx-auto max-w-md`), lifted
- *    `--mobile-nav-inset` plus the safe-area inset off the bottom,
+ *    from the sides and the bottom alike (`--float-left`, `--float-right` and
+ *    `--float-bottom`, the one float grid in globals.css, which add the
+ *    safe-area insets; `mx-auto max-w-md`),
  *    `--mobile-nav-bar-height` tall (4.5rem; 4rem until 2026-11-04),
  *    `rounded-full`, a solid 0.5px token
  *    border (`--border-width-rest`), `shadow-lg` and `backdrop-blur-xl` on a
@@ -231,11 +232,11 @@ export function MziziBottomNav({
       data-portal="https://mzizi.dev/components/mzizi-bottom-nav"
       aria-label={label}
       className={cn(
-        "fixed inset-x-[var(--float-inset)] bottom-[var(--float-bottom)] z-50 mx-auto flex h-[var(--mobile-nav-bar-height)] max-w-md items-center md:hidden",
+        "fixed left-[var(--float-left)] right-[var(--float-right)] bottom-[var(--float-bottom)] z-50 mx-auto flex h-[var(--mobile-nav-bar-height)] max-w-md items-center md:hidden",
         FLOATING_SURFACE,
         hasLane
           ? "gap-[var(--float-gap)] px-[var(--float-gap)]"
-          : "justify-around px-2",
+          : "justify-around px-[var(--float-gap)]",
         "[&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-2 [&_a]:focus-visible:outline-primary [&_button]:focus-visible:outline-2 [&_button]:focus-visible:outline-offset-2 [&_button]:focus-visible:outline-primary",
         className,
       )}

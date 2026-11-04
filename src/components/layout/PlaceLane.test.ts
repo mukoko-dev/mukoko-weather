@@ -237,12 +237,13 @@ describe("PlaceLane — styling comes from tokens", () => {
     );
     expect(fill).toContain("bg-container-cobalt");
     expect(fill).toContain("text-on-container-cobalt");
-    // The chip's own rule is the second one with this selector.
-    const at = css.lastIndexOf(
-      '.lark:is([aria-current]:not([aria-current="false"])) {',
-    );
-    expect(at).toBeGreaterThan(-1);
-    const r = css.slice(at, css.indexOf("}", at));
+    // The chip's own rule is the one with this selector that sets a border.
+    const rules = [
+      ...css.matchAll(
+        /\.lark:is\(\[aria-current\]:not\(\[aria-current="false"\]\)\) \{([^}]*)\}/g,
+      ),
+    ].map((m) => m[1] ?? "");
+    const r = rules.find((body) => body.includes("border-width")) ?? "";
     expect(r).toContain("border-width: var(--border-width-active);");
   });
 

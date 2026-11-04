@@ -469,9 +469,10 @@ export function MapDashboard({ location }: MapDashboardProps) {
       />
 
       {/* Top-left: close (back to the location) and the shared breadcrumb
-          trail as a compact overlay pill. The column stops 7rem short of the
-          right edge, so neither can run under the control stack. */}
-      <div className="pointer-events-none absolute left-[var(--float-inset)] top-[var(--float-top)] z-10 flex w-[min(20rem,calc(100%-2*var(--float-inset)-var(--touch-target-min)-var(--float-gap)))] min-w-0 items-center gap-[var(--float-gap)]">
+          trail as a compact overlay pill. The column's width is the screen
+          minus the float grid's side insets, one control and one gap, so
+          neither can run under the control stack. */}
+      <div className="pointer-events-none absolute left-[var(--float-left)] top-[var(--float-top)] z-10 flex w-[min(20rem,calc(100%-var(--float-left)-var(--float-right)-var(--touch-target-min)-var(--float-gap)))] min-w-0 items-center gap-[var(--float-gap)]">
         <Link
           href={`/${location.slug}`}
           aria-label={`Close map and return to ${location.name}`}
@@ -490,8 +491,8 @@ export function MapDashboard({ location }: MapDashboardProps) {
       </div>
 
       {/* Top-right: stacked controls (layer sheet, my location) and the list. */}
-      <div className="pointer-events-none absolute right-[var(--float-inset)] top-[var(--float-top)] z-10 flex flex-col items-end gap-[var(--float-gap)]">
-        <div className="serval pointer-events-auto flex flex-col overflow-hidden rounded-full">
+      <div className="pointer-events-none absolute right-[var(--float-right)] top-[var(--float-top)] z-10 flex flex-col items-end gap-[var(--float-gap)]">
+        <div className="serval pointer-events-auto flex flex-col rounded-full">
           <button
             type="button"
             onClick={toggleSheet}
@@ -541,7 +542,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
       <section
         aria-labelledby="map-legend-title"
         data-slot="map-sheet"
-        className="serval absolute inset-x-[var(--float-inset)] bottom-[var(--float-bottom)] z-10 mx-auto flex max-h-[calc(100dvh-6rem)] max-w-xl flex-col overflow-y-auto p-[var(--space-card)] [@media(max-height:500px)]:mr-auto [@media(max-height:500px)]:max-w-md"
+        className="serval absolute left-[var(--float-left)] right-[var(--float-right)] bottom-[var(--float-bottom)] z-10 mx-auto flex max-h-[calc(100dvh-var(--float-top)-var(--touch-target-min)-var(--float-gap)-var(--float-bottom))] max-w-xl flex-col overflow-y-auto p-[var(--space-card)] [@media(max-height:500px)]:mr-auto [@media(max-height:500px)]:max-w-md"
       >
         <div className="flex items-start gap-3">
           <span aria-hidden="true" className="hoopoe-lg mt-0.5 text-primary">

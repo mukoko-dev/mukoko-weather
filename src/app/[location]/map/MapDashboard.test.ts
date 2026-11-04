@@ -122,7 +122,12 @@ describe("MapDashboard — bottom sheet", () => {
     // The same inset from the side and bottom edges as the controls above,
     // and the bar on other pages: the one float grid in globals.css.
     expect(source).toMatch(
-      /serval absolute inset-x-\[var\(--float-inset\)\] bottom-\[var\(--float-bottom\)\]/,
+      /serval absolute left-\[var\(--float-left\)\] right-\[var\(--float-right\)\] bottom-\[var\(--float-bottom\)\]/,
+    );
+    // Its height cap leaves room for the top controls and the grid's gaps, so
+    // it never runs under them, with the safe area counted on both sides.
+    expect(source).toContain(
+      "max-h-[calc(100dvh-var(--float-top)-var(--touch-target-min)-var(--float-gap)-var(--float-bottom))]",
     );
     expect(source).toContain("max-w-xl");
   });
@@ -141,7 +146,10 @@ describe("MapDashboard — bottom sheet", () => {
   });
 
   it("caps its height so a landscape phone still sees the map", () => {
-    expect(source).toContain("max-h-[calc(100dvh-6rem)]");
+    // The cap is derived from the float grid (the top row of controls, a gap
+    // and the safe areas), never a literal such as 6rem.
+    expect(source).toMatch(/max-h-\[calc\(100dvh-var\(--float-top\)/);
+    expect(source).not.toContain("100dvh-6rem");
     expect(source).toContain("overflow-y-auto");
     expect(source).toContain("[@media(max-height:500px)]:mr-auto");
   });

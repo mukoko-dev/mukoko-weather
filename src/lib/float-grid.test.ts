@@ -29,52 +29,84 @@ describe("the float grid", () => {
     expect(css).toContain("--float-pad: 0.25rem;");
   });
 
-  it("adds the safe area to the top and the bottom in one place each", () => {
+  it("adds the safe area to each edge in one place each", () => {
     expect(css).toContain(
       "--float-top: max(var(--float-inset), env(safe-area-inset-top, 0px));",
     );
     expect(css).toContain(
       "--float-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--float-inset));",
     );
+    expect(css).toContain(
+      "--float-left: max(var(--float-inset), env(safe-area-inset-left, 0px));",
+    );
+    expect(css).toContain(
+      "--float-right: max(var(--float-inset), env(safe-area-inset-right, 0px));",
+    );
   });
 
   it("is what the bottom bar, the hero's icon group and the map read", () => {
-    expect(css).toContain("--mobile-nav-inset: var(--float-inset);");
-    expect(css).toContain("--hadeda-inset: var(--float-inset);");
+    // The page clearance and the bar's position are the same lift: one token.
+    expect(css).not.toContain("--mobile-nav-inset");
+    expect(css.replace(/\s+/g, " ")).toContain(
+      "--mobile-nav-clearance: calc( var(--float-bottom) + var(--mobile-nav-bar-height) + 0.5rem );",
+    );
     expect(css).toContain("--hadeda-gap: var(--float-gap);");
     expect(css).toContain("--hadeda-pad: var(--float-pad);");
-    expect(code(bottomNav)).toContain("inset-x-[var(--float-inset)]");
+    expect(code(bottomNav)).toContain("left-[var(--float-left)]");
+    expect(code(bottomNav)).toContain("right-[var(--float-right)]");
     expect(code(bottomNav)).toContain("bottom-[var(--float-bottom)]");
     for (const token of [
-      "left-[var(--float-inset)]",
-      "right-[var(--float-inset)]",
+      "left-[var(--float-left)]",
+      "right-[var(--float-right)]",
       "top-[var(--float-top)]",
-      "inset-x-[var(--float-inset)]",
       "bottom-[var(--float-bottom)]",
     ]) {
       expect(map).toContain(token);
     }
   });
 
-  it("leaves no edge distance of its own on the map or the bar", () => {
+  it("leaves no edge distance or safe-area expression of its own on the map or the bar", () => {
     // The distances this grid replaced: left-4/right-4, inset-x-3, 0.75rem
-    // from the bottom, and a max(1rem, env(...)) of their own.
+    // from the bottom, a max(1rem, env(...)) of their own, and the same written
+    // as an arbitrary value (left-[1rem], inset-x-[12px], bottom-[calc(...)]).
     for (const source of [code(map), code(bottomNav)]) {
-      expect(source).not.toMatch(/(^|[\s"`])(left|right|inset-x)-[0-9]/);
+      expect(source).not.toMatch(
+        /(^|[\s"`])-?(left|right|top|bottom|inset|inset-x|inset-y)-[0-9]/,
+      );
+      expect(source).not.toMatch(
+        /(^|[\s"`])(left|right|top|bottom|inset|inset-x|inset-y)-\[(?!var\(--float-)/,
+      );
       expect(source).not.toMatch(/safe-area-inset/);
       expect(source).not.toContain("0.75rem");
       expect(source).not.toMatch(/max\(1rem/);
     }
   });
 
-  it("makes the map's control capsule as wide as a round control beside it", () => {
+  it("makes the map's control capsule as wide as a round control beside it, and lets its focus ring show", () => {
     // Find My: the capsule and the lone round control share one width. The
-    // capsule has no padding of its own around its two 48px controls.
+    // capsule has no padding of its own around its two 48px controls, and no
+    // overflow clip: its buttons are full circles inside it, and a clip would
+    // cut the keyboard focus ring drawn outside them.
     const capsule = map.match(
-      /className="(serval pointer-events-auto flex flex-col overflow-hidden[^"]*)"/,
+      /className="(serval pointer-events-auto flex flex-col[^"]*)"/,
     );
     expect(capsule).not.toBeNull();
     expect(capsule?.[1]).toContain("rounded-full");
     expect(capsule?.[1]).not.toMatch(/(^|\s)p[xy]?-/);
+    expect(capsule?.[1]).not.toMatch(/overflow-/);
+  });
+
+  it("keeps its round controls round on keyboard focus (the global ring would square them)", () => {
+    const at = css.indexOf(".duiker:focus-visible,");
+    expect(at).toBeGreaterThan(-1);
+    const rule = css.slice(at, css.indexOf("}", at));
+    for (const selector of [
+      ".duiker:focus-visible",
+      ".duiker-solid:focus-visible",
+      ".plover:focus-visible",
+    ]) {
+      expect(rule).toContain(selector);
+    }
+    expect(rule).toContain("border-radius: var(--radius-full);");
   });
 });

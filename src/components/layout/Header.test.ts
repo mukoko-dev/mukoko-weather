@@ -73,7 +73,9 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
 
   it("floats like mukoko-news's island: inset from the edges, lifted, max-w-md, pill, token border, shadow, blur", () => {
     // The same inset on the sides and the bottom, from the one float grid.
-    expect(bottomNav).toContain("fixed inset-x-[var(--float-inset)]");
+    expect(bottomNav).toContain(
+      "fixed left-[var(--float-left)] right-[var(--float-right)]",
+    );
     expect(bottomNav).toContain("bottom-[var(--float-bottom)]");
     expect(bottomNav).toContain("z-50 mx-auto");
     expect(bottomNav).toContain("max-w-md");
@@ -90,15 +92,16 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
   it("is 4.5rem tall; --mobile-nav-clearance is the bar plus the lift, the safe area and a breath", () => {
     expect(bottomNav).toContain("h-[var(--mobile-nav-bar-height)]");
     expect(css).toContain("--mobile-nav-bar-height: 4.5rem;");
-    // The lift is the grid's inset, so the bar sits as far from the bottom
-    // edge as from the sides.
-    expect(css).toContain("--mobile-nav-inset: var(--float-inset);");
+    // The lift is the grid's bottom (inset plus the safe area), so the bar
+    // sits as far from the bottom edge as from the sides, and there is no
+    // second token for it.
+    expect(css).not.toContain("--mobile-nav-inset");
     expect(css).toContain("--float-inset: 1rem;");
     expect(css).toContain(
       "--float-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--float-inset));",
     );
-    expect(css).toMatch(
-      /--mobile-nav-clearance: calc\(\s*env\(safe-area-inset-bottom, 0px\) \+ var\(--mobile-nav-inset\) \+\s*var\(--mobile-nav-bar-height\) \+ 0\.5rem\s*\);/,
+    expect(css.replace(/\s+/g, " ")).toContain(
+      "--mobile-nav-clearance: calc( var(--float-bottom) + var(--mobile-nav-bar-height) + 0.5rem );",
     );
   });
 
