@@ -266,6 +266,14 @@ export interface PresentResult {
   failed: boolean;
 }
 
+/**
+ * What warming a place did: it was already held young enough (`fresh`), a
+ * forecast was fetched and kept (`warmed`), nothing usable came back
+ * (`failed`: the place is unknown, the request failed, or only the seasonal
+ * estimate was served), or the caller gave up first (`skipped`).
+ */
+export type WarmResult = "fresh" | "warmed" | "failed" | "skipped";
+
 export interface PlaceController {
   getState(): PlaceState;
   subscribe(listener: () => void): () => void;
@@ -284,6 +292,14 @@ export interface PlaceController {
   reconcile(pathname: string): Promise<boolean>;
   /** Show a target (used by the switch bus). */
   showTarget(target: PlaceTarget, url?: UrlAction): Promise<boolean>;
+  /**
+   * Get a place the visitor may go to next ready before they ask: one forecast
+   * request, kept in memory, so the switch paints from it at once. It shows
+   * nothing, never touches the screen's state or the request that is on
+   * screen, and never retries (one attempt; the switch itself retries). A
+   * place held young enough costs nothing.
+   */
+  warm(target: PlaceTarget, signal?: AbortSignal): Promise<WarmResult>;
   /** Fetch the place on screen again, now ("Try again"). */
   retry(): Promise<PresentResult>;
   /** The browser came online / the page became visible: one more attempt if the last failed. */
@@ -548,8 +564,63 @@ export function createPlaceController(
     return refresh(req, seed, found);
   }
 
+  async function warm(
+    target: PlaceTarget,
+    signal?: AbortSignal,
+  ): Promise<WarmResult> {
+    if (signal?.aborted) return "skipped";
+    const slug =
+      target.kind === "slug" ? target.slug : (home?.location.slug ?? null);
+    if (!slug) return "skipped";
+    const young = (view: DeviceView): boolean =>
+      isFreshEnough(view, deps.now());
+
+    const mem = recallFromMemory(slug, deps.now());
+    if (mem && young(mem)) return "fresh";
+    let seed: PlaceSeed | null =
+      target.kind === "home" ? home : mem ? seedOfPayload(mem.payload) : null;
+    if (!seed) {
+      const device = await withTimeout(
+        Promise.resolve(deps.recall(slug)).catch(() => null),
+        deps.recallTimeoutMs ?? 400,
+      );
+      if (signal?.aborted) return "skipped";
+      if (device && young(device)) {
+        // A copy from an earlier visit that is still young: keep it where a
+        // switch reads first, so it does not wait for the device.
+        rememberInMemory(device.payload, device.fetchedAt);
+        return "fresh";
+      }
+      seed = device ? seedOfPayload(device.payload) : null;
+    }
+    const own = new AbortController();
+    const sig = signal ?? own.signal;
+    if (!seed) {
+      seed = await deps.resolve(slug, sig).catch(() => null);
+      if (signal?.aborted) return "skipped";
+    }
+    if (!seed) return "failed";
+    try {
+      const value = await deps.fetchWeather(
+        seed.location.lat,
+        seed.location.lon,
+        sig,
+      );
+      // Kept even if the caller gave up meanwhile: the request was paid for.
+      // The seasonal estimate is never kept (rememberInMemory refuses it).
+      rememberInMemory(
+        liveViewFor(seed, value.weather, value.usingFallback),
+        deps.now(),
+      );
+      return value.usingFallback ? "failed" : "warmed";
+    } catch {
+      return "failed";
+    }
+  }
+
   const controller: PlaceController = {
     getState: () => state,
+    warm,
     subscribe(listener) {
       listeners.add(listener);
       return () => {

@@ -30,6 +30,13 @@ import { placeDocumentTitle } from "@/lib/place-target";
 import { writeLastLocationCookie } from "@/lib/current-slug";
 import { recallPlace } from "@/lib/rxdb/weather-places";
 import { useAppStore } from "@/lib/store";
+import { readDeviceHints } from "@/lib/lazy-visibility";
+import { useIdleOnce } from "@/lib/use-idle-once";
+import { usePagerSequence } from "@/lib/use-location-pager";
+import { warmLimit, warmTargets } from "@/lib/place-warm";
+
+/** The longest to wait for an idle moment before warming the next places. */
+const WARM_IDLE_TIMEOUT_MS = 1500;
 
 /**
  * The dashboard is a separate chunk: the server HTML carries only the shell
@@ -167,6 +174,32 @@ export function usePlaceStage(
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [controller]);
+
+  // Get the places a swipe can reach next ready while this one is read
+  // (src/lib/place-warm.ts): once its own forecast is in and the browser has had
+  // an idle moment, one request at a time, never while the tab is hidden. The
+  // answer is held in memory, so the switch paints at once instead of waiting.
+  const savedLocations = useAppStore((s) => s.savedLocations);
+  const selectedLocation = useAppStore((s) => s.selectedLocation);
+  const sequence = usePagerSequence(savedLocations, selectedLocation);
+  const settled = !!state.view && !state.fetching && !state.failed;
+  const idle = useIdleOnce(WARM_IDLE_TIMEOUT_MS, state.path);
+  useEffect(() => {
+    if (!settled || !idle) return;
+    const limit = warmLimit(readDeviceHints(), navigator.onLine !== false);
+    const targets = warmTargets(sequence, state.path, limit);
+    if (targets.length === 0) return;
+    const stop = new AbortController();
+    void (async () => {
+      for (const target of targets) {
+        if (stop.signal.aborted || document.visibilityState === "hidden") {
+          return;
+        }
+        await controller.warm(target, stop.signal);
+      }
+    })();
+    return () => stop.abort();
+  }, [controller, settled, idle, sequence, state.path]);
 
   const retry = useCallback(() => void controller.retry(), [controller]);
   return { state, controller, retry };
