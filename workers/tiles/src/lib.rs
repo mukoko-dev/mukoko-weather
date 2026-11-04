@@ -9,7 +9,9 @@
 //! GET /v1/map-tiles?…                  the same, under the API's prefix
 //! GET /health
 //! 200 image/png   X-Cache: HIT | MISS | STALE, X-Map-Layer; or the 1x1
-//!                 transparent tile (X-Map-Tile: empty) when nothing can be served
+//!                 transparent tile (X-Map-Tile: empty, kept thirty seconds: it
+//!                 says the provider could not be asked, nothing about the
+//!                 place) when nothing can be served
 //! 400 bad layer, zoom, tile or timestamp   422 missing or non-integer z/x/y/layer
 //! 429 over the per-IP limit                503 no Tomorrow.io key configured
 //! ```
@@ -28,7 +30,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use weather_core::breaker::{self, Breaker};
-use weather_core::tiles::{self, TileRequest};
+use weather_core::tiles::{self, TileKind, TileRequest};
 use weather_edge::{
     cors, error, get_with_timeout, json, now, now_ms, query_pairs, responses, secret,
 };
@@ -102,14 +104,14 @@ fn png(bytes: Vec<u8>, cache_control: &str) -> Result<Response> {
 }
 
 fn tile_response(bytes: Vec<u8>, layer: &str, cache: &str) -> Result<Response> {
-    let resp = png(bytes, tiles::TILE_CACHE_CONTROL)?;
+    let resp = png(bytes, tiles::cache_control(TileKind::Fresh))?;
     resp.headers().set("X-Map-Layer", layer)?;
     resp.headers().set("X-Cache", cache)?;
     Ok(resp)
 }
 
 fn stale_response(bytes: Vec<u8>, layer: &str) -> Result<Response> {
-    let resp = png(bytes, tiles::FALLBACK_CACHE_CONTROL)?;
+    let resp = png(bytes, tiles::cache_control(TileKind::Stale))?;
     resp.headers().set("X-Map-Layer", layer)?;
     resp.headers().set("X-Cache", "STALE")?;
     Ok(resp)
@@ -118,7 +120,7 @@ fn stale_response(bytes: Vec<u8>, layer: &str) -> Result<Response> {
 fn empty_response() -> Result<Response> {
     let resp = png(
         tiles::TRANSPARENT_PNG.to_vec(),
-        tiles::FALLBACK_CACHE_CONTROL,
+        tiles::cache_control(TileKind::Empty),
     )?;
     resp.headers().set("X-Cache", "MISS")?;
     resp.headers().set("X-Map-Tile", "empty")?;
