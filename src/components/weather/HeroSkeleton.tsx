@@ -5,7 +5,7 @@ import { Shimmer } from "@/components/ui/shimmer";
  * When the location hero changes shape (CurrentConditions), change this file
  * only; LocationSkeleton just renders `<HeroSkeleton />`.
  *
- * It is the open-sky hero's box, row for row: the 48px top row (breadcrumb
+ * It is the open-sky hero's box, row for row: the 49px top row (breadcrumb
  * bar at the left; at the right the round Share from `sm` up, and on phones
  * the fixed icon group `.hadeda` holding two round controls, which the real
  * group replaces in the same place), then the centred stack (`pt-4 pb-[26px]`): eyebrow line (Caption), the name

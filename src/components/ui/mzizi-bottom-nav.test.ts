@@ -79,7 +79,9 @@ describe("MziziBottomNav — leading, lane, trailing", () => {
   });
 
   it("keeps pinned items from shrinking and tightens them to keep the lane wide", () => {
-    expect(html).toContain("min-w-[var(--touch-target-min)] shrink-0 px-2");
+    expect(html).toContain(
+      "min-w-[var(--touch-target-min)] shrink-0 px-[var(--inset-floor)]",
+    );
     expect(html).not.toContain("min-w-[60px]");
   });
 

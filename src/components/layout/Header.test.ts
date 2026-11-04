@@ -97,8 +97,9 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
     // second token for it.
     expect(css).not.toContain("--mobile-nav-inset");
     expect(css).toContain("--float-inset: 1rem;");
-    expect(css).toContain(
-      "--float-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--float-inset));",
+    // The inset plus a small lift (owner, 2026-11-04), safe area included.
+    expect(css.replace(/\s+/g, " ")).toContain(
+      "--float-bottom: calc( env(safe-area-inset-bottom, 0px) + var(--float-inset) + var(--float-lift) );",
     );
     expect(css.replace(/\s+/g, " ")).toContain(
       "--mobile-nav-clearance: calc( var(--float-bottom) + var(--mobile-nav-bar-height) + 0.5rem );",
@@ -138,7 +139,7 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
     // The link's own box is a touch target tall and its content fits the bar,
     // so the area is an extension and never a shrink.
     const bar = css.match(/--mobile-nav-bar-height:\s*([\d.]+)rem;/);
-    const touch = css.match(/--touch-target-min:\s*(\d+)px;/);
+    const touch = css.match(/--target-floor:\s*(\d+)px;/);
     expect(bar).not.toBeNull();
     expect(touch).not.toBeNull();
     expect(Number(bar?.[1]) * 16).toBeGreaterThan(Number(touch?.[1]));
