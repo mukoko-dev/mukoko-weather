@@ -6,7 +6,6 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
-  DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -54,6 +53,7 @@ export function PWAInstallPrompt() {
   const [open, setOpen] = useState(false);
   const deferredPrompt = useRef<BeforeInstallPromptEvent | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const installButton = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     // Already installed as PWA — don't show
@@ -138,8 +138,17 @@ export function PWAInstallPrompt() {
         if (!v) handleDismiss();
       }}
     >
-      <DialogContent className="max-w-sm rounded-[var(--radius-card)] p-6 sm:p-6">
-        <DialogHeader className="items-center text-center gap-4">
+      <DialogContent
+        heading="Install mukoko weather"
+        className="sm:max-w-sm"
+        // The primary action is the point of this prompt: focus it, not the
+        // Close in the shared bar (which every other dialog opens on).
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          installButton.current?.focus();
+        }}
+      >
+        <DialogHeader className="items-center gap-4 px-6 pt-3 text-center">
           {/* App icon — full-color brand mark */}
           <div className="flex items-center justify-center w-16 h-16 rounded-[var(--radius-card)] bg-surface-dim">
             <Image
@@ -151,10 +160,6 @@ export function PWAInstallPrompt() {
             />
           </div>
 
-          <DialogTitle className="text-xl font-bold text-text-primary">
-            Install mukoko weather
-          </DialogTitle>
-
           <DialogDescription className="text-sm text-text-secondary leading-relaxed">
             Get instant access from your home screen with offline weather data
             for your saved locations.
@@ -162,7 +167,7 @@ export function PWAInstallPrompt() {
         </DialogHeader>
 
         {/* Feature highlights */}
-        <ul className="space-y-3 py-2 text-sm text-text-secondary">
+        <ul className="space-y-3 px-6 py-2 text-sm text-text-secondary">
           {[
             "Works offline with cached weather data",
             "Faster loads — no browser overhead",
@@ -181,8 +186,9 @@ export function PWAInstallPrompt() {
         </ul>
 
         {/* Actions */}
-        <div className="flex flex-col gap-2 pt-2">
+        <div className="flex flex-col gap-2 px-6 pt-2 pb-6">
           <Button
+            ref={installButton}
             onClick={handleInstall}
             className="min-h-[var(--touch-target-min)]"
           >
