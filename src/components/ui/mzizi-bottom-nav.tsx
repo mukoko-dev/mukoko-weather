@@ -60,10 +60,13 @@
  *    does); what scrolls, snaps or fades inside the lane is the consumer's
  *    (this app: components/layout/PlaceLane.tsx, which also keeps its own
  *    first chip pinned and its current chip in view). With a lane the pinned
- *    items are as narrow as the Bundu floor allows (`min-w` the 49px hit
- *    region, a 14px inline inset on every side of the text, not 60px) and their
- *    labels collapse to screen-reader-only below
- *    360px, so the lane keeps the width on a small phone; the bar uses
+ *    items all take ONE preset width (`--mobile-nav-item-width`, globals.css:
+ *    the longest label plus the Bundu floor's 14px inline inset), whatever
+ *    their label says, so Map and Locations are the same size (they were as
+ *    wide as their text, 53pt and 85pt, owner 2026-11-05); a label longer than
+ *    the preset is cut with an ellipsis, never widens the button. Their
+ *    labels collapse to screen-reader-only below 360px, where the items are
+ *    one touch target wide, so the lane keeps the width on a small phone; the bar uses
  *    `--float-gap` between its parts and as its side padding. Pinned items stay pill-sized (about 53px with the border) and
  *    take `.plover`, so the whole bar height is their tappable area, and their
  *    icon is 18px. Without `lane` the bar is exactly the registry's single
@@ -203,7 +206,7 @@ export function MziziBottomNav({
         className={cn(
           "plover relative flex min-h-[var(--touch-target-min)] flex-col items-center justify-center gap-1 rounded-full py-1",
           hasLane
-            ? "min-w-[var(--touch-target-min)] shrink-0 px-[var(--inset-floor)]"
+            ? "w-[var(--mobile-nav-item-width)] min-w-[var(--touch-target-min)] max-[359px]:w-[var(--touch-target-min)] shrink-0 px-[var(--inset-floor)]"
             : "min-w-[60px] px-[var(--inset-floor)]",
           "text-[length:var(--text-nav-label)] font-medium transition-colors",
           // The current item is marked by `.plover`'s aria-current rule (a
@@ -220,7 +223,13 @@ export function MziziBottomNav({
         />
         {/* Below 360px a lane needs the width more than the label does; the
             accessible name stays (`ariaLabel`, else this text). */}
-        <span className={hasLane ? "max-[359px]:sr-only" : undefined}>
+        <span
+          className={
+            hasLane
+              ? "min-w-0 max-w-full truncate max-[359px]:sr-only"
+              : undefined
+          }
+        >
           {item.label}
         </span>
       </Link>
