@@ -259,9 +259,13 @@ describe("saved-location surfaces use radius TOKENS only", () => {
  * geometry, not a surface radius, and are not read.
  * ------------------------------------------------------------------------ */
 
-/** A `rounded*` utility: bare, with a size word, a side, or an arbitrary value. */
+/**
+ * A `rounded*` utility: bare, with a size word, a side, or an arbitrary value
+ * in Tailwind's bracket form `[...]` or its parenthesis form `(--x)`. Only the
+ * bracket form of a token is allowed (below): one spelling for one rule.
+ */
 const RADIUS_UTILITY =
-  /(?<![\w-])rounded(?:-(?:s|e|t|r|b|l|ss|se|ee|es|tl|tr|br|bl))?(?:-(?:\[[^\]\s"'`]*\]|[a-z0-9]+))?(?![\w-])/g;
+  /(?<![\w-])rounded(?:-(?:s|e|t|r|b|l|ss|se|ee|es|tl|tr|br|bl))?(?:-(?:\[[^\]\s"'`]*\]|\([^)\s"'`]*\)|[a-z0-9]+))?(?![\w-])/g;
 
 /** The only forms allowed: full, none, a --radius-* token, or `inherit`. */
 const RADIUS_UTILITY_OK =
@@ -302,15 +306,37 @@ function offendingCssRadii(source: string): string[] {
 const STYLE_RADIUS_KEY =
   /^border(?:(?:Top|Bottom)(?:Left|Right))?Radius$|^border(?:Start|End)(?:Start|End)Radius$/;
 
-/** Off-token radii in a TS/TSX source: class strings and style properties. */
-function offendingSourceRadii(file: string, text: string): string[] {
-  const sf = ts.createSourceFile(
+/** Parse a TS/TSX source. */
+function parseSource(file: string, text: string): ts.SourceFile {
+  return ts.createSourceFile(
     file,
     text,
     ts.ScriptTarget.Latest,
     true,
     file.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
+}
+
+/** The name of a property: `a`, `"a"`, a shorthand `a`, or a computed `["a"]`. */
+function propertyKey(node: ts.Node): string {
+  if (ts.isShorthandPropertyAssignment(node)) return node.name.text;
+  if (!ts.isPropertyAssignment(node)) return "";
+  const name = node.name;
+  if (ts.isIdentifier(name) || ts.isStringLiteral(name)) return name.text;
+  if (
+    ts.isComputedPropertyName(name) &&
+    ts.isStringLiteralLike(name.expression)
+  )
+    return name.expression.text;
+  return "";
+}
+
+/**
+ * Off-token radii in a parsed TS/TSX source: class strings and `borderRadius`
+ * style properties (written out, shorthand or as a computed string key; a
+ * spread object built elsewhere is not followed).
+ */
+function offendingRadiiIn(sf: ts.SourceFile): string[] {
   const out: string[] = [];
   const visit = (node: ts.Node) => {
     if (
@@ -330,10 +356,8 @@ function offendingSourceRadii(file: string, text: string): string[] {
           out.push(`${line + 1}: ${token}`);
         }
       }
-    } else if (ts.isPropertyAssignment(node)) {
-      const name = node.name;
-      const key =
-        ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : "";
+    } else {
+      const key = propertyKey(node);
       if (STYLE_RADIUS_KEY.test(key)) {
         const { line } = sf.getLineAndCharacterOfPosition(node.getStart());
         out.push(`${line + 1}: ${key}`);
@@ -343,6 +367,11 @@ function offendingSourceRadii(file: string, text: string): string[] {
   };
   visit(sf);
   return out;
+}
+
+/** Off-token radii in a TS/TSX source text (the matcher's own tests use this). */
+function offendingSourceRadii(file: string, text: string): string[] {
+  return offendingRadiiIn(parseSource(file, text));
 }
 
 function walkFiles(dir: string, match: RegExp, out: string[] = []): string[] {
@@ -387,11 +416,18 @@ describe("every radius in src is a Mzizi token", () => {
   );
   const cssFiles = walkFiles(join(ROOT, "src"), /\.css$/);
 
+  // Each file is read and parsed once; the radius scan and the "is every
+  // --radius-* defined" check below both read this.
+  const parsed = sourceFiles.map((f) => ({
+    rel: relative(ROOT, f),
+    sf: parseSource(f, readFileSync(f, "utf-8")),
+  }));
+
   /** file -> off-token radii found in it. */
   const found = new Map<string, string[]>();
-  for (const f of sourceFiles) {
-    const hits = offendingSourceRadii(f, readFileSync(f, "utf-8"));
-    if (hits.length) found.set(relative(ROOT, f), hits);
+  for (const { rel, sf } of parsed) {
+    const hits = offendingRadiiIn(sf);
+    if (hits.length) found.set(rel, hits);
   }
   for (const f of cssFiles) {
     const hits = offendingCssRadii(readFileSync(f, "utf-8"));
@@ -433,15 +469,7 @@ describe("every radius in src is a Mzizi token", () => {
         if (!used.has(m[1])) used.set(m[1], file);
       }
     };
-    for (const f of sourceFiles) {
-      const rel = relative(ROOT, f);
-      const sf = ts.createSourceFile(
-        f,
-        readFileSync(f, "utf-8"),
-        ts.ScriptTarget.Latest,
-        true,
-        f.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-      );
+    for (const { rel, sf } of parsed) {
       const visit = (n: ts.Node) => {
         if (
           ts.isStringLiteralLike(n) ||
@@ -460,6 +488,45 @@ describe("every radius in src is a Mzizi token", () => {
       .filter(([name]) => !defined.has(name))
       .map(([name, file]) => `${name} (first used in ${file})`);
     expect(undefinedVars).toEqual([]);
+  });
+
+  it("a block skeleton (40px or taller) names the radius of the surface it stands for", () => {
+    // The default Skeleton corner is --radius-sm, right for a text bar. A
+    // placeholder for a card, an input or a chart that kept it would draw 7px
+    // corners and pop to 14px or 12px when the real content arrived. Reads the
+    // className string literal on <Skeleton>; a className built with cn() or a
+    // template is not followed.
+    const offenders: string[] = [];
+    for (const { rel, sf } of parsed) {
+      const visit = (n: ts.Node) => {
+        if (ts.isJsxSelfClosingElement(n) || ts.isJsxOpeningElement(n)) {
+          const tag = n.tagName.getText(sf);
+          if (tag === "Skeleton") {
+            for (const attr of n.attributes.properties) {
+              if (
+                ts.isJsxAttribute(attr) &&
+                attr.name.getText(sf) === "className" &&
+                attr.initializer &&
+                ts.isStringLiteral(attr.initializer)
+              ) {
+                const cls = attr.initializer.text;
+                const tall = /(?<![\w-])h-(?:(\d+)|\[)/.exec(cls);
+                const isBlock = tall && (!tall[1] || Number(tall[1]) >= 10);
+                if (isBlock && !/(?<![\w-])rounded-/.test(cls)) {
+                  const { line } = sf.getLineAndCharacterOfPosition(
+                    n.getStart(sf),
+                  );
+                  offenders.push(`${rel}:${line + 1} "${cls}"`);
+                }
+              }
+            }
+          }
+        }
+        ts.forEachChild(n, visit);
+      };
+      visit(sf);
+    }
+    expect(offenders).toEqual([]);
   });
 
   describe("the matcher itself", () => {
@@ -504,6 +571,38 @@ describe("every radius in src is a Mzizi token", () => {
       ]) {
         expect(offendingRadiusUtilities(`flex ${cls} p-2`), cls).toEqual([]);
       }
+    });
+
+    it("refuses Tailwind's parenthesis form, which would otherwise slip past", () => {
+      for (const cls of [
+        "rounded-(--radius-xs)",
+        "rounded-(--my-px)",
+        "rounded-t-(--radius-card)",
+      ]) {
+        expect(offendingRadiusUtilities(`flex ${cls} p-2`), cls).toEqual([cls]);
+      }
+    });
+
+    it("finds a borderRadius style key written out, as a shorthand, or as a computed string", () => {
+      expect(
+        offendingSourceRadii("a.tsx", "const s = { borderRadius: 6 };"),
+      ).toEqual(["1: borderRadius"]);
+      expect(
+        offendingSourceRadii(
+          "a.tsx",
+          "const borderRadius = 6;\nconst s = { borderRadius };",
+        ),
+      ).toEqual(["2: borderRadius"]);
+      expect(
+        offendingSourceRadii(
+          "a.ts",
+          'const s = { ["borderTopLeftRadius"]: 6 };',
+        ),
+      ).toEqual(["1: borderTopLeftRadius"]);
+      // A key that only contains the word, or a token value, is not a radius.
+      expect(
+        offendingSourceRadii("a.ts", "const s = { borderRadiusNote: 1 };"),
+      ).toEqual([]);
     });
 
     it("reads class strings, not prose, comments or JSX text", () => {

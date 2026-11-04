@@ -228,7 +228,7 @@ export function AirQualityWideSkeleton() {
       aria-label="Loading air quality"
     >
       <Skeleton className="h-4 w-28" />
-      <Skeleton className="h-10 w-20" />
+      <Skeleton className="h-10 w-20 rounded-[var(--radius-sm)]" />
       <Skeleton className="h-2 w-full rounded-full" />
       <Skeleton className="h-4 w-3/4" />
     </div>
