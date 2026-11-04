@@ -248,6 +248,14 @@ describe("focus on the sky (WCAG 1.4.11, 3:1)", () => {
     ).toMatch(/--focus-ring:\s*var\(--exp-storm\)\s*;/);
   });
 
+  it("gives the phone icon group (a light card pill inside the hero) the page ring too", () => {
+    // The ring var is inherited from the sky scope (white); on the group's card
+    // surface that would be invisible.
+    expect(declsFor("[data-sky-hero] .hadeda")).toMatch(
+      /--focus-ring:\s*var\(--exp-storm\)\s*;/,
+    );
+  });
+
   it(".kestrel-round has an unlayered :focus-visible ring on the sky foreground that keeps the round shape", () => {
     const group = focusVisibleGroups(css).find((g) =>
       g.selectors.includes("kestrel-round"),

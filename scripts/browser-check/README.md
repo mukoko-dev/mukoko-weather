@@ -9,11 +9,12 @@ npm run build && npx next start -p 3100 &
 BASE=http://localhost:3100 SHOTS=/tmp/shots node scripts/browser-check/pwa-check.mjs
 ```
 
-| Script              | What it proves                                                                                                                                                                                                                                                     | Takes |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----- |
-| `pwa-check.mjs`     | The shell, the worker, switching places without a reload, offline launch (a stored place and a never-stored one), and the slow-forecast line (none before 8 s, one calm line and "Try again" after, no layout shift, "Couldn't load" after the retries, recovery). | 90 s  |
-| `offline-shell.mjs` | Five fresh browsers launched offline: `/` paints the saved place, `/lagos-ng` shows the "You're offline" page and not the error boundary, with no `/_next/` request failing.                                                                                       | 80 s  |
-| `offline-retry.mjs` | The offline page's chunk is refused at install, so it is not stored; one online navigation a minute later stores it (as a script, never as HTML); offline then works.                                                                                              | 90 s  |
+| Script                | What it proves                                                                                                                                                                                                                                                     | Takes |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----- |
+| `pwa-check.mjs`       | The shell, the worker, switching places without a reload, offline launch (a stored place and a never-stored one), and the slow-forecast line (none before 8 s, one calm line and "Try again" after, no layout shift, "Couldn't load" after the retries, recovery). | 90 s  |
+| `offline-shell.mjs`   | Five fresh browsers launched offline: `/` paints the saved place, `/lagos-ng` shows the "You're offline" page and not the error boundary, with no `/_next/` request failing.                                                                                       | 80 s  |
+| `hero-icon-group.mjs` | The hero's phone icon group: fixed to the top of the screen and level with the hero's top row, still there after scrolling, the profile menu opens under it inside the screen; at 1280 px there is no fixed group and Share is back in the top row.                | 20 s  |
+| `offline-retry.mjs`   | The offline page's chunk is refused at install, so it is not stored; one online navigation a minute later stores it (as a script, never as HTML); offline then works.                                                                                              | 90 s  |
 
 `harness.mjs` holds what they share. Exit code 0 is a pass, 1 a failed check, 2 a crash of the harness itself.
 

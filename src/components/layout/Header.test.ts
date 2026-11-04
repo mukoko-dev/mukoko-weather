@@ -475,8 +475,11 @@ describe("PhoneMenu — one menu, two homes", () => {
   it("is the header's phone menu and the hero's, from one component", () => {
     expect(source).toContain("<PhoneMenu");
     expect(hero).toContain("<PhoneMenu");
-    expect(hero).toContain('buttonClassName="kestrel-round"');
-    expect(hero).toContain('trigger="profile"');
+    // In the hero it is the profile trigger, a round card-surface control in
+    // the fixed phone icon group (.hadeda) beside Share.
+    expect(hero).toContain(
+      '<PhoneMenu trigger="profile" buttonClassName="duiker" />',
+    );
   });
 
   it("lists the account (Account when signed in, Sign in otherwise)", () => {

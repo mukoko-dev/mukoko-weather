@@ -145,6 +145,32 @@
       var(--mobile-nav-bar-height) + 0.5rem
   );
 
+  /* The phone hero's icon group (.hadeda): Share and the profile menu in ONE
+     round pill fixed to the top of the screen, inset 1rem from the top and
+     right edges (the hero's own gutter). Its size comes from these tokens and
+     from nothing else: --hadeda-width is the controls (48px each) plus the
+     gaps between them plus the padding around them, and --hadeda-reserve is
+     what the breadcrumb at the left of the hero's top row leaves free for it
+     (the pill plus a 0.75rem gap), so the trail wraps before it reaches the
+     group. Change a gap, a padding or the number of controls here and the
+     reserve follows. Header.test.ts and viewport-layout.test.ts keep them in
+     step with the component.
+
+     The inset is the same 1rem as the hero's own top margin, so the group is
+     level with the top row at the top of the page. The top and right use
+     max(inset, env(safe-area-inset-*)) so the pill is never under a notch or
+     status bar; today the app does not set viewport-fit=cover, where those
+     insets are 0. If it ever does, the hero's top row needs the same inset. */
+  --hadeda-inset: 1rem;
+  --hadeda-controls: 2;
+  --hadeda-gap: 0.5rem;
+  --hadeda-pad: 0.25rem;
+  --hadeda-width: calc(
+    var(--hadeda-controls) * var(--touch-target-min) +
+      (var(--hadeda-controls) - 1) * var(--hadeda-gap) + 2 * var(--hadeda-pad)
+  );
+  --hadeda-reserve: calc(var(--hadeda-width) + 0.75rem);
+
   /* Mzizi border rule: a solid border on ALL four sides, 0.5px at rest and
      1px on hover, active/selected (aria-current, aria-pressed, aria-selected,
      data-active) and focus-visible. Never a single-side accent stripe. The
@@ -1296,6 +1322,39 @@ body {
            disabled:cursor-not-allowed disabled:opacity-50;
   }
 
+  /* .hadeda — the phone hero's icon group (the hadeda ibis: always on the high
+     perch). Share and the profile menu, two .duiker controls in one round pill
+     FIXED to the top of the screen, so they stay in reach while the page
+     scrolls. A card surface like the bottom bar's island, so it reads over the
+     dark sky and over the cards that scroll under it: 0.5px token border,
+     shadow-lg, a 90% card fill. The blur is on a pseudo-element, never on the
+     group itself: a backdrop-filter makes its element the containing block of
+     fixed descendants, and the profile menu's panel is fixed. Phones only (the
+     caller adds sm:hidden); from `sm` the site header is the top chrome. */
+  .hadeda {
+    position: fixed;
+    top: max(var(--hadeda-inset), env(safe-area-inset-top, 0px));
+    right: max(var(--hadeda-inset), env(safe-area-inset-right, 0px));
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: var(--hadeda-gap);
+    padding: var(--hadeda-pad);
+    border-radius: 9999px;
+    border: var(--border-width-rest) solid var(--border);
+    background-color: color-mix(in srgb, var(--card) 90%, transparent);
+    box-shadow: var(--shadow-lg);
+  }
+  .hadeda::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(24px);
+  }
+
   /* .duiker-solid — the one primary round control in a group (map timeline
      play/pause). Filled with the brand colour, same 48px geometry. */
   .duiker-solid {
@@ -1911,7 +1970,8 @@ body {
 .kestrel-card {
   --focus-ring: var(--sky-fg);
 }
-[data-sky-hero] [data-slot="account-menu-panel"] {
+[data-sky-hero] [data-slot="account-menu-panel"],
+[data-sky-hero] .hadeda {
   --focus-ring: var(--exp-storm);
 }
 
