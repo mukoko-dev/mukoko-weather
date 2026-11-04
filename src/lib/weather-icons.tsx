@@ -506,6 +506,7 @@ export function MapPinIcon({ className = "", size = 24 }: IconProps) {
 export function ShareIcon({ className = "", size = 24 }: IconProps) {
   return (
     <svg
+      aria-hidden="true"
       className={className}
       width={size}
       height={size}

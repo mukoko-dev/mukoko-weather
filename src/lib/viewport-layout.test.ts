@@ -189,3 +189,86 @@ describe("the header and the bottom nav are not inside a containing-block ancest
     );
   });
 });
+
+describe("the hero's phone icon group (.hadeda) stays fixed to the viewport", () => {
+  const body = (selector: string) => {
+    const at = css.indexOf(`${selector} {`);
+    expect(at, `no ${selector} rule`).toBeGreaterThan(-1);
+    return css.slice(at, css.indexOf("}", at));
+  };
+
+  it("is position: fixed at the top right, from the inset tokens and the safe area", () => {
+    const rule = body("  .hadeda");
+    expect(rule).toContain("position: fixed");
+    // The safe-area maths lives once, in the float grid.
+    expect(rule).toContain("top: var(--float-top)");
+    expect(rule).toContain("right: var(--float-right)");
+    expect(rule).not.toContain("env(");
+    expect(rule).toMatch(/z-index:\s*40/);
+  });
+
+  it("never blurs, transforms or filters itself: its blur is on a pseudo-element", () => {
+    // A backdrop-filter (or transform, filter, contain, will-change) would make
+    // the group the containing block of the profile menu's fixed panel.
+    expect(body("  .hadeda")).not.toMatch(
+      /(backdrop-filter|transform|filter|perspective|contain|will-change)\s*:/,
+    );
+    const before = body("  .hadeda::before");
+    expect(before).toContain("backdrop-filter: blur(");
+    expect(before).toMatch(/z-index:\s*-1/);
+  });
+
+  it("sits in no containing-block ancestor in the hero or its section wrapper", () => {
+    for (const file of [
+      "components/weather/CurrentConditions.tsx",
+      "components/weather/DraggableSection.tsx",
+    ]) {
+      for (const c of classNames(read(file))) {
+        expect(c, file).not.toMatch(CONTAINING_BLOCK);
+      }
+    }
+  });
+
+  it("sizes itself from its tokens, and the breadcrumb's reserve is derived from the same ones", () => {
+    expect(css).not.toContain("--hadeda-inset");
+    expect(css).toContain("--hadeda-controls: 2;");
+    expect(css).toContain("--hadeda-gap: var(--float-gap);");
+    expect(css).toContain("--hadeda-pad: var(--float-pad);");
+    // The width is the controls, the gaps between them and the padding around.
+    expect(css.replace(/\s+/g, " ")).toContain(
+      "--hadeda-width: calc( var(--hadeda-controls) * var(--touch-target-min) + (var(--hadeda-controls) - 1) * var(--hadeda-gap) + 2 * var(--hadeda-pad) );",
+    );
+    expect(css).toContain(
+      "--hadeda-reserve: calc(var(--hadeda-width) + 0.75rem);",
+    );
+    // The rule that draws the pill reads the same gap and padding (no second copy).
+    const rule = body("  .hadeda");
+    expect(rule).toContain("gap: var(--hadeda-gap)");
+    expect(rule).toContain("padding: var(--hadeda-pad)");
+    expect(rule).not.toMatch(/(?<!-)\b(gap|padding):\s*[\d.]+rem/);
+  });
+
+  it("holds exactly as many controls as the token says", () => {
+    const hero = read("components/weather/CurrentConditions.tsx");
+    const group = hero.slice(hero.indexOf('className="hadeda sm:hidden"'));
+    const end = group.indexOf("</div>\n      </div>");
+    const inner = group.slice(0, end);
+    // Share (ShareControl) and the profile menu (PhoneMenu).
+    const controls =
+      (inner.match(/<ShareControl/g) ?? []).length +
+      (inner.match(/<PhoneMenu/g) ?? []).length;
+    const token = css.match(/--hadeda-controls:\s*(\d+);/);
+    expect(token).not.toBeNull();
+    expect(controls).toBe(Number(token![1]));
+  });
+
+  it("is a card surface with the Mzizi border: 0.5px token border, shadow, 90% card fill", () => {
+    const rule = body("  .hadeda");
+    expect(rule).toContain(
+      "border: var(--border-width-rest) solid var(--border)",
+    );
+    expect(rule).toContain("var(--card) 90%");
+    expect(rule).toContain("box-shadow: var(--shadow-lg)");
+    expect(rule).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(/);
+  });
+});

@@ -143,11 +143,32 @@ describe("CurrentConditions — top row (breadcrumb, Share, ⋯)", () => {
     );
   });
 
-  it("holds Share and, on phones only, the ⋯ menu — both round 48px controls", () => {
-    expect(source).toContain('className="kestrel-round"');
-    expect(source).toContain("<PhoneMenu");
-    expect(source).toContain('buttonClassName="kestrel-round"');
-    expect(source).toContain('<div className="relative sm:hidden">');
+  it("holds Share at the right of the top row from `sm` up, as a round sky control", () => {
+    expect(source).toContain(
+      '<ShareControl slug={slug} locationName={locationName} variant="sky" />',
+    );
+    expect(source).toContain('<div className="hidden shrink-0 sm:block">');
+  });
+
+  it("puts Share and the profile menu in ONE fixed icon group on phones (sticky at the top of the screen)", () => {
+    expect(source).toContain('<div className="hadeda sm:hidden">');
+    const group = source.slice(source.indexOf('className="hadeda sm:hidden"'));
+    expect(group.indexOf('variant="card"')).toBeGreaterThan(-1);
+    expect(group.indexOf('variant="card"')).toBeLessThan(
+      group.indexOf("<PhoneMenu"),
+    );
+    expect(group).toContain(
+      '<PhoneMenu trigger="profile" buttonClassName="duiker" />',
+    );
+    // The group is not drawn from `sm` up, where the site header is the top chrome.
+    expect(source.match(/<PhoneMenu/g)).toHaveLength(1);
+  });
+
+  it("keeps the top row 48px tall and leaves the breadcrumb room for the group on phones", () => {
+    expect(source).toContain(
+      "min-h-[var(--touch-target-min)] min-w-0 pr-[var(--hadeda-reserve)]",
+    );
+    expect(source).toContain("sm:pr-0");
   });
 
   it("sits before the identity stack", () => {
@@ -157,49 +178,14 @@ describe("CurrentConditions — top row (breadcrumb, Share, ⋯)", () => {
   });
 });
 
-describe("CurrentConditions — share button", () => {
-  it("imports ShareIcon from weather-icons", () => {
-    expect(source).toContain("ShareIcon");
-    expect(source).toContain("weather-icons");
-  });
-
-  it("accepts a slug prop for constructing share URLs", () => {
+describe("CurrentConditions — share button (the logic lives in ShareControl)", () => {
+  it("renders the shared ShareControl, passing the slug and the place name", () => {
+    expect(source).toContain(
+      'import { ShareControl } from "@/components/weather/ShareControl"',
+    );
     expect(source).toContain("slug?:");
-  });
-
-  it("uses Web Share API (navigator.share) when available", () => {
-    expect(source).toContain("navigator.share");
-  });
-
-  it("falls back to clipboard copy when Web Share API is unavailable", () => {
-    expect(source).toMatch(/navigator\.clipboard\s*\.writeText/);
-  });
-
-  it("announces 'Link copied' after clipboard copy (live region)", () => {
-    expect(source).toContain("Link copied");
-    expect(source).toContain('role="status"');
-    expect(source).toContain("setCopied");
-  });
-
-  it("resets copied state after 2 seconds", () => {
-    expect(source).toContain("2000");
-    expect(source).toContain("setTimeout");
-  });
-
-  it("constructs share URL from BASE_URL and slug, else window.location.href", () => {
-    expect(source).toContain("BASE_URL");
-    expect(source).toContain("weather.mukoko.com");
-    expect(source).toContain("window.location.href");
-  });
-
-  it("is icon-only: its name comes from aria-label", () => {
-    expect(source).toContain("Share weather for");
-    expect(source).toContain("aria-label");
-    expect(source).not.toContain("sr-only sm:not-sr-only");
-  });
-
-  it("hides its icon from assistive tech to avoid a duplicate label", () => {
-    expect(source).toContain('aria-hidden="true"');
+    expect(source).not.toContain("navigator.share");
+    expect(source).not.toContain("ShareIcon");
   });
 });
 

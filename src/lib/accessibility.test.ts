@@ -27,6 +27,7 @@ function readComponent(relativePath: string) {
 const currentConditions = readComponent(
   "../components/weather/CurrentConditions.tsx",
 );
+const shareControl = readComponent("../components/weather/ShareControl.tsx");
 const chartErrorBoundary = readComponent(
   "../components/weather/ChartErrorBoundary.tsx",
 );
@@ -68,9 +69,9 @@ describe("Sections — aria-labelledby", () => {
 });
 
 describe("Interactive elements — aria-label", () => {
-  it("CurrentConditions share button has descriptive aria-label", () => {
-    expect(currentConditions).toContain("Share weather for");
-    expect(currentConditions).toContain("aria-label");
+  it("the hero's share button has a descriptive aria-label", () => {
+    expect(shareControl).toContain("Share weather for");
+    expect(shareControl).toContain("aria-label");
   });
 
   it("ChartErrorBoundary retry button is inside a role=alert region", () => {
@@ -132,14 +133,18 @@ describe("Screen reader text — sr-only", () => {
 });
 
 describe("Touch targets — 56px minimum", () => {
-  it("CurrentConditions share button meets the touch target requirement", () => {
-    // Share is the round .kestrel-round control, which carries both minimums.
-    expect(currentConditions).toContain('className="kestrel-round"');
+  it("the hero's share button meets the touch target requirement", () => {
+    // Share is a round .kestrel-round (on the sky) or .duiker (in the phone
+    // icon group) control; each carries both minimums.
+    expect(shareControl).toContain('"duiker"');
+    expect(shareControl).toContain('"kestrel-round"');
     const css = readFileSync(resolve(__dirname, "../app/globals.css"), "utf-8");
-    const rule = css.slice(css.indexOf(".kestrel-round {"));
-    const body = rule.slice(0, rule.indexOf("}"));
-    expect(body).toContain("w-[var(--touch-target-min)]");
-    expect(body).toContain("h-[var(--touch-target-min)]");
+    for (const cls of [".kestrel-round {", ".duiker {"]) {
+      const rule = css.slice(css.indexOf(cls));
+      const body = rule.slice(0, rule.indexOf("}"));
+      expect(body, cls).toContain("w-[var(--touch-target-min)]");
+      expect(body, cls).toContain("h-[var(--touch-target-min)]");
+    }
   });
 });
 

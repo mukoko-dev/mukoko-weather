@@ -9,6 +9,7 @@ import {
   createPlaceController,
   isFreshEnough,
   liveViewFor,
+  memoryHasRoomFor,
   mergeStoredWithSeed,
   recallFromMemory,
   rememberInMemory,
@@ -119,6 +120,8 @@ interface Harness {
     fetch: string[];
     recall: string[];
     resolve: string[];
+    /** The options of each fetchWeather call, in order. */
+    options: Array<{ force?: boolean; background?: boolean } | undefined>;
     push: string[];
     replace: string[];
     shown: string[];
@@ -148,6 +151,7 @@ function harness(initialPath: string): Harness {
     fetch: [],
     recall: [],
     resolve: [],
+    options: [],
     push: [],
     replace: [],
     shown: [],
@@ -182,9 +186,10 @@ function harness(initialPath: string): Harness {
       calls.recall.push(slug);
       return stored.get(slug) ?? null;
     },
-    fetchWeather: async (lat) => {
+    fetchWeather: async (lat, _lon, _signal, options) => {
       const slug = byLat.get(lat) ?? "?";
       calls.fetch.push(slug);
+      calls.options.push(options);
       await holds.get(slug);
       if (failFetch.on) throw new Error("offline");
       return {
@@ -1155,6 +1160,189 @@ describe("a forecast that is slow to arrive (the skeleton says so, after 8 s)", 
   });
 });
 
+describe("warm: getting the next place ready before it is asked for", () => {
+  const slugOf = (slug: string) => ({ kind: "slug", slug }) as const;
+  const startedAt = async (h: Harness) => {
+    const c = createPlaceController(h.deps, {
+      seed: HARARE,
+      isHome: false,
+      path: "/harare",
+    });
+    await c.start();
+    return c;
+  };
+
+  it("fetches a place once and keeps it: the switch then paints from memory with no request", async () => {
+    const h = harness("/harare");
+    const c = await startedAt(h);
+    expect(await c.warm(slugOf("nairobi-ke"))).toBe("warmed");
+    expect(h.calls.resolve).toEqual(["nairobi-ke"]);
+    expect(h.calls.fetch).toEqual(["harare", "nairobi-ke"]);
+
+    const recalls = h.calls.recall.length;
+    expect(await c.showSlug("nairobi-ke")).toBe(true);
+    expect(h.calls.fetch).toEqual(["harare", "nairobi-ke"]);
+    expect(h.calls.recall.length).toBe(recalls);
+    expect(c.getState().fetching).toBe(false);
+    expect(temp(c.getState())).toBe(-1);
+  });
+
+  it("costs nothing for a place already held young enough in memory", async () => {
+    const h = harness("/harare");
+    const c = await startedAt(h);
+    expect(await c.warm(slugOf("harare"))).toBe("fresh");
+    expect(h.calls.fetch).toEqual(["harare"]);
+    expect(h.calls.resolve).toEqual([]);
+  });
+
+  it("keeps a young device copy in memory, with no request and no lookup", async () => {
+    const h = harness("/harare");
+    h.stored.set("nairobi-ke", storedView(NAIROBI, 20, 60_000));
+    const c = await startedAt(h);
+    expect(await c.warm(slugOf("nairobi-ke"))).toBe("fresh");
+    expect(h.calls.fetch).toEqual(["harare"]);
+    expect(h.calls.resolve).toEqual([]);
+    // The switch no longer waits for the device.
+    const recalls = h.calls.recall.length;
+    await c.showSlug("nairobi-ke");
+    expect(h.calls.recall.length).toBe(recalls);
+    expect(temp(c.getState())).toBe(20);
+  });
+
+  it("refreshes an old device copy, taking the place from the copy and not asking the resolver", async () => {
+    const h = harness("/harare");
+    h.stored.set(
+      "nairobi-ke",
+      storedView(NAIROBI, 20, REFRESH_AFTER_MS + 1000),
+    );
+    const c = await startedAt(h);
+    expect(await c.warm(slugOf("nairobi-ke"))).toBe("warmed");
+    expect(h.calls.resolve).toEqual([]);
+    expect(h.calls.fetch).toEqual(["harare", "nairobi-ke"]);
+    expect(recallFromMemory("nairobi-ke", h.clock.now)).not.toBeNull();
+  });
+
+  it("shows nothing: the screen's state and its listeners are untouched", async () => {
+    const h = harness("/harare");
+    const c = await startedAt(h);
+    const before = c.getState();
+    let heard = 0;
+    c.subscribe(() => heard++);
+    await c.warm(slugOf("nairobi-ke"));
+    await c.warm(slugOf("lagos-ng"));
+    expect(c.getState()).toBe(before);
+    expect(heard).toBe(0);
+    expect(h.calls.shown).toEqual(["harare:none"]);
+    expect(h.calls.push).toEqual([]);
+  });
+
+  it("does not take over a switch that is still loading", async () => {
+    const h = harness("/harare");
+    const c = await startedAt(h);
+    const release = h.hold("lagos-ng");
+    const switching = c.showSlug("lagos-ng");
+    await new Promise((r) => setTimeout(r, 10));
+    expect(await c.warm(slugOf("nairobi-ke"))).toBe("warmed");
+    release();
+    expect(await switching).toBe(true);
+    expect(c.getState().seed?.location.slug).toBe("lagos-ng");
+    expect(temp(c.getState())).toBe(6);
+  });
+
+  it("never keeps the seasonal estimate: it says failed, and the switch asks again", async () => {
+    const h = harness("/harare");
+    const c = await startedAt(h);
+    h.fallbackAnswer.on = true;
+    expect(await c.warm(slugOf("nairobi-ke"))).toBe("failed");
+    expect(recallFromMemory("nairobi-ke", h.clock.now)).toBeNull();
+    h.fallbackAnswer.on = false;
+    await c.showSlug("nairobi-ke");
+    expect(h.calls.fetch).toEqual(["harare", "nairobi-ke", "nairobi-ke"]);
+  });
+
+  it("a failed request is failed, throws nothing and schedules no retry", async () => {
+    const h = harness("/harare");
+    const c = await startedAt(h);
+    const timersBefore = h.pending();
+    h.failFetch.on = true;
+    expect(await c.warm(slugOf("nairobi-ke"))).toBe("failed");
+    expect(h.pending()).toEqual(timersBefore);
+    expect(c.getState().failed).toBe(false);
+  });
+
+  it("a place nobody knows is failed and fetches nothing", async () => {
+    const h = harness("/harare");
+    const c = await startedAt(h);
+    expect(await c.warm(slugOf("nowhere-xx"))).toBe("failed");
+    expect(h.calls.fetch).toEqual(["harare"]);
+  });
+
+  it("asks for a background read (the Worker only, one attempt); the visitor's own switch does not", async () => {
+    const h = harness("/harare");
+    const c = await startedAt(h);
+    expect(h.calls.options.map((o) => o?.background)).toEqual([undefined]);
+    await c.warm(slugOf("nairobi-ke"));
+    expect(h.calls.options.at(-1)).toEqual({ background: true });
+    await c.showSlug("lagos-ng");
+    expect(h.calls.options.at(-1)?.background).toBeUndefined();
+  });
+
+  it("never pushes out a place the visitor opened: with no free slot it asks for nothing", async () => {
+    const h = harness("/harare");
+    const c = await startedAt(h);
+    // Fill every slot with places the visitor "opened".
+    for (let i = 0; i < MEMORY_MAX_PLACES; i++) {
+      const s = seed(`opened-${i}`, 40 + i);
+      rememberInMemory(
+        {
+          location: s.location,
+          weather: weather(i),
+          usingFallback: false,
+          frostAlert: null,
+          season: s.season,
+          countryName: s.countryName,
+        },
+        NOW,
+      );
+    }
+    expect(memoryHasRoomFor("nairobi-ke")).toBe(false);
+    const fetchesBefore = h.calls.fetch.length;
+    expect(await c.warm(slugOf("nairobi-ke"))).toBe("skipped");
+    expect(h.calls.fetch.length).toBe(fetchesBefore);
+    for (let i = 0; i < MEMORY_MAX_PLACES; i++) {
+      expect(recallFromMemory(`opened-${i}`, NOW)).not.toBeNull();
+    }
+  });
+
+  it("a signal that is already aborted does nothing", async () => {
+    const h = harness("/harare");
+    const c = await startedAt(h);
+    const stop = new AbortController();
+    stop.abort();
+    expect(await c.warm(slugOf("nairobi-ke"), stop.signal)).toBe("skipped");
+    expect(h.calls.fetch).toEqual(["harare"]);
+    expect(h.calls.recall).toEqual(["harare"]);
+  });
+
+  it("warms My Location from the home seed, and skips it when this stage never knew it", async () => {
+    const h = harness("/");
+    const home = createPlaceController(h.deps, {
+      seed: HARARE,
+      isHome: true,
+      path: "/",
+    });
+    await home.start();
+    expect(await home.warm({ kind: "home" })).toBe("fresh");
+
+    const other = createPlaceController(harness("/harare").deps, {
+      seed: HARARE,
+      isHome: false,
+      path: "/harare",
+    });
+    expect(await other.warm({ kind: "home" })).toBe("skipped");
+  });
+});
+
 describe("pure helpers", () => {
   it("isFreshEnough: current and younger than the refresh window", () => {
     const young = storedView(HARARE, 21, 60_000);
@@ -1219,6 +1407,66 @@ describe("pure helpers", () => {
     expect(
       recallFromMemory(`place-${MEMORY_MAX_PLACES + 2}`, NOW),
     ).not.toBeNull();
+  });
+
+  it("a speculative copy takes only a free slot and is the first to go", () => {
+    const put = (slug: string, i: number, speculative = false) => {
+      const s = seed(slug, i);
+      rememberInMemory(
+        {
+          location: s.location,
+          weather: weather(i),
+          usingFallback: false,
+          frostAlert: null,
+          season: s.season,
+          countryName: s.countryName,
+        },
+        NOW,
+        { speculative },
+      );
+    };
+    // Room: kept, and at the OLD end, so the next two opened places push it
+    // out before anything the visitor opened.
+    for (let i = 0; i < MEMORY_MAX_PLACES - 1; i++) put(`opened-${i}`, i);
+    put("warm-a", 50, true);
+    expect(recallFromMemory("warm-a", NOW)).not.toBeNull();
+    expect(memoryHasRoomFor("warm-b")).toBe(false);
+    put("opened-x", 60);
+    expect(recallFromMemory("warm-a", NOW)).toBeNull();
+    expect(recallFromMemory("opened-0", NOW)).not.toBeNull();
+
+    // No room: dropped, nothing evicted.
+    put("warm-b", 51, true);
+    expect(recallFromMemory("warm-b", NOW)).toBeNull();
+    expect(recallFromMemory("opened-0", NOW)).not.toBeNull();
+  });
+
+  it("a speculative refresh of a held place keeps its place in the order and the seasonal estimate is still refused", () => {
+    const s = seed("held", 1);
+    const payload = (temp: number, usingFallback = false) => ({
+      location: s.location,
+      weather: weather(temp),
+      usingFallback,
+      frostAlert: null,
+      season: s.season,
+      countryName: s.countryName,
+    });
+    rememberInMemory(payload(1), NOW);
+    for (let i = 0; i < MEMORY_MAX_PLACES - 1; i++) {
+      const o = seed(`other-${i}`, 10 + i);
+      rememberInMemory({ ...payload(2), location: o.location }, NOW);
+    }
+    rememberInMemory(payload(30), NOW, { speculative: true });
+    expect(
+      recallFromMemory("held", NOW)?.payload.weather.current.temperature_2m,
+    ).toBe(30);
+    // Still the oldest: the next opened place evicts it.
+    const x = seed("opened-new", 99);
+    rememberInMemory({ ...payload(3), location: x.location }, NOW);
+    expect(recallFromMemory("held", NOW)).toBeNull();
+    // The estimate is refused, speculative or not.
+    rememberInMemory(payload(5, true), NOW, { speculative: true });
+    expect(recallFromMemory("held", NOW)).toBeNull();
   });
 
   it("memory re-bases an old copy on now and drops one the forecast no longer covers", () => {

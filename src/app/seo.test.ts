@@ -231,9 +231,10 @@ describe("country-aware metadata in [location]/page.tsx", () => {
     "utf-8",
   );
 
-  it("imports getCountryByCode from db lib for country names", () => {
-    expect(pageSource).toContain("getCountryByCode");
-    expect(pageSource).toContain("@/lib/db");
+  it("names the country from the static country list, not a read (issue #452)", () => {
+    expect(pageSource).toContain("countryDisplayName(");
+    expect(pageSource).not.toContain("getCountryByCode");
+    expect(pageSource).not.toContain("@/lib/db");
   });
 
   it("derives countryCode from loc.country with empty fallback", () => {

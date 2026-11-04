@@ -22,7 +22,7 @@ import { LocationPromptCard } from "@/components/weather/LocationPromptCard";
 import { PlaceView, usePlaceStage } from "@/components/weather/PlaceStage";
 import { LocationSkeleton } from "@/components/weather/LocationSkeleton";
 import { defaultHomeLocation } from "@/lib/default-home-place";
-import type { AISummaryUser } from "@/components/weather/AISummary";
+import { useAiUser } from "@/lib/use-ai-user";
 import { seedOfPayload, type PlaceSeed } from "@/lib/place-controller";
 import {
   catalogueLocation,
@@ -53,7 +53,6 @@ interface Props {
   /** Server-seeded place (cookie-resolved or IP-geo location) — null when
    *  the server had nothing to go on (true first visit, blocked cookies). */
   initial: HomeSeed | null;
-  user: AISummaryUser | null;
 }
 
 type GpsState = "idle" | "detecting";
@@ -96,8 +95,11 @@ const PROMPT_COPY: Record<Exclude<PromptMessage, null>, string> = {
  * - Explicit `/{slug}` URLs remain the shareable/SEO surface for saved and
  *   browsed locations; they are untouched by this flow.
  */
-export function CurrentLocationHome({ initial, user }: Props) {
+export function CurrentLocationHome({ initial }: Props) {
   const openMyWeather = useAppStore((s) => s.openMyWeather);
+  // The signed-in person, read in the browser from AuthKit's provider; the
+  // server render does not wait for the session (issue #452).
+  const user = useAiUser();
   // The place stage owns what is on screen: the server's place, then the copy
   // stored on the device, then the visitor's own weather request. A GPS swap
   // and a switch to a saved place are both "show this place" on the stage.
@@ -368,7 +370,7 @@ export function CurrentLocationHome({ initial, user }: Props) {
   if (shownSeed) {
     const showCard = promptReady && !gpsConfirmed && !dismissed && onHomePlace;
     return (
-      <PlaceView stage={stage} user={user} isCurrentLocation={gpsConfirmed}>
+      <PlaceView stage={stage} isCurrentLocation={gpsConfirmed}>
         {showCard && (
           <LocationPromptCard
             placeName={shownSeed.location.name}
