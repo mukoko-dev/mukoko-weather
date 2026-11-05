@@ -12,7 +12,7 @@
     "mongodb": "^7.3.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20261019.1",
+    "@cloudflare/workers-types": "^5.20261026.1",
     "@types/node": "^22.20.5",
     "typescript": "6.0.3",
     "vitest": "^4.1.11"
