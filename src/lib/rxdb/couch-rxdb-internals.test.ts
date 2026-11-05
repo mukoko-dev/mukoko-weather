@@ -27,8 +27,17 @@ import { replicateCouchDB } from "rxdb/plugins/replication-couchdb";
 import { endReplicationRetries } from "./couch-rxdb";
 import { RxDBLeaderElectionPlugin } from "rxdb/plugins/leader-election";
 
-/** The RxDB the internal was checked against (2026-11-03). */
-const CHECKED_RXDB_VERSION = "17.3.0";
+/**
+ * The RxDB the internal was checked against (2026-11-04).
+ *
+ * 17.3.0 -> 17.6.0 re-check: the retry loops (`while (!done &&
+ * !this.isStoppedOrPaused())` in the pull and push handlers), `isStoppedOrPaused`,
+ * `internalReplicationState.events.paused` and the start/pause/cancel queue are
+ * unchanged. The one behavioural change is that a failed `start()` no longer
+ * leaves the queue rejected and is emitted on `error$` as `RC_START`; the
+ * cycle in `couch-rxdb.ts` already ends and fails on ANY `error$` emission.
+ */
+const CHECKED_RXDB_VERSION = "17.6.0";
 
 const WHAT_TO_RECHECK =
   "RxDB changed something `src/lib/rxdb/couch-rxdb.ts` relies on. Re-check " +
