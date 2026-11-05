@@ -26,6 +26,7 @@ import { resolve } from "path";
 import { createElement, type ReactNode } from "react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { canonicalSlug } from "@/lib/slug-migration";
 import {
   importsOf,
   relativeToSrc,
@@ -146,7 +147,9 @@ describe.each(PAGES)("/[location]/%s server render", (_route, load) => {
       "location",
       "season",
     ]);
-    expect((dashboard!.props.location as { slug: string }).slug).toBe("harare");
+    expect((dashboard!.props.location as { slug: string }).slug).toBe(
+      canonicalSlug("harare"),
+    );
     expect(JSON.stringify(dashboard!.props)).not.toMatch(
       /temperature_2m|hourly|usingFallback|frostAlert/,
     );
@@ -179,7 +182,7 @@ describe.each(PAGES)("/[location]/%s server render", (_route, load) => {
     const dashboard = tree.props.children.find(
       (c) => c?.props && "season" in c.props,
     );
-    expect(dashboard?.key).toBe("harare");
+    expect(dashboard?.key).toBe(canonicalSlug("harare"));
   });
 
   it("generateMetadata calls no weather loader either", async () => {
@@ -202,7 +205,9 @@ describe("/display server render", () => {
 
   it("renders a shipped place and calls no weather loader and no weather URL", async () => {
     const tree = await renderDisplay({ location: "harare" });
-    expect((tree.props.location as { slug: string }).slug).toBe("harare");
+    expect((tree.props.location as { slug: string }).slug).toBe(
+      canonicalSlug("harare"),
+    );
     expect(getWeatherForLocation).not.toHaveBeenCalled();
     expect(weatherFetches()).toEqual([]);
   });
@@ -221,7 +226,9 @@ describe("/display server render", () => {
     await renderDisplay({ lat: "1.35", lon: "103.82" });
     requestCookie = "bulawayo";
     const tree = await renderDisplay({});
-    expect((tree.props.location as { slug: string }).slug).toBe("bulawayo");
+    expect((tree.props.location as { slug: string }).slug).toBe(
+      canonicalSlug("bulawayo"),
+    );
     expect(getWeatherForLocation).not.toHaveBeenCalled();
     expect(weatherFetches()).toEqual([]);
   });
@@ -230,10 +237,14 @@ describe("/display server render", () => {
     // A hung database must not hold a wall display's first byte.
     storeLookup = () => new Promise(() => {});
     const tree = await renderDisplay({ location: "bulawayo" });
-    expect((tree.props.location as { slug: string }).slug).toBe("bulawayo");
+    expect((tree.props.location as { slug: string }).slug).toBe(
+      canonicalSlug("bulawayo"),
+    );
     requestCookie = "harare";
     const fromCookie = await renderDisplay({});
-    expect((fromCookie.props.location as { slug: string }).slug).toBe("harare");
+    expect((fromCookie.props.location as { slug: string }).slug).toBe(
+      canonicalSlug("harare"),
+    );
   });
 });
 

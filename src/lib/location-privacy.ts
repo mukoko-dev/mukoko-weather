@@ -6,11 +6,14 @@
  * shareable identity; only what is EXPORTED (GA4, Vercel Analytics, request
  * URLs that reach platform logs) is coarsened here.
  *
- * - legacy catalog slugs (`harare`, `nairobi-ke`) carry no coordinate: kept
+ * - legacy catalog slugs (`harare`, `nairobi-ke`) carry no coordinate: kept,
+ *   and so is the canonical slug of a shipped seed city (`harare--ksy4dd1`
+ *   is exported as `harare`)
  * - spots become `spot--<4-char geohash>` (about 39 x 20 km), name dropped
  * - OSM places become `place` (name and feature id dropped)
  */
 import { parseSmartSlug } from "./smart-slug";
+import { storageKeySlug } from "./slug-migration";
 
 /** Geohash characters kept for a spot: a ~39 x 20 km cell. */
 export const ANALYTICS_GEOHASH_CHARS = 4;
@@ -26,6 +29,11 @@ export function roundCoord(value: number): number {
 
 /** Coarsen one slug for analytics. Non-smart slugs are returned unchanged. */
 export function coarsenSlug(slug: string): string {
+  // A shipped seed city is a public place, not a private coordinate: its
+  // canonical slug is exported as the plain catalogue slug it replaced
+  // (`harare`), exactly what analytics saw before the move (#317).
+  const catalogue = storageKeySlug(slug);
+  if (catalogue !== slug) return catalogue;
   const parsed = parseSmartSlug(slug);
   if (!parsed) return slug;
   if (parsed.ref.kind === "spot" && parsed.geohash) {

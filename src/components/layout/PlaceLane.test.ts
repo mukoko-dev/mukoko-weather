@@ -13,6 +13,7 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 import { PlaceLaneView } from "./PlaceLane";
 import { laneChips, pagerSequence } from "@/lib/location-pager";
+import { canonicalSlug as c } from "@/lib/slug-migration";
 
 const source = readFileSync(resolve(__dirname, "PlaceLane.tsx"), "utf-8");
 const css = readFileSync(resolve(__dirname, "../../app/globals.css"), "utf-8");
@@ -57,7 +58,8 @@ describe("PlaceLane — accessible lane", () => {
     expect(html.match(/<li\b/g)).toHaveLength(2);
     expect(html).toContain('aria-label="My Location"');
     expect(html).toContain('href="/"');
-    expect(html).toContain('href="/harare"');
+    // The lane links to the canonical URL of a shipped place (#317).
+    expect(html).toContain(`href="/${c("harare")}"`);
     expect(html).toContain(">Harare</span>");
     expect(html).toContain('title="Nairobi"');
   });
@@ -66,7 +68,7 @@ describe("PlaceLane — accessible lane", () => {
     const html = view(["harare", "nairobi-ke"], 2);
     expect(html.match(/aria-current="page"/g)).toHaveLength(1);
     const tag = (html.match(/<a\b[^>]*aria-current="page"[^>]*>/) ?? [""])[0];
-    expect(tag).toContain('href="/nairobi-ke"');
+    expect(tag).toContain(`href="/${c("nairobi-ke")}"`);
   });
 
   it("marks no chip when none is current (e.g. /locations)", () => {

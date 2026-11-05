@@ -30,6 +30,7 @@ import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildSmartSlug } from "@/lib/smart-slug";
+import { canonicalSlug } from "@/lib/slug-migration";
 import {
   importsOf,
   relativeToSrc,
@@ -110,7 +111,7 @@ describe("/[location]: the render waits for nothing", () => {
       expect(stage).toBeTruthy();
       expect(
         (stage!.props.seed as { location: { slug: string } }).location.slug,
-      ).toBe(slug);
+      ).toBe(canonicalSlug(slug));
       expect(getLocationFromDb).not.toHaveBeenCalled();
       expect(getCurrentUser).not.toHaveBeenCalled();
       expect(getSeasonForDate).not.toHaveBeenCalled();
@@ -187,7 +188,9 @@ describe("/: the render waits for nothing it can name itself", () => {
     requestCookie = "bulawayo";
     const initial = await renderHome();
     expect(initial).not.toBeNull();
-    expect((initial!.location as { slug: string }).slug).toBe("bulawayo");
+    expect((initial!.location as { slug: string }).slug).toBe(
+      canonicalSlug("bulawayo"),
+    );
     expect(Object.keys(initial!).sort()).toEqual([
       "countryName",
       "location",
@@ -207,7 +210,9 @@ describe("/: the render waits for nothing it can name itself", () => {
 
   it("a first visit seeds Harare with no lookup at all", async () => {
     const initial = await renderHome();
-    expect((initial!.location as { slug: string }).slug).toBe("harare");
+    expect((initial!.location as { slug: string }).slug).toBe(
+      canonicalSlug("harare"),
+    );
     expect(getLocationFromDb).not.toHaveBeenCalled();
     expect(getCurrentUser).not.toHaveBeenCalled();
   });

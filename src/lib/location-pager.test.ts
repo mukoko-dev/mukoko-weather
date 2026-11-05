@@ -13,13 +13,14 @@ import {
   pagerIndex,
   pagerSequence,
 } from "./location-pager";
+import { canonicalSlug as c } from "./slug-migration";
 
 describe("pagerSequence", () => {
   it("starts with the My Location page and then one page per saved slug", () => {
     expect(pagerSequence(["harare", "nairobi-ke"])).toEqual([
       "/",
-      "/harare",
-      "/nairobi-ke",
+      `/${c("harare")}`,
+      `/${c("nairobi-ke")}`,
     ]);
   });
 
@@ -32,8 +33,8 @@ describe("pagerSequence", () => {
   it("drops duplicate slugs, keeping the first occurrence", () => {
     expect(pagerSequence(["harare", "gweru", "harare"])).toEqual([
       "/",
-      "/harare",
-      "/gweru",
+      `/${c("harare")}`,
+      `/${c("gweru")}`,
     ]);
   });
 
@@ -49,7 +50,7 @@ describe("pagerSequence", () => {
         "../etc",
         "harare",
       ]),
-    ).toEqual(["/", "/harare"]);
+    ).toEqual(["/", `/${c("harare")}`]);
   });
 
   it("keeps a smart slug with its -- delimiter", () => {
@@ -61,15 +62,15 @@ describe("pagerSequence", () => {
 });
 
 describe("pagerIndex", () => {
-  const sequence = ["/", "/harare", "/nairobi-ke"];
+  const sequence = ["/", `/${c("harare")}`, `/${c("nairobi-ke")}`];
 
   it("maps the home page to index 0", () => {
     expect(pagerIndex("/", sequence)).toBe(0);
   });
 
   it("maps a saved location page to its index", () => {
-    expect(pagerIndex("/harare", sequence)).toBe(1);
-    expect(pagerIndex("/nairobi-ke", sequence)).toBe(2);
+    expect(pagerIndex(`/${c("harare")}`, sequence)).toBe(1);
+    expect(pagerIndex(`/${c("nairobi-ke")}`, sequence)).toBe(2);
   });
 
   it("treats sub-routes as their location (/harare/map is the harare page)", () => {
@@ -81,7 +82,7 @@ describe("pagerIndex", () => {
   it("returns -1 for pages that are not in the pager", () => {
     expect(pagerIndex("/explore", sequence)).toBe(-1);
     expect(pagerIndex("/history", sequence)).toBe(-1);
-    expect(pagerIndex("/gweru", sequence)).toBe(-1);
+    expect(pagerIndex(`/${c("gweru")}`, sequence)).toBe(-1);
   });
 
   it("treats an empty or missing pathname as the home page", () => {
@@ -96,12 +97,12 @@ describe("pagerIndex", () => {
 });
 
 describe("neighbour", () => {
-  const sequence = ["/", "/harare", "/nairobi-ke"];
+  const sequence = ["/", `/${c("harare")}`, `/${c("nairobi-ke")}`];
 
   it("steps forward and backward through the sequence", () => {
-    expect(neighbour(sequence, 0, 1)).toBe("/harare");
-    expect(neighbour(sequence, 1, 1)).toBe("/nairobi-ke");
-    expect(neighbour(sequence, 2, -1)).toBe("/harare");
+    expect(neighbour(sequence, 0, 1)).toBe(`/${c("harare")}`);
+    expect(neighbour(sequence, 1, 1)).toBe(`/${c("nairobi-ke")}`);
+    expect(neighbour(sequence, 2, -1)).toBe(`/${c("harare")}`);
     expect(neighbour(sequence, 1, -1)).toBe("/");
   });
 
@@ -132,9 +133,9 @@ describe("neighbour", () => {
 
 describe("pagerPlaces", () => {
   it("excludes the home page (it has its own glyph)", () => {
-    expect(pagerPlaces(["/", "/harare", "/gweru"])).toEqual([
-      "/harare",
-      "/gweru",
+    expect(pagerPlaces(["/", `/${c("harare")}`, `/${c("gweru")}`])).toEqual([
+      `/${c("harare")}`,
+      `/${c("gweru")}`,
     ]);
   });
 
@@ -155,32 +156,32 @@ describe("pagerSequence with suggested places", () => {
   it("lists My Location, then saved places, then visible suggested places", () => {
     expect(pagerSequence(["harare"], ["bulawayo", "nairobi-ke"])).toEqual([
       "/",
-      "/harare",
-      "/bulawayo",
-      "/nairobi-ke",
+      `/${c("harare")}`,
+      `/${c("bulawayo")}`,
+      `/${c("nairobi-ke")}`,
     ]);
   });
 
   it("shows suggested places when nothing is saved", () => {
     expect(pagerSequence([], ["harare", "bulawayo"])).toEqual([
       "/",
-      "/harare",
-      "/bulawayo",
+      `/${c("harare")}`,
+      `/${c("bulawayo")}`,
     ]);
   });
 
   it("keeps the first occurrence when a saved place is also suggested", () => {
     expect(pagerSequence(["harare"], ["harare", "bulawayo"])).toEqual([
       "/",
-      "/harare",
-      "/bulawayo",
+      `/${c("harare")}`,
+      `/${c("bulawayo")}`,
     ]);
   });
 
   it("drops route names and bad slugs from the suggestions too", () => {
     expect(pagerSequence([], ["explore", "Bad Slug", "bulawayo"])).toEqual([
       "/",
-      "/bulawayo",
+      `/${c("bulawayo")}`,
     ]);
   });
 
@@ -196,11 +197,16 @@ describe("laneChips — the places lane", () => {
   it("always starts with My Location, then one chip per place in sequence order", () => {
     expect(laneChips(pagerSequence(["harare", "nairobi-ke"]))).toEqual([
       { href: "/", kind: "home", slug: null, name: "My Location" },
-      { href: "/harare", kind: "place", slug: "harare", name: "Harare" },
       {
-        href: "/nairobi-ke",
+        href: `/${c("harare")}`,
         kind: "place",
-        slug: "nairobi-ke",
+        slug: c("harare"),
+        name: "Harare",
+      },
+      {
+        href: `/${c("nairobi-ke")}`,
+        kind: "place",
+        slug: c("nairobi-ke"),
         name: "Nairobi",
       },
     ]);
@@ -226,11 +232,11 @@ describe("laneChips — the places lane", () => {
 
   it("keeps the saved places before the suggested ones (the swipe order)", () => {
     const chips = laneChips(pagerSequence(["harare"], ["bulawayo", "gweru"]));
-    expect(chips.map((c) => c.href)).toEqual([
+    expect(chips.map((chip) => chip.href)).toEqual([
       "/",
-      "/harare",
-      "/bulawayo",
-      "/gweru",
+      `/${c("harare")}`,
+      `/${c("bulawayo")}`,
+      `/${c("gweru")}`,
     ]);
   });
 

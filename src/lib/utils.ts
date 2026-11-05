@@ -18,7 +18,11 @@ export function formatCoords(lat: number, lon: number): string {
  * numeric collision suffixes (e.g., -14).
  */
 export function slugToDisplayName(slug: string): string {
-  const parts = slug.split("-");
+  // `{name}--{ref}` (the canonical form): the name is everything before the
+  // last `--`; the geohash or OSM ref is never part of it.
+  const delimiter = slug.lastIndexOf("--");
+  const named = delimiter > 0 ? slug.slice(0, delimiter) : slug;
+  const parts = named.split("-");
   // Strip trailing numeric-only segments (slug collision suffixes)
   while (parts.length > 1 && /^\d+$/.test(parts[parts.length - 1])) {
     parts.pop();

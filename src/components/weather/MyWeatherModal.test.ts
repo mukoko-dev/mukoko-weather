@@ -58,7 +58,7 @@ describe("MyWeatherModal — close cancels, primary button commits", () => {
     expect(apply).toContain("setSelectedLocation(pendingSlug)");
     // In place through the place stage; the router is only the fallback.
     expect(apply).toContain(
-      "navigateToPlace(`/${pendingSlug}`, (href) => router.push(href))",
+      "navigateToPlace(locationPath(pendingSlug), (href) => router.push(href))",
     );
   });
 
