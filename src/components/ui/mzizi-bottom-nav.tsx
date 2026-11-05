@@ -17,8 +17,10 @@
  *    visually).
  * 3. Items are at least `--touch-target-min` (the 49px Bundu floor) tall. Upstream items are
  *    `py-1` + a 21px icon + a 10px label, about 47px. Here the icon is 18px
- *    and the label 14px, so the item is about 51px, and its tappable area
- *    (`.plover`, globals.css) runs the bar's whole height.
+ *    and the label 14px, with `--gap-floor` (7px) between them (upstream's
+ *    `gap-1`, 4px, is under the floor), so the item is about 56px (measured in
+ *    Chromium at 375 and 393px wide; 53px with the old 4px gap), and its
+ *    tappable area (`.plover`, globals.css) runs the bar's whole height.
  * 4. (Superseded by 9.) Upstream's `h-20` bar left only 46px for the 48px (then)
  *    items on an iPhone.
  * 5. An optional `label` (the landmark's aria-label).
@@ -204,7 +206,7 @@ export function MziziBottomNav({
         aria-current={active ? "page" : undefined}
         aria-label={item.ariaLabel}
         className={cn(
-          "plover relative flex min-h-[var(--touch-target-min)] flex-col items-center justify-center gap-1 rounded-full py-1",
+          "plover relative flex min-h-[var(--touch-target-min)] flex-col items-center justify-center gap-[var(--gap-floor)] rounded-full py-1",
           hasLane
             ? "w-[var(--mobile-nav-item-width)] min-w-[var(--touch-target-min)] max-[359px]:w-[var(--touch-target-min)] shrink-0 px-[var(--inset-floor)]"
             : "min-w-[60px] px-[var(--inset-floor)]",
