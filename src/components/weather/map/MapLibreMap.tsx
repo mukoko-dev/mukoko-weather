@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type {
   Map as MapLibreGLMap,
   Marker,
@@ -543,12 +543,6 @@ export function MapLibreMap({
     prefetch: weatherPrefetchTimestamp,
     onLoaded: onWeatherFrameLoaded,
   });
-  overlayPropsRef.current = {
-    layer: weatherLayer,
-    timestamp: weatherTimestamp,
-    prefetch: weatherPrefetchTimestamp,
-    onLoaded: onWeatherFrameLoaded,
-  };
   // Timeline frames on the map (see overlay-frames.ts). Reset on style switch.
   const framesRef = useRef<FrameState>(newFrameState());
   // True once the current style JSON has been applied (MapLibre "style.load").
@@ -560,13 +554,46 @@ export function MapLibreMap({
   const bubbleMarkersRef = useRef<Marker[]>([]);
   const markerCtorRef = useRef<typeof Marker | null>(null);
   const aqiBubblesRef = useRef<readonly AqBubble[] | null>(aqiBubbles);
-  aqiBubblesRef.current = aqiBubbles;
   // Same pattern for the AQI overlay: restore() reads the latest collection.
   const aqiOverlayRef = useRef<FieldRaster | null>(aqiOverlay);
-  aqiOverlayRef.current = aqiOverlay;
   const fieldOverlayRef = useRef<FieldOverlay | null>(fieldOverlay);
-  fieldOverlayRef.current = fieldOverlay;
+  // The refs above hold the latest props for async callbacks. They are written
+  // here, in a layout effect, not during render: a render React throws away
+  // (concurrent rendering) must not change what a map event sees. This effect
+  // is declared BEFORE every other effect in the component and layout effects
+  // run before passive ones, so each effect below reads the current props, as
+  // it did when these were assigned in the render body. The refs start with
+  // the first render's props (the useRef arguments), so nothing is stale
+  // before the first commit.
+  useLayoutEffect(() => {
+    overlayPropsRef.current = {
+      layer: weatherLayer,
+      timestamp: weatherTimestamp,
+      prefetch: weatherPrefetchTimestamp,
+      onLoaded: onWeatherFrameLoaded,
+    };
+    aqiBubblesRef.current = aqiBubbles;
+    aqiOverlayRef.current = aqiOverlay;
+    fieldOverlayRef.current = fieldOverlay;
+  }, [
+    weatherLayer,
+    weatherTimestamp,
+    weatherPrefetchTimestamp,
+    onWeatherFrameLoaded,
+    aqiBubbles,
+    aqiOverlay,
+    fieldOverlay,
+  ]);
   const [overlayError, setOverlayError] = useState(false);
+  // The notice belongs to one layer + time. When either changes it is cleared
+  // in the same render (React's "reset state when a prop changes" pattern), so
+  // the old notice is never painted over the new selection.
+  const overlayKey = `${weatherLayer ?? ""}|${weatherTimestamp}`;
+  const [errorForKey, setErrorForKey] = useState(overlayKey);
+  if (errorForKey !== overlayKey) {
+    setErrorForKey(overlayKey);
+    setOverlayError(false);
+  }
   // Dedupes overlay tile-load logging. A single map view fires one `error` event
   // per failed raster tile (≈10 per pan/zoom), so without this guard a transient
   // decode failure spams the console 10× and re-runs the handler needlessly. We
@@ -827,7 +854,8 @@ export function MapLibreMap({
   // Before the style is ready there is nothing to do: restore() reads the
   // latest props from refs on "style.load".
   useEffect(() => {
-    setOverlayError(false);
+    // The notice itself is cleared during render (overlayKey above); this is
+    // the log guard, which may fire once again for the new selection.
     overlayErrorLoggedRef.current = false;
   }, [weatherLayer, weatherTimestamp]);
 

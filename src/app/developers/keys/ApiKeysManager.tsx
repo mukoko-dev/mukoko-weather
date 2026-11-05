@@ -11,7 +11,7 @@
  * no hardcoded hex or inline styles.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { PlusIcon, TrashIcon } from "@/lib/weather-icons";
 import { DEFAULT_LOCALE, formatDate } from "@/lib/i18n";
 import { fetchJsonOrThrow } from "@/lib/fetch-json";
@@ -76,26 +76,32 @@ export function ApiKeysManager() {
   const [copied, setCopied] = useState(false);
   const [entityRequired, setEntityRequired] = useState(false);
 
-  const loadKeys = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchJsonOrThrow<{
-        keys: ApiKey[];
-        entityRequired?: boolean;
-      }>("/api/keys", { init: { cache: "no-store" } });
-      setKeys(data.keys ?? []);
-      setEntityRequired(Boolean(data.entityRequired));
-    } catch {
-      setError("Could not load your API keys. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+  // Loads the keys once, on mount (`loading` starts true and `error` null).
+  // State is set from the promise callbacks, and only while this effect is
+  // still current, so a page left before the answer arrives is not updated.
   useEffect(() => {
-    void loadKeys();
-  }, [loadKeys]);
+    let current = true;
+    fetchJsonOrThrow<{
+      keys: ApiKey[];
+      entityRequired?: boolean;
+    }>("/api/keys", { init: { cache: "no-store" } })
+      .then((data) => {
+        if (!current) return;
+        setKeys(data.keys ?? []);
+        setEntityRequired(Boolean(data.entityRequired));
+      })
+      .catch(() => {
+        if (current) {
+          setError("Could not load your API keys. Please try again.");
+        }
+      })
+      .finally(() => {
+        if (current) setLoading(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, []);
 
   const atCapacity = keys.length >= MAX_KEYS;
 

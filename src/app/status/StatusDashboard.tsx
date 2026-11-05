@@ -65,37 +65,53 @@ function OverallBanner({
   );
 }
 
+/** One read of the status payload; throws on a non-2xx answer. Sets no state. */
+async function readStatus(): Promise<StatusResponse> {
+  const response = await fetch(workerUrl("/v1/status"));
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  return (await response.json()) as StatusResponse;
+}
+
 export function StatusDashboard() {
   const [data, setData] = useState<StatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchStatus = useCallback(async () => {
+  // Shows the outcome of a status read. `setData` and the other setters are
+  // only handed to the promise as callbacks, never called here, so the mount
+  // effect can start a read without setting state during the effect itself.
+  const show = useCallback(
+    (read: Promise<StatusResponse>) =>
+      read
+        .then(setData, (err: unknown) =>
+          setError(
+            err instanceof Error ? err.message : "Failed to fetch status",
+          ),
+        )
+        .finally(() => setLoading(false)),
+    [],
+  );
+
+  // A read the visitor or the poll asks for after the first one: show it as
+  // in progress, then read. (The first read needs neither: `loading` starts
+  // true and `error` null.)
+  const fetchStatus = useCallback(() => {
     setLoading(true);
     setError(null);
-    try {
-      const response = await fetch(workerUrl("/v1/status"));
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const json = await response.json();
-      setData(json);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch status");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    return show(readStatus());
+  }, [show]);
 
   useEffect(() => {
-    fetchStatus();
+    void show(readStatus());
 
     // Auto-refresh every 5 minutes. The server caches the payload for ~60s, so
     // spacing client polls well beyond that avoids piling requests on top of a
     // still-fresh cache while keeping the dashboard reasonably live.
     const interval = setInterval(fetchStatus, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [fetchStatus]);
+  }, [show, fetchStatus]);
 
   if (loading && !data) {
     return (
