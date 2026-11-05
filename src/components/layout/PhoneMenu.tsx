@@ -26,7 +26,7 @@ import {
   writeLastLocationCookie,
 } from "@/lib/current-slug";
 import {
-  NOTIFICATIONS_EMPTY_TEXT,
+  NOTIFICATIONS_LABEL,
   isDestinationActive,
   visibleHeaderDestinations,
   weatherMapHref,
@@ -58,6 +58,7 @@ interface Props {
  */
 export function PhoneMenu({ trigger, buttonClassName, iconClassName }: Props) {
   const openMyWeather = useAppStore((s) => s.openMyWeather);
+  const openNotifications = useAppStore((s) => s.openNotifications);
   const selectedLocation = useAppStore((s) => s.selectedLocation);
   const setSelectedLocation = useAppStore((s) => s.setSelectedLocation);
   const pathname = usePathname();
@@ -65,8 +66,6 @@ export function PhoneMenu({ trigger, buttonClassName, iconClassName }: Props) {
   const { user } = useAuth();
   const authedUser = user as PublicUser | null;
   const [locating, setLocating] = useState(false);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const notificationsId = useId();
   const groupId = useId();
 
   const destinations = visibleHeaderDestinations(isFeatureEnabled);
@@ -141,9 +140,6 @@ export function PhoneMenu({ trigger, buttonClassName, iconClassName }: Props) {
             ? `Account menu for ${displayNameFor(authedUser)}`
             : "Account menu"
       }
-      onOpenChange={(open) => {
-        if (!open) setNotificationsOpen(false);
-      }}
     >
       <section aria-labelledby={groupLabel("account")}>
         <h2
@@ -213,24 +209,18 @@ export function PhoneMenu({ trigger, buttonClassName, iconClassName }: Props) {
             </Link>
           </li>
           <li>
+            {/* Opens the notifications centre (the alerts for your places and
+                their settings) in a sheet, the same one the header's bell
+                opens; the menu closes first, like My Weather. */}
             <button
               type="button"
-              onClick={() => setNotificationsOpen((v) => !v)}
-              aria-expanded={notificationsOpen}
-              aria-controls={notificationsId}
+              data-close-menu
+              onClick={() => openNotifications()}
+              aria-haspopup="dialog"
               className={ACCOUNT_MENU_ROW_CLASS}
             >
-              Notifications
+              {NOTIFICATIONS_LABEL}
             </button>
-            {notificationsOpen && (
-              <p
-                id={notificationsId}
-                className="dove px-[var(--inset-floor)] pb-2"
-                aria-live="polite"
-              >
-                {NOTIFICATIONS_EMPTY_TEXT}
-              </p>
-            )}
           </li>
         </ul>
       </section>

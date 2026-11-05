@@ -106,7 +106,7 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
           </p>
           <button
             type="button"
-            onClick={openReportModal}
+            onClick={() => openReportModal()}
             className="kudu-sm mt-[var(--space-stack)]"
           >
             <span aria-hidden="true">
@@ -133,7 +133,11 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
             </span>
           )}
         </h2>
-        <button type="button" onClick={openReportModal} className="kudu-sm">
+        <button
+          type="button"
+          onClick={() => openReportModal()}
+          className="kudu-sm"
+        >
           <span aria-hidden="true">
             <MegaphoneIcon size={18} />
           </span>

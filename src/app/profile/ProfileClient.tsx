@@ -16,8 +16,9 @@
  *   7. Footer        — product + version line
  */
 
-import { LogOut, SlidersHorizontal } from "lucide-react";
+import { Bell, LogOut, SlidersHorizontal } from "lucide-react";
 import { useAppStore } from "@/lib/store";
+import { prefsSummary } from "@/lib/notification-prefs";
 import type { ProfileOrganization } from "@/lib/profile";
 import { ProfileIdentity } from "@/components/profile/ProfileIdentity";
 import { ProfileGroup } from "@/components/profile/ProfileGroup";
@@ -44,6 +45,8 @@ export function ProfileClient({
   organizations: ProfileOrganization[];
 }) {
   const openMyWeather = useAppStore((s) => s.openMyWeather);
+  const openNotifications = useAppStore((s) => s.openNotifications);
+  const notificationPrefs = useAppStore((s) => s.notificationPrefs);
   const savedCount = useAppStore((s) => s.savedLocations.length);
   const activityCount = useAppStore((s) => s.selectedActivities.length);
   const preferencesValue = `${savedCount} ${savedCount === 1 ? "place" : "places"} · ${activityCount} ${activityCount === 1 ? "activity" : "activities"}`;
@@ -63,6 +66,12 @@ export function ProfileClient({
           label="My Weather"
           value={preferencesValue}
           onClick={() => openMyWeather()}
+        />
+        <GroupedRow
+          icon={Bell}
+          label="Notifications"
+          value={prefsSummary(notificationPrefs)}
+          onClick={() => openNotifications("settings")}
         />
       </ProfileGroup>
 
