@@ -195,7 +195,7 @@ export function PlaceLaneView({
           title={MY_LOCATION_NAME}
           onClick={(event) => onChipClick(event, home)}
           className={`lark press-scale shrink-0 ${
-            showHomeLabel ? "" : "min-w-[var(--touch-target-min)] px-0"
+            showHomeLabel ? "" : "min-w-[var(--touch-target-min)]"
           }`}
         >
           <NavigationIcon
@@ -220,6 +220,7 @@ export function PlaceLaneView({
           <ul
             ref={listRef}
             aria-label="Saved places and suggestions"
+            // mzizi-spacing-exempt: a 4px side gutter that keeps a chip's border and focus ring off the clip edge, not a text inset (each .lark chip has the 14px floor); p-0 only resets the list
             className="relative m-0 flex h-full w-max list-none items-center gap-2 overflow-clip p-0 px-1"
           >
             {places.map((chip) => {
