@@ -209,7 +209,7 @@ describe("the hero's phone icon group (.hadeda) stays fixed to the viewport", ()
 
   it("never blurs, transforms or filters itself: its blur is on a pseudo-element", () => {
     // A backdrop-filter (or transform, filter, contain, will-change) would make
-    // the group the containing block of the profile menu's fixed panel.
+    // the group the containing block of any fixed descendant.
     expect(body("  .hadeda")).not.toMatch(
       /(backdrop-filter|transform|filter|perspective|contain|will-change)\s*:/,
     );
@@ -253,10 +253,10 @@ describe("the hero's phone icon group (.hadeda) stays fixed to the viewport", ()
     const group = hero.slice(hero.indexOf('className="hadeda sm:hidden"'));
     const end = group.indexOf("</div>\n      </div>");
     const inner = group.slice(0, end);
-    // Share (ShareControl) and the profile menu (PhoneMenu).
+    // Share (ShareControl) and My Location (MyLocationLink).
     const controls =
       (inner.match(/<ShareControl/g) ?? []).length +
-      (inner.match(/<PhoneMenu/g) ?? []).length;
+      (inner.match(/<MyLocationLink/g) ?? []).length;
     const token = css.match(/--hadeda-controls:\s*(\d+);/);
     expect(token).not.toBeNull();
     expect(controls).toBe(Number(token![1]));

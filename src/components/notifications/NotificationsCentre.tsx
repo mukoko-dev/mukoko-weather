@@ -66,8 +66,8 @@ function focusTargetFor(opener: Element | null): HTMLElement | null {
   ) {
     return opener;
   }
-  // The first one on screen: the header's is not drawn over the sky hero, and
-  // the hero has its own account menu.
+  // The first one on screen: the header's bell is not drawn over the sky hero
+  // on a phone, where the account menu is the bottom bar's first slot.
   const firstVisible = (selector: string): HTMLElement | null =>
     [...document.querySelectorAll(selector)].find(isVisible) ?? null;
   return (
