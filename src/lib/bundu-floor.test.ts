@@ -239,10 +239,12 @@ describe("the phone menu keeps the floor", () => {
       /ACCOUNT_MENU_ROW_CLASS =\s*"[^"]*px-\[var\(--inset-floor\)\]/,
     );
     expect(code).toContain('"px-[var(--inset-floor)] py-2"');
-    // The group headings and the note under Notifications line up with the rows.
+    // The three group headings line up with the rows. (The note that used to
+    // expand under Notifications is gone: the row opens the notifications
+    // centre, which keeps its own floor, see notifications.test.ts.)
     expect(
       withoutComments(phoneMenu).match(/!?px-\[var\(--inset-floor\)\]/g),
-    ).toHaveLength(4);
+    ).toHaveLength(3);
   });
 
   it("sets its secondary text at 14px, not the 12px caption token", () => {

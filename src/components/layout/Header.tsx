@@ -7,14 +7,16 @@ import { useAuth } from "@workos-inc/authkit-nextjs/components";
 import { MukokoLogo } from "@/components/brand/MukokoLogo";
 import { LayersIcon, BellIcon, UserIcon } from "@/lib/weather-icons";
 import { PhoneMenu } from "@/components/layout/PhoneMenu";
+import { NotificationsBoundary } from "@/components/notifications/NotificationsBoundary";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { useChromeClaimed } from "@/components/layout/chrome-context";
 import { useAppStore } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { initialsFor, type PublicUser } from "@/lib/user-display";
 import { currentLocationSlug } from "@/lib/current-slug";
+import { useAlertBadge } from "@/lib/use-alerts";
 import {
-  NOTIFICATIONS_EMPTY_TEXT,
+  NOTIFICATIONS_LABEL,
   isDestinationActive,
   visibleHeaderDestinations,
   weatherMapHref,
@@ -26,6 +28,14 @@ import {
 const MyWeatherModal = lazy(() =>
   import("@/components/weather/MyWeatherModal").then((m) => ({
     default: m.MyWeatherModal,
+  })),
+);
+
+// The notifications centre (the alerts list and its settings) loads when it
+// is first opened, so none of it is in a page's first-load JavaScript.
+const NotificationsCentre = lazy(() =>
+  import("@/components/notifications/NotificationsCentre").then((m) => ({
+    default: m.NotificationsCentre,
   })),
 );
 
@@ -49,11 +59,14 @@ export function SiteHeader() {
   const selectedLocation = useAppStore((s) => s.selectedLocation);
   const savedLocations = useAppStore((s) => s.savedLocations);
   const reportModalOpen = useAppStore((s) => s.reportModalOpen);
+  const notificationsOpen = useAppStore((s) => s.notificationsOpen);
+  const openNotifications = useAppStore((s) => s.openNotifications);
+  const closeNotifications = useAppStore((s) => s.closeNotifications);
+  const alertCount = useAlertBadge();
   const pathname = usePathname();
   const [isScrolled, setIsScrolled] = useState(false);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  // The bell's wrapper: the centre's popover hangs under it.
   const notificationsRef = useRef<HTMLDivElement>(null);
-  const bellButtonRef = useRef<HTMLButtonElement>(null);
   // AuthKit's `useAuth()` is hydrated via `<AuthKitProvider initialAuth={…}>`
   // in the root layout, so this renders with the right state on first paint.
   const { user } = useAuth();
@@ -69,32 +82,6 @@ export function SiteHeader() {
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
-
-  // Dismiss the notifications popover on outside click or Escape. Escape also
-  // returns focus to the bell button so keyboard users aren't stranded.
-  useEffect(() => {
-    if (!notificationsOpen) return;
-    const handleClick = (e: MouseEvent) => {
-      if (
-        notificationsRef.current &&
-        !notificationsRef.current.contains(e.target as Node)
-      ) {
-        setNotificationsOpen(false);
-      }
-    };
-    const handleKeydown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setNotificationsOpen(false);
-        bellButtonRef.current?.focus();
-      }
-    };
-    document.addEventListener("mousedown", handleClick);
-    document.addEventListener("keydown", handleKeydown);
-    return () => {
-      document.removeEventListener("mousedown", handleClick);
-      document.removeEventListener("keydown", handleKeydown);
-    };
-  }, [notificationsOpen]);
 
   // Active page flags for the desktop nav and the mobile ⋯ menu.
   // The header's destinations come from one list shared with the phone menu
@@ -207,27 +194,41 @@ export function SiteHeader() {
               </div>
 
               <div className="relative" ref={notificationsRef}>
+                {/* The bell opens the notifications centre (alerts for your
+                    places and their settings). The dot says there is
+                    something to read; the count is in the name. */}
                 <button
-                  ref={bellButtonRef}
-                  onClick={() => setNotificationsOpen((v) => !v)}
-                  aria-label="Notifications"
+                  onClick={() =>
+                    notificationsOpen
+                      ? closeNotifications()
+                      : openNotifications("list")
+                  }
+                  data-notifications-trigger
+                  aria-label={
+                    alertCount > 0
+                      ? `${NOTIFICATIONS_LABEL}, ${alertCount} ${alertCount === 1 ? "alert" : "alerts"}`
+                      : NOTIFICATIONS_LABEL
+                  }
                   aria-haspopup="dialog"
                   aria-expanded={notificationsOpen}
-                  className="bee"
+                  className="bee relative"
                   type="button"
                 >
                   <BellIcon size={20} className="text-primary-foreground" />
+                  {alertCount > 0 && (
+                    <span
+                      aria-hidden="true"
+                      data-alert-dot
+                      className="absolute right-3 top-3 h-2.5 w-2.5 rounded-full bg-primary-foreground ring-2 ring-primary"
+                    />
+                  )}
                 </button>
                 {notificationsOpen && (
-                  <div
-                    role="dialog"
-                    aria-label="Notifications"
-                    className="absolute right-0 top-full z-40 mt-2 w-64 rounded-[var(--radius-card)] border border-text-tertiary/10 bg-surface-card p-4 shadow-lg"
-                  >
-                    <p className="dove" aria-live="polite">
-                      {NOTIFICATIONS_EMPTY_TEXT}
-                    </p>
-                  </div>
+                  <NotificationsBoundary onClose={closeNotifications}>
+                    <Suspense>
+                      <NotificationsCentre anchorRef={notificationsRef} />
+                    </Suspense>
+                  </NotificationsBoundary>
                 )}
               </div>
 

@@ -16,6 +16,11 @@ const acct = readFileSync(
   "utf-8",
 );
 const nav = readFileSync(resolve(__dirname, "MobileNav.tsx"), "utf-8");
+/** The notifications centre: the sheet on phones, the popover under the bell. */
+const centre = readFileSync(
+  resolve(__dirname, "../notifications/NotificationsCentre.tsx"),
+  "utf-8",
+);
 const css = readFileSync(resolve(__dirname, "../../app/globals.css"), "utf-8");
 /** The body of one `@layer components` rule in globals.css. */
 function rule(name: string): string {
@@ -301,8 +306,10 @@ describe("Header — the phone menu is the Mzizi account menu, filled with the h
     // element, so a mousedown listener never fires there.
     expect(acct).not.toContain('"mousedown"');
     expect(acct).toContain('closest("a, [data-close-menu]")');
-    // The two action rows opt in to closing; Notifications expands in place.
-    expect(menu.match(/data-close-menu/g)).toHaveLength(2);
+    // The three action rows (My Weather, Use my location, Notifications) opt
+    // in to closing: each opens something of its own (a modal, the GPS flow,
+    // the notifications sheet) and the menu is out of the way by then.
+    expect(menu.match(/data-close-menu/g)).toHaveLength(3);
   });
 
   it("closes when focus moves to an element outside the menu, and ignores a null relatedTarget", () => {
@@ -403,12 +410,17 @@ describe("Header — nothing the header offers is lost in the phone menu", () =>
     expect(menu).toContain("href={weatherMapHref(mapSlug)}");
     expect(menu).toContain("Choose a location for the weather map");
 
-    // Notifications: the header's bell and the menu row show the same copy.
-    expect(source).toContain('aria-label="Notifications"');
-    expect(menu).toContain("Notifications");
-    expect(source).toContain("{NOTIFICATIONS_EMPTY_TEXT}");
-    expect(menu).toContain("{NOTIFICATIONS_EMPTY_TEXT}");
-    expect(nav).toContain('"No notifications yet"');
+    // Notifications: the header's bell and the menu row call themselves the
+    // same thing and open the SAME centre (the store's openNotifications).
+    expect(source).toContain("NOTIFICATIONS_LABEL");
+    expect(menu).toContain("{NOTIFICATIONS_LABEL}");
+    expect(nav).toContain('export const NOTIFICATIONS_LABEL = "Notifications"');
+    expect(source).toContain("openNotifications");
+    expect(menu).toContain("openNotifications()");
+    // The old "No notifications yet" stub is gone from both.
+    expect(source).not.toContain("No notifications yet");
+    expect(menu).not.toContain("No notifications yet");
+    expect(nav).not.toContain("No notifications yet");
 
     // My Weather and Use my location.
     expect(source).toContain("openMyWeather()");
@@ -481,26 +493,66 @@ describe("Header — My Location (GPS) action", () => {
   });
 });
 
-describe("Header — notifications popover accessibility (issue #95)", () => {
+describe("Header — the bell opens the notifications centre (issue #95, #289)", () => {
   it("announces as a dialog, not a menu (it has no menuitems)", () => {
-    expect(source).toContain('role="dialog"');
-    expect(source).not.toContain('role="menu"');
+    expect(centre).toContain('role="dialog"');
+    expect(centre).not.toContain('role="menu"');
     expect(source).toContain('aria-haspopup="dialog"');
+    expect(menu).toContain('aria-haspopup="dialog"');
   });
 
   it("closes on Escape and returns focus to the bell button", () => {
-    expect(source).toContain('e.key === "Escape"');
-    expect(source).toContain("bellButtonRef.current?.focus()");
-    expect(source).toContain("ref={bellButtonRef}");
+    expect(centre).toContain('e.key !== "Escape"');
+    expect(centre).toContain("NOTIFICATIONS_TRIGGER_ATTR");
+    expect(centre).toContain(".focus()");
+    // The bell carries the attribute the centre looks for.
+    expect(source).toContain("data-notifications-trigger");
   });
 
-  it("cleans up both the outside-click and keydown listeners", () => {
-    expect(source).toContain(
-      'document.removeEventListener("mousedown", handleClick)',
+  it("cleans up both the outside-press and keydown listeners", () => {
+    expect(centre).toContain(
+      'document.removeEventListener("pointerdown", onPointerDown)',
     );
-    expect(source).toContain(
-      'document.removeEventListener("keydown", handleKeydown)',
+    expect(centre).toContain(
+      'document.removeEventListener("keydown", onKeyDown)',
     );
+    // iOS Safari sends no mouse events for a tap on a non-clickable element.
+    expect(centre).not.toContain('"mousedown"');
+  });
+
+  it("is mounted on demand, behind the store's notificationsOpen, and lazily loaded", () => {
+    expect(source).toContain("const NotificationsCentre = lazy(");
+    expect(source).toContain("{notificationsOpen && (");
+    expect(source).toContain(
+      "<NotificationsCentre anchorRef={notificationsRef} />",
+    );
+  });
+
+  it("is isolated: a failed chunk or a render error never reaches the page's error boundary", () => {
+    expect(source).toContain(
+      "<NotificationsBoundary onClose={closeNotifications}>",
+    );
+    // The boundary sits outside the Suspense that loads the lazy centre.
+    expect(source.indexOf("<NotificationsBoundary")).toBeLessThan(
+      source.indexOf("<Suspense>\n                      <NotificationsCentre"),
+    );
+    const boundary = readFileSync(
+      resolve(__dirname, "../notifications/NotificationsBoundary.tsx"),
+      "utf-8",
+    );
+    expect(boundary).toContain("static getDerivedStateFromError");
+    expect(boundary).toContain('role="alert"');
+    expect(boundary).toContain("reportErrorToAnalytics(");
+    expect(boundary).toContain("this.props.onClose");
+    expect(boundary).toContain("impala-sm");
+  });
+
+  it("shows a dot with the count in the bell's name, never the count alone", () => {
+    expect(source).toContain("useAlertBadge()");
+    expect(source).toContain("data-alert-dot");
+    expect(source).toMatch(/alertCount === 1 \? "alert" : "alerts"/);
+    // The dot is decorative.
+    expect(source).toMatch(/aria-hidden="true"\s+data-alert-dot/);
   });
 });
 
@@ -616,17 +668,16 @@ describe("Header over the sky: white text never reaches the popovers", () => {
   });
 
   it("keeps the notifications popover and the ⋯ menu outside the ink scopes, on a card surface", () => {
-    const popover = source.indexOf(
-      'aria-label="Notifications"\n                    className=',
+    // The popover is rendered by the centre, inside the bell's wrapper, which
+    // follows both ink elements (the logo wrapper and the desktop nav).
+    expect(source.indexOf("<NotificationsCentre")).toBeGreaterThan(
+      source.indexOf("</nav>"),
     );
-    const dialog = source.indexOf('role="dialog"');
+    const dialog = centre.indexOf('role="dialog"');
     expect(dialog).toBeGreaterThan(-1);
-    // The popover opens after both ink elements have closed (the action pill
-    // follows the nav), and sits on bg-surface-card.
-    expect(source.indexOf("</nav>")).toBeLessThan(dialog);
-    expect(source.slice(dialog, dialog + 400)).toContain("bg-surface-card");
-    expect(popover === -1 || popover > source.indexOf("</nav>")).toBe(true);
+    expect(centre.slice(dialog, dialog + 900)).toContain("bg-surface-card");
     expect(acct).toContain("bg-popover");
+    expect(centre).not.toContain("data-header-ink");
     expect(menu).not.toContain("data-header-ink");
     expect(acct).not.toContain("data-header-ink");
   });
