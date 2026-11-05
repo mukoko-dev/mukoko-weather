@@ -76,7 +76,12 @@ export function usePolledJson<T>(
       : { status: "loading" },
   );
   const validateRef = useRef(validate);
-  validateRef.current = validate;
+  // Kept current after each commit, not during render. Declared before the
+  // polling effect below (passive effects run in order), and only read from
+  // that effect's async callbacks.
+  useEffect(() => {
+    validateRef.current = validate;
+  });
   const skipFirst = useRef(initial !== undefined);
   const seeded = useRef(initial !== undefined);
 
