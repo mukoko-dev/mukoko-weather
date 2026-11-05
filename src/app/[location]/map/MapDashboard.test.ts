@@ -100,8 +100,10 @@ describe("MapDashboard — timeline", () => {
 
   it("keeps observed satellite loops on their own relative labels", () => {
     expect(source).toMatch(/gibsLayer\s*\?\s*null/);
-    expect(source).toContain(
-      'inputLabel={gibsLayer ? "Observation time" : "Forecast time"}',
+    // An observed loop is an "Observation time" unless the layer names its own
+    // frame (the wildfire loop is a "Detection day (UTC)").
+    expect(source).toMatch(
+      /inputLabel=\{\s*gibsLayer\s*\?\s*\(gibsLayer\.timeLabel \?\? "Observation time"\)\s*:\s*"Forecast time"\s*\}/,
     );
   });
 
@@ -281,5 +283,50 @@ describe("MapDashboard — overlay sources and credits", () => {
     );
     expect(source).not.toContain("modelGridToGeoJSON");
     expect(source).toContain("fetchModelGrid({");
+  });
+});
+
+describe("MapDashboard — wildfire legend", () => {
+  it("prints the marker's swatch with its name, ringed like every data fill", () => {
+    expect(source).toContain("chip?.legend.marker");
+    expect(source).toContain("{chip.legend.marker.label}");
+    expect(source).toContain("chip.legend.marker.className,");
+    // The swatch is decorative: the name beside it carries the meaning.
+    expect(source).toMatch(
+      /aria-hidden="true"\s+className=\{cn\(\s*"size-3 shrink-0 rounded-full ring-1 ring-wx-outline"/,
+    );
+  });
+
+  it("shows the honest limits whenever the layer is active, outside the collapsible body", () => {
+    const limitsAt = source.indexOf("chip?.legend.limits");
+    const bodyAt = source.indexOf("<div id={sheetId}");
+    expect(limitsAt).toBeGreaterThan(-1);
+    // The legend header is always shown; the layer chips and timeline collapse.
+    expect(limitsAt).toBeLessThan(bodyAt);
+    expect(source).toContain("{chip.legend.limits}");
+    // Full width, not squeezed between the layer icon and the chevron; the
+    // note and the day on screen sit with it (one line, not two).
+    const block = source.slice(limitsAt, source.indexOf("<div id={sheetId}"));
+    expect(block).toContain('<div className="mt-2 text-sm">');
+    expect(block).toContain("{chip.legend.note}");
+    expect(block).toContain("{chip.legend.limits}");
+  });
+
+  it("says which UTC day the frame on screen is (and 'so far' for today)", () => {
+    expect(source).toContain(
+      "const wildfireOn = activeLayer === WILDFIRE_LAYER_ID;",
+    );
+    expect(source).toContain("utcDayLabel(frames[step].timestamp)");
+    expect(source).toContain("(UTC day)");
+    expect(source).toContain(
+      'frames[step].label === "Today" ? ", so far" : ""',
+    );
+  });
+
+  it("keeps the legend text at the 14 px floor (text-sm), never smaller", () => {
+    const legendStart = source.indexOf('id="map-legend-title"');
+    const bodyAt = source.indexOf("id={sheetId}");
+    const legend = source.slice(legendStart, bodyAt);
+    expect(legend).not.toMatch(/text-xs|text-\[\d/);
   });
 });

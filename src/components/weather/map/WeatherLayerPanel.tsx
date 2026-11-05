@@ -1,10 +1,11 @@
 "use client";
 
-import { createElement, useCallback } from "react";
+import { createElement, useCallback, type FocusEvent } from "react";
 import {
   Cloud,
   CloudRain,
   Droplets,
+  Flame,
   Layers,
   Satellite,
   SatelliteDish,
@@ -16,10 +17,11 @@ import {
 import {
   AIR_QUALITY_LAYER_ID,
   MAP_CHIPS,
+  WILDFIRE_LAYER_ID,
   type MapChip,
 } from "@/lib/map-layers";
 import type { MapModel } from "@/lib/map-sources";
-import { cn } from "@/lib/utils";
+import { cn, getScrollBehavior } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
 
 /**
@@ -37,6 +39,7 @@ export const CHIP_ICONS: Record<string, LucideIcon> = {
   humidity: Droplets,
   satellite: Satellite,
   satelliteRain: SatelliteDish,
+  [WILDFIRE_LAYER_ID]: Flame,
   modelTemperature: Thermometer,
   modelPrecipitation: CloudRain,
   modelWind: Wind,
@@ -55,6 +58,23 @@ export function LayerIcon({
   className?: string;
 }) {
   return createElement(chipIcon(id), { className, "aria-hidden": true });
+}
+
+/**
+ * Keeps a focused chip inside its sideways-scrolling row. The browser only
+ * scrolls a focused chip into view when it is wholly out of sight: one that is
+ * half visible (the Cloud chip, or Wildfires on a wide sheet) stays half
+ * hidden under the edge fade, so a keyboard user would tab to a chip they
+ * cannot read. `inline: "nearest"` brings it in by the least distance and
+ * honours the row's scroll padding; `block: "nearest"` never moves the sheet.
+ * Reduced motion jumps instead of gliding.
+ */
+export function scrollChipIntoView(event: FocusEvent<HTMLButtonElement>) {
+  event.currentTarget.scrollIntoView({
+    inline: "nearest",
+    block: "nearest",
+    behavior: getScrollBehavior(),
+  });
 }
 
 interface WeatherLayerPanelProps {
@@ -100,8 +120,8 @@ export function WeatherLayerPanel({
     <div
       role="group"
       aria-label="Map layers"
-      // mzizi-spacing-exempt: full-bleed sideways scroller; -mx-4 reaches into the sheet's own padding (px-4 puts it back) so chips scroll to the card's edge and overlap no target
-      className="scrollbar-hide scroll-fade-x -mx-4 flex gap-2 overflow-x-auto px-4 pb-1"
+      // mzizi-spacing-exempt: full-bleed sideways scroller; -mx-4 reaches into the sheet's own padding (ps-4 puts it back at the start, pe-6 clears the 1.5rem edge fade at the end) so chips scroll to the card's edge and overlap no target
+      className="scrollbar-hide scroll-fade-x scroll-px-6 -mx-4 flex gap-2 overflow-x-auto ps-4 pe-6 pb-1"
     >
       {chips.map((chip) => {
         const isActive = chip.id === activeLayer;
@@ -110,6 +130,7 @@ export function WeatherLayerPanel({
             key={chip.id}
             type="button"
             onClick={() => handleSelect(chip.id)}
+            onFocus={scrollChipIntoView}
             aria-pressed={isActive}
             className={cn(
               "quail inline-flex shrink-0 items-center gap-2 px-4 text-sm font-medium",
@@ -133,7 +154,7 @@ export function WeatherLayerPanel({
         role="group"
         aria-label="Forecast model"
         // mzizi-spacing-exempt: the same full-bleed sideways scroller as the layer chips above
-        className="scrollbar-hide scroll-fade-x -mx-4 mt-1 flex gap-2 overflow-x-auto px-4 pb-1"
+        className="scrollbar-hide scroll-fade-x scroll-px-6 -mx-4 mt-1 flex gap-2 overflow-x-auto ps-4 pe-6 pb-1"
       >
         {models.map((model) => {
           const isActive = model.id === activeModel;
@@ -144,6 +165,7 @@ export function WeatherLayerPanel({
               onClick={() => {
                 if (!isActive) onModelChange(model.id);
               }}
+              onFocus={scrollChipIntoView}
               aria-pressed={isActive}
               className={cn(
                 "quail shrink-0 px-4 text-sm font-medium",
