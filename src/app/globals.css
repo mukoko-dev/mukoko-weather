@@ -215,16 +215,17 @@
     var(--float-bottom) + var(--mobile-nav-bar-height) + 0.5rem
   );
 
-  /* The phone hero's icon group (.hadeda): Share and the profile menu in ONE
-     round pill fixed to the top of the screen, inset 1rem from the top and
-     right edges (the hero's own gutter). Its size comes from these tokens and
-     from nothing else: --hadeda-width is the controls (49px each) plus the
-     gaps between them plus the padding around them, and --hadeda-reserve is
-     what the breadcrumb at the left of the hero's top row leaves free for it
-     (the pill plus a 0.75rem gap), so the trail wraps before it reaches the
-     group. Change a gap, a padding or the number of controls here and the
-     reserve follows. Header.test.ts and viewport-layout.test.ts keep them in
-     step with the component.
+  /* The phone hero's icon group (.hadeda): Share and My Location (the round
+     arrow link to `/`; the account avatar it swapped places with is the bottom
+     bar's first slot) in ONE round pill fixed to the top of the screen, inset
+     1rem from the top and right edges (the hero's own gutter). Its size comes
+     from these tokens and from nothing else: --hadeda-width is the controls
+     (49px each) plus the gaps between them plus the padding around them, and
+     --hadeda-reserve is what the breadcrumb at the left of the hero's top row
+     leaves free for it (the pill plus a 0.75rem gap), so the trail wraps before
+     it reaches the group. Change a gap, a padding or the number of controls
+     here and the reserve follows. Header.test.ts and viewport-layout.test.ts
+     keep them in step with the component.
 
      The inset is the float grid's 1rem, the same as the hero's own top
      margin, so the group is level with the top row at the top of the page. Its
@@ -1466,14 +1467,16 @@ body {
   }
 
   /* .hadeda — the phone hero's icon group (the hadeda ibis: always on the high
-     perch). Share and the profile menu, two .duiker controls in one round pill
+     perch). Share and My Location, two .duiker controls in one round pill
      FIXED to the top of the screen, so they stay in reach while the page
      scrolls. A card surface like the bottom bar's island, so it reads over the
      dark sky and over the cards that scroll under it: 0.5px token border,
      shadow-lg, a 90% card fill. The blur is on a pseudo-element, never on the
      group itself: a backdrop-filter makes its element the containing block of
-     fixed descendants, and the profile menu's panel is fixed. Phones only (the
-     caller adds sm:hidden); from `sm` the site header is the top chrome. */
+     fixed descendants (the group held the profile menu's fixed panel until the
+     account avatar moved to the bottom bar), so nothing fixed inside it can be
+     captured. Phones only (the caller adds sm:hidden); from `sm` the site
+     header is the top chrome. */
   .hadeda {
     position: fixed;
     top: var(--float-top);
@@ -2158,19 +2161,18 @@ body {
    are unlayered rules and not utilities.) The unscrolled header's brand mark
    and desktop links are the same scope, set in their own block below.
 
-   The ⋯ menu panel opens inside the hero but is drawn on a light card
-   surface, so it takes the page ring back. */
+   The phone icon group (.hadeda) is a light card pill inside the hero, so it
+   takes the page ring back. */
 [data-sky-hero],
 .kestrel-ink,
 .kestrel-card {
   --focus-ring: var(--sky-fg);
 }
-[data-sky-hero] [data-slot="account-menu-panel"],
 [data-sky-hero] .hadeda {
   --focus-ring: var(--exp-storm);
 }
 
-/* .kestrel-round (Share, the ⋯ trigger) — unlayered like the fauna rules above:
+/* .kestrel-round (Share on the sky) — unlayered like the fauna rules above:
    the global :focus-visible rule would otherwise square the round control to a
    --radius-sm radius on keyboard focus. */
 .kestrel-round:focus-visible {
@@ -2584,7 +2586,7 @@ body {
     padding: var(--space-card);
   }
 
-  /* .kestrel-round — round 48px icon control on the sky (Share, the ⋯ menu).
+  /* .kestrel-round — round 48px icon control on the sky (Share).
      A hairline border and a faint fill, no shadow: Mzizi separates with
      borders. */
   .kestrel-round {
@@ -2604,11 +2606,12 @@ body {
 
 /* The sky runs to the top of the screen. While a page shows the sky hero
    ([data-sky-hero]) the phone header is not drawn: the hero's own top row holds
-   the breadcrumb, Share and the ⋯ menu (the bottom controls stay). From `sm`
-   the one app header stays, transparent over the sky with its text pointed at
-   the sky foreground, and only gains its blurred surface after scroll
-   ([data-scrolled]). Pure CSS on the body, so there is no flash and a page
-   without the hero (the chooser, every other route) is untouched. */
+   the breadcrumb, Share and My Location (the bottom controls stay, the account
+   menu among them). From `sm` the one app header stays, transparent over the
+   sky with its text pointed at the sky foreground, and only gains its blurred
+   surface after scroll ([data-scrolled]). Pure CSS on the body, so there is no
+   flash and a page without the hero (the chooser, every other route) is
+   untouched. */
 @media (max-width: 639.98px) {
   body:has([data-sky-hero]) [data-site-header] {
     display: none;
@@ -2616,8 +2619,8 @@ body {
 }
 /* The override is scoped to the bar's own brand mark and desktop links
    ([data-header-ink]), never the <header> itself: the notifications popover
-   and the ⋯ menu live inside the header on a light card surface, and white
-   text there would be unreadable. */
+   lives inside the header on a light card surface, and white text there would
+   be unreadable. */
 body:has([data-sky-hero])
   [data-site-header]:not([data-scrolled])
   [data-header-ink] {

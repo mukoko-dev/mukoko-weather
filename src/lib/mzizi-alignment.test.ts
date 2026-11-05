@@ -44,7 +44,7 @@ export const CONTROL_CLASSES = new Set([
   // Round icon control on a card surface (nav island, map overlays)
   "duiker",
   "duiker-solid",
-  // Round icon control on the hero sky (Share, the ⋯ menu)
+  // Round icon control on the hero sky (Share)
   "kestrel-round",
   // Pill chip / toggle chip (aria-pressed)
   "quail",
@@ -343,7 +343,7 @@ describe("Mzizi alignment guard — every button", () => {
 
   it("the hero's Share is a Mzizi control: kestrel-round on the sky, duiker in the phone icon group", () => {
     // The hero itself holds no button of its own; its Share is ShareControl's
-    // one button, and the profile menu's trigger is PhoneMenu's.
+    // one button, and My Location is MyLocationLink's link.
     expect(
       FOUND.filter((f) => f.file.endsWith("CurrentConditions.tsx")),
     ).toHaveLength(0);
@@ -387,15 +387,31 @@ describe("Mzizi alignment guard — menus", () => {
     );
   });
 
-  it("the header and the hero reach the phone menu only through PhoneMenu", () => {
+  it("the phone menu is reached only through PhoneMenu, and only from the bottom bar", () => {
+    // The avatar and My Location swapped places (owner, 2026-11-05): the
+    // account menu is the bar's first slot, and neither the header nor the hero
+    // mounts it any more.
+    const bar = read("src/components/layout/MobileNav.tsx");
+    expect(bar).toContain("<PhoneMenu");
+    expect(bar).not.toMatch(/menuOpen|setMenuOpen|mobile-.*-menu/);
     for (const file of [
       "src/components/layout/Header.tsx",
       "src/components/weather/CurrentConditions.tsx",
     ]) {
       const src = read(file);
-      expect(src, file).toContain("<PhoneMenu");
-      expect(src, file).not.toMatch(/menuOpen|setMenuOpen|mobile-.*-menu/);
+      expect(src, file).not.toContain("PhoneMenu");
+      expect(src, file).not.toContain("<AccountMenu");
+      expect(src, file).toContain("<MyLocationLink");
     }
+    const homes = sources.filter((f) =>
+      /<(PhoneMenu|AccountMenu)\b/.test(readFileSync(f, "utf-8")),
+    );
+    expect(homes.map((f) => relative(ROOT, f)).sort()).toEqual(
+      [
+        "src/components/layout/MobileNav.tsx",
+        "src/components/layout/PhoneMenu.tsx",
+      ].sort(),
+    );
   });
 
   it("the vendored component names its registry source and lists its deviations", () => {

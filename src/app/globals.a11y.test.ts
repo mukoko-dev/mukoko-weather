@@ -242,13 +242,7 @@ describe("focus on the sky (WCAG 1.4.11, 3:1)", () => {
     expect(declsFor("[data-site-header]")).not.toContain("--focus-ring");
   });
 
-  it("gives the ⋯ menu panel (a light card inside the hero) the page ring back", () => {
-    expect(
-      declsFor('[data-sky-hero] [data-slot="account-menu-panel"]'),
-    ).toMatch(/--focus-ring:\s*var\(--exp-storm\)\s*;/);
-  });
-
-  it("gives the phone icon group (a light card pill inside the hero) the page ring too", () => {
+  it("gives the phone icon group (a light card pill inside the hero) the page ring back", () => {
     // The ring var is inherited from the sky scope (white); on the group's card
     // surface that would be invisible.
     expect(declsFor("[data-sky-hero] .hadeda")).toMatch(
