@@ -159,3 +159,146 @@ describe("every floating surface has a visible edge", () => {
     );
   });
 });
+
+/* ---------------------------------------------------------------------------
+ * The spacing floor on the surfaces stage 1 of #479 brought up to it: the
+ * phone menu, the bottom bar and the map. `mzizi check` (@nyuchi/mzizi-cli
+ * 0.8.0) is the tool that reads the whole app; this is the part of it that
+ * runs here, on these files only, until the CI ratchet (stage 6) takes over.
+ * ------------------------------------------------------------------------ */
+
+const accountMenu = read("components/ui/app-account-menu.tsx");
+const phoneMenu = read("components/layout/PhoneMenu.tsx");
+
+/** `text` with every comment blanked, line structure kept. */
+function withoutComments(text: string): string {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+    .replace(
+      /(^|[^:"'`])\/\/.*$/gm,
+      (m, lead: string) => lead + " ".repeat(m.length - lead.length),
+    );
+}
+
+/** A Tailwind utility under the Bundu spacing floor, as `mzizi check` reads it. */
+const BELOW_FLOOR: Array<[string, RegExp]> = [
+  [
+    "padding under the 14px inset",
+    /(?<![\w-])!?(?:p|px|pl|pr|ps|pe)-(?:px|0\.5|1|1\.5|2|2\.5|3)(?![\w.[-])/g,
+  ],
+  [
+    "padding of zero",
+    /(?<![\w-])!?(?:p|px|py|pt|pb|pl|pr|ps|pe)-0(?![\w.[-])/g,
+  ],
+  [
+    "gap under 7px",
+    /(?<![\w-])!?(?:gap|gap-x|gap-y|space-x|space-y)-(?:0|px|0\.5|1|1\.5)(?![\w.[-])/g,
+  ],
+  ["negative margin", /(?<![\w-])!?-m[trblxyse]?-[\w.[\]()-]+/g],
+  ["line height under 1.5", /(?<![\w-])leading-(?:none|tight|snug)(?![\w-])/g],
+];
+
+/** Everything under the floor in a source, minus lines with a written reason. */
+function belowFloor(source: string): string[] {
+  const raw = source.split("\n");
+  const code = withoutComments(source).split("\n");
+  const reasoned = (i: number) => {
+    const marker = /mzizi-spacing-exempt:\s*(.*)/;
+    const reason = (line: string | undefined) =>
+      /[A-Za-z]{3,}/.test(line?.match(marker)?.[1] ?? "");
+    // The same line, or a comment on its own line directly above.
+    return (
+      reason(raw[i]) ||
+      (/^[\s{}]*$/.test(code[i - 1] ?? "x") && reason(raw[i - 1]))
+    );
+  };
+  const out: string[] = [];
+  code.forEach((line, i) => {
+    for (const [what, pattern] of BELOW_FLOOR) {
+      for (const m of line.matchAll(pattern)) {
+        if (!reasoned(i)) out.push(`line ${i + 1}: ${m[0]} (${what})`);
+      }
+    }
+  });
+  return out;
+}
+
+describe("the phone menu keeps the floor", () => {
+  it("is 49px tall on every row, the default trigger included", () => {
+    expect(accountMenu).toMatch(
+      /ACCOUNT_MENU_ROW_CLASS =\s*"flex min-h-\[var\(--touch-target-min\)\]/,
+    );
+    expect(accountMenu).toMatch(
+      /triggerClassName \?\?\s*"flex min-h-\[var\(--touch-target-min\)\]/,
+    );
+  });
+
+  it("gives every row and the identity block the 14px inset by token, not a literal", () => {
+    const code = withoutComments(accountMenu);
+    expect(code).toMatch(
+      /ACCOUNT_MENU_ROW_CLASS =\s*"[^"]*px-\[var\(--inset-floor\)\]/,
+    );
+    expect(code).toContain('"px-[var(--inset-floor)] py-2"');
+    // The group headings and the note under Notifications line up with the rows.
+    expect(
+      withoutComments(phoneMenu).match(/!?px-\[var\(--inset-floor\)\]/g),
+    ).toHaveLength(4);
+  });
+
+  it("sets its secondary text at 14px, not the 12px caption token", () => {
+    expect(withoutComments(accountMenu)).not.toContain("--text-caption");
+    expect(withoutComments(accountMenu)).toContain("--text-body-sm");
+  });
+
+  it("holds no padding, gap or leading under the floor except where a reason is written", () => {
+    expect(belowFloor(accountMenu)).toEqual([]);
+    expect(belowFloor(phoneMenu)).toEqual([]);
+  });
+});
+
+describe("the bottom bar and the map keep the floor", () => {
+  const files = [
+    "components/ui/mzizi-bottom-nav.tsx",
+    "components/layout/MobileNav.tsx",
+    "components/layout/PlaceLane.tsx",
+    "app/[location]/map/MapDashboard.tsx",
+    "components/weather/map/MapLibreMap.tsx",
+    "components/weather/map/MapTimeline.tsx",
+    "components/weather/map/MapSkeleton.tsx",
+    "components/weather/map/MapPreview.tsx",
+    "components/weather/map/WeatherLayerPanel.tsx",
+  ];
+
+  for (const file of files) {
+    it(`${file} holds nothing under the floor without a written reason`, () => {
+      expect(belowFloor(read(file))).toEqual([]);
+    });
+  }
+
+  it("takes the gap between a pinned item's icon and label, a lane chip's glyph and label, and the timeline's controls from --gap-floor", () => {
+    expect(bottomNav).toContain("gap-[var(--gap-floor)] rounded-full py-1");
+    expect(rule(".lark")).toContain("gap-[var(--gap-floor)]");
+    const timeline = read("components/weather/map/MapTimeline.tsx");
+    expect(timeline.match(/gap-\[var\(--gap-floor\)\]/g)).toHaveLength(2);
+  });
+
+  it("gives the map's locate message the 14px inset on both sides", () => {
+    expect(map).toContain(
+      "max-w-[12rem] px-[var(--inset-floor)] py-2 text-sm text-text-secondary",
+    );
+  });
+
+  it("explains each exemption in a comment with a reason, never a bare marker", () => {
+    for (const file of files) {
+      for (const line of read(file).split("\n")) {
+        const at = line.indexOf("mzizi-spacing-exempt");
+        if (at === -1) continue;
+        expect(line.slice(at), `${file}: ${line.trim()}`).toMatch(
+          /mzizi-spacing-exempt:\s*[^]*[A-Za-z]{3,}/,
+        );
+      }
+    }
+    // The two CSS exemptions (the range thumb's offset) live in globals.css.
+    expect(css).toMatch(/mzizi-spacing-exempt:[^*]*centres the 24px thumb/);
+  });
+});

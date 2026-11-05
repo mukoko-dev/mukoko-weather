@@ -900,6 +900,7 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --radius-xs: 4px;
   --radius-sm: 7px;
   --radius-md: 12px;
   --radius-lg: var(--radius);
@@ -1475,7 +1476,7 @@ body {
 
   /* .springhare — the map timeline range input. Native <input type=range>
      (keyboard, aria-valuetext and touch come free), restyled: a thin track,
-     a 24px thumb with a ring, and a full 48px hit area. */
+     a 24px thumb with a ring, and a full 49px hit area (--touch-target-min). */
   .springhare {
     @apply h-[var(--touch-target-min)] w-full cursor-pointer appearance-none bg-transparent
            focus-visible:outline-none;
@@ -1487,6 +1488,7 @@ body {
     @apply h-1.5 rounded-full bg-text-tertiary/30;
   }
   .springhare::-webkit-slider-thumb {
+    /* mzizi-spacing-exempt: centres the 24px thumb on the 6px track, (6 - 24) / 2 = -9px; WebKit draws the thumb from the track's top edge and nothing else shares that box */
     @apply -mt-[9px] h-6 w-6 appearance-none rounded-full border-4 border-surface-card bg-primary shadow-md;
   }
   .springhare::-moz-range-thumb {
@@ -1862,7 +1864,7 @@ body {
      --text-nav-label token, truncated, so a long name never crowds the lane. */
   .lark {
     @apply relative flex min-h-[var(--touch-target-min)] items-center
-           justify-center gap-1.5 rounded-full border-[color:var(--float-border)] bg-muted
+           justify-center gap-[var(--gap-floor)] rounded-full border-[color:var(--float-border)] bg-muted
            px-[var(--inset-floor)]
            text-[length:var(--text-nav-label)] font-medium whitespace-nowrap
            text-foreground transition-colors;

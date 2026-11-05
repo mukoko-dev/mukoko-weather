@@ -8,6 +8,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { canonicalSlug as c } from "@/lib/slug-migration";
 
 const nav = vi.hoisted(() => ({ pathname: "/" }));
 const store = vi.hoisted(() => ({
@@ -122,7 +123,13 @@ describe("MobileNav render — the places lane", () => {
     const laneHrefs = hrefs.filter(
       (h) => h !== "/harare/map" && h !== "/locations",
     );
-    expect(laneHrefs).toEqual(["/", "/harare", "/nairobi-ke", "/lagos-ng"]);
+    // Saved places are canonical URLs (#317).
+    expect(laneHrefs).toEqual([
+      "/",
+      `/${c("harare")}`,
+      `/${c("nairobi-ke")}`,
+      `/${c("lagos-ng")}`,
+    ]);
   });
 
   it("names the chips: My Location by label, places by their visible name", () => {
@@ -143,7 +150,13 @@ describe("MobileNav render — the places lane", () => {
     const html = render("/explore", ["harare"]);
     expect(html).not.toContain(">My Location</span>");
     expect(html).toContain('aria-label="My Location"');
-    expect(html).toContain("min-w-[var(--touch-target-min)] px-0");
+    // The glyph chip is one touch target wide through `min-w` alone; it keeps
+    // `.lark`'s own 14px inline inset (no `px-0`, which `mzizi check` refuses).
+    expect(html).toContain(
+      'class="lark press-scale shrink-0 min-w-[var(--touch-target-min)]"',
+    );
+    // mzizi-spacing-exempt: names the class this asserts is gone
+    expect(html).not.toContain("px-0");
   });
 
   it("pins My Location outside the scroller and lets the places scroll beside it", () => {
@@ -182,11 +195,13 @@ describe("MobileNav render — aria-current is on exactly the current item", () 
   });
 
   it("is the place's chip on its page", () => {
-    const html = render("/nairobi-ke", ["harare", "nairobi-ke"]);
+    const html = render(`/${c("nairobi-ke")}`, ["harare", "nairobi-ke"]);
     expect(current(html)).toBe(1);
     expect(anchors(html).find((a) => a.includes("aria-current"))).toContain(
-      'href="/nairobi-ke"',
+      `href="/${c("nairobi-ke")}"`,
     );
+    // A legacy URL a stored page can still show is the same place.
+    expect(current(render("/nairobi-ke", ["harare", "nairobi-ke"]))).toBe(1);
   });
 
   it("is the place's chip on a sub-route like its map", () => {
@@ -219,8 +234,8 @@ describe("MobileNav render — aria-current is on exactly the current item", () 
 
 describe("MobileNav render — what a chip says", () => {
   it("shows the person's own label, then a name seen this session, then the slug's name", () => {
-    store.locationLabels = { harare: "Home" };
-    store.locationNames = { "nairobi-ke": "Nairobi CBD" };
+    store.locationLabels = { [c("harare")]: "Home" };
+    store.locationNames = { [c("nairobi-ke")]: "Nairobi CBD" };
     const html = render("/", ["harare", "nairobi-ke", "lagos-ng"]);
     expect(html).toContain(">Home</span>");
     expect(html).toContain(">Nairobi CBD</span>");

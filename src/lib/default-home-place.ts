@@ -1,5 +1,6 @@
 import { DEFAULT_HOME_SLUG } from "./default-places";
 import { LOCATIONS, type WeatherLocation } from "./locations";
+import { canonicalSlug } from "./slug-migration";
 
 /**
  * Harare, from the shipped seed: it needs no database and no network lookup,
@@ -16,5 +17,6 @@ export function defaultHomeLocation(): WeatherLocation {
     // runtime case.
     throw new Error(`Seed place ${DEFAULT_HOME_SLUG} is missing`);
   }
-  return seed;
+  // The seed list keys on the legacy slug; the page carries the canonical one.
+  return { ...seed, slug: canonicalSlug(seed.slug) };
 }

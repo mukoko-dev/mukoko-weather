@@ -1,4 +1,5 @@
 import { displayNameFromSlug, isLocationSlug } from "@/lib/current-slug";
+import { canonicalSlug } from "@/lib/slug-migration";
 import {
   coordinateLabel,
   isCoordinateNameSlug,
@@ -39,9 +40,12 @@ export function pagerSequence(
   const sequence = [MY_LOCATION_HREF];
   const seen = new Set<string>();
   for (const slug of [...(savedLocations ?? []), ...(presets ?? [])]) {
-    if (!isLocationSlug(slug) || seen.has(slug)) continue;
-    seen.add(slug);
-    sequence.push(`/${slug}`);
+    if (!isLocationSlug(slug)) continue;
+    // A legacy seed slug and its canonical slug are one page.
+    const canonical = canonicalSlug(slug);
+    if (seen.has(canonical)) continue;
+    seen.add(canonical);
+    sequence.push(`/${canonical}`);
   }
   return sequence;
 }
@@ -60,7 +64,9 @@ export function pagerIndex(
     .split("/")
     .find((segment) => segment.length > 0);
   const target =
-    firstSegment === undefined ? MY_LOCATION_HREF : `/${firstSegment}`;
+    firstSegment === undefined
+      ? MY_LOCATION_HREF
+      : `/${canonicalSlug(firstSegment)}`;
   return sequence.indexOf(target);
 }
 

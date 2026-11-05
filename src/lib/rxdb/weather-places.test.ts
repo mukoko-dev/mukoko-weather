@@ -13,6 +13,7 @@ import {
   rememberPlace,
 } from "./weather-places";
 import { weatherPlaceSchema } from "./schemas";
+import { canonicalSlug } from "../slug-migration";
 
 const HOUR = 3_600_000;
 const OFFSET = 7200;
@@ -166,11 +167,64 @@ describe("rememberPlace / recallPlace", () => {
     expect(doc.expiresAt).toBe(harare(13, 0));
     const v = await recallPlace("harare", t + 30 * 60_000);
     expect(v?.freshness).toBe("current");
-    expect(v?.payload.location.slug).toBe("harare");
+    // A shipped place is shown under its canonical slug (#317).
+    expect(v?.payload.location.slug).toBe(canonicalSlug("harare"));
     // Showing a place refreshes its LRU timestamp.
     expect(col.patched).toEqual([
       ["harare", { lastAccessedAt: t + 30 * 60_000 }],
     ]);
+  });
+
+  it("finds a copy stored under a seed's legacy slug and shows it under the canonical one, whichever spelling asked (#317)", async () => {
+    const t = harare(11, 9);
+    await rememberPlace(payload("harare"), { now: t });
+    const canonical = canonicalSlug("harare");
+    expect(col.docs.has(canonical)).toBe(false);
+    for (const asked of [canonical, "harare"]) {
+      const v = await recallPlace(asked, t + 30 * 60_000);
+      expect(v?.freshness, asked).toBe("current");
+      // The place on screen is the canonical one, so its URL and its memory
+      // entry are too (an in-place switch to a legacy link lands on the
+      // canonical URL); the stored copy itself is left where it is.
+      expect(v?.payload.location.slug, asked).toBe(canonical);
+    }
+    expect(col.docs.has("harare")).toBe(true);
+  });
+
+  it("a copy stored under the canonical slug is found by the legacy spelling, and wins over an older legacy copy", async () => {
+    const t = harare(11, 9);
+    const canonical = canonicalSlug("harare");
+    await rememberPlace(payload("harare"), { now: t });
+    await rememberPlace(payload(canonical), { now: t + 1000 });
+    const v = await recallPlace("harare", t + 30 * 60_000);
+    expect(v?.payload.location.slug).toBe(canonical);
+    expect(v?.fetchedAt).toBe(t + 1000);
+    // Only the canonical copy exists: the legacy spelling still finds it.
+    col.docs.delete("harare");
+    expect((await recallPlace("harare", t + 30 * 60_000))?.fetchedAt).toBe(
+      t + 1000,
+    );
+  });
+
+  it("a slug that is not in the pinned table is looked up as it always was", async () => {
+    const t = harare(11, 9);
+    await rememberPlace(payload("kakamega-ke"), { now: t });
+    const v = await recallPlace("kakamega-ke", t + 30 * 60_000);
+    expect(v?.payload.location.slug).toBe("kakamega-ke");
+    expect(await recallPlace("kakamega--ksy4dd7")).toBeNull();
+  });
+
+  it("a legacy-keyed copy that is corrupt is deleted under its own key", async () => {
+    col.docs.set("harare", {
+      slug: "harare",
+      payload: "{broken",
+      fetchedAt: 1,
+      lastAccessedAt: 1,
+      expiresAt: Number.MAX_SAFE_INTEGER,
+      bytes: 7,
+    });
+    expect(await recallPlace(canonicalSlug("harare"))).toBeNull();
+    expect(col.docs.has("harare")).toBe(false);
   });
 
   it("shows older data as this hour's forecast", async () => {

@@ -22,6 +22,7 @@
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { canonicalSlug } from "@/lib/slug-migration";
 
 const mockGetLocationFromDb = vi.fn();
 vi.mock("@/lib/db", () => ({
@@ -106,8 +107,14 @@ describe("shared per-request location loader", () => {
   it("answers a shipped place and a spot without asking the store at all", async () => {
     mockGetLocationFromDb.mockRejectedValue(new Error("must not be asked"));
     const { loadLocation } = await import("./load-location");
+    // A shipped place carries its canonical slug (#317), named by either spelling.
     await expect(loadLocation("harare")).resolves.toMatchObject({
-      slug: "harare",
+      slug: canonicalSlug("harare"),
+    });
+    await expect(loadLocation(canonicalSlug("harare"))).resolves.toMatchObject({
+      name: "Harare",
+      province: "Harare",
+      slug: canonicalSlug("harare"),
     });
     await expect(loadLocation("some-place--ksy4dd7")).resolves.toMatchObject({
       slug: "some-place--ksy4dd7",

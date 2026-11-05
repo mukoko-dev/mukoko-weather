@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { locationPath } from "@/lib/slug-migration";
 
 /**
  * "Try one of these cities": the way out of a place we could not show. One
@@ -21,7 +22,7 @@ export function CitySuggestions({
       <ul className="mt-3 flex flex-wrap justify-center gap-2">
         {locations.map((loc) => (
           <li key={loc.slug}>
-            <Link href={`/${loc.slug}`}>
+            <Link href={locationPath(loc.slug)}>
               <Badge className="hover:bg-primary/20 transition-colors">
                 {loc.name}
               </Badge>

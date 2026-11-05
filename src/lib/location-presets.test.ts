@@ -8,6 +8,7 @@ import {
   suggestPresetSlugs,
   visiblePresetSlugs,
 } from "./location-presets";
+import { canonicalSlug as c } from "./slug-migration";
 import { LOCATIONS } from "./locations";
 
 const HARARE = { lat: -17.8292, lon: 31.0522 };
@@ -47,16 +48,16 @@ describe("isPresetAnchor", () => {
 
 describe("suggestPresetSlugs", () => {
   it("suggests Harare, Nairobi and Lagos alone when there is no anchor", () => {
-    const defaults = ["harare", "nairobi-ke", "lagos-ng"];
+    const defaults = [c("harare"), c("nairobi-ke"), c("lagos-ng")];
     expect(suggestPresetSlugs(null)).toEqual(defaults);
     expect(suggestPresetSlugs(undefined)).toEqual(defaults);
   });
 
   it("treats an invalid anchor as no anchor", () => {
     expect(suggestPresetSlugs({ lat: 999, lon: 0 })).toEqual([
-      "harare",
-      "nairobi-ke",
-      "lagos-ng",
+      c("harare"),
+      c("nairobi-ke"),
+      c("lagos-ng"),
     ]);
   });
 
@@ -65,11 +66,15 @@ describe("suggestPresetSlugs", () => {
     expect(list).toHaveLength(
       PRESET_NEAREST_COUNT + PRESET_ALWAYS_SLUGS.length,
     );
-    expect(list.slice(-3)).toEqual(["harare", "nairobi-ke", "lagos-ng"]);
+    expect(list.slice(-3)).toEqual([
+      c("harare"),
+      c("nairobi-ke"),
+      c("lagos-ng"),
+    ]);
     // The always-suggested cities are not repeated among the nearest.
     const nearest = list.slice(0, PRESET_NEAREST_COUNT);
     for (const slug of PRESET_ALWAYS_SLUGS) {
-      expect(nearest).not.toContain(slug);
+      expect(nearest).not.toContain(c(slug));
     }
   });
 
@@ -77,7 +82,7 @@ describe("suggestPresetSlugs", () => {
     const list = suggestPresetSlugs(HARARE);
     const nearest = list.slice(0, PRESET_NEAREST_COUNT);
     const distances = nearest.map((slug) => {
-      const loc = LOCATIONS.find((l) => l.slug === slug)!;
+      const loc = LOCATIONS.find((l) => c(l.slug) === slug)!;
       return haversineKm(HARARE, { lat: loc.lat, lon: loc.lon });
     });
     const sorted = [...distances].sort((a, b) => a - b);
@@ -89,7 +94,7 @@ describe("suggestPresetSlugs", () => {
       const list = suggestPresetSlugs(anchor);
       expect(new Set(list).size).toBe(list.length);
       for (const slug of list) {
-        expect(LOCATIONS.some((l) => l.slug === slug)).toBe(true);
+        expect(LOCATIONS.some((l) => c(l.slug) === slug)).toBe(true);
       }
     }
   });
@@ -111,7 +116,7 @@ describe("visiblePresetSlugs", () => {
         current: null,
         suggested,
       }),
-    ).toEqual(suggested);
+    ).toEqual(suggested.map(c));
   });
 
   it("hides a hidden suggestion without touching the others", () => {
@@ -123,7 +128,7 @@ describe("visiblePresetSlugs", () => {
         current: null,
         suggested,
       }),
-    ).toEqual(["nairobi-ke", "kampala-ug", "bulawayo"]);
+    ).toEqual([c("nairobi-ke"), c("kampala-ug"), c("bulawayo")]);
   });
 
   it("does not repeat a saved place or the current location as a preset", () => {
@@ -135,7 +140,7 @@ describe("visiblePresetSlugs", () => {
         current: "nairobi-ke",
         suggested,
       }),
-    ).toEqual(["harare", "bulawayo"]);
+    ).toEqual([c("harare"), c("bulawayo")]);
   });
 
   it("drops anything that is not a location slug and removes duplicates", () => {
@@ -147,7 +152,7 @@ describe("visiblePresetSlugs", () => {
         current: null,
         suggested: ["explore", "Harare", "harare", "harare", "bulawayo"],
       }),
-    ).toEqual(["harare", "bulawayo"]);
+    ).toEqual([c("harare"), c("bulawayo")]);
   });
 
   it("uses the anchor's suggestions when no override is given", () => {
@@ -164,7 +169,7 @@ describe("visiblePresetSlugs", () => {
 describe("hiddenSuggestedSlugs", () => {
   it("lists only the hidden places that are actually suggested for this anchor", () => {
     expect(hiddenSuggestedSlugs(null, ["harare", "not-a-suggestion"])).toEqual([
-      "harare",
+      c("harare"),
     ]);
   });
 
