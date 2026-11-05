@@ -10,12 +10,13 @@
 //            (optional: the paid Open-Meteo plan, the history archive), the
 //            store secret OPEN_METEO_API_KEY bound as
 //            MUKOKO_WEATHER_OPEN_METEO_API_KEY
-//   vars:    NYUCHI_API_URL, OPEN_METEO_ARCHIVE_LICENSED (=1: the owner's
-//            Open-Meteo licence includes the historical weather API, so the
-//            history archive uses the paid archive host with the key; owner,
-//            2026-11-05. If the plan did not include it, a refused key falls
-//            back to the free host once per call, so remove the var rather
-//            than leave it set. See workers/README.md "Open-Meteo paid plan".)
+//   vars:    NYUCHI_API_URL, OPEN_METEO_ARCHIVE_LICENSED (="0": the owner's
+//            plan is the lowest tier and has no historical weather API
+//            (owner, 2026-11-05), so the history archive stays on the free
+//            archive host. Set to "0", not removed: keep_vars would keep a
+//            "1" already deployed. Set it to "1" after an upgrade to a plan
+//            with the historical API. See workers/README.md "Open-Meteo paid
+//            plan".)
 //   optional vars, NOT declared here (keep_vars keeps one set in the
 //   dashboard): HISTORY_PROVIDERS, HISTORY_COMMERCIAL_ONLY
 // OWNER: replace the placeholder ids below with the created resources' ids
@@ -59,7 +60,7 @@
   ],
   "vars": {
     "NYUCHI_API_URL": "https://api.nyuchi.com",
-    "OPEN_METEO_ARCHIVE_LICENSED": "1",
+    "OPEN_METEO_ARCHIVE_LICENSED": "0",
   },
   "kv_namespaces": [
     // Geocoding (1 day), reverse geocoding (30 days), place lookups (1 day).
