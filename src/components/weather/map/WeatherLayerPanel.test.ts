@@ -6,9 +6,13 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
-import { Layers } from "lucide-react";
-import { MAP_CHIPS, AIR_QUALITY_LAYER_ID } from "@/lib/map-layers";
-import { CHIP_ICONS, chipIcon } from "./WeatherLayerPanel";
+import { Flame, Layers } from "lucide-react";
+import {
+  MAP_CHIPS,
+  AIR_QUALITY_LAYER_ID,
+  WILDFIRE_LAYER_ID,
+} from "@/lib/map-layers";
+import { CHIP_ICONS, chipIcon, scrollChipIntoView } from "./WeatherLayerPanel";
 
 const panelSource = readFileSync(
   resolve(__dirname, "WeatherLayerPanel.tsx"),
@@ -38,7 +42,37 @@ describe("WeatherLayerPanel — labelled chips", () => {
     expect(panelSource).toContain("overflow-x-auto");
   });
 
-  it("offers the five chips the brief asks for, then the NASA satellite layers, in order", () => {
+  it("scrolls a focused chip fully into its row (the browser leaves a half-visible one under the fade)", () => {
+    // Both rows: the layer chips and the model chips.
+    expect(panelSource.match(/onFocus=\{scrollChipIntoView\}/g)).toHaveLength(
+      2,
+    );
+    const calls: unknown[] = [];
+    const event = {
+      currentTarget: { scrollIntoView: (o: unknown) => calls.push(o) },
+    } as unknown as Parameters<typeof scrollChipIntoView>[0];
+    scrollChipIntoView(event);
+    // Sideways only: never moves the sheet up or down.
+    expect(calls).toEqual([
+      { inline: "nearest", block: "nearest", behavior: "smooth" },
+    ]);
+  });
+
+  it("keeps a chip clear of the edge fade, scrolled to the end or reached by keyboard focus", () => {
+    // The fade is 1.5rem wide at the end (.scroll-fade-x in globals.css).
+    // scroll-px-6 is the same 1.5rem of scroll padding for a chip focus
+    // scrolls into view, and pe-6 the same 1.5rem of padding after the last
+    // chip (now Wildfires), so neither leaves it half under the fade.
+    expect(panelSource.match(/scroll-px-6/g)).toHaveLength(2);
+    expect(panelSource.match(/ps-4 pe-6/g)).toHaveLength(2);
+    const css = readFileSync(
+      resolve(__dirname, "../../../app/globals.css"),
+      "utf-8",
+    );
+    expect(css).toMatch(/\.scroll-fade-x \{[^}]*#000 calc\(100% - 1\.5rem\)/);
+  });
+
+  it("offers the five chips the brief asks for, then the NASA satellite layers and wildfires, in order", () => {
     expect(MAP_CHIPS.map((c) => c.label)).toEqual([
       "Air quality",
       "Rain",
@@ -47,8 +81,17 @@ describe("WeatherLayerPanel — labelled chips", () => {
       "Cloud",
       "Satellite",
       "Rain (satellite)",
+      "Wildfires",
     ]);
     expect(MAP_CHIPS[0].id).toBe(AIR_QUALITY_LAYER_ID);
+  });
+
+  it("draws the Wildfires chip with the Lucide flame, next to its text label", () => {
+    expect(CHIP_ICONS[WILDFIRE_LAYER_ID]).toBe(Flame);
+    expect(chipIcon("wildfire")).toBe(Flame);
+    expect(MAP_CHIPS.find((c) => c.id === WILDFIRE_LAYER_ID)!.label).toBe(
+      "Wildfires",
+    );
   });
 
   it("is single-select: aria-pressed marks the active chip only", () => {
