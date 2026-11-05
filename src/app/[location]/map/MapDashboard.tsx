@@ -528,7 +528,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
         {locateMessage && (
           <p
             role="status"
-            className="serval pointer-events-auto max-w-[12rem] p-2 text-sm text-text-secondary"
+            className="serval pointer-events-auto max-w-[12rem] px-[var(--inset-floor)] py-2 text-sm text-text-secondary"
           >
             {locateMessage}
           </p>
@@ -566,6 +566,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
             {chip && chip.legend.segments.length > 0 && (
               <>
                 <div
+                  // mzizi-spacing-exempt: a decorative colour bar (aria-hidden, no controls); the 1px gap is the hairline between its bands
                   className="mt-1.5 flex h-2 gap-px overflow-hidden rounded-full ring-1 ring-wx-outline"
                   aria-hidden="true"
                 >
@@ -627,6 +628,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
             aria-expanded={sheetOpen}
             aria-controls={sheetId}
             aria-label={sheetOpen ? "Collapse map layers" : "Expand map layers"}
+            // mzizi-spacing-exempt: pulls the 49px collapse control into the card's own padding so its glyph meets the card edge; it overlaps padding only, never another target
             className="duiker -mr-2 -mt-1"
           >
             <ChevronDown

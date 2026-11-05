@@ -150,7 +150,13 @@ describe("MobileNav render — the places lane", () => {
     const html = render("/explore", ["harare"]);
     expect(html).not.toContain(">My Location</span>");
     expect(html).toContain('aria-label="My Location"');
-    expect(html).toContain("min-w-[var(--touch-target-min)] px-0");
+    // The glyph chip is one touch target wide through `min-w` alone; it keeps
+    // `.lark`'s own 14px inline inset (no `px-0`, which `mzizi check` refuses).
+    expect(html).toContain(
+      'class="lark press-scale shrink-0 min-w-[var(--touch-target-min)]"',
+    );
+    // mzizi-spacing-exempt: names the class this asserts is gone
+    expect(html).not.toContain("px-0");
   });
 
   it("pins My Location outside the scroller and lets the places scroll beside it", () => {

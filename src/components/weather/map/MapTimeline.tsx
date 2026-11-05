@@ -164,8 +164,11 @@ export function MapTimeline({
         : null;
 
   return (
-    <div className="flex flex-col gap-1" data-slot="map-timeline">
-      <div className="flex items-center gap-1">
+    <div
+      className="flex flex-col gap-[var(--gap-floor)]"
+      data-slot="map-timeline"
+    >
+      <div className="flex items-center gap-[var(--gap-floor)]">
         <button
           type="button"
           onClick={togglePlay}
@@ -233,6 +236,7 @@ export function MapTimeline({
           column also draws the final frame at its right edge. */}
       <div
         aria-hidden="true"
+        // mzizi-spacing-exempt: decorative tick labels (aria-hidden, no controls) tucked under the track; px-3 is half the 24px thumb so a tick sits under the thumb's centre, not a text inset
         className="-mt-2 flex h-8 px-3 text-sm text-text-tertiary"
       >
         {Array.from({ length: last }, (_, i) => {

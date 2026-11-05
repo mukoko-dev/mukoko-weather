@@ -240,12 +240,13 @@ describe("saved-location surfaces use radius TOKENS only", () => {
  * radius and different things". The repo's rule was already "only
  * `rounded-full`, `rounded-none` or `rounded-[var(--radius-*)]`", but the
  * guard above read eight files, so the rest of src drifted:
- *   - bare `rounded` (Tailwind's own 0.25rem, 4px) and `rounded-xs`
- *     (--radius-xs, 2px) come from Tailwind's default theme and are NOT on the
- *     Mzizi scale;
- *   - `rounded-sm|md|lg|xl|2xl` DO resolve to the Mzizi scale (7/12/14/17px
- *     through the `@theme` block), but under a size word, not a role, so the
- *     same card ended up as `rounded-lg` here and `--radius-card` there;
+ *   - bare `rounded` (Tailwind's own 0.25rem, 4px) comes from Tailwind's
+ *     default theme and is NOT on the Mzizi scale;
+ *   - `rounded-xs|sm|md|lg|xl|2xl` DO resolve to the Mzizi scale (4/7/12/14/
+ *     17px through the `@theme` block; `--radius-xs` is Mzizi's own since
+ *     @nyuchi/mzizi-skills 0.18.0, before that Tailwind's 2px), but under a
+ *     size word, not a role, so the same card ended up as `rounded-lg` here
+ *     and `--radius-card` there;
  *   - a literal radius (`rounded-[6px]`, `border-radius: 4px`) is its own
  *     number.
  * A role token (`--radius-card`, `--radius-input`, `--radius-badge`,
