@@ -4,6 +4,7 @@ These are changes to `CLAUDE.md` that agents wrote as patch notes because only t
 
 | File | First line |
 | --- | --- |
+| `avatar-swap.md` | # CLAUDE.md patch: the avatar and My Location swapped places (mukoko-dev/mukoko-weather#525) |
 | `campfire-circles-e2e-2026-11-05.md` | # Suggested CLAUDE.md additions (owner, 2026-11-05, later) — apply by hand; agents never edit CLAUDE.md |
 | `claude-md-changes.patch` | diff --git a/CLAUDE.md b/CLAUDE.md |
 | `glm-only.md` | # CLAUDE.md patch note: GLM models only (owner, 2026-11-05) |
