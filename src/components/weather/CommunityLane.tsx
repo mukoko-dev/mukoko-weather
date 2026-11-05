@@ -8,7 +8,7 @@ import {
 } from "@/lib/activities";
 import { CardHitArea } from "@/components/ui/card-hit-area";
 import { fetchSuitabilityRules } from "@/lib/suitability-cache";
-import { getReportTypeInfo } from "@/lib/report-types";
+import { getReportTypeInfo, unverifiedLabel } from "@/lib/report-types";
 import { loadReports } from "@/lib/reports-api";
 import { useAppStore } from "@/lib/store";
 import type { WeatherData } from "@/lib/weather";
@@ -354,6 +354,7 @@ export function CommunityLane({
                     c.count,
                     getReportTypeInfo(c.type)?.label ?? c.type,
                   )}
+                  {unverifiedLabel(c.type) && ` (${unverifiedLabel(c.type)})`}
                 </li>
               ))}
             </ul>

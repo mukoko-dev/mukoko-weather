@@ -16,7 +16,7 @@
 //! - **No client text reaches the prompt.** The Python put the name of the
 //!   place into the prompt after a database lookup, and the raw slug when it
 //!   found none. The Worker takes only a slug (lowercased, `[a-z0-9-]{1,80}`,
-//!   or none) and a report type from a list of 13, and names the place itself
+//!   or none) and a report type from a list of 14, and names the place itself
 //!   ([`place_name`]: the seed catalogue's name, else the name part of a
 //!   `{name}--{cell or map ref}` slug, else the slug's words without a trailing
 //!   hash; "your area" with no slug). Nothing a visitor types can say anything
@@ -64,7 +64,7 @@ pub enum Refusal {
     Body,
     /// `locationSlug` is given but is not a slug.
     Slug,
-    /// `reportType` is not one of the 13 report types.
+    /// `reportType` is not one of the 14 report types.
     ReportType,
 }
 
@@ -88,7 +88,7 @@ pub struct Valid {
     pub report_type: String,
 }
 
-/// `{reportType, locationSlug?}`: one of the 13 report types and, when given,
+/// `{reportType, locationSlug?}`: one of the 14 report types and, when given,
 /// a slug. An empty or null slug is no slug. Any other field is ignored
 /// (never read).
 pub fn validate(body: &Value) -> Result<Valid, Refusal> {
@@ -306,7 +306,7 @@ mod tests {
             assert_eq!(got.max_tokens, sent["maxTokens"].as_u64().unwrap() as u32);
             stored += 1;
         }
-        // All 13 types, and two more places.
+        // Every report type, and two more places.
         assert!(stored >= REPORT_TYPES.len() + 2, "{stored}");
     }
 
@@ -388,6 +388,45 @@ mod tests {
             v,
             json!({"questions": ["How heavy?", "How long?"], "source": "ai"})
         );
+    }
+
+    #[test]
+    fn a_wildfire_report_gets_its_own_prompt_and_fixed_pair() {
+        // Accepted like any other type, with the place named from the slug.
+        let valid = validate(&json!({"locationSlug": "harare", "reportType": "wildfire"}));
+        assert_eq!(valid.unwrap().report_type, "wildfire");
+        let p = prompt("Harare", "wildfire");
+        assert!(
+            p.system.contains("They selected: wildfire."),
+            "{}",
+            p.system
+        );
+        assert_eq!(p.user, "I'm reporting: wildfire");
+        // The fixture holds the case, so the prompt cannot drift unseen.
+        let f = fixture();
+        assert!(f["prompts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["reportType"] == "wildfire" && c["place"] == "Harare"));
+        // When the model cannot answer, the fixed pair: two questions about
+        // what is seen, from the shared vectors.
+        let a = fallback("wildfire");
+        assert_eq!(a.source, Source::Fallback);
+        assert_eq!(
+            a.questions,
+            vec![
+                "What can you see: smoke, flames, or both?",
+                "About how far away is it?"
+            ]
+        );
+        // An answer from the model is cleaned like any other.
+        let m = from_model(
+            "1) Can you see smoke or flames?\n2. How far away is it?",
+            "wildfire",
+        );
+        assert_eq!(m.source, Source::Ai);
+        assert_eq!(m.questions.len(), 2);
     }
 
     #[test]

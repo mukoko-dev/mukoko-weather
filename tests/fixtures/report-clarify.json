@@ -4,6 +4,10 @@
     "commit": "d6abca34c4814c82c74b0566ca7b6f4feb3fc208",
     "source": "api/py/_reports.py clarify_report"
   },
+  "_extended": {
+    "note": "The wildfire prompt case was added by hand when the 14th report type was added (the Python and its generator are deleted): the system prompt is the stored template with the place and the report type substituted, exactly as for every other type, so it is the frost case with the type replaced.",
+    "reportType": "wildfire"
+  },
   "answers": [
     {
       "expected": {
@@ -443,6 +447,20 @@
           }
         ],
         "system": "You are helping a user submit a weather report for Harare. They selected: frost.\n\nAsk 1-2 brief follow-up questions to clarify the severity and specifics of what they're experiencing. Use simple, conversational language.\n\nExamples of good follow-up questions:\n- Rain: \"How heavy is it? Light drizzle, steady rain, or a downpour?\"\n- Wind: \"How strong does the wind feel? Leaves rustling, branches swaying, or trees bending?\"\n- Visibility: \"How far can you see? Across the street, a few blocks, or barely anything?\"\n\nRules:\n- Ask maximum 2 questions\n- Use simple language accessible to all literacy levels\n- Never use emoji\n- Format as a numbered list\n- Keep questions under 15 words each"
+      }
+    },
+    {
+      "place": "Harare",
+      "reportType": "wildfire",
+      "sent": {
+        "maxTokens": 150,
+        "messages": [
+          {
+            "content": "I'm reporting: wildfire",
+            "role": "user"
+          }
+        ],
+        "system": "You are helping a user submit a weather report for Harare. They selected: wildfire.\n\nAsk 1-2 brief follow-up questions to clarify the severity and specifics of what they're experiencing. Use simple, conversational language.\n\nExamples of good follow-up questions:\n- Rain: \"How heavy is it? Light drizzle, steady rain, or a downpour?\"\n- Wind: \"How strong does the wind feel? Leaves rustling, branches swaying, or trees bending?\"\n- Visibility: \"How far can you see? Across the street, a few blocks, or barely anything?\"\n\nRules:\n- Ask maximum 2 questions\n- Use simple language accessible to all literacy levels\n- Never use emoji\n- Format as a numbered list\n- Keep questions under 15 words each"
       }
     },
     {
