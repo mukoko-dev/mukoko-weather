@@ -21,9 +21,9 @@ const SCALE: Record<string, [number, number]> = {
   h3: [30, 1.25],
   h4: [24, 1.3],
   h5: [20, 1.4],
-  h6: [16, 1.4],
+  h6: [17, 1.4],
   "body-lg": [18, 1.6],
-  body: [16, 1.6],
+  body: [17, 1.6],
   "body-sm": [14, 1.5],
   caption: [14, 1.5],
 };
@@ -63,13 +63,9 @@ describe("type-scale tokens alias the Mzizi values", () => {
       const m = css.match(new RegExp(`--text-${name}:\\s*([0-9.]+)rem;`));
       expect(m, `--text-${name} declared`).not.toBeNull();
       expect(parseFloat(m![1]) * 16).toBe(px);
-      if (name !== "body") {
-        const l = css.match(
-          new RegExp(`--text-${name}-leading:\\s*([0-9.]+);`),
-        );
-        expect(l, `--text-${name}-leading declared`).not.toBeNull();
-        expect(parseFloat(l![1])).toBe(leading);
-      }
+      const l = css.match(new RegExp(`--text-${name}-leading:\\s*([0-9.]+);`));
+      expect(l, `--text-${name}-leading declared`).not.toBeNull();
+      expect(parseFloat(l![1])).toBe(leading);
     });
   }
 });

@@ -118,7 +118,7 @@ export function AirQualityDetails({ lat, lon }: Props) {
 
   return (
     <section aria-labelledby="air-quality-heading">
-      <div className="mb-3 flex items-baseline justify-between gap-2">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="air-quality-heading" className="giraffe">
           Air Quality
         </h2>

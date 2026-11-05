@@ -148,7 +148,7 @@ export function StatusDashboard() {
               <StatusDot status={check.status} />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h3 className="font-semibold text-text-primary">
                   {check.name}
                 </h3>
