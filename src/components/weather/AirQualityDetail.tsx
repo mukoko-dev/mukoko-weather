@@ -118,7 +118,7 @@ export function AirQualityDetail({ open, reading, slug, now, onClose }: Props) {
                         {r.name}
                       </span>
                       {r.isMain && (
-                        <span className="ml-2 rounded-[var(--radius-sm)] bg-surface-dim px-1.5 py-0.5 text-xs font-medium text-text-primary">
+                        <span className="ml-2 inline-block whitespace-nowrap rounded-[var(--radius-sm)] bg-surface-dim px-1.5 py-0.5 text-sm font-medium text-text-primary">
                           Main pollutant
                         </span>
                       )}

@@ -4,6 +4,12 @@ import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import { FLIGHT_CATEGORY_PDF } from "@/lib/weather-scales";
 
 // PDF uses inline hex — CSS custom properties are not supported by @react-pdf/renderer
+
+// mzizi-text-exempt-file: the briefing is a printable document, and
+// @react-pdf/renderer sizes its text in points on paper (an A4 page), not in
+// CSS pixels on a screen. The Bundu text floor (14px, stage 2 of #479) is a
+// rule for the interface; the briefing's sizes are the printed-document sizes
+// a pilot reads on paper. Raising its smallest sizes is a follow-up of its own.
 const NAVY = "#1a2744";
 const WHITE = "#ffffff";
 const LIGHT_GRAY = "#f5f7fa";

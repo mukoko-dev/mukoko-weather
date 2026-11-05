@@ -45,7 +45,7 @@ export function ProfileOrganizations({
                 <span className="block truncate font-medium text-text-primary">
                   {org.entityName ?? "Unnamed organization"}
                 </span>
-                <span className="text-xs text-text-secondary">
+                <span className="text-sm text-text-secondary">
                   {roleLabel(org.title, org.role)}
                 </span>
                 <ul
@@ -55,7 +55,7 @@ export function ProfileOrganizations({
                   {org.capabilities.map((cap) => (
                     <li
                       key={cap}
-                      className="rounded-full bg-surface-dim px-2 py-0.5 font-mono text-xs text-text-secondary"
+                      className="rounded-full bg-surface-dim px-2 py-0.5 font-mono text-sm text-text-secondary"
                     >
                       {CAPABILITY_LABELS[cap]}
                     </li>
@@ -66,7 +66,7 @@ export function ProfileOrganizations({
           );
         })}
       </ul>
-      <p className="border-t border-border px-4 py-3 text-xs text-text-secondary">
+      <p className="border-t border-border px-4 py-3 text-sm text-text-secondary">
         These permissions apply to each organization on its own.
       </p>
     </ProfileGroup>

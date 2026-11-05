@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import {
+  CHART_FONT_PX,
   CanvasChart,
   resolveColor,
   type ChartConfig,
@@ -452,7 +453,7 @@ export function TimeSeriesChart({
         grid: { display: false },
         ticks: {
           color: gridColor,
-          font: { size: 11 },
+          font: { size: CHART_FONT_PX },
           maxRotation: 0,
           autoSkip: true,
           maxTicksLimit,
@@ -481,7 +482,7 @@ export function TimeSeriesChart({
               : { color: hexWithAlpha(gridColor, 0.15), drawTicks: false },
           ticks: {
             color: gridColor,
-            font: { size: 11 },
+            font: { size: CHART_FONT_PX },
             ...(cfg.format
               ? { callback: (v: string | number) => cfg.format!(Number(v)) }
               : {}),
@@ -492,7 +493,7 @@ export function TimeSeriesChart({
     } else {
       scales.y = {
         grid: { color: hexWithAlpha(gridColor, 0.15), drawTicks: false },
-        ticks: { color: gridColor, font: { size: 11 } },
+        ticks: { color: gridColor, font: { size: CHART_FONT_PX } },
         border: { display: false },
       };
     }

@@ -278,7 +278,11 @@
   --text-body-lg-leading: 1.6;
   --text-body-sm: 0.875rem; /* 14px */
   --text-body-sm-leading: 1.5;
-  --text-caption: 0.75rem; /* 12px */
+  /* 0.875rem (14px) — the Bundu floor for captions, labels and metadata
+     (Mzizi registry 4.23.0: --fs-caption, 14px at 1.5 leading; it was 12px
+     until stage 2 of #479). Nothing a person reads is set under it:
+     bundu-floor.test.ts scans every size class and CSS declaration in src. */
+  --text-caption: 0.875rem;
   --text-caption-leading: 1.5;
 
   /* Layout rhythm — ONE spacing scale for the location page and every card
@@ -915,6 +919,18 @@
   --radius-3xl: 9999px;
   --radius-4xl: 9999px;
   --spacing-touch: var(--touch-target-min);
+
+  /* The Tailwind text sizes under the floor, raised the way the Mzizi
+     registry raises them (mzizi-tokens-globals.css: "--text-xs: Tailwind
+     default 12px, raised to the 14px caption floor"): text-xs is the caption
+     size and text-sm the small size, both 14px at 1.5 leading, so a size class
+     brought in by a vendored component can never be under the floor. The app's
+     own markup says text-sm; text-xs is kept only so a pasted class still
+     lands on the floor. */
+  --text-xs: var(--text-caption);
+  --text-xs--line-height: var(--text-caption-leading);
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.5;
 
   /* Accordion open/close animations */
   --animate-accordion-down: accordion-down 200ms ease-out;
@@ -1969,7 +1985,7 @@ body {
   /* .oribi — uppercase mono eyebrow label (a small caption above a value or
      heading, e.g. a card's station name or a METAR/TAF title). */
   .oribi {
-    @apply font-mono text-xs uppercase tracking-wide text-text-secondary;
+    @apply font-mono text-sm uppercase tracking-wide text-text-secondary;
   }
 
   .chameleon {
@@ -2863,4 +2879,16 @@ body:has([data-sky-hero])
       transparent 16rem
     );
   }
+}
+
+/* MapLibre's own stylesheet (maplibre-gl.css, loaded with the first map and
+   not in a cascade layer) sets `font: 12px/20px` on every map, which is what
+   its attribution control and any popup inherit. The credits are text a person
+   reads, so they take the caption floor (14px, Mzizi registry 4.23.0; stage 2
+   of #479). Two classes beat its one, whichever stylesheet loads last. */
+.maplibregl-map .maplibregl-ctrl,
+.maplibregl-map .maplibregl-ctrl-attrib,
+.maplibregl-map .maplibregl-popup-content {
+  font-size: var(--text-caption);
+  line-height: var(--text-caption-leading);
 }
