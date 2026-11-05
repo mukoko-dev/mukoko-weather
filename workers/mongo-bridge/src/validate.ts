@@ -27,6 +27,7 @@ export const REPORT_TYPES = [
   "thunderstorm",
   "hail",
   "flooding",
+  "wildfire",
   "strong-wind",
   "clear-skies",
   "cloudy",
@@ -36,6 +37,14 @@ export const REPORT_TYPES = [
   "dust",
   "frost",
 ] as const;
+
+/**
+ * Report types a forecast cannot confirm. A report of one is never stored as
+ * verified, whatever the caller says (`weather_core::community::NEVER_VERIFIED`
+ * decides this first; the bridge repeats it so a mistake on that side cannot
+ * put a "verified" mark on a wildfire).
+ */
+export const NEVER_VERIFIED_REPORT_TYPES = ["wildfire"] as const;
 
 export const SEVERITIES = ["mild", "moderate", "severe"] as const;
 
@@ -387,6 +396,12 @@ export function validateReport(input: unknown): Checked<NewReport> {
   }
   if (typeof verified !== "boolean")
     return err("verified must be true or false");
+  if (
+    verified &&
+    (NEVER_VERIFIED_REPORT_TYPES as readonly string[]).includes(reportType)
+  ) {
+    return err(`A ${reportType} report cannot be verified`);
+  }
   const lat = checkCoordinate("lat", input.lat, 90);
   if (!lat.ok) return lat;
   const lon = checkCoordinate("lon", input.lon, 180);

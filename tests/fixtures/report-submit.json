@@ -4,6 +4,9 @@
     "commit": "4091aa3c69120077c38a753fcd7d98f6927d696b",
     "source": "api/py/_reports.py submit_report"
   },
+  "_extended": {
+    "note": "The refusal text of the unknown-type case lists the allowed types, so it gained 'wildfire' by hand when the 14th report type was added (the Python and its generator are deleted). No other case changed."
+  },
   "cases": [
     {
       "current": {
@@ -339,7 +342,7 @@
       "current": null,
       "expected": {
         "error": {
-          "detail": "Invalid report type. Must be one of: clear-skies, cloudy, dust, flooding, fog, frost, hail, haze, heavy-rain, light-rain, mist, strong-wind, thunderstorm",
+          "detail": "Invalid report type. Must be one of: clear-skies, cloudy, dust, flooding, fog, frost, hail, haze, heavy-rain, light-rain, mist, strong-wind, thunderstorm, wildfire",
           "status": 400
         }
       },
