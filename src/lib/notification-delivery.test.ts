@@ -35,11 +35,8 @@ describe("the delivery channels", () => {
     expect(DELIVERY_BEST_EFFORT).toBe("Delivery is best effort.");
   });
 
-  it("lists Telegram and Campfire, nothing else, as coming soon", () => {
-    expect(COMING_SOON_CHANNELS.map((c) => c.title)).toEqual([
-      "Telegram",
-      "Campfire",
-    ]);
+  it("lists Campfire, nothing else, as coming soon (we build our own messaging, not Telegram)", () => {
+    expect(COMING_SOON_CHANNELS.map((c) => c.title)).toEqual(["Campfire"]);
   });
 });
 
