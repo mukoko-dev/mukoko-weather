@@ -241,6 +241,14 @@ pub fn split_span(start: &str, end: &str, max_days: i64) -> Vec<(String, String)
     chunks
 }
 
+/// The D1 `place_daily` slug a catalogue place's recorded days are read by.
+/// The jobs Worker records a shipped seed under its LEGACY slug, so the
+/// canonical slug the app now uses (`harare--ksy4dd1`, #317) is mapped back;
+/// a spot or a bare coordinate has no D1 rows at all.
+pub fn d1_slug(slug: &str, is_catalogue: bool) -> Option<String> {
+    is_catalogue.then(|| crate::slug_migration::storage_key_slug(slug).to_owned())
+}
+
 /// The coordinate-grid key a bare coordinate's history is stored under
 /// (`weather_cache_key`: 0.05 degree cells, integer arithmetic).
 pub fn cell_key(lat: f64, lon: f64) -> String {
@@ -1033,6 +1041,21 @@ mod tests {
     use super::*;
 
     const FIXTURE: &str = include_str!("../../../../tests/fixtures/history-days.json");
+
+    #[test]
+    fn a_seeds_recorded_days_are_read_by_its_legacy_slug_whichever_spelling_asked() {
+        let canonical = crate::slug_migration::canonical_slug("harare");
+        assert_ne!(canonical, "harare");
+        assert_eq!(d1_slug(canonical, true).as_deref(), Some("harare"));
+        assert_eq!(d1_slug("harare", true).as_deref(), Some("harare"));
+        // A place that is not a shipped seed keeps its own slug.
+        assert_eq!(
+            d1_slug("sembawang-sg", true).as_deref(),
+            Some("sembawang-sg")
+        );
+        // A spot or a bare coordinate has no D1 rows.
+        assert_eq!(d1_slug("west-paddock--kqwy4dd7", false), None);
+    }
 
     #[test]
     fn holdings_are_known_only_when_no_applicable_store_failed() {
