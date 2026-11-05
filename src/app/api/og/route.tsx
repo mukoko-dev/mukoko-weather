@@ -4,6 +4,12 @@ import type { NextRequest } from "next/server";
 
 export const runtime = "edge";
 
+// mzizi-text-exempt-file: this route draws a 1200x630 PNG for link previews,
+// an image with its own pixel grid that the platform scales down, not UI text
+// set in CSS pixels on a screen. The Bundu text floor (14px, stage 2 of #479)
+// is a rule for the interface, so the font sizes below are sized against the
+// artwork, not against the floor.
+
 // ─── In-Memory Rate Limiter ──────────────────────────────────────────────────
 // NOTE: In-memory — per-isolate. Multiple concurrent edge instances may each
 // track the same IP independently. Sufficient for abuse deterrence, not for

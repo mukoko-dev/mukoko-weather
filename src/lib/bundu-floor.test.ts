@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -9,7 +9,8 @@ import { describe, expect, it } from "vitest";
  * 14px between text and its container edge (the inline axis for a control),
  * 7px between adjacent controls, and a 3:1 contrast for a UI part. This guard
  * holds the bottom bar, the map's controls and the hero's icon group to it
- * (stage 1 of #479); the rest of the app follows in the stages that issue lists.
+ * (stage 1 of #479) and every font size in the app to the 14px text floor
+ * (stage 2); the rest of the app follows in the stages that issue lists.
  */
 const root = join(__dirname, "..");
 const read = (p: string) => readFileSync(join(root, p), "utf8");
@@ -302,5 +303,286 @@ describe("the bottom bar and the map keep the floor", () => {
     }
     // The two CSS exemptions (the range thumb's offset) live in globals.css.
     expect(css).toMatch(/mzizi-spacing-exempt:[^*]*centres the 24px thumb/);
+  });
+});
+
+/* ---------------------------------------------------------------------------
+ * The text floor (stage 2 of #479): nothing a person reads is set under 14px.
+ *
+ * Mzizi registry 4.23.0 raised the caption and the small size to 14px; the
+ * Bundu floor is "captions, metadata and secondary text 14px, body 17px". This
+ * stage is the 14px part (the 17px body is a later stage of #479). The scan
+ * below reads every source and style sheet under src (not tests) for a font
+ * size under the floor, and a size that cannot be read from source at all (SVG
+ * text scales with its viewBox, so a 13px label drew at 9px in a phone-width
+ * tile) is refused rather than guessed. Where a size is deliberately under
+ * the floor, a comment says why: `mzizi-text-exempt: <reason>` on the line or
+ * the comment line above it, or `mzizi-text-exempt-file: <reason>` for a file
+ * that is not interface text (an image, a printed page). A bare marker excuses
+ * nothing: the reason is required.
+ * ------------------------------------------------------------------------ */
+
+const TEXT_FLOOR_PX = 14;
+
+/** Every .ts, .tsx and .css file under src that is not a test. */
+function sourceFiles(dir: string = root): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === "node_modules" || entry.name === "__fixtures__") {
+      continue;
+    }
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...sourceFiles(full));
+    else if (
+      /\.(tsx?|css)$/.test(entry.name) &&
+      !/\.test\.tsx?$/.test(entry.name)
+    ) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+/** A CSS length in px, or null when it is relative (em, %) and so unknowable. */
+function lengthPx(value: string, unit: string): number | null {
+  const n = Number(value);
+  if (unit === "px" || unit === "") return n;
+  if (unit === "rem") return n * 16;
+  if (unit === "pt") return (n * 4) / 3;
+  return null;
+}
+
+/** `--text-*` sizes declared in globals.css, in px (leadings are not sizes). */
+const textTokens = new Map<string, number>();
+for (const m of css.matchAll(/--text-([a-z0-9-]+):\s*([\d.]+)(rem|px);/g)) {
+  if (m[1].endsWith("-leading") || m[1].includes("--")) continue;
+  textTokens.set(m[1], Number(m[2]) * (m[3] === "rem" ? 16 : 1));
+}
+
+/** Font sizes under the floor in a source, minus lines with a written reason. */
+function textBelowFloor(source: string): string[] {
+  const fileReason = source.match(/mzizi-text-exempt-file:\s*([^\n]*)/)?.[1];
+  if (/[A-Za-z]{3,}/.test(fileReason ?? "")) return [];
+  const raw = source.split("\n");
+  const code = withoutComments(source).split("\n");
+  const reasoned = (i: number) => {
+    const reason = (line: string | undefined) =>
+      /[A-Za-z]{3,}/.test(line?.match(/mzizi-text-exempt:\s*(.*)/)?.[1] ?? "");
+    return (
+      reason(raw[i]) ||
+      (/^[\s{}]*$/.test(code[i - 1] ?? "x") && reason(raw[i - 1]))
+    );
+  };
+  const rules: Array<[string, RegExp, (m: RegExpMatchArray) => number | null]> =
+    [
+      [
+        "a literal Tailwind size",
+        /(?<![\w-])text-\[(?:length:)?([\d.]+)(px|rem|em|pt|%)\]/g,
+        (m) => lengthPx(m[1], m[2]),
+      ],
+      [
+        "a size token under the floor",
+        /(?<![\w-])text-\[length:var\(--text-([a-z0-9-]+)\)\]/g,
+        (m) => textTokens.get(m[1]) ?? null,
+      ],
+      [
+        "a Tailwind size below xs",
+        /(?<![\w-])text-([0-9])xs(?![\w-])/g,
+        () => 0,
+      ],
+      [
+        "a CSS font-size",
+        /font-size:\s*([\d.]+)(px|rem|em|pt|%)/g,
+        (m) => lengthPx(m[1], m[2]),
+      ],
+      [
+        "a CSS font-size token under the floor",
+        /font-size:\s*var\(--text-([a-z0-9-]+)\)/g,
+        (m) => textTokens.get(m[1]) ?? null,
+      ],
+      [
+        "a font shorthand",
+        /(?<![\w-])font:\s*(?:[a-z0-9-]+\s+){0,3}([\d.]+)(px|rem|pt)\b/g,
+        (m) => lengthPx(m[1], m[2]),
+      ],
+      [
+        "an inline fontSize",
+        /fontSize[=:]\s*\{?\s*(\d[\d.]*)/g,
+        (m) => Number(m[1]),
+      ],
+      [
+        "a canvas font size",
+        /font:\s*\{\s*size:\s*(\d[\d.]*)/g,
+        (m) => Number(m[1]),
+      ],
+      [
+        "a map text-size",
+        /["']text-size["']\s*:\s*(\d[\d.]*)/g,
+        (m) => Number(m[1]),
+      ],
+    ];
+  const out: string[] = [];
+  code.forEach((line, i) => {
+    for (const [what, pattern, size] of rules) {
+      for (const m of line.matchAll(pattern)) {
+        const px = size(m);
+        // null is a relative size or an unknown token: not readable from
+        // source, so not allowed either.
+        if ((px === null || px < TEXT_FLOOR_PX) && !reasoned(i)) {
+          out.push(`line ${i + 1}: ${m[0]} (${what})`);
+        }
+      }
+    }
+    // SVG text is sized in the viewBox's units and scales with the element.
+    if (/<(?:text|tspan)[\s>]/.test(line) && !reasoned(i)) {
+      out.push(`line ${i + 1}: SVG <text> (it scales with its viewBox)`);
+    }
+  });
+  return out;
+}
+
+describe("the Tailwind text sizes and the size tokens are at the floor", () => {
+  it("raises --text-caption to the registry's 14px at 1.5 leading", () => {
+    expect(token("--text-caption")).toBe("0.875rem");
+    expect(token("--text-caption-leading")).toBe("1.5");
+  });
+
+  it("raises text-xs and text-sm to the floor the way the registry does", () => {
+    const theme = css.slice(css.indexOf("@theme inline {"));
+    expect(theme).toContain("--text-xs: var(--text-caption);");
+    expect(theme).toContain(
+      "--text-xs--line-height: var(--text-caption-leading);",
+    );
+    expect(theme).toContain("--text-sm: 0.875rem;");
+    expect(theme).toContain("--text-sm--line-height: 1.5;");
+  });
+
+  it("declares no size token under 14px", () => {
+    expect(textTokens.size).toBeGreaterThan(10);
+    for (const [name, px] of textTokens) {
+      expect(px, `--text-${name}`).toBeGreaterThanOrEqual(TEXT_FLOOR_PX);
+    }
+  });
+
+  it("draws chart text, tooltips and axes at the floor", () => {
+    const chart = read("components/ui/chart.tsx");
+    const px = Number(chart.match(/export const CHART_FONT_PX = (\d+);/)?.[1]);
+    expect(px).toBeGreaterThanOrEqual(TEXT_FLOOR_PX);
+    expect(chart).toContain("ChartJS.defaults.font.size = CHART_FONT_PX;");
+    const series = read("components/weather/charts/TimeSeriesChart.tsx");
+    expect(series.match(/font: \{ size: CHART_FONT_PX \}/g)).toHaveLength(3);
+  });
+
+  it("lifts the credits MapLibre's own stylesheet sets at 12px to the caption token", () => {
+    expect(css).toMatch(
+      /\.maplibregl-map \.maplibregl-ctrl-attrib,[\s\S]*?\{\s*font-size: var\(--text-caption\);/,
+    );
+  });
+});
+
+describe("no source under src sets text under the 14px floor", () => {
+  const files = sourceFiles();
+
+  it("reads the whole app, not a handful of files", () => {
+    expect(files.length).toBeGreaterThan(300);
+  });
+
+  it("holds nothing under the floor without a written reason", () => {
+    const found: string[] = [];
+    for (const file of files) {
+      for (const hit of textBelowFloor(readFileSync(file, "utf8"))) {
+        found.push(`${file.slice(root.length + 1)} ${hit}`);
+      }
+    }
+    expect(found).toEqual([]);
+  });
+
+  it("exempts only the two files that are not interface text", () => {
+    const exempt = files
+      .filter((f) => /mzizi-text-exempt-file:/.test(readFileSync(f, "utf8")))
+      .map((f) => f.slice(root.length + 1))
+      .sort();
+    expect(exempt).toEqual([
+      "app/api/og/route.tsx",
+      "app/aviation/AviationBriefingPDF.tsx",
+    ]);
+  });
+
+  it("explains every exemption with a reason, never a bare marker", () => {
+    for (const file of files) {
+      for (const line of readFileSync(file, "utf8").split("\n")) {
+        const at = line.search(/mzizi-text-exempt(?:-file)?:/);
+        if (at === -1 || /\bmzizi-text-exempt-file:\s*$/.test(line)) continue;
+        expect(line.slice(at), `${file}: ${line.trim()}`).toMatch(
+          /mzizi-text-exempt(?:-file)?:\s*[^]*[A-Za-z]{3,}/,
+        );
+      }
+    }
+  });
+});
+
+describe("the text scan itself (a violation is found; a reason excuses it)", () => {
+  it("finds a literal size, an under-floor token, a CSS size, a canvas size and SVG text", () => {
+    expect(textBelowFloor('<p className="text-[11px]">x</p>')).toHaveLength(1);
+    expect(textBelowFloor('<p className="text-[0.75rem]">x</p>')).toHaveLength(
+      1,
+    );
+    expect(
+      textBelowFloor('<p className="text-[length:0.8em]">x</p>'),
+    ).toHaveLength(1);
+    expect(textBelowFloor('<p className="text-2xs">x</p>')).toHaveLength(1);
+    expect(textBelowFloor(".a { font-size: 13px; }")).toHaveLength(1);
+    expect(textBelowFloor(".a { font: 12px/20px Arial; }")).toHaveLength(1);
+    expect(textBelowFloor("const o = { fontSize: 10 };")).toHaveLength(1);
+    expect(textBelowFloor("ticks: { font: { size: 11 } }")).toHaveLength(1);
+    expect(textBelowFloor('{ "text-size": 12 }')).toHaveLength(1);
+    expect(textBelowFloor('<svg><text x="1">1</text></svg>')).toHaveLength(1);
+  });
+
+  it("finds a token that is under the floor and one that does not exist", () => {
+    expect(textTokens.get("caption")).toBe(14);
+    expect(
+      textBelowFloor('<p className="text-[length:var(--text-nope)]">x</p>'),
+    ).toHaveLength(1);
+  });
+
+  it("lets the floor and everything above it through", () => {
+    for (const ok of [
+      '<p className="text-sm text-xs text-base">x</p>',
+      '<p className="text-[14px] text-[0.875rem] text-[length:var(--text-caption)]">x</p>',
+      '<p className="text-[length:var(--text-nav-label)] text-[color:var(--x)]">x</p>',
+      ".a { font-size: 14px; } .b { font-size: var(--text-body-sm); }",
+      "ticks: { font: { size: CHART_FONT_PX } }",
+    ]) {
+      expect(textBelowFloor(ok), ok).toEqual([]);
+    }
+  });
+
+  it("is excused by a written reason on the line or the line above, and by nothing less", () => {
+    const line = '<p className="text-[11px]">x</p>';
+    expect(
+      textBelowFloor(`${line} // mzizi-text-exempt: a printed legend`),
+    ).toEqual([]);
+    expect(
+      textBelowFloor(`// mzizi-text-exempt: a printed legend\n${line}`),
+    ).toEqual([]);
+    expect(
+      textBelowFloor(`/* mzizi-text-exempt: an image */\n${line}`),
+    ).toEqual([]);
+    expect(textBelowFloor(`// mzizi-text-exempt:\n${line}`)).toHaveLength(1);
+    expect(textBelowFloor(`// mzizi-text-exempt: x\n${line}`)).toHaveLength(1);
+    expect(
+      textBelowFloor(`// mzizi-text-exempt: a reason\n\n${line}`),
+    ).toHaveLength(1);
+    expect(
+      textBelowFloor(`// mzizi-text-exempt-file: a printed page\n${line}`),
+    ).toEqual([]);
+  });
+
+  it("ignores a size named in a comment", () => {
+    expect(textBelowFloor("// was text-[11px] before\nconst a = 1;")).toEqual(
+      [],
+    );
+    expect(textBelowFloor("/* font-size: 12px */")).toEqual([]);
   });
 });

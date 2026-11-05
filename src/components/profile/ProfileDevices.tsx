@@ -171,12 +171,12 @@ export function ProfileDevices() {
                   <span className="block truncate font-medium text-text-primary">
                     {d.label}
                     {d.current && (
-                      <Badge className="ml-2 rounded-full px-2 text-xs">
+                      <Badge className="ml-2 rounded-full px-2 text-sm">
                         This device{standalone ? " · app" : ""}
                       </Badge>
                     )}
                   </span>
-                  <span className="text-xs text-text-secondary">
+                  <span className="text-sm text-text-secondary">
                     {d.current
                       ? "Active now"
                       : now !== null
@@ -191,7 +191,7 @@ export function ProfileDevices() {
                       {chips.map((c) => (
                         <li
                           key={c}
-                          className="rounded-full bg-surface-dim px-2 py-0.5 font-mono text-xs text-text-secondary"
+                          className="rounded-full bg-surface-dim px-2 py-0.5 font-mono text-sm text-text-secondary"
                         >
                           {c}
                         </li>
@@ -199,10 +199,10 @@ export function ProfileDevices() {
                     </ul>
                   )}
                   {hint && (
-                    <p className="mt-1 text-xs text-text-tertiary">{hint}</p>
+                    <p className="mt-1 text-sm text-text-tertiary">{hint}</p>
                   )}
                   {d.current && (
-                    <p className="mt-1 text-xs text-text-tertiary">
+                    <p className="mt-1 text-sm text-text-tertiary">
                       {preferencesSummary({
                         theme,
                         savedLocations,
