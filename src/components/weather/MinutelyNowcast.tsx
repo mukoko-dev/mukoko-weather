@@ -72,7 +72,7 @@ export function MinutelyNowcast({ minutely }: MinutelyNowcastProps) {
 
   return (
     <section aria-labelledby="nowcast-heading" className="baobab">
-      <div className="mb-2 flex items-baseline justify-between gap-2">
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="nowcast-heading" className="giraffe">
           Next hour
         </h2>

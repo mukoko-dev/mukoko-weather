@@ -9,8 +9,9 @@ import { describe, expect, it } from "vitest";
  * 14px between text and its container edge (the inline axis for a control),
  * 7px between adjacent controls, and a 3:1 contrast for a UI part. This guard
  * holds the bottom bar, the map's controls and the hero's icon group to it
- * (stage 1 of #479) and every font size in the app to the 14px text floor
- * (stage 2); the rest of the app follows in the stages that issue lists.
+ * (stage 1 of #479), every font size in the app to the 14px text floor
+ * (stage 2) and body text to the 17px body floor (stage 3); the rest of the
+ * app follows in the stages that issue lists.
  */
 const root = join(__dirname, "..");
 const read = (p: string) => readFileSync(join(root, p), "utf8");
@@ -307,11 +308,13 @@ describe("the bottom bar and the map keep the floor", () => {
 });
 
 /* ---------------------------------------------------------------------------
- * The text floor (stage 2 of #479): nothing a person reads is set under 14px.
+ * The text floor (stages 2 and 3 of #479): nothing a person reads is set under
+ * 14px, and body text is 17px.
  *
  * Mzizi registry 4.23.0 raised the caption and the small size to 14px; the
- * Bundu floor is "captions, metadata and secondary text 14px, body 17px". This
- * stage is the 14px part (the 17px body is a later stage of #479). The scan
+ * Bundu floor is "captions, metadata and secondary text 14px, body 17px". Stage
+ * 2 was the 14px part, stage 3 is the 17px body (the tokens, Tailwind's
+ * text-base and the body element; the second describe below). The scan
  * below reads every source and style sheet under src (not tests) for a font
  * size under the floor, and a size that cannot be read from source at all (SVG
  * text scales with its viewBox, so a 13px label drew at 9px in a phone-width
@@ -323,6 +326,8 @@ describe("the bottom bar and the map keep the floor", () => {
  * ------------------------------------------------------------------------ */
 
 const TEXT_FLOOR_PX = 14;
+/** The body floor (Mzizi registry 4.23.0 `--fs-body`): 17px. */
+const BODY_FLOOR_PX = 17;
 
 /** Every .ts, .tsx and .css file under src that is not a test. */
 function sourceFiles(dir: string = root): string[] {
@@ -359,8 +364,16 @@ for (const m of css.matchAll(/--text-([a-z0-9-]+):\s*([\d.]+)(rem|px);/g)) {
   textTokens.set(m[1], Number(m[2]) * (m[3] === "rem" ? 16 : 1));
 }
 
-/** Font sizes under the floor in a source, minus lines with a written reason. */
-function textBelowFloor(source: string): string[] {
+/**
+ * Font sizes outside what `allowed` accepts (by default: under the 14px
+ * floor), minus lines with a written reason. A size that cannot be read from
+ * source (relative, or an unknown token) is `null` and never allowed.
+ */
+function textBelowFloor(
+  source: string,
+  isBad: (px: number | null) => boolean = (px) =>
+    px === null || px < TEXT_FLOOR_PX,
+): string[] {
   const fileReason = source.match(/mzizi-text-exempt-file:\s*([^\n]*)/)?.[1];
   if (/[A-Za-z]{3,}/.test(fileReason ?? "")) return [];
   const raw = source.split("\n");
@@ -428,7 +441,7 @@ function textBelowFloor(source: string): string[] {
         const px = size(m);
         // null is a relative size or an unknown token: not readable from
         // source, so not allowed either.
-        if ((px === null || px < TEXT_FLOOR_PX) && !reasoned(i)) {
+        if (isBad(px) && !reasoned(i)) {
           out.push(`line ${i + 1}: ${m[0]} (${what})`);
         }
       }
@@ -518,6 +531,123 @@ describe("no source under src sets text under the 14px floor", () => {
         );
       }
     }
+  });
+});
+
+describe("body text is at the 17px body floor (stage 3 of #479)", () => {
+  const theme = css.slice(css.indexOf("@theme inline {"));
+
+  it("sets --text-body, --text-h6 and the body leading the way the registry does", () => {
+    // --fs-body is 17px at --lh-body 1.6; H6 is the body size in a heading weight.
+    expect(token("--text-body")).toBe("1.0625rem");
+    expect(textTokens.get("body")).toBeGreaterThanOrEqual(BODY_FLOOR_PX);
+    expect(textTokens.get("h6")).toBeGreaterThanOrEqual(BODY_FLOOR_PX);
+    expect(Number(token("--text-body-leading"))).toBeGreaterThanOrEqual(
+      Number(token("--leading-floor")),
+    );
+  });
+
+  it("makes Tailwind's text-base the body size, not its own 16px", () => {
+    // 265 uses in the app: the size class is how most body text is written.
+    expect(theme).toContain("--text-base: var(--text-body);");
+    expect(theme).toContain(
+      "--text-base--line-height: var(--text-body-leading);",
+    );
+    expect(theme).not.toMatch(/--text-base:\s*[\d.]+(rem|px)/);
+  });
+
+  it("sets the body element to the body size, so text with no size class is 17px too", () => {
+    // Paragraphs, list items, labels, buttons and inputs name no size and inherit
+    // from <body>; preflight gives controls `font: inherit`.
+    expect(rule("body")).toContain("font-size: var(--text-body);");
+    expect(rule("body")).toContain("line-height: var(--text-body-leading);");
+    expect(rule("footer")).toContain("font-size: var(--text-body);");
+  });
+
+  it("keeps the small sizes the small sizes: the caption, the small size and the nav label stay at 14px", () => {
+    for (const name of ["caption", "body-sm", "nav-label"]) {
+      expect(textTokens.get(name), `--text-${name}`).toBe(TEXT_FLOOR_PX);
+    }
+    expect(theme).toContain("--text-sm: 0.875rem;");
+  });
+
+  it("names no literal size between the caption and the body: a size is one or the other", () => {
+    const between = (px: number | null) =>
+      px !== null && px > TEXT_FLOOR_PX && px < BODY_FLOOR_PX;
+    const found: string[] = [];
+    for (const file of sourceFiles()) {
+      for (const hit of textBelowFloor(readFileSync(file, "utf8"), between)) {
+        found.push(`${file.slice(root.length + 1)} ${hit}`);
+      }
+    }
+    expect(found).toEqual([]);
+  });
+
+  it("finds a 15px or 16px size in the scan, and lets 14px, 17px and 18px through", () => {
+    const between = (px: number | null) =>
+      px !== null && px > TEXT_FLOOR_PX && px < BODY_FLOOR_PX;
+    for (const bad of [
+      '<p className="text-[15px]">x</p>',
+      '<p className="text-[1rem]">x</p>',
+      ".a { font-size: 16px; }",
+      ".a { font-size: 0.95rem; }",
+    ]) {
+      expect(textBelowFloor(bad, between), bad).toHaveLength(1);
+    }
+    for (const ok of [
+      '<p className="text-[14px] text-[17px] text-[1.125rem] text-base">x</p>',
+      ".a { font-size: 17px; } .b { font-size: var(--text-body); }",
+    ]) {
+      expect(textBelowFloor(ok, between), ok).toEqual([]);
+    }
+    expect(
+      textBelowFloor(
+        "// mzizi-text-exempt: a measured badge\n.a { font-size: 16px; }",
+        between,
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("the 17px body lets its boxes give (stage 3 of #479; found in a real browser at 340, 375, 393 and 1280px)", () => {
+  it("lets a title row wrap, so a note or link beside a title drops below it instead of squeezing it", () => {
+    for (const file of [
+      "components/ui/section-header.tsx",
+      "components/weather/AirQualityMapCard.tsx",
+      "components/weather/map/MapPreview.tsx",
+      "components/weather/MinutelyNowcast.tsx",
+      "components/weather/charts/ModelComparisonChart.tsx",
+      "components/weather/AirQualityDetails.tsx",
+    ]) {
+      expect(read(file), file).toMatch(
+        /flex flex-wrap items-(center|baseline)/,
+      );
+    }
+  });
+
+  it("puts the icon over the label on the report type buttons on a narrow phone, so Thunderstorm fits", () => {
+    const modal = read("components/weather/reports/WeatherReportModal.tsx");
+    expect(modal).toContain("max-[390px]:flex-col");
+    expect(modal).toContain("max-[390px]:text-center");
+  });
+
+  it("lets a status row's badge drop under the service name", () => {
+    expect(read("app/status/StatusDashboard.tsx")).toContain(
+      "flex flex-wrap items-center gap-2",
+    );
+  });
+
+  it("gives the forecast day column a minimum, not a fixed width, and the cloud figures an auto-fit grid", () => {
+    expect(read("components/weather/DailyForecast.tsx")).toContain(
+      "min-w-10 shrink-0 flex-col items-center sm:min-w-12",
+    );
+    expect(read("components/weather/AviationWeather.tsx")).toContain(
+      "grid-cols-[repeat(auto-fit,minmax(5.5rem,1fr))]",
+    );
+  });
+
+  it("lets inline code break anywhere: the page clips sideways overflow, so a long id list was cut off", () => {
+    expect(rule(".termite")).toContain("[overflow-wrap:anywhere]");
   });
 });
 

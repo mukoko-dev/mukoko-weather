@@ -208,7 +208,7 @@ export function WeatherReportModal() {
                     type="button"
                     onClick={() => handleTypeSelect(type.id)}
                     disabled={loading}
-                    className="flex items-center gap-2.5 rounded-[var(--radius-button)] border border-border bg-surface-card px-3 py-3 text-left text-base transition-colors hover:bg-surface-dim hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[var(--touch-target-min)] disabled:opacity-50"
+                    className="flex items-center gap-2.5 rounded-[var(--radius-button)] border border-border bg-surface-card px-3 py-3 text-left text-base transition-colors max-[390px]:flex-col max-[390px]:justify-center max-[390px]:gap-[var(--gap-floor)] max-[390px]:text-center hover:bg-surface-dim hover:border-primary/30 focus-visible:outline-2 focus-visible:outline-primary min-h-[var(--touch-target-min)] disabled:opacity-50"
                   >
                     <Icon size={20} className="shrink-0 text-text-secondary" />
                     <span className="text-text-primary font-medium">
