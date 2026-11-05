@@ -74,15 +74,25 @@ pub const MAX_ACTIVITIES: usize = 5;
 /// function calling and low-effort reasoning). The Workers' `AI_MODEL` var overrides it.
 pub const DEFAULT_MODEL: &str = "@cf/zai-org/glm-5.3-flash";
 
-/// Only Workers AI models (`@cf/…`, open weights) are allowed, so the gateway
-/// can never be pointed at a closed third-party model by configuration.
+/// Every id of the one model family the platform runs: Z.ai GLM on Workers AI
+/// (owner, 2026-11-05: "the Shamwari AI and the AI we use should only use GLM
+/// models").
+pub const GLM_PREFIX: &str = "@cf/zai-org/glm-";
+
+/// Only GLM models (`@cf/zai-org/glm-…`) are allowed, so the gateway can never
+/// be pointed at any other model, open or closed, by configuration or by a
+/// caller. The name after the vendor is one path segment of letters, digits,
+/// `.`, `_` and `-`: an id such as `@cf/zai-org/glm-x/../../meta/llama` is not
+/// a GLM model and is refused.
 pub fn allowed_model(model: &str) -> bool {
     let m = model.trim();
-    m.starts_with("@cf/")
-        && m.len() > 4
-        && m.len() <= 120
-        && m.bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b"@/-_.:".contains(&b))
+    m.len() <= 120
+        && m.strip_prefix(GLM_PREFIX).is_some_and(|rest| {
+            !rest.is_empty()
+                && rest
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
+        })
 }
 
 /// One chat turn as the app sends it.
@@ -208,14 +218,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn models_must_be_open_weights() {
+    fn only_glm_models_are_allowed() {
         assert!(allowed_model(DEFAULT_MODEL));
-        assert!(allowed_model("@cf/qwen/qwen3-30b-a3b-fp8"));
-        assert!(allowed_model("@cf/meta/llama-3.3-70b-instruct-fp8-fast"));
+        assert!(allowed_model("@cf/zai-org/glm-5.3"));
+        assert!(allowed_model("  @cf/zai-org/glm-5.3-flash "));
+        // Every other family is refused, open weights or not.
+        assert!(!allowed_model("@cf/qwen/qwen3-30b-a3b-fp8"));
+        assert!(!allowed_model("@cf/meta/llama-3.3-70b-instruct-fp8-fast"));
+        assert!(!allowed_model("@cf/meta/llama-guard-3-8b"));
         assert!(!allowed_model("gpt-4o"));
         assert!(!allowed_model("anthropic/claude"));
+        assert!(!allowed_model("openai/gpt-5.5"));
+        assert!(!allowed_model("workers-ai/@cf/zai-org/glm-5.3"));
+        // Shapes that only look like GLM.
         assert!(!allowed_model("@cf/"));
-        assert!(!allowed_model("@cf/x y"));
+        assert!(!allowed_model("@cf/zai-org/"));
+        assert!(!allowed_model("@cf/zai-org/glm-"));
+        assert!(!allowed_model("@cf/zai-org/glm"));
+        assert!(!allowed_model("@cf/other/glm-5.3"));
+        assert!(!allowed_model("@cf/zai-org/glm-x y"));
+        assert!(!allowed_model("@cf/zai-org/glm-x/../../meta/llama-3.3"));
+        assert!(!allowed_model("@cf/zai-org/glm-5.3:latest"));
+        assert!(!allowed_model(&format!("{GLM_PREFIX}{}", "x".repeat(120))));
     }
 
     fn t(role: &str, c: &str) -> Turn {

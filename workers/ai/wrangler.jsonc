@@ -13,8 +13,9 @@
 // Names only, never values:
 //   secrets: NYUCHI_API_KEY (internal key, `ai` scope), from the Secrets
 //            Store as MUKOKO_WEATHER_NYUCHI_API_KEY (below)
-//   vars:    NYUCHI_API_URL, AI_MODEL (a @cf/ model; Z.ai GLM, a reasoning
-//            model with function calling)
+//   vars:    NYUCHI_API_URL, AI_MODEL (a @cf/zai-org/glm-* model only: GLM is the
+//            one model family the platform runs; a reasoning model
+//            with function calling)
 // OWNER: replace the placeholder ids below with the created resources'
 // ids (workers/README.md, "Owner steps").
 {
