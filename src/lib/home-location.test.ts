@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { ipFallbackLocation, snapIpCoord } from "./home-location";
 import { parseSmartSlug } from "./smart-slug";
+import { canonicalSlug } from "./slug-migration";
 
 describe("ipFallbackLocation — home seed for visitors outside the stored geography", () => {
   it("gives a London visitor London, not an empty chooser", () => {
@@ -20,7 +21,7 @@ describe("ipFallbackLocation — home seed for visitors outside the stored geogr
 
   it("still uses a nearby shipped seed in the visitor's own country", () => {
     const loc = ipFallbackLocation(-17.85, 31.06, "ZW", "Harare");
-    expect(loc!.slug).toBe("harare");
+    expect(loc!.slug).toBe(canonicalSlug("harare"));
   });
 
   it("never borrows a seed across a border", () => {

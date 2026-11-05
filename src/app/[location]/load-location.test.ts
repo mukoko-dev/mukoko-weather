@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import type { LocationDoc } from "@/lib/db";
+import { canonicalSlug } from "@/lib/slug-migration";
 
 vi.mock("@/lib/db", () => ({ getLocationFromDb: vi.fn() }));
 
@@ -15,7 +16,8 @@ describe("resolveLocationForPage: a shipped place never waits and never 404s (#4
         throw new Error("MongoServerSelectionError");
       });
       const loc = await resolveLocationForPage(slug, resolve, SHORT);
-      expect(loc?.slug).toBe(slug);
+      // The page carries the canonical slug of a shipped place (#317).
+      expect(loc?.slug).toBe(canonicalSlug(slug));
       // No lookup is made for a place the app ships.
       expect(resolve).not.toHaveBeenCalled();
     },
@@ -28,7 +30,7 @@ describe("resolveLocationForPage: a shipped place never waits and never 404s (#4
       () => new Promise<LocationDoc | null>(() => undefined),
       60_000,
     );
-    expect(loc?.slug).toBe("harare");
+    expect(loc?.slug).toBe(canonicalSlug("harare"));
     expect(Date.now() - started).toBeLessThan(500);
   });
 

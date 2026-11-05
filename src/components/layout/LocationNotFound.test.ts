@@ -11,6 +11,7 @@ import { resolve } from "path";
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { canonicalSlug } from "@/lib/slug-migration";
 
 const mockLocations = vi.fn();
 vi.mock("@/lib/db", () => ({
@@ -80,7 +81,7 @@ describe("LocationNotFound — server-rendered HTML", () => {
     expect(html).toMatch(
       /<h1[^>]*id="not-found-heading"[^>]*>Location not found<\/h1>/,
     );
-    expect(html).toContain('href="/harare"');
+    expect(html).toContain(`href="/${canonicalSlug("harare")}"`);
     expect(html).toMatch(/class="kudu"[^>]*>Browse locations/);
   });
 

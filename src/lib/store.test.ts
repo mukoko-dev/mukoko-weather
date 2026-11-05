@@ -14,6 +14,7 @@ import {
   type ThemePreference,
   type ShamwariContext,
 } from "./store";
+import { canonicalSlug as c } from "./slug-migration";
 
 // Mock RxDB bridge to prevent IndexedDB access in tests
 vi.mock("./rxdb/bridge", () => ({
@@ -92,12 +93,12 @@ describe("selectedLocation", () => {
 
   it("updates via setSelectedLocation", () => {
     useAppStore.getState().setSelectedLocation("bulawayo");
-    expect(useAppStore.getState().selectedLocation).toBe("bulawayo");
+    expect(useAppStore.getState().selectedLocation).toBe(c("bulawayo"));
   });
 
   it("can be set to any slug string", () => {
     useAppStore.getState().setSelectedLocation("victoria-falls");
-    expect(useAppStore.getState().selectedLocation).toBe("victoria-falls");
+    expect(useAppStore.getState().selectedLocation).toBe(c("victoria-falls"));
   });
 });
 
@@ -153,8 +154,10 @@ describe("homeLocation", () => {
 
   it("setHomeLocation sets the slug and persists it to RxDB", () => {
     useAppStore.getState().setHomeLocation("harare");
-    expect(useAppStore.getState().homeLocation).toBe("harare");
-    expect(updatePreferences).toHaveBeenCalledWith({ homeLocation: "harare" });
+    expect(useAppStore.getState().homeLocation).toBe(c("harare"));
+    expect(updatePreferences).toHaveBeenCalledWith({
+      homeLocation: c("harare"),
+    });
   });
 
   it("setHomeLocation(null) clears the home and persists null", () => {
@@ -192,12 +195,18 @@ describe("savedLocations", () => {
 
   it("saveLocation adds a slug", () => {
     useAppStore.getState().saveLocation("bulawayo");
-    expect(useAppStore.getState().savedLocations).toEqual(["bulawayo"]);
+    expect(useAppStore.getState().savedLocations).toEqual([c("bulawayo")]);
   });
 
   it("saveLocation is a no-op when slug already saved", () => {
-    useAppStore.setState({ savedLocations: ["bulawayo"] });
+    useAppStore.setState({ savedLocations: [c("bulawayo")] });
     useAppStore.getState().saveLocation("bulawayo");
+    expect(useAppStore.getState().savedLocations).toEqual([c("bulawayo")]);
+    useAppStore.getState().saveLocation(c("bulawayo"));
+    expect(useAppStore.getState().savedLocations).toEqual([c("bulawayo")]);
+    // A legacy spelling already saved counts as saved too.
+    useAppStore.setState({ savedLocations: ["bulawayo"] });
+    useAppStore.getState().saveLocation(c("bulawayo"));
     expect(useAppStore.getState().savedLocations).toEqual(["bulawayo"]);
   });
 
@@ -231,9 +240,9 @@ describe("savedLocations", () => {
     useAppStore.getState().saveLocation("bulawayo");
     useAppStore.getState().saveLocation("mutare");
     expect(useAppStore.getState().savedLocations).toEqual([
-      "harare",
-      "bulawayo",
-      "mutare",
+      c("harare"),
+      c("bulawayo"),
+      c("mutare"),
     ]);
   });
 
@@ -243,7 +252,7 @@ describe("savedLocations", () => {
     useAppStore.getState().saveLocation("gweru");
     expect(updatePreferences).toHaveBeenCalledWith(
       expect.objectContaining({
-        savedLocations: expect.arrayContaining(["gweru"]),
+        savedLocations: expect.arrayContaining([c("gweru")]),
       }),
     );
   });
@@ -421,11 +430,14 @@ describe("locationLabels", () => {
 
   it("removeLocation also cleans up the label", () => {
     useAppStore.setState({
-      savedLocations: ["harare", "bulawayo"],
-      locationLabels: { harare: "Home", bulawayo: "Work" },
+      savedLocations: [c("harare"), c("bulawayo")],
+      locationLabels: { [c("harare")]: "Home", [c("bulawayo")]: "Work" },
     });
     useAppStore.getState().removeLocation("harare");
-    expect(useAppStore.getState().locationLabels).toEqual({ bulawayo: "Work" });
+    expect(useAppStore.getState().savedLocations).toEqual([c("bulawayo")]);
+    expect(useAppStore.getState().locationLabels).toEqual({
+      [c("bulawayo")]: "Work",
+    });
   });
 
   it("setLocationLabel triggers RxDB persistence", async () => {

@@ -5,13 +5,33 @@ import {
   localPlaceForSlug,
   spotLocation,
 } from "./local-place";
+import { canonicalSlug } from "./slug-migration";
 import { buildSmartSlug } from "./smart-slug";
 
 describe("localPlaceForSlug: the places a slug names with no lookup", () => {
-  it("is the shipped place itself, for every shipped slug", () => {
+  it("is the shipped place itself, under its canonical slug, for every shipped slug (#317)", () => {
     for (const loc of LOCATIONS) {
-      expect(localPlaceForSlug(loc.slug), loc.slug).toBe(loc);
+      const canonical = canonicalSlug(loc.slug);
+      expect(localPlaceForSlug(loc.slug), loc.slug).toEqual({
+        ...loc,
+        slug: canonical,
+      });
+      // The canonical slug is a spot by grammar, but names the seed: it is
+      // the seed itself (its own province, tags and height), never a bare
+      // coordinate.
+      expect(localPlaceForSlug(canonical), canonical).toBe(
+        localPlaceForSlug(loc.slug),
+      );
     }
+  });
+
+  it("a canonical seed slug keeps the seed's own region, height and tags", () => {
+    const place = localPlaceForSlug(canonicalSlug("bulawayo"))!;
+    expect(place.province).toBe("Bulawayo");
+    expect(place.tags).toContain("city");
+    expect(place.regionApproximate).toBeUndefined();
+    expect(place.elevationApproximate).toBeUndefined();
+    expect(place.source).not.toBe("geolocation");
   });
 
   it("decodes a spot from its own slug: coordinate, name, no measured height", () => {

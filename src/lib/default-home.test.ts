@@ -8,6 +8,7 @@ import {
 } from "./default-home";
 import { LOCATIONS } from "./locations";
 import { suggestPresetSlugs, visiblePresetSlugs } from "./location-presets";
+import { canonicalSlug } from "./slug-migration";
 import { pagerSequence } from "./location-pager";
 
 const read = (rel: string) => readFileSync(resolve(__dirname, rel), "utf-8");
@@ -16,7 +17,8 @@ describe("the default load is Harare, never a chooser (#414)", () => {
   it("the default is the shipped Harare seed, so it renders without a lookup", () => {
     const loc = defaultHomeLocation();
     expect(DEFAULT_HOME_SLUG).toBe("harare");
-    expect(loc.slug).toBe("harare");
+    // The page carries the canonical slug; the seed list keys on the legacy one.
+    expect(loc.slug).toBe(canonicalSlug("harare"));
     expect(loc.country).toBe("ZW");
     expect(LOCATIONS.some((l) => l.slug === "harare")).toBe(true);
     expect(Number.isFinite(loc.lat) && Number.isFinite(loc.lon)).toBe(true);
@@ -33,7 +35,8 @@ describe("the default load is Harare, never a chooser (#414)", () => {
   });
 
   it("a visitor who has saved nothing is suggested exactly those three, in that order", () => {
-    expect(suggestPresetSlugs(null)).toEqual([...DEFAULT_PAGER_SLUGS]);
+    const canonical = DEFAULT_PAGER_SLUGS.map(canonicalSlug);
+    expect(suggestPresetSlugs(null)).toEqual(canonical);
     expect(
       visiblePresetSlugs({
         anchor: null,
@@ -41,7 +44,7 @@ describe("the default load is Harare, never a chooser (#414)", () => {
         saved: [],
         current: null,
       }),
-    ).toEqual([...DEFAULT_PAGER_SLUGS]);
+    ).toEqual(canonical);
     // The bottom nav pager: My Location first, then the three.
     expect(
       pagerSequence(
@@ -53,7 +56,7 @@ describe("the default load is Harare, never a chooser (#414)", () => {
           current: null,
         }),
       ),
-    ).toEqual(["/", "/harare", "/nairobi-ke", "/lagos-ng"]);
+    ).toEqual(["/", ...canonical.map((slug) => `/${slug}`)]);
   });
 });
 

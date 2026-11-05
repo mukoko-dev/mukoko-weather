@@ -53,6 +53,7 @@ import {
   type ParsedSmartSlug,
 } from "./smart-slug";
 import { nearestWithin } from "./geo";
+import { CANONICAL_TO_LEGACY, canonicalSlug } from "./slug-migration";
 import { fetchWorkerPlace, looksLikePlaceSlug } from "./worker-place";
 import { TIMED_OUT, withTimeout } from "./with-timeout";
 import type { PlaceRef, SpotRef } from "./place-ref";
@@ -309,6 +310,9 @@ export async function adaptPlacesGeoToLocationDoc(
 export function adaptSeedToLocationDoc(seed: WeatherLocation): AdaptedLocation {
   return {
     ...seed,
+    // The page and every link carry the canonical slug; `_id` keeps the
+    // legacy one (it is the durable-data identity, never shown).
+    slug: canonicalSlug(seed.slug),
     _id: `seed:${seed.slug}`,
     source: seed.source ?? "seed",
     updatedAt: new Date(),
@@ -588,6 +592,18 @@ async function resolveSpotSlug(
 /** placesGeo platform slugs: `<slugified-name>-<6 hex>` (see upsert_placesgeo_city). */
 export const PLATFORM_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*-[0-9a-f]{6}$/;
 
+/**
+ * `loc` with its `slug` replaced by the canonical one when it is a shipped
+ * seed (#317). ONLY a slug in the pinned table moves: a community, platform or
+ * Nyuchi place (`mombasa-ke`, `harare-35c223`) keeps its slug, because its
+ * stored history, reports, country, province and tags are found by that slug
+ * and a `{name}--{geohash}` spot would not reach them.
+ */
+function withCanonicalSlug(loc: AdaptedLocation): AdaptedLocation {
+  const slug = canonicalSlug(loc.slug);
+  return slug === loc.slug ? loc : { ...loc, slug };
+}
+
 async function resolveFromPlaces(
   slug: string,
   options: ResolveOptions = {},
@@ -707,9 +723,12 @@ async function resolveFromPlaces(
   return adaptPlacesGeoToLocationDoc(matches[0], { cleanSlug: slug, seed });
 }
 
-/** The shipped seed place for a slug, adapted, or null (no lookup, no I/O). */
+/**
+ * The shipped seed place for a slug (its legacy slug or its canonical one),
+ * adapted, or null (no lookup, no I/O). The result's `slug` is canonical.
+ */
 export function seedLocationForSlug(slug: string): AdaptedLocation | null {
-  const seed = SLUG_INDEX.get(slug);
+  const seed = SLUG_INDEX.get(CANONICAL_TO_LEGACY.get(slug) ?? slug);
   return seed ? adaptSeedToLocationDoc(seed) : null;
 }
 
@@ -723,7 +742,9 @@ export const DB_LOOKUP_TOTAL_MS = 8_000;
 
 /**
  * Canonical lookup for a URL slug: the stored geography, plus what the app can
- * always answer without it (#414).
+ * always answer without it (#414). The place it returns carries its CANONICAL
+ * slug (`{name}--{ref}`, #317); a requested slug that differs from it is the
+ * signal to redirect (the proxy does it, 308).
  *
  * 1. The stored geography (`resolveFromPlaces`). On the render path its first
  *    wait is {@link ResolveOptions.dbTimeoutMs}: a hung or failing cluster
@@ -748,6 +769,23 @@ export async function resolveLocationSlug(
   options: ResolveOptions = {},
 ): Promise<AdaptedLocation | null> {
   if (!slug) return null;
+  // A canonical seed slug is a spot by grammar, but it names a shipped seed:
+  // resolve it as the seed (its own name, province, tags, elevation) rather
+  // than as a bare coordinate, then hand back the canonical slug (#317).
+  const legacy = CANONICAL_TO_LEGACY.get(slug);
+  const found = await resolveLocationSlugAsRequested(legacy ?? slug, options);
+  return found ? withCanonicalSlug(found) : null;
+}
+
+/**
+ * The resolution itself, for the slug as the stores know it (a shipped seed
+ * under its legacy slug). {@link resolveLocationSlug} maps in and out of
+ * canonical form around it.
+ */
+async function resolveLocationSlugAsRequested(
+  slug: string,
+  options: ResolveOptions,
+): Promise<AdaptedLocation | null> {
   const {
     strict = false,
     dbTimeoutMs = DB_LOOKUP_TIMEOUT_MS,

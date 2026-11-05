@@ -7,6 +7,7 @@
  */
 
 import { weatherCodeToInfo } from "@/lib/weather";
+import { locationPath } from "./slug-migration";
 
 /** Fauna class (globals.css `.oryx-*`) that paints a card's condition sky. */
 export type OryxSky =
@@ -330,7 +331,7 @@ export function buildLocationList(
 
 /** Href for a card: `/` for the current location, `/{slug}` otherwise. */
 export function cardHref(entry: LocationListEntry): string {
-  return entry.isCurrent ? "/" : `/${entry.slug}`;
+  return entry.isCurrent ? "/" : locationPath(entry.slug);
 }
 
 // ---------------------------------------------------------------------------
