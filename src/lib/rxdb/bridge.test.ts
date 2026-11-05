@@ -77,6 +77,14 @@ function makeCallbacks(overrides?: Partial<BridgeCallbacks>): BridgeCallbacks {
       homeLocation: null,
       hiddenPresetSlugs: [],
       presetAnchor: null,
+      notificationPrefs: {
+        frost: true,
+        lightning: true,
+        wildfire: true,
+        flooding: true,
+        quietStart: null,
+        quietEnd: null,
+      },
     })),
     ...overrides,
   };
@@ -264,6 +272,14 @@ describe("bridge — initRxDBBridge", () => {
         homeLocation: "harare",
         hiddenPresetSlugs: [],
         presetAnchor: null,
+        notificationPrefs: {
+          frost: true,
+          lightning: true,
+          wildfire: true,
+          flooding: true,
+          quietStart: null,
+          quietEnd: null,
+        },
       })),
     });
 
@@ -311,6 +327,32 @@ describe("bridge — updatePreferences", () => {
     expect(mockPatch).toHaveBeenCalledWith(
       expect.objectContaining({ theme: "dark", updatedAt: expect.any(Number) }),
     );
+  });
+
+  it("prefers the conflict-safe incrementalPatch, so two quick writes both land", async () => {
+    const incrementalPatch = vi.fn().mockResolvedValue(undefined);
+    mockFindOneExec.mockResolvedValue({ patch: mockPatch, incrementalPatch });
+
+    const { updatePreferences, getDeviceId } = await import("./bridge");
+    getDeviceId();
+    await updatePreferences({
+      notificationPrefs: {
+        frost: false,
+        lightning: true,
+        wildfire: true,
+        flooding: true,
+        quietStart: 21,
+        quietEnd: 5,
+      },
+    });
+
+    expect(incrementalPatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        notificationPrefs: expect.objectContaining({ frost: false }),
+        updatedAt: expect.any(Number),
+      }),
+    );
+    expect(mockPatch).not.toHaveBeenCalled();
   });
 
   it("upserts new doc when none exists", async () => {

@@ -57,6 +57,10 @@ export type AnalyticsEvents = {
       | "pwa_install_accepted"
       | "pwa_install_dismissed";
   };
+  /** User switched an alert kind (frost, lightning, wildfire, flooding) on or off */
+  alert_kind_toggled: { kind: string; enabled: boolean };
+  /** User started a community report from an alert or the empty list */
+  alert_report_started: { kind: string };
   /** User opened a modal */
   modal_opened: {
     modal:
@@ -64,7 +68,8 @@ export type AnalyticsEvents = {
       | "saved-locations"
       | "weather-report"
       | "pwa_install"
-      | "activities";
+      | "activities"
+      | "notifications";
   };
 };
 

@@ -61,5 +61,9 @@ export function weatherMapHref(slug: string | null): string {
   return slug ? `/${slug}/map` : "/explore";
 }
 
-/** What the bell shows (there are no notifications yet). */
-export const NOTIFICATIONS_EMPTY_TEXT = "No notifications yet";
+/**
+ * The name of the notifications entry point: the header's bell and the phone
+ * menu's row both open the notifications centre (alerts for your places and
+ * their settings, `components/notifications`) and call themselves this.
+ */
+export const NOTIFICATIONS_LABEL = "Notifications";

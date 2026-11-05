@@ -113,6 +113,11 @@ const ALLOWED_EXCEPTIONS: Record<string, { count: number; reason: string }> = {
     count: 1,
     reason: "the one selectable radio row (.bushbuck) shared by MyWeatherModal",
   },
+  "src/components/weather/ToggleRow.tsx": {
+    count: 1,
+    reason:
+      "the one on/off switch row (.bushbuck, role=switch) shared by the notification settings — a settings-list row, not a pill",
+  },
   "src/components/weather/reports/WeatherReportModal.tsx": {
     count: 2,
     reason: "report-type tiles and severity segmented options (wizard)",
