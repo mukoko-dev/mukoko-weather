@@ -67,6 +67,7 @@ describe("feature-flags", () => {
         "model_map_layers",
         "apple_weatherkit",
         "couch_sync",
+        "web_push",
         "vector_search",
         "multi_language",
       ];
@@ -95,6 +96,9 @@ describe("feature-flags", () => {
       // Not offered until Gwaihir serves it and the owner has confirmed the
       // Developer Program terms: a picker entry that does nothing is a lie.
       expect(FLAGS.apple_weatherkit).toBe(false);
+      // Web push ships dark until the alert service is live (#289): the
+      // notification settings say "Not switched on yet" and offer no switch.
+      expect(FLAGS.web_push).toBe(false);
     });
   });
 

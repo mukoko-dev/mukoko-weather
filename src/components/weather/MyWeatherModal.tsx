@@ -45,6 +45,7 @@ import { ForecastCredit } from "@/components/ui/forecast-credit";
 import { t } from "@/lib/i18n";
 import { Spinner } from "@/components/ui/spinner";
 import { SelectRow } from "./SelectRow";
+import { prefsSummary } from "@/lib/notification-prefs";
 import { navigateToPlace } from "@/lib/place-bus";
 import { locationPath } from "@/lib/slug-migration";
 import {
@@ -827,6 +828,9 @@ const THEME_OPTIONS: {
 function SettingsTab() {
   const theme = useAppStore((s) => s.theme);
   const setTheme = useAppStore((s) => s.setTheme);
+  const closeMyWeather = useAppStore((s) => s.closeMyWeather);
+  const openNotifications = useAppStore((s) => s.openNotifications);
+  const notificationPrefs = useAppStore((s) => s.notificationPrefs);
 
   return (
     <div className="p-4">
@@ -867,6 +871,24 @@ function SettingsTab() {
             </div>
           </SelectRow>
         ))}
+      </div>
+
+      <div className="mt-6">
+        <h4 className="giraffe mb-1">Notifications</h4>
+        <p className="mb-3 text-base text-text-tertiary">
+          Frost, lightning, wildfire and flooding alerts for your places (
+          {prefsSummary(notificationPrefs)}).
+        </p>
+        <Button
+          variant="outline"
+          onClick={() => {
+            // One dialog at a time: close this one, then open the settings.
+            closeMyWeather();
+            openNotifications("settings");
+          }}
+        >
+          Notification settings
+        </Button>
       </div>
 
       <ModelSelector />

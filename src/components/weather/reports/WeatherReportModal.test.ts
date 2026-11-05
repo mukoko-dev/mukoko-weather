@@ -59,19 +59,38 @@ describe("3-step wizard flow", () => {
   });
 
   it("asks the Worker for the follow-up questions, never /api/py", () => {
-    expect(source).toContain('postWorker(\n        "reports/clarify"');
+    // One helper asks, for the type picked in the wizard and for a type the
+    // wizard was opened on (an alert's "Report flooding").
+    expect(source).toContain('postWorker(\n      "reports/clarify"');
     expect(source).toContain("CLARIFY_TIMEOUT_MS");
     expect(source).toContain("clarifyQuestions(await res.json())");
     expect(source).not.toContain("/api/py");
+    expect(source.match(/"reports\/clarify"/g)).toHaveLength(1);
   });
 
   it("carries on without questions when the request fails", () => {
-    // Clarification is optional: a refusal or a network error still moves the
-    // wizard to the next step.
-    expect(source).toMatch(/catch \{[^}]*optional/);
+    // Clarification is optional: a refusal or a network error gives no
+    // questions, and the wizard still moves to the next step.
+    expect(source).toMatch(/catch \{\s*return \[\];/);
     expect(source).toMatch(
-      /finally \{\s*setLoading\(false\);\s*setStep\("clarify"\)/,
+      /setQuestions\(await fetchQuestions\(locationSlug, typeId\)\);\s*setLoading\(false\);\s*setStep\("clarify"\)/,
     );
+  });
+
+  it("can open on a report type and a place chosen by an alert", () => {
+    // Read once, at mount, from the store; an unknown type is ignored.
+    expect(source).toContain("useAppStore.getState().reportPreset");
+    expect(source).toContain("getReportTypeInfo(preset.reportType)");
+    expect(source).toContain(
+      'useState<Step>(opened.type ? "clarify" : "select")',
+    );
+    expect(source).toContain(
+      "const locationSlug = opened.slug ?? selectedLocation;",
+    );
+    // The report, the clarify call and the kept list all use the alert's place.
+    expect(source).toContain("locationSlug,\n          reportType,");
+    expect(source).toContain("forgetReports(locationSlug)");
+    expect(source).not.toMatch(/forgetReports\(selectedLocation\)/);
   });
 
   it("submits the report to the Worker's POST /v1/reports and reads its refusal", () => {

@@ -13,6 +13,10 @@
 
 import { preferencesCollection } from "./collections";
 import type { PreferencesDocType } from "./schemas";
+import {
+  DEFAULT_NOTIFICATION_PREFS,
+  sanitiseNotificationPrefs,
+} from "../notification-prefs";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -89,6 +93,7 @@ interface LegacyState {
   homeLocation?: string | null;
   hiddenPresetSlugs?: string[];
   presetAnchor?: { lat: number; lon: number } | null;
+  notificationPrefs?: unknown;
 }
 
 /**
@@ -182,6 +187,7 @@ async function _doMigrate(): Promise<void> {
     homeLocation: legacy.homeLocation ?? null,
     hiddenPresetSlugs: legacy.hiddenPresetSlugs ?? [],
     presetAnchor: legacy.presetAnchor ?? null,
+    notificationPrefs: sanitiseNotificationPrefs(legacy.notificationPrefs),
     updatedAt: Date.now(),
   });
 
@@ -269,6 +275,7 @@ async function _doInitBridge(callbacks: BridgeCallbacks): Promise<void> {
         homeLocation: doc.homeLocation,
         hiddenPresetSlugs: [...(doc.hiddenPresetSlugs ?? [])],
         presetAnchor: doc.presetAnchor ?? null,
+        notificationPrefs: sanitiseNotificationPrefs(doc.notificationPrefs),
       });
     }
 
@@ -288,6 +295,7 @@ async function _doInitBridge(callbacks: BridgeCallbacks): Promise<void> {
           homeLocation: rxDoc.homeLocation,
           hiddenPresetSlugs: [...(rxDoc.hiddenPresetSlugs ?? [])],
           presetAnchor: rxDoc.presetAnchor ?? null,
+          notificationPrefs: sanitiseNotificationPrefs(rxDoc.notificationPrefs),
         });
       } catch {
         // never let a subscription callback bubble into RxDB internals
@@ -327,7 +335,16 @@ export async function updatePreferences(
     const doc = await col.findOne(deviceId).exec();
 
     if (doc) {
-      await doc.patch({ ...updates, updatedAt: Date.now() });
+      const patch = { ...updates, updatedAt: Date.now() };
+      // `incrementalPatch` re-reads the document and retries on a revision
+      // conflict. A plain `patch` throws one when a second write starts before
+      // the first has finished (two switches tapped in quick succession), and
+      // the second choice was then lost.
+      if (typeof doc.incrementalPatch === "function") {
+        await doc.incrementalPatch(patch);
+      } else {
+        await doc.patch(patch);
+      }
     } else {
       // Shouldn't happen after init, but handle gracefully
       await col.upsert({
@@ -342,6 +359,7 @@ export async function updatePreferences(
         homeLocation: null,
         hiddenPresetSlugs: [],
         presetAnchor: null,
+        notificationPrefs: { ...DEFAULT_NOTIFICATION_PREFS },
         ...updates,
         updatedAt: Date.now(),
       });

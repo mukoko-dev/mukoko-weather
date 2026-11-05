@@ -14,8 +14,10 @@
 import type { RxDatabase } from "rxdb";
 import {
   migratePreferencesV2ToV3,
+  migratePreferencesV3ToV4,
   preferencesSchema,
   type PreferencesDocV2,
+  type PreferencesDocV3,
   weatherCacheSchema,
   weatherHintSchema,
   weatherPlaceSchema,
@@ -164,6 +166,8 @@ async function _initDb(): Promise<MukokoDatabase> {
         }),
         // v2 → v3: suggested places (hidden list + anchor), see schemas.ts.
         3: (oldDoc: PreferencesDocV2) => migratePreferencesV2ToV3(oldDoc),
+        // v3 → v4: notification preferences (alerts), see schemas.ts.
+        4: (oldDoc: PreferencesDocV3) => migratePreferencesV3ToV4(oldDoc),
       },
     },
     weather_cache: { schema: weatherCacheSchema },

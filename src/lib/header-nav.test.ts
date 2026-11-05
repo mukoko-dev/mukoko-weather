@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   HEADER_DESTINATIONS,
-  NOTIFICATIONS_EMPTY_TEXT,
+  NOTIFICATIONS_LABEL,
   isDestinationActive,
   visibleHeaderDestinations,
   weatherMapHref,
@@ -43,7 +43,7 @@ describe("header-nav", () => {
     expect(weatherMapHref(null)).toBe("/explore");
   });
 
-  it("says there are no notifications yet", () => {
-    expect(NOTIFICATIONS_EMPTY_TEXT).toBe("No notifications yet");
+  it("names the notifications entry point once (the bell and the phone menu row)", () => {
+    expect(NOTIFICATIONS_LABEL).toBe("Notifications");
   });
 });
