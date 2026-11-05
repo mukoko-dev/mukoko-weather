@@ -3,7 +3,7 @@
  * (mukoko-dev/mukoko-weather#289). Pure: the browser facts come in as
  * arguments (`PushEnv`, from `push/client.ts`), nothing is read here.
  *
- * Four ways an alert could reach a person:
+ * Three ways an alert could reach a person:
  *
  * - **In the app**: always on. Alerts are worked out on the device from the
  *   forecasts it holds, so this needs no server and cannot be switched off.
@@ -12,8 +12,9 @@
  *   something. While the alert service is not live (`serverReady` false, the
  *   `web_push` flag), the row says "Not switched on yet" and has no button:
  *   we never show a switch that does nothing.
- * - **Telegram** and **Campfire** (Mukoko's own messaging): "Coming soon",
- *   no button and no backend in this version.
+ * - **Campfire** (Mukoko's own messaging, end to end encrypted; owner,
+ *   2026-11-05: we build our own, not Telegram): "Coming soon", no button
+ *   and no backend in this version.
  *
  * Delivery is best effort and never described as guaranteed.
  */
@@ -36,11 +37,6 @@ export const IN_APP_DELIVERY = {
 
 /** The messaging channels that are not built yet. */
 export const COMING_SOON_CHANNELS = [
-  {
-    id: "telegram",
-    title: "Telegram",
-    detail: "Alerts in a Telegram chat.",
-  },
   {
     id: "campfire",
     title: "Campfire",
