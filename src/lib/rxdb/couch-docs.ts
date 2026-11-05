@@ -139,6 +139,19 @@ const OWNED_ID_RE = new RegExp(
   `^(?:activity:[a-z0-9][a-z0-9-]{0,63}|preference:(?:${SYNCED_PREFERENCE_KEYS.join("|")}))$`,
 );
 const RFC3339_MS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+/**
+ * A time in the one form the data model requires (`…SSS Z`) that is also a
+ * real instant. The pattern alone passes `2026-02-30T…`, which `Date` rolls
+ * forward to 2 March, so the string is also required to be exactly what the
+ * instant it names prints as.
+ */
+export function isWireTimestamp(v: unknown): v is string {
+  if (typeof v !== "string" || !RFC3339_MS_RE.test(v)) return false;
+  const ms = Date.parse(v);
+  return Number.isFinite(ms) && new Date(ms).toISOString() === v;
+}
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 

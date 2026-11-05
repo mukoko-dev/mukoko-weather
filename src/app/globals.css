@@ -1880,8 +1880,10 @@ body {
      targets). A thumb that lands a little high or low still counts, no number
      here is a guess at the bar, and a change to the bar's token moves it.
      Horizontally it is the link's own width, so it never reaches the next
-     target. It stays inside the bar (and the lane's scroller, which is the
-     bar's height), so nothing is clipped.
+     target. The bar's border takes a pixel off each side, so the lane inside
+     it is a little shorter than the token: the chips' list clips its content
+     to the lane (PlaceLane.tsx), otherwise the overshoot gave the lane
+     something to scroll vertically.
 
      A pinned item wears the same bordered pill as a chip (owner, 2026-11-04:
      the surface blends and boundaries disappear): the --float-border hairline

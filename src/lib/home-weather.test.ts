@@ -1,11 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { workerData } from "./worker-data";
 import {
+  DIRECT_FORECAST_TIMEOUT_MS,
   fetchHomeWeather,
   fetchWorkerWeatherOnce,
   loadModelWeather,
 } from "./home-weather";
 import { createFallbackWeather } from "./weather";
+
+// `fetchWeather` is the visitor's own request to Open-Meteo; the Worker is
+// the stubbed `fetch`. Everything else in ./weather stays real.
+const direct = vi.hoisted(() => ({ fetchWeather: vi.fn() }));
+vi.mock("./weather", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./weather")>();
+  return {
+    ...actual,
+    fetchWeather: (...args: Parameters<typeof actual.fetchWeather>) =>
+      direct.fetchWeather(...args),
+  };
+});
 
 function respond(provider: string, init: { status?: number } = {}) {
   const body = createFallbackWeather(-17.83, 31.05, 1483);
@@ -30,6 +43,7 @@ function failing(status: number, headers: Record<string, string> = {}) {
 
 beforeEach(() => {
   workerData.reset();
+  direct.fetchWeather.mockReset();
 });
 
 afterEach(() => {
@@ -231,6 +245,100 @@ describe("fetchHomeWeather", () => {
     await fetchHomeWeather(-17.83, 31.05);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  describe("when the Worker only has the seasonal estimate", () => {
+    // Sembawang: not in the Worker's cache, and the Workers' shared egress was
+    // being refused by Open-Meteo (HTTP 429), so the Worker answered `fallback`.
+    const LAT = 1.4439557246543009;
+    const LON = 103.8244683875342;
+
+    function live() {
+      const weather = createFallbackWeather(LAT, LON, 8);
+      weather.current.temperature_2m = 31.5;
+      return weather;
+    }
+
+    it("asks Open-Meteo from the browser and shows that forecast", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => respond("fallback")),
+      );
+      const forecast = live();
+      direct.fetchWeather.mockResolvedValue(forecast);
+      const result = await fetchHomeWeather(LAT, LON);
+      expect(result).toEqual({ weather: forecast, usingFallback: false });
+      // Coarsened like every other client fetch of a derived place, with a
+      // budget shorter than the library default.
+      expect(direct.fetchWeather).toHaveBeenCalledWith(
+        1.444,
+        103.824,
+        undefined,
+        DIRECT_FORECAST_TIMEOUT_MS,
+      );
+    });
+
+    it("keeps the Worker's estimate, flagged, when the browser cannot get a forecast either", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => respond("fallback")),
+      );
+      direct.fetchWeather.mockRejectedValue(
+        new Error("Weather API error: 429"),
+      );
+      const result = await fetchHomeWeather(LAT, LON);
+      expect(result.usingFallback).toBe(true);
+      // The Worker's own body, not anything from the browser.
+      expect(result.weather.current.temperature_2m).toBe(
+        createFallbackWeather(-17.83, 31.05, 1483).current.temperature_2m,
+      );
+    });
+
+    it("does not take a body that is not a forecast from the browser", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => respond("fallback")),
+      );
+      direct.fetchWeather.mockResolvedValue({ hourly: {} });
+      const result = await fetchHomeWeather(LAT, LON);
+      expect(result.usingFallback).toBe(true);
+    });
+
+    it("never calls Open-Meteo itself while the Worker has a live forecast", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => respond("open-meteo:blend")),
+      );
+      const result = await fetchHomeWeather(LAT, LON);
+      expect(result.usingFallback).toBe(false);
+      expect(direct.fetchWeather).not.toHaveBeenCalled();
+    });
+
+    it("takes the Worker's MET Norway failover as the live forecast it is, with no call of its own", async () => {
+      // The Worker's own chain (Open-Meteo, then MET Norway, then a stored
+      // forecast) comes first: only the estimate that follows all of it sends
+      // the visitor's browser to the provider.
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => respond("met-no")),
+      );
+      const result = await fetchHomeWeather(LAT, LON);
+      expect(result.usingFallback).toBe(false);
+      expect(direct.fetchWeather).not.toHaveBeenCalled();
+    });
+
+    it("still goes straight to Open-Meteo when the Worker cannot be reached", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => {
+          throw new TypeError("Failed to fetch");
+        }),
+      );
+      const forecast = live();
+      direct.fetchWeather.mockResolvedValue(forecast);
+      const result = await fetchHomeWeather(LAT, LON);
+      expect(result).toEqual({ weather: forecast, usingFallback: false });
+    });
+  });
 });
 
 describe("fetchWorkerWeatherOnce (the background read for a place not yet asked for)", () => {
@@ -283,12 +391,15 @@ describe("fetchWorkerWeatherOnce (the background read for a place not yet asked 
     await expect(fetchWorkerWeatherOnce(-17.83, 31.05)).rejects.toThrow();
   });
 
-  it("says when the Worker only had the seasonal estimate", async () => {
+  it("says when the Worker only had the seasonal estimate, and does not ask the provider for it", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => respond("fallback")),
     );
     const result = await fetchWorkerWeatherOnce(-17.83, 31.05);
     expect(result.usingFallback).toBe(true);
+    // A place nobody asked for yet never spends the visitor's own allowance:
+    // only the foreground read (`fetchHomeWeather`) goes to the provider.
+    expect(direct.fetchWeather).not.toHaveBeenCalled();
   });
 });
