@@ -21,6 +21,7 @@
 import { existsSync, readFileSync } from "fs";
 import { dirname, resolve } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { canonicalSlug } from "@/lib/slug-migration";
 
 const SRC = resolve(__dirname, "..");
 
@@ -155,7 +156,9 @@ describe("/ server render", () => {
     const initial = await renderHome();
     // `initial: null` is what renders the client's city chooser; it must not.
     expect(initial).not.toBeNull();
-    expect((initial!.location as { slug: string }).slug).toBe("harare");
+    expect((initial!.location as { slug: string }).slug).toBe(
+      canonicalSlug("harare"),
+    );
     expect(initial!.countryName).toBe("Zimbabwe");
     expect(Object.keys(initial!).sort()).toEqual([
       "countryName",
@@ -180,7 +183,10 @@ describe("/ server render", () => {
       };
       const initial = await renderHome();
       expect(initial, city).not.toBeNull();
-      expect((initial!.location as { slug: string }).slug, city).toBe(slug);
+      // Pages carry the canonical slug of a shipped place (#317).
+      expect((initial!.location as { slug: string }).slug, city).toBe(
+        canonicalSlug(slug),
+      );
     }
     expect(getWeatherForLocation).not.toHaveBeenCalled();
     expect(weatherFetches()).toEqual([]);

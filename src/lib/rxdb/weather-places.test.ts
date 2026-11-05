@@ -13,6 +13,7 @@ import {
   rememberPlace,
 } from "./weather-places";
 import { weatherPlaceSchema } from "./schemas";
+import { canonicalSlug } from "../slug-migration";
 
 const HOUR = 3_600_000;
 const OFFSET = 7200;
@@ -171,6 +172,36 @@ describe("rememberPlace / recallPlace", () => {
     expect(col.patched).toEqual([
       ["harare", { lastAccessedAt: t + 30 * 60_000 }],
     ]);
+  });
+
+  it("finds a copy stored under a seed's legacy slug and shows it under the canonical one (#317)", async () => {
+    const t = harare(11, 9);
+    await rememberPlace(payload("harare"), { now: t });
+    const canonical = canonicalSlug("harare");
+    expect(col.docs.has(canonical)).toBe(false);
+    const v = await recallPlace(canonical, t + 30 * 60_000);
+    expect(v?.freshness).toBe("current");
+    // The place on screen is the canonical one, so its URL and its memory
+    // entry are too; the stored copy itself is left where it is.
+    expect(v?.payload.location.slug).toBe(canonical);
+    expect(col.docs.has("harare")).toBe(true);
+    // A canonical copy wins over a legacy one.
+    await rememberPlace(payload(canonical), { now: t + 1000 });
+    const again = await recallPlace(canonical, t + 30 * 60_000);
+    expect(again?.payload.location.slug).toBe(canonical);
+  });
+
+  it("a legacy-keyed copy that is corrupt is deleted under its own key", async () => {
+    col.docs.set("harare", {
+      slug: "harare",
+      payload: "{broken",
+      fetchedAt: 1,
+      lastAccessedAt: 1,
+      expiresAt: Number.MAX_SAFE_INTEGER,
+      bytes: 7,
+    });
+    expect(await recallPlace(canonicalSlug("harare"))).toBeNull();
+    expect(col.docs.has("harare")).toBe(false);
   });
 
   it("shows older data as this hour's forecast", async () => {

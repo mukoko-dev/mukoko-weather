@@ -7,8 +7,8 @@
  * would now derive a different slug than its pinned row.
  *
  * Add rows with `UPDATE_SLUG_MIGRATION=1 npx vitest run
- * src/lib/slug-migration.test.ts`, then regenerate the Python and Rust
- * copies with `node --experimental-strip-types
+ * src/lib/slug-migration.test.ts`, then regenerate the Rust
+ * copy with `node --experimental-strip-types
  * workers/scripts/gen-seed-locations.mjs`.
  */
 export const SEED_SLUG_TABLE: readonly (readonly [string, string])[] = [

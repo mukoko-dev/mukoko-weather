@@ -168,7 +168,10 @@ async function buildHome() {
             const nearest = data.nearest as WeatherLocation;
             // The Worker answers a shipped seed by its legacy slug; the page
             // and every link carry the canonical one (#317).
-            detectedLocation = { ...nearest, slug: canonicalSlug(nearest.slug) };
+            detectedLocation = {
+              ...nearest,
+              slug: canonicalSlug(nearest.slug),
+            };
           }
         }
       } catch {

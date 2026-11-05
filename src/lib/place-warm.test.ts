@@ -11,6 +11,7 @@ import type { WarmResult } from "./place-controller";
 import type { PlaceTarget } from "./place-target";
 import type { DeviceHints } from "./lazy-visibility";
 import { pagerSequence } from "./location-pager";
+import { canonicalSlug } from "./slug-migration";
 
 const phone: DeviceHints = { viewportWidth: 393, viewportHeight: 852 };
 
@@ -78,7 +79,10 @@ describe("warmTargets: which places, nearest first", () => {
 
   it("works on the real pager sequence (My Location first, saved places after)", () => {
     const real = pagerSequence(["harare", "bulawayo"], []);
-    expect(slugs(warmTargets(real, "/harare", 4))).toEqual(["bulawayo", "/"]);
+    expect(slugs(warmTargets(real, `/${canonicalSlug("harare")}`, 4))).toEqual([
+      canonicalSlug("bulawayo"),
+      "/",
+    ]);
   });
 });
 
@@ -88,12 +92,13 @@ describe("warming only what the visitor chose", () => {
     const withSuggested = pagerSequence(["harare", "bulawayo"], ["nairobi-ke"]);
     const slugs = (t: ReturnType<typeof warmTargets>) =>
       t.map((x) => (x.kind === "home" ? "/" : x.slug));
-    expect(slugs(warmTargets(saved, "/bulawayo", 4))).not.toContain(
-      "nairobi-ke",
+    const bulawayo = `/${canonicalSlug("bulawayo")}`;
+    expect(slugs(warmTargets(saved, bulawayo, 4))).not.toContain(
+      canonicalSlug("nairobi-ke"),
     );
     // The same call over the longer sequence WOULD have warmed it.
-    expect(slugs(warmTargets(withSuggested, "/bulawayo", 4))).toContain(
-      "nairobi-ke",
+    expect(slugs(warmTargets(withSuggested, bulawayo, 4))).toContain(
+      canonicalSlug("nairobi-ke"),
     );
   });
 });

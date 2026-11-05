@@ -37,11 +37,11 @@ pinned (append-only: a published URL never changes).
 `src/lib/slug-migration.test.ts` fails unless the table has exactly one row per
 seed, is a bijection, equals the derivation from the seed, decodes back within
 one 153 m cell of the seed, contains no legacy slug as a canonical slug and no
-OSM ref. The Python (`api/py/data/slug_migration.json`) and Rust
-(`workers/crates/weather-core/data/slug-migration.json`) copies are written by
-`workers/scripts/gen-seed-locations.mjs` (CI runs it with `--check`), and each
-language re-derives every canonical slug from the seed with its own geohash and
-slugify implementation, so the three cannot drift.
+OSM ref. The Rust copy
+(`workers/crates/weather-core/data/slug-migration.json`) is written by
+`workers/scripts/gen-seed-locations.mjs` (CI runs it with `--check`), and the
+Worker re-derives every canonical slug from the seed with its own geohash and
+slugify implementation, so the two cannot drift.
 
 Platform slugs cannot be tabulated: the 6-hex id lives in the database.
 
@@ -71,13 +71,15 @@ IndexedDB and the device profile follow.
 
 ## Backend: nothing is lost
 
-Existing history, reports and AI caches live under the legacy slug. The
-backends accept both spellings and key by the legacy one (Python `storage_slug`
-and friends; Rust `storage_key_slug` for the D1 `place_daily` history). History
-and report reads also include the `geo:<geohash7>` cell key a visitor may have
-written under while the canonical URL was only a spot. The `storage_slug` rule
-for spots is unchanged. Nothing writes production data and there is no
-migration script.
+Existing history and reports live under the legacy slug. The Workers accept
+both spellings and key by the legacy one (`weather_core::slug_migration`:
+`storage_slug` and `read_keys` for the MongoDB history and reports,
+`history::d1_slug` for the D1 `place_daily` days). Report reads also include
+the `geo:<geohash7>` cell key a visitor may have written under while the
+canonical URL was only a spot. The `storage_slug` rule for spots is unchanged.
+The AI Worker's caches are keyed by the place the point resolves to, not by a
+slug the client sends, so they need no mapping. Nothing writes production data
+and there is no migration script.
 
 ## Owner decisions and risks
 

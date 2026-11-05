@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { canonicalSlug } from "@/lib/slug-migration";
 import { CitySuggestions } from "./CitySuggestions";
 
 describe("CitySuggestions", () => {
@@ -14,7 +15,9 @@ describe("CitySuggestions", () => {
       }),
     );
     expect(html).toContain("Try one of these cities:");
-    expect(html).toContain('href="/harare"');
+    // A link to a shipped place is its canonical URL (#317).
+    expect(html).toContain(`href="/${canonicalSlug("harare")}"`);
+    expect(html).toContain(`href="/${canonicalSlug("nairobi-ke")}"`);
     expect(html).toContain(">Nairobi<");
   });
 

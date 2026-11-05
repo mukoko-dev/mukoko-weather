@@ -21,6 +21,7 @@ import {
   serialisePayload,
   servedStaleAgeMs,
 } from "../device-weather";
+import { storageKeySlug } from "../slug-migration";
 import type { WeatherPlaceDocType } from "./schemas";
 
 /** The slice of an RxDB collection this module uses (so tests can fake it). */
@@ -153,14 +154,24 @@ export async function recallPlace(
   const col = await collection();
   if (!col) return null;
   try {
-    const doc = await col.findOne(slug).exec();
+    let doc = await col.findOne(slug).exec();
+    // A copy stored before the canonical-slug move (#317) sits under the
+    // seed's legacy slug: a saved place keeps its offline copy through the
+    // move instead of starting empty. It is shown under the canonical slug,
+    // and the next good forecast stores it there.
+    const legacy = storageKeySlug(slug);
+    if (!doc && legacy !== slug) doc = await col.findOne(legacy).exec();
     if (!doc) return null;
-    const payload = parsePayload(doc.payload);
+    const stored = parsePayload(doc.payload);
+    const payload =
+      stored && doc.slug !== slug
+        ? { ...stored, location: { ...stored.location, slug } }
+        : stored;
     const view = payload
       ? deviceViewOf({ payload, fetchedAt: doc.fetchedAt }, now)
       : null;
     if (!view) {
-      await col.bulkRemove([slug]).catch(() => {});
+      await col.bulkRemove([doc.slug]).catch(() => {});
       return null;
     }
     void doc.incrementalPatch?.({ lastAccessedAt: now })?.catch?.(() => {});

@@ -30,7 +30,7 @@ import {
  *
  *   UPDATE_SLUG_MIGRATION=1 npx vitest run src/lib/slug-migration.test.ts
  *   node --experimental-strip-types workers/scripts/gen-seed-locations.mjs
- *   npx prettier@3.9.4 --write api/py/data/slug_migration.json
+ *   npx prettier@3.9.4 --write workers/crates/weather-core/data/slug-migration.json
  *
  * Regeneration only ever APPENDS: an existing row is a URL that may already be
  * indexed, bookmarked or saved on a device, so it is never rewritten.
@@ -54,8 +54,8 @@ if (process.env.UPDATE_SLUG_MIGRATION) {
  * would now derive a different slug than its pinned row.
  *
  * Add rows with \`UPDATE_SLUG_MIGRATION=1 npx vitest run
- * src/lib/slug-migration.test.ts\`, then regenerate the Python and Rust
- * copies with \`node --experimental-strip-types
+ * src/lib/slug-migration.test.ts\`, then regenerate the Rust
+ * copy with \`node --experimental-strip-types
  * workers/scripts/gen-seed-locations.mjs\`.
  */
 export const SEED_SLUG_TABLE: readonly (readonly [string, string])[] = [
@@ -278,7 +278,7 @@ describe("every legacy URL redirects in one hop (308 target)", () => {
   });
 });
 
-describe("generated copies for the other backends", () => {
+describe("the generated copy for the Rust Workers", () => {
   const read = (path: string) =>
     JSON.parse(readFileSync(join(process.cwd(), path), "utf8")) as {
       legacy: string;
@@ -288,10 +288,6 @@ describe("generated copies for the other backends", () => {
     legacy,
     canonical,
   }));
-
-  it("api/py/data/slug_migration.json matches the table", () => {
-    expect(read("api/py/data/slug_migration.json")).toEqual(expected);
-  });
 
   it("the Rust Workers' slug-migration.json matches the table", () => {
     expect(

@@ -629,8 +629,10 @@ describe("resolveLocationSlug — a place the Worker names (#414)", () => {
         : notFound(),
     );
     const loc = await resolveLocationSlug("sembawang-sg");
+    // A community place answers to its canonical `{name}--{geohash}` slug
+    // (#317): the proxy 308s `/sembawang-sg` to it.
     expect(loc).toMatchObject({
-      slug: "sembawang-sg",
+      slug: expect.stringMatching(/^sembawang--[0-9b-hjkmnp-z]{7}$/),
       name: "Sembawang",
       country: "SG",
     });
