@@ -4,7 +4,11 @@ import { useState, useEffect, useCallback } from "react";
 import { useAppStore } from "@/lib/store";
 import { trackEvent } from "@/lib/analytics";
 import { CloudSunIcon, MegaphoneIcon } from "@/lib/weather-icons";
-import { getReportTypeInfo } from "@/lib/report-types";
+import {
+  getReportTypeInfo,
+  showsVerified,
+  unverifiedLabel,
+} from "@/lib/report-types";
 import { loadReports, reportsUpvoteUrl } from "@/lib/reports-api";
 import { LoadingNotice } from "@/components/ui/loading-notice";
 import { Button } from "@/components/ui/button";
@@ -159,6 +163,9 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
           {reports.map((report) => {
             const typeInfo = getReportTypeInfo(report.reportType);
             const TypeIcon = typeInfo?.icon ?? CloudSunIcon;
+            // A type no forecast can confirm (a wildfire) is only ever what
+            // people nearby said: never "Verified".
+            const unverified = unverifiedLabel(report.reportType);
             return (
               <div
                 key={report.id}
@@ -180,7 +187,7 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
                     >
                       {report.severity}
                     </span>
-                    {report.verified && (
+                    {showsVerified(report.reportType, report.verified) && (
                       <span
                         className="rounded-[var(--radius-badge)] bg-severity-low/10 px-1.5 py-0.5 text-base font-bold text-severity-low"
                         title="Verified against API data"
@@ -189,6 +196,11 @@ export function RecentReports({ locationSlug }: { locationSlug: string }) {
                       </span>
                     )}
                   </div>
+                  {unverified && (
+                    <p className="mt-0.5 text-base font-medium text-text-secondary">
+                      {unverified}
+                    </p>
+                  )}
                   {report.description && (
                     <p className="mt-0.5 text-base text-text-secondary line-clamp-1">
                       {report.description}

@@ -16,7 +16,7 @@
 //! - the model fails, is blocked by the gateway, answers with nothing usable,
 //!   or takes longer than [`MODEL_TIMEOUT`].
 //!
-//! Only a request without one of the 13 report types, or with a
+//! Only a request without one of the 14 report types, or with a
 //! `locationSlug` that is not a slug, is refused, with `400`. No text from the visitor reaches the
 //! prompt, so there is nothing to store and nothing to log: a failed call
 //! writes the route, class and stage only (`weather_core::ai::failure`).
