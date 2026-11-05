@@ -77,6 +77,15 @@ export const FLAGS = {
    * Try it locally with localStorage.setItem("ff:couch_sync", "true").
    */
   couch_sync: false,
+  /**
+   * Web push for alerts (#289): the "Push on this device" switch in the
+   * notification settings. OFF until the alert service is live (the
+   * `/api/push/*` routes, the VAPID key and the sender): with it off the row
+   * says "Not switched on yet" and offers no button, because a switch that
+   * does nothing would be a lie. In-app alerts do not depend on it. Try it
+   * locally with localStorage.setItem("ff:web_push", "true").
+   */
+  web_push: false,
   /** Vector semantic search for locations */
   vector_search: false,
   /** Multi-language support (Shona, Ndebele) */

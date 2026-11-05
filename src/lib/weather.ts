@@ -544,6 +544,16 @@ export function normalizeMultiModel(
 }
 
 /**
+ * The one definition of a frost hour: 3°C or below, in the night hours 22:00
+ * to 08:00 at the LOCATION (`hour` is the location's hour of day, 0 to 23).
+ * `checkFrostRisk` and the in-app alerts (`src/lib/alerts.ts`) both use it, so
+ * the banner and the notifications can never disagree about what frost is.
+ */
+export function isFrostHour(hour: number, temp: number): boolean {
+  return (hour >= 22 || hour <= 8) && temp <= 3;
+}
+
+/**
  * Frost risk: any hour at or below 3°C between 22:00 and 08:00 at the
  * LOCATION (pass the payload's `utc_offset_seconds`; zoned Tomorrow.io
  * instants would otherwise be read in the server's UTC clock).
@@ -557,7 +567,7 @@ export function checkFrostRisk(
     .map((temp, i) => ({ temp, time: hourly.time[i] }))
     .filter((h) => {
       const hour = locationHourOf(h.time, offset);
-      return hour !== null && (hour >= 22 || hour <= 8) && h.temp <= 3;
+      return hour !== null && isFrostHour(hour, h.temp);
     });
 
   if (frostHours.length > 0) {

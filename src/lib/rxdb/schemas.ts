@@ -9,6 +9,11 @@
  */
 
 import type { RxJsonSchema } from "rxdb";
+import {
+  DEFAULT_NOTIFICATION_PREFS,
+  sanitiseNotificationPrefs,
+  type NotificationPrefs,
+} from "../notification-prefs";
 
 // ---------------------------------------------------------------------------
 // Preferences — replaces Zustand persist + device-sync.ts
@@ -39,12 +44,22 @@ export interface PreferencesDocType {
    * visit to /locations), or null before that. Device-local.
    */
   presetAnchor: { lat: number; lon: number } | null;
+  /**
+   * Which alerts the person wants (frost, lightning, wildfire, flooding) and
+   * their quiet hours, on their own clock. Device-local: the Worker's
+   * device-profile sync does not carry it yet. Defaults: all four on, quiet
+   * hours off (`src/lib/notification-prefs.ts`).
+   */
+  notificationPrefs: NotificationPrefs;
   updatedAt: number;
 }
 
+/** v3 → v4 document shape (before the notification preferences existed). */
+export type PreferencesDocV3 = Omit<PreferencesDocType, "notificationPrefs">;
+
 /** v2 → v3 document shape (before the preset fields existed). */
 export type PreferencesDocV2 = Omit<
-  PreferencesDocType,
+  PreferencesDocV3,
   "hiddenPresetSlugs" | "presetAnchor"
 >;
 
@@ -54,8 +69,8 @@ export type PreferencesDocV2 = Omit<
  */
 export function migratePreferencesV2ToV3(
   oldDoc: PreferencesDocV2 &
-    Partial<Pick<PreferencesDocType, "hiddenPresetSlugs" | "presetAnchor">>,
-): PreferencesDocType {
+    Partial<Pick<PreferencesDocV3, "hiddenPresetSlugs" | "presetAnchor">>,
+): PreferencesDocV3 {
   const anchor = oldDoc.presetAnchor;
   const validAnchor =
     anchor &&
@@ -76,10 +91,26 @@ export function migratePreferencesV2ToV3(
   };
 }
 
+/**
+ * v3 → v4: adds `notificationPrefs` (all four alert kinds on, quiet hours
+ * off). Existing documents keep every other field; a malformed value is
+ * repaired by `sanitiseNotificationPrefs` rather than dropping the document.
+ */
+export function migratePreferencesV3ToV4(
+  oldDoc: PreferencesDocV3 &
+    Partial<Pick<PreferencesDocType, "notificationPrefs">>,
+): PreferencesDocType {
+  return {
+    ...oldDoc,
+    notificationPrefs: sanitiseNotificationPrefs(oldDoc.notificationPrefs),
+  };
+}
+
 export const preferencesSchema: RxJsonSchema<PreferencesDocType> = {
   // v0 → v1: added selectedForecastModel. v1 → v2: added homeLocation.
   // v2 → v3: added hiddenPresetSlugs and presetAnchor (suggested places).
-  version: 3,
+  // v3 → v4: added notificationPrefs (alerts: kinds on/off, quiet hours).
+  version: 4,
   primaryKey: "id",
   type: "object",
   properties: {
@@ -117,6 +148,18 @@ export const preferencesSchema: RxJsonSchema<PreferencesDocType> = {
       },
       default: null,
     },
+    notificationPrefs: {
+      type: "object",
+      properties: {
+        frost: { type: "boolean" },
+        lightning: { type: "boolean" },
+        wildfire: { type: "boolean" },
+        flooding: { type: "boolean" },
+        quietStart: { type: ["number", "null"] },
+        quietEnd: { type: ["number", "null"] },
+      },
+      default: { ...DEFAULT_NOTIFICATION_PREFS },
+    },
     updatedAt: { type: "number" },
   },
   required: [
@@ -131,6 +174,7 @@ export const preferencesSchema: RxJsonSchema<PreferencesDocType> = {
     "homeLocation",
     "hiddenPresetSlugs",
     "presetAnchor",
+    "notificationPrefs",
     "updatedAt",
   ],
 };

@@ -11,6 +11,7 @@ import {
   mergeSectionOrder,
   pinHeroFirst,
   PINNED_FIRST_SECTION,
+  cleanReportPreset,
   type ThemePreference,
   type ShamwariContext,
 } from "./store";
@@ -389,6 +390,156 @@ describe("reportModal", () => {
     useAppStore.getState().openReportModal();
     useAppStore.getState().closeReportModal();
     expect(useAppStore.getState().reportModalOpen).toBe(false);
+  });
+
+  it("opens on a report type and a place when an alert asks, and forgets them on close", () => {
+    useAppStore
+      .getState()
+      .openReportModal({ reportType: "flooding", locationSlug: "mutare" });
+    expect(useAppStore.getState().reportModalOpen).toBe(true);
+    expect(useAppStore.getState().reportPreset).toEqual({
+      reportType: "flooding",
+      locationSlug: "mutare",
+    });
+    useAppStore.getState().closeReportModal();
+    expect(useAppStore.getState().reportPreset).toBeNull();
+  });
+
+  it("is safe to use as a click handler: an event is no preset", () => {
+    const click = { type: "click", nativeEvent: {}, target: {} };
+    (useAppStore.getState().openReportModal as unknown as (e: unknown) => void)(
+      click,
+    );
+    expect(useAppStore.getState().reportModalOpen).toBe(true);
+    expect(useAppStore.getState().reportPreset).toBeNull();
+    useAppStore.getState().closeReportModal();
+  });
+
+  it("a plain open clears a preset left from before", () => {
+    useAppStore.getState().openReportModal({ reportType: "flooding" });
+    useAppStore.getState().openReportModal();
+    expect(useAppStore.getState().reportPreset).toBeNull();
+    useAppStore.getState().closeReportModal();
+  });
+});
+
+describe("cleanReportPreset", () => {
+  it("keeps a well-formed type and slug", () => {
+    expect(
+      cleanReportPreset({ reportType: "heavy-rain", locationSlug: "harare" }),
+    ).toEqual({ reportType: "heavy-rain", locationSlug: "harare" });
+    expect(cleanReportPreset({ reportType: "frost" })).toEqual({
+      reportType: "frost",
+    });
+    expect(cleanReportPreset({ locationSlug: "nairobi-ke" })).toEqual({
+      locationSlug: "nairobi-ke",
+    });
+  });
+
+  it("drops anything malformed, and is null when nothing is left", () => {
+    expect(cleanReportPreset(null)).toBeNull();
+    expect(cleanReportPreset("flooding")).toBeNull();
+    expect(cleanReportPreset({})).toBeNull();
+    expect(cleanReportPreset({ reportType: "Flood Ing!" })).toBeNull();
+    expect(cleanReportPreset({ reportType: 7, locationSlug: 7 })).toBeNull();
+    expect(
+      cleanReportPreset({ reportType: "flooding", locationSlug: "../etc" }),
+    ).toEqual({ reportType: "flooding" });
+  });
+});
+
+describe("notificationPrefs", () => {
+  beforeEach(() => {
+    useAppStore.setState({
+      notificationPrefs: {
+        frost: true,
+        lightning: true,
+        wildfire: true,
+        flooding: true,
+        quietStart: null,
+        quietEnd: null,
+      },
+    });
+    vi.mocked(updatePreferences).mockClear();
+  });
+
+  it("defaults to all four kinds on and quiet hours off", () => {
+    expect(useAppStore.getState().notificationPrefs).toEqual({
+      frost: true,
+      lightning: true,
+      wildfire: true,
+      flooding: true,
+      quietStart: null,
+      quietEnd: null,
+    });
+  });
+
+  it("setNotificationPrefs applies a patch and persists the whole value to RxDB", () => {
+    useAppStore.getState().setNotificationPrefs({ lightning: false });
+    const expected = {
+      frost: true,
+      lightning: false,
+      wildfire: true,
+      flooding: true,
+      quietStart: null,
+      quietEnd: null,
+    };
+    expect(useAppStore.getState().notificationPrefs).toEqual(expected);
+    expect(updatePreferences).toHaveBeenCalledWith({
+      notificationPrefs: expected,
+    });
+  });
+
+  it("sanitises: quiet hours with equal ends are not kept", () => {
+    useAppStore.getState().setNotificationPrefs({ quietStart: 4, quietEnd: 4 });
+    expect(useAppStore.getState().notificationPrefs.quietStart).toBeNull();
+    useAppStore
+      .getState()
+      .setNotificationPrefs({ quietStart: 22, quietEnd: 6 });
+    expect(useAppStore.getState().notificationPrefs).toMatchObject({
+      quietStart: 22,
+      quietEnd: 6,
+    });
+  });
+
+  it("is in the RxDB bridge's snapshot and is hydrated from RxDB preferences", () => {
+    const src = readFileSync(resolve(__dirname, "store.ts"), "utf-8");
+    expect(src).toMatch(/notificationPrefs: s\.notificationPrefs/);
+    expect(src).toMatch(/if \(prefs\.notificationPrefs !== undefined\)/);
+    expect(src).toContain("sanitiseNotificationPrefs(");
+  });
+});
+
+describe("the notifications centre", () => {
+  it("is closed by default, on the list", () => {
+    expect(useAppStore.getState().notificationsOpen).toBe(false);
+    expect(useAppStore.getState().notificationsView).toBe("list");
+  });
+
+  it("opens on the list, or on the settings when asked, and closes", () => {
+    useAppStore.getState().openNotifications();
+    expect(useAppStore.getState()).toMatchObject({
+      notificationsOpen: true,
+      notificationsView: "list",
+    });
+    useAppStore.getState().openNotifications("settings");
+    expect(useAppStore.getState().notificationsView).toBe("settings");
+    useAppStore.getState().closeNotifications();
+    expect(useAppStore.getState().notificationsOpen).toBe(false);
+    // The next open starts on the list again.
+    useAppStore.getState().openNotifications();
+    expect(useAppStore.getState().notificationsView).toBe("list");
+    useAppStore.getState().closeNotifications();
+  });
+
+  it("is safe to use as a click handler: an event opens the list", () => {
+    (
+      useAppStore.getState().openNotifications as unknown as (
+        e: unknown,
+      ) => void
+    )({ type: "click" });
+    expect(useAppStore.getState().notificationsView).toBe("list");
+    useAppStore.getState().closeNotifications();
   });
 });
 

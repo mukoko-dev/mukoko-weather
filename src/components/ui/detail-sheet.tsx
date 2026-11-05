@@ -19,8 +19,13 @@ interface DetailSheetProps {
   header?: ReactNode;
   /** Plain-language description; becomes the dialog's accessible description. */
   description?: ReactNode;
-  /** Where focus goes on close; defaults to Radix's own return to the opener. */
-  returnFocusTo?: HTMLElement | null;
+  /**
+   * Where focus goes on close; defaults to Radix's own return to the opener.
+   * A function is asked when the sheet closes, for an opener that may be gone
+   * by then (a menu row whose menu closed): when it answers null, Radix's own
+   * return applies.
+   */
+  returnFocusTo?: HTMLElement | null | (() => HTMLElement | null);
   children: ReactNode;
 }
 
@@ -55,8 +60,13 @@ export function DetailSheet({
         onCloseAutoFocus={
           returnFocusTo
             ? (event) => {
+                const target =
+                  typeof returnFocusTo === "function"
+                    ? returnFocusTo()
+                    : returnFocusTo;
+                if (!target) return;
                 event.preventDefault();
-                returnFocusTo.focus();
+                target.focus();
               }
             : undefined
         }

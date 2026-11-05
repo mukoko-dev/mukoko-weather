@@ -146,6 +146,8 @@ describe("analytics", () => {
         geolocation_result: { status: "success", location: "harare" },
         map_layer_changed: { layer: "precipitation", location: "harare" },
         onboarding_completed: { method: "personalize" },
+        alert_kind_toggled: { kind: "frost", enabled: true },
+        alert_report_started: { kind: "flooding" },
         modal_opened: { modal: "weather-report" },
       };
 

@@ -7,6 +7,7 @@ import {
   weatherHintSchema,
   suitabilityRuleSchema,
   migratePreferencesV2ToV3,
+  migratePreferencesV3ToV4,
   type PreferencesDocType,
   type WeatherCacheDocType,
   type WeatherHintDocType,
@@ -19,8 +20,89 @@ import {
 
 describe("RxDB schemas", () => {
   describe("preferencesSchema", () => {
-    it("has version 3 (added hiddenPresetSlugs and presetAnchor)", () => {
-      expect(preferencesSchema.version).toBe(3);
+    it("has version 4 (added notificationPrefs)", () => {
+      expect(preferencesSchema.version).toBe(4);
+    });
+
+    it("defines notificationPrefs as an object defaulting to all kinds on and quiet hours off, required", () => {
+      const prop = preferencesSchema.properties.notificationPrefs;
+      expect(prop.type).toBe("object");
+      expect(prop.default).toEqual({
+        frost: true,
+        lightning: true,
+        wildfire: true,
+        flooding: true,
+        quietStart: null,
+        quietEnd: null,
+      });
+      expect(Object.keys(prop.properties ?? {}).sort()).toEqual([
+        "flooding",
+        "frost",
+        "lightning",
+        "quietEnd",
+        "quietStart",
+        "wildfire",
+      ]);
+      expect(preferencesSchema.required).toContain("notificationPrefs");
+    });
+
+    describe("v3 → v4 migration", () => {
+      const v3Doc = {
+        id: "device-1",
+        theme: "dark",
+        selectedLocation: "harare",
+        savedLocations: ["bulawayo"],
+        locationLabels: { bulawayo: "Work" },
+        selectedActivities: ["farming"],
+        hasOnboarded: true,
+        selectedForecastModel: "gfs_seamless",
+        homeLocation: "harare",
+        hiddenPresetSlugs: ["nairobi-ke"],
+        presetAnchor: { lat: -17.8, lon: 31.05 },
+        updatedAt: 1234,
+      };
+
+      it("adds the defaults (all four kinds on, quiet hours off), keeping every other field", () => {
+        const migrated = migratePreferencesV3ToV4(v3Doc);
+        expect(migrated.notificationPrefs).toEqual({
+          frost: true,
+          lightning: true,
+          wildfire: true,
+          flooding: true,
+          quietStart: null,
+          quietEnd: null,
+        });
+        expect(migrated).toMatchObject(v3Doc);
+      });
+
+      it("keeps valid choices already present and repairs malformed ones", () => {
+        const kept = migratePreferencesV3ToV4({
+          ...v3Doc,
+          notificationPrefs: {
+            frost: false,
+            lightning: true,
+            wildfire: true,
+            flooding: false,
+            quietStart: 22,
+            quietEnd: 6,
+          },
+        });
+        expect(kept.notificationPrefs.frost).toBe(false);
+        expect(kept.notificationPrefs.flooding).toBe(false);
+        expect(kept.notificationPrefs.quietStart).toBe(22);
+
+        const repaired = migratePreferencesV3ToV4({
+          ...v3Doc,
+          notificationPrefs: {
+            frost: "no",
+            quietStart: 5,
+            quietEnd: 5,
+          } as unknown as PreferencesDocType["notificationPrefs"],
+        });
+        expect(repaired.notificationPrefs.frost).toBe(true);
+        expect(repaired.notificationPrefs.quietStart).toBeNull();
+        expect(repaired.notificationPrefs.quietEnd).toBeNull();
+      });
     });
 
     it("defines hiddenPresetSlugs as a required string array defaulting to []", () => {
@@ -201,6 +283,14 @@ describe("schema type compatibility", () => {
       homeLocation: "harare",
       hiddenPresetSlugs: [],
       presetAnchor: null,
+      notificationPrefs: {
+        frost: true,
+        lightning: true,
+        wildfire: true,
+        flooding: true,
+        quietStart: null,
+        quietEnd: null,
+      },
       updatedAt: Date.now(),
     };
     expect(doc.id).toBe("test-uuid");

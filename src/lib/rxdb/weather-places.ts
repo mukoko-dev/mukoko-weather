@@ -51,6 +51,33 @@ async function defaultCollection(): Promise<PlaceCollection | null> {
 
 let source: CollectionSource = defaultCollection;
 
+// ---------------------------------------------------------------------------
+// Change notices (the bell's alerts read these places)
+// ---------------------------------------------------------------------------
+
+const listeners = new Set<() => void>();
+
+/**
+ * Be told when a place was stored or the store was cleared, so the bell can
+ * look again (never on a timer). Returns the unsubscribe function.
+ */
+export function subscribePlaces(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function notifyPlaces(): void {
+  for (const listener of [...listeners]) {
+    try {
+      listener();
+    } catch {
+      // a listener must never break a write
+    }
+  }
+}
+
 /** Tests only: swap the collection source (null restores the default). */
 export function _setPlaceCollectionSource(next: CollectionSource | null): void {
   source = next ?? defaultCollection;
@@ -138,6 +165,7 @@ export async function rememberPlace(
   } catch {
     // Eviction is housekeeping — the write itself succeeded.
   }
+  notifyPlaces();
   return true;
 }
 
@@ -205,6 +233,41 @@ export async function listPlaces(
   }
 }
 
+export interface ReadPlace extends DeviceView {
+  slug: string;
+}
+
+/**
+ * The stored views for these places, re-based on "now", in the order asked.
+ * READ-ONLY: unlike `recallPlace` it does not touch `lastAccessedAt` (looking
+ * at the alerts must not make a place look recently viewed) and deletes
+ * nothing; a missing, corrupt or expired place is simply left out.
+ */
+export async function readPlaces(
+  slugs: readonly string[],
+  now: number = Date.now(),
+): Promise<ReadPlace[]> {
+  const wanted = [...new Set(slugs.filter(Boolean))];
+  if (wanted.length === 0) return [];
+  const col = await collection();
+  if (!col) return [];
+  const out: ReadPlace[] = [];
+  for (const slug of wanted) {
+    try {
+      const doc = await col.findOne(slug).exec();
+      if (!doc) continue;
+      const payload = parsePayload(doc.payload);
+      const view = payload
+        ? deviceViewOf({ payload, fetchedAt: doc.fetchedAt }, now)
+        : null;
+      if (view) out.push({ ...view, slug: doc.slug });
+    } catch {
+      // one unreadable place never hides the others
+    }
+  }
+  return out;
+}
+
 /** Count and bytes of what is stored (for the Settings storage row). */
 export async function placesUsage(): Promise<{ count: number; bytes: number }> {
   const col = await collection();
@@ -227,6 +290,7 @@ export async function clearPlaces(): Promise<number> {
   try {
     const docs = await col.find().exec();
     if (docs.length) await col.bulkRemove(docs.map((d) => d.slug));
+    if (docs.length) notifyPlaces();
     return docs.length;
   } catch {
     return 0;

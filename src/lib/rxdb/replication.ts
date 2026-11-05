@@ -24,6 +24,7 @@ import {
   type DevicePrefsBody,
 } from "./device-profile";
 import type { PreferencesDocType } from "./schemas";
+import { sanitiseNotificationPrefs } from "../notification-prefs";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -127,6 +128,10 @@ async function startPrefsReplication(): Promise<void> {
             // Suggested-place state is device-local too (see schemas.ts).
             hiddenPresetSlugs: localDoc?.hiddenPresetSlugs ?? [],
             presetAnchor: localDoc?.presetAnchor ?? null,
+            // Alert preferences are device-local too (see schemas.ts).
+            notificationPrefs: sanitiseNotificationPrefs(
+              localDoc?.notificationPrefs,
+            ),
             updatedAt: Date.now(),
             _deleted: false,
           };

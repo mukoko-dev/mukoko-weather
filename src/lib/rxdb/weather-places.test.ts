@@ -9,8 +9,10 @@ import {
   clearPlaces,
   listPlaces,
   placesUsage,
+  readPlaces,
   recallPlace,
   rememberPlace,
+  subscribePlaces,
 } from "./weather-places";
 import { weatherPlaceSchema } from "./schemas";
 
@@ -291,5 +293,91 @@ describe("listPlaces / usage / clear", () => {
     expect(u.bytes).toBeGreaterThan(1000);
     expect(await clearPlaces()).toBe(2);
     expect(col.docs.size).toBe(0);
+  });
+});
+
+describe("readPlaces (what the alerts read)", () => {
+  it("returns the asked places in the order asked, skipping missing ones", async () => {
+    const t = harare(11, 9);
+    await rememberPlace(payload("a"), { now: t });
+    await rememberPlace(payload("b"), { now: t });
+    const read = await readPlaces(["b", "nope", "a", "b"], t + 1000);
+    expect(read.map((p) => p.slug)).toEqual(["b", "a"]);
+    expect(read[0].payload.location.slug).toBe("b");
+    expect(read[0].fetchedAt).toBe(t);
+  });
+
+  it("is read-only: it does not touch the LRU timestamp or delete anything", async () => {
+    const t = harare(11, 9);
+    await rememberPlace(payload("a"), { now: t });
+    col.docs.set("broken", {
+      ...col.docs.get("a")!,
+      slug: "broken",
+      payload: "{",
+    });
+    col.patched.length = 0;
+    const read = await readPlaces(["a", "broken"], t + 1000);
+    expect(read.map((p) => p.slug)).toEqual(["a"]);
+    expect(col.patched).toEqual([]);
+    expect(col.docs.has("broken")).toBe(true);
+    // Expired records are left alone too.
+    expect(await readPlaces(["a"], harare(13, 1))).toEqual([]);
+    expect(col.docs.has("a")).toBe(true);
+  });
+
+  it("reads empty for no slugs, and when storage is unavailable", async () => {
+    expect(await readPlaces([])).toEqual([]);
+    expect(await readPlaces(["", ""])).toEqual([]);
+    _setPlaceCollectionSource(async () => null);
+    expect(await readPlaces(["a"])).toEqual([]);
+  });
+
+  it("one unreadable place does not hide the others", async () => {
+    const t = harare(11, 9);
+    await rememberPlace(payload("a"), { now: t });
+    await rememberPlace(payload("b"), { now: t });
+    const real = col.findOne.bind(col);
+    col.findOne = ((slug: string) =>
+      slug === "a"
+        ? { exec: async () => Promise.reject(new Error("boom")) }
+        : real(slug)) as typeof col.findOne;
+    expect((await readPlaces(["a", "b"], t + 1000)).map((p) => p.slug)).toEqual(
+      ["b"],
+    );
+  });
+});
+
+describe("subscribePlaces (the bell looks again when a place is stored)", () => {
+  it("is told after a place is stored and after the store is cleared, until it unsubscribes", async () => {
+    let calls = 0;
+    const off = subscribePlaces(() => {
+      calls += 1;
+    });
+    await rememberPlace(payload("a"), { now: harare(11, 9) });
+    expect(calls).toBe(1);
+    await clearPlaces();
+    expect(calls).toBe(2);
+    off();
+    await rememberPlace(payload("a"), { now: harare(11, 9) });
+    expect(calls).toBe(2);
+  });
+
+  it("is not told when nothing was stored or cleared, and a throwing listener breaks nothing", async () => {
+    let calls = 0;
+    const off = subscribePlaces(() => {
+      calls += 1;
+    });
+    const off2 = subscribePlaces(() => {
+      throw new Error("listener bug");
+    });
+    expect(await clearPlaces()).toBe(0);
+    await rememberPlace({ ...payload("a"), usingFallback: true });
+    expect(calls).toBe(0);
+    expect(await rememberPlace(payload("a"), { now: harare(11, 9) })).toBe(
+      true,
+    );
+    expect(calls).toBe(1);
+    off();
+    off2();
   });
 });

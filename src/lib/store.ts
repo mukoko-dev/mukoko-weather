@@ -10,12 +10,49 @@ import { sameSyncableState } from "./rxdb/sync-state";
 import { isLocationSlug } from "./current-slug";
 import { isPresetAnchor, type PresetAnchor } from "./location-presets";
 import { resolveTheme, type ThemePreference } from "./theme";
+import {
+  DEFAULT_NOTIFICATION_PREFS,
+  mergeNotificationPrefs,
+  sanitiseNotificationPrefs,
+  type NotificationPrefs,
+} from "./notification-prefs";
 
 export type { ThemePreference };
 export { resolveTheme };
 
 /** Tabs of the My Weather modal (ids match MyWeatherModal's TabsTrigger values). */
 export type MyWeatherTab = "location" | "activities" | "settings";
+
+/** What the notifications centre shows: the list of alerts, or the settings. */
+export type NotificationsView = "list" | "settings";
+
+/**
+ * Opens the report wizard already on a report type (and, when the alert is
+ * about another place than the one on screen, for that place). Both parts are
+ * optional and validated by `cleanReportPreset`.
+ */
+export interface ReportPreset {
+  reportType?: string;
+  locationSlug?: string;
+}
+
+/**
+ * A preset the wizard can trust. `openReportModal` is used directly as a click
+ * handler in places, so it can be handed a DOM event: anything that is not a
+ * plain object with a well-formed type or slug is no preset.
+ */
+export function cleanReportPreset(value: unknown): ReportPreset | null {
+  if (!value || typeof value !== "object") return null;
+  const { reportType, locationSlug } = value as Record<string, unknown>;
+  const preset: ReportPreset = {};
+  if (typeof reportType === "string" && /^[a-z]+(-[a-z]+)*$/.test(reportType)) {
+    preset.reportType = reportType;
+  }
+  if (typeof locationSlug === "string" && isLocationSlug(locationSlug)) {
+    preset.locationSlug = locationSlug;
+  }
+  return preset.reportType || preset.locationSlug ? preset : null;
+}
 
 // ---------------------------------------------------------------------------
 // Shamwari context — carries weather/location/summary data between pages
@@ -225,8 +262,21 @@ interface AppState {
   clearShamwariContext: () => void;
   /** Weather report modal visibility (transient) */
   reportModalOpen: boolean;
-  openReportModal: () => void;
+  /** Set when the wizard was opened from an alert (transient). */
+  reportPreset: ReportPreset | null;
+  openReportModal: (preset?: ReportPreset) => void;
   closeReportModal: () => void;
+  /**
+   * Alerts: which kinds the person wants and their quiet hours. Persisted in
+   * RxDB, device-local for now (not yet part of the device sync).
+   */
+  notificationPrefs: NotificationPrefs;
+  setNotificationPrefs: (patch: Partial<NotificationPrefs>) => void;
+  /** The notifications centre (bell, phone menu, settings entry points). Transient. */
+  notificationsOpen: boolean;
+  notificationsView: NotificationsView;
+  openNotifications: (view?: NotificationsView) => void;
+  closeNotifications: () => void;
   /** User-defined section order for the location page primary column */
   sectionOrder: string[];
   setSectionOrder: (order: string[]) => void;
@@ -406,8 +456,25 @@ export const useAppStore = create<AppState>()((set) => ({
     set({ shamwariContext: { ...ctx, timestamp: Date.now() } }),
   clearShamwariContext: () => set({ shamwariContext: null }),
   reportModalOpen: false,
-  openReportModal: () => set({ reportModalOpen: true }),
-  closeReportModal: () => set({ reportModalOpen: false }),
+  reportPreset: null,
+  openReportModal: (preset) =>
+    set({ reportModalOpen: true, reportPreset: cleanReportPreset(preset) }),
+  closeReportModal: () => set({ reportModalOpen: false, reportPreset: null }),
+  notificationPrefs: { ...DEFAULT_NOTIFICATION_PREFS },
+  setNotificationPrefs: (patch) =>
+    set((state) => {
+      const next = mergeNotificationPrefs(state.notificationPrefs, patch);
+      if (!_suppressRxDBWrites) updatePreferences({ notificationPrefs: next });
+      return { notificationPrefs: next };
+    }),
+  notificationsOpen: false,
+  notificationsView: "list",
+  openNotifications: (view = "list") =>
+    set({
+      notificationsOpen: true,
+      notificationsView: view === "settings" ? "settings" : "list",
+    }),
+  closeNotifications: () => set({ notificationsOpen: false }),
   // Initialise to the defaults on BOTH the server and the first client render so
   // hydration matches. The persisted order (if any) is applied post-hydration via
   // `hydrateSectionOrder()`, mirroring how RxDB-backed prefs are deferred.
@@ -492,6 +559,13 @@ export function initializeDeviceSync(): void {
               : null,
           });
         }
+        if (prefs.notificationPrefs !== undefined) {
+          useAppStore.setState({
+            notificationPrefs: sanitiseNotificationPrefs(
+              prefs.notificationPrefs,
+            ),
+          });
+        }
       } finally {
         _suppressRxDBWrites = false;
       }
@@ -510,6 +584,7 @@ export function initializeDeviceSync(): void {
         homeLocation: s.homeLocation,
         hiddenPresetSlugs: s.hiddenPresetSlugs,
         presetAnchor: s.presetAnchor,
+        notificationPrefs: s.notificationPrefs,
       };
     },
   })

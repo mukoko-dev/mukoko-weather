@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAppStore } from "@/lib/store";
 import { trackEvent } from "@/lib/analytics";
-import { REPORT_TYPES } from "@/lib/report-types";
+import { REPORT_TYPES, getReportTypeInfo } from "@/lib/report-types";
 import {
   CLARIFY_TIMEOUT_MS,
   clarifyQuestions,
@@ -37,6 +37,26 @@ const SEVERITIES = [
 
 type Step = "select" | "clarify" | "confirm";
 
+/**
+ * The wizard's follow-up questions for a type: the Worker's answer, or none
+ * (clarification is optional, so any failure carries on without questions).
+ */
+async function fetchQuestions(
+  locationSlug: string,
+  reportType: string,
+): Promise<string[]> {
+  try {
+    const res = await postWorker(
+      "reports/clarify",
+      { locationSlug, reportType },
+      { timeoutMs: CLARIFY_TIMEOUT_MS },
+    );
+    return res.ok ? clarifyQuestions(await res.json()) : [];
+  } catch {
+    return [];
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -45,9 +65,24 @@ export function WeatherReportModal() {
   const reportModalOpen = useAppStore((s) => s.reportModalOpen);
   const closeReportModal = useAppStore((s) => s.closeReportModal);
   const selectedLocation = useAppStore((s) => s.selectedLocation);
+  // Opened from an alert ("Report flooding"): the type is already chosen and
+  // the report is for that alert's place. Read once, when the wizard mounts
+  // (it is mounted only while open). A type this build does not know is
+  // ignored, so a button can never open the wizard on nothing.
+  const [opened] = useState(() => {
+    const preset = useAppStore.getState().reportPreset;
+    return {
+      type:
+        preset?.reportType && getReportTypeInfo(preset.reportType)
+          ? preset.reportType
+          : null,
+      slug: preset?.locationSlug ?? null,
+    };
+  });
+  const locationSlug = opened.slug ?? selectedLocation;
 
-  const [step, setStep] = useState<Step>("select");
-  const [reportType, setReportType] = useState<string | null>(null);
+  const [step, setStep] = useState<Step>(opened.type ? "clarify" : "select");
+  const [reportType, setReportType] = useState<string | null>(opened.type);
   const [severity, setSeverity] = useState("moderate");
   const [description, setDescription] = useState("");
   const [questions, setQuestions] = useState<string[]>([]);
@@ -74,24 +109,23 @@ export function WeatherReportModal() {
   const handleTypeSelect = async (typeId: string) => {
     setReportType(typeId);
     setLoading(true);
-
-    try {
-      const res = await postWorker(
-        "reports/clarify",
-        { locationSlug: selectedLocation, reportType: typeId },
-        { timeoutMs: CLARIFY_TIMEOUT_MS },
-      );
-
-      if (res.ok) {
-        setQuestions(clarifyQuestions(await res.json()));
-      }
-    } catch {
-      // Clarification is optional — continue without it
-    } finally {
-      setLoading(false);
-      setStep("clarify");
-    }
+    setQuestions(await fetchQuestions(locationSlug, typeId));
+    setLoading(false);
+    setStep("clarify");
   };
+
+  // Opened on a type: the step shows at once and the questions arrive when the
+  // Worker answers (the severity and the description do not wait for them).
+  useEffect(() => {
+    if (!opened.type) return;
+    let alive = true;
+    void fetchQuestions(locationSlug, opened.type).then((q) => {
+      if (alive) setQuestions(q);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [opened.type, locationSlug]);
 
   const handleSubmit = async () => {
     if (!reportType) return;
@@ -104,7 +138,7 @@ export function WeatherReportModal() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          locationSlug: selectedLocation,
+          locationSlug,
           reportType,
           severity,
           description: description.trim(),
@@ -117,13 +151,13 @@ export function WeatherReportModal() {
       }
 
       // The kept list for this place is now out of date.
-      forgetReports(selectedLocation);
+      forgetReports(locationSlug);
       setSubmitted(true);
       setStep("confirm");
       trackEvent("report_submitted", {
         type: reportType,
         severity,
-        location: selectedLocation,
+        location: locationSlug,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit report");
