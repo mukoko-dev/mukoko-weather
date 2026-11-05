@@ -3,6 +3,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import {
   AQI_SCALE,
+  FIRE_SCALE,
   FLIGHT_CATEGORY_PDF,
   FLIGHT_SCALE,
   PSI_SCALE,
@@ -260,7 +261,24 @@ describe("weather scales", () => {
     expect(status.uv).toBe("published");
     expect(status.cloud).toBe("ours");
     expect(status.frost).toBe("ours");
+    expect(status.fire).toBe("published");
     expect(PSI_SCALE.status).toBe("ours");
+  });
+
+  it("draws a fire detection in NASA GIBS's own colour, the same in both themes, with its name printed", () => {
+    // rgb(240, 40, 40): the `circle-color` of GIBS's FIRMS_VIIRS_Thermal_Anomalies
+    // vector style (read 2026-11-05), and the colour of the WMS pixels the map draws.
+    expect(FIRE_SCALE.bands).toHaveLength(1);
+    const [band] = FIRE_SCALE.bands;
+    expect(band.token).toBe("--wx-fire-1");
+    expect(tokenHex("light", band.token)).toBe("#f02828");
+    expect(tokenHex("dark", band.token)).toBe("#f02828");
+    expect(parseInt("f0", 16)).toBe(240);
+    expect(parseInt("28", 16)).toBe(40);
+    // Not a brand mineral or a severity colour.
+    expect(band.bg).toBe("bg-wx-fire-1");
+    expect(band.name).toBe("Fire detected by satellite");
+    expect(band.label).toBe("Detection");
   });
 
   it("temperature runs blue to red and rain follows the NOAA rate table", () => {
