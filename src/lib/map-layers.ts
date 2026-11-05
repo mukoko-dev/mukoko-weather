@@ -21,6 +21,7 @@ import {
 import {
   AQI_SCALE,
   CLOUD_SCALE,
+  FIRE_SCALE,
   RAIN_SCALE,
   TEMP_SCALE,
   WIND_SCALE,
@@ -281,6 +282,20 @@ export const MODEL_OVERLAY_ID = "model-overlay";
 /** Chip id for the air-quality view. It is NOT a Tomorrow.io tile layer. */
 export const AIR_QUALITY_LAYER_ID = "airQuality";
 
+/** Chip id for the satellite fire-detection layer (a NASA GIBS layer, see map-sources.ts). */
+export const WILDFIRE_LAYER_ID = "wildfire";
+
+/**
+ * What a Wildfires dot is, and is not, printed in the legend card. A VIIRS
+ * thermal anomaly is heat a satellite sensed, not a report of a wildfire:
+ * planned burns, gas flares and industrial heat show up the same way. FIRMS
+ * says its global data are available "within 3 hours of satellite observation"
+ * (earthdata.nasa.gov/data/tools/firms, read 2026-11-05), and cloud stops an
+ * infrared sensor seeing the ground.
+ */
+export const WILDFIRE_LIMITS =
+  "A dot is heat a satellite sensed, not a confirmed wildfire: it can be a planned burn, gas flare or industrial heat. Cloud can hide a real fire, and detections lag by hours.";
+
 /** One colour step on a legend scale. `className` is a static Tailwind class. */
 export interface LegendSegment {
   className: string;
@@ -302,6 +317,17 @@ export interface LayerLegend {
   segments: LegendSegment[];
   /** One line under the scale, e.g. how old the imagery is. */
   note?: string;
+  /**
+   * A layer drawn as separate marks, not a value scale (wildfire): the swatch
+   * a mark is drawn in (a static `bg-` class, the same token the map's pixels
+   * use) and the name printed beside it, so colour is never the only signal.
+   */
+  marker?: { className: string; label: string };
+  /**
+   * What the data cannot tell you, in plain words, shown with the legend
+   * whenever the layer is active (it stays visible when the sheet collapses).
+   */
+  limits?: string;
 }
 
 /** A labelled chip in the bottom sheet. */
@@ -513,6 +539,20 @@ export const MAP_CHIPS: readonly MapChip[] = [
       segments: [],
       // \u2060 (word joiner) keeps "4–6" from breaking after the dash on a narrow sheet.
       note: "NASA IMERG, about 10 km grid, 4–\u20606 hours behind",
+    },
+  },
+  {
+    id: WILDFIRE_LAYER_ID,
+    label: "Wildfires",
+    legend: {
+      unit: "detections",
+      segments: [],
+      marker: {
+        className: FIRE_SCALE.bands[0].bg,
+        label: FIRE_SCALE.bands[0].name,
+      },
+      note: "NOAA-20 VIIRS, about 375 m",
+      limits: WILDFIRE_LIMITS,
     },
   },
 ];

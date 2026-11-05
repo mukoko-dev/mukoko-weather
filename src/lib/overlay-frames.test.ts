@@ -187,12 +187,13 @@ describe("NASA GIBS timelines through the frame plan (#266)", () => {
         }
       });
 
-      it("builds each frame from the layer's own GIBS tiles, not the 512px overlay", () => {
+      it("builds each frame from the layer's own GIBS tiles, not the Tomorrow.io overlay", () => {
         for (const f of frames) {
           const src = buildWeatherOverlaySource(layer.chipId, f.time);
           expect(src.tiles[0]).toContain("gibs.earthdata.nasa.gov");
           expect(src.tiles[0]).toContain(encodeURIComponent(f.time));
-          expect(src.tileSize).toBe(256);
+          // WMTS tiles are 256 px; a WMS layer (wildfire) asks for 512 px.
+          expect(src.tileSize).toBe(layer.service === "wms" ? 512 : 256);
           expect(src.maxzoom).toBe(layer.maxZoom);
           expect(src.maxzoom).not.toBe(WEATHER_OVERLAY_MAX_ZOOM);
         }

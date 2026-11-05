@@ -46,6 +46,7 @@ import {
   readStoredMapLayer,
   timelineAxisLabels,
   timelineDefaultIndex,
+  WILDFIRE_LAYER_ID,
   writeStoredMapLayer,
   type TimelineFrame,
 } from "@/lib/map-layers";
@@ -59,6 +60,7 @@ import {
   mapModelForPreference,
   overlayAttribution,
   satelliteFrames,
+  utcDayLabel,
   type TimeInterval,
 } from "@/lib/map-sources";
 import {
@@ -225,6 +227,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
   const aqOn = activeLayer === AIR_QUALITY_LAYER_ID;
   const gibsLayer = getGibsLayer(activeLayer);
   const modelOn = isModelLayer(activeLayer);
+  const wildfireOn = activeLayer === WILDFIRE_LAYER_ID;
 
   // NASA GIBS: look up which frames exist (DescribeDomains) while a satellite
   // layer is active. Until it answers, frames come from a fixed latency.
@@ -590,7 +593,19 @@ export function MapDashboard({ location }: MapDashboardProps) {
                 </p>
               </>
             )}
-            {chip?.legend.note && (
+            {chip?.legend.marker && (
+              <p className="mt-1.5 flex items-center gap-2 text-sm text-text-primary">
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "size-3 shrink-0 rounded-full ring-1 ring-wx-outline",
+                    chip.legend.marker.className,
+                  )}
+                />
+                {chip.legend.marker.label}
+              </p>
+            )}
+            {chip?.legend.note && !chip.legend.limits && (
               <p className="mt-1 text-sm text-text-tertiary">
                 {chip.legend.note}
               </p>
@@ -640,6 +655,30 @@ export function MapDashboard({ location }: MapDashboardProps) {
           </button>
         </div>
 
+        {/* A layer with limits (wildfire) keeps its note, the day on screen and
+            what the data cannot tell you together, at full width (under the
+            icon and the chevron, not beside them) so they read in fewer lines
+            and the sheet stays short on a small phone. Above the collapsible
+            body, so they stay on screen when the sheet is folded. */}
+        {chip?.legend.limits && (
+          <div className="mt-2 text-sm">
+            {chip.legend.note && (
+              <p className="text-text-tertiary">
+                {chip.legend.note}
+                {wildfireOn && frames[step] && (
+                  <>
+                    {" · "}
+                    <span role="status">
+                      {`${utcDayLabel(frames[step].timestamp)} (UTC day)${frames[step].label === "Today" ? ", so far" : ""}`}
+                    </span>
+                  </>
+                )}
+              </p>
+            )}
+            <p className="mt-1 text-text-secondary">{chip.legend.limits}</p>
+          </div>
+        )}
+
         <div id={sheetId} hidden={!sheetOpen} className="mt-3">
           <h3 className="sr-only">Map layers and time</h3>
           <ChartErrorBoundary name="map layers">
@@ -669,7 +708,11 @@ export function MapDashboard({ location }: MapDashboardProps) {
                     setPlaying(next);
                   }}
                   zone={timelineZone}
-                  inputLabel={gibsLayer ? "Observation time" : "Forecast time"}
+                  inputLabel={
+                    gibsLayer
+                      ? (gibsLayer.timeLabel ?? "Observation time")
+                      : "Forecast time"
+                  }
                 />
               </ChartErrorBoundary>
             </div>

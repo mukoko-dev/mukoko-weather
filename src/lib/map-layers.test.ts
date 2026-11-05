@@ -24,8 +24,19 @@ import {
   MAP_MAX_PIXEL_RATIO,
   mapPixelRatioOverride,
   readStoredMapLayer,
+  timelineDefaultIndex,
+  weatherOverlayOpacity,
+  WILDFIRE_LAYER_ID,
+  WILDFIRE_LIMITS,
   writeStoredMapLayer,
 } from "./map-layers";
+import {
+  MAP_PROVIDERS,
+  attributionForLayer,
+  satelliteFrames,
+  getGibsLayer,
+} from "./map-sources";
+import { FIRE_SCALE } from "./weather-scales";
 
 describe("MAP_LAYERS", () => {
   it("has at least 3 layers (issue requirement)", () => {
@@ -198,7 +209,7 @@ describe("MapTiler style URLs", () => {
 });
 
 describe("map chips (full-screen map)", () => {
-  it("lists air quality, the four tile layers and the two NASA satellite layers, each with a label and a legend", () => {
+  it("lists air quality, the four tile layers, the two NASA satellite layers and wildfires, each with a label and a legend", () => {
     expect(MAP_CHIPS.map((c) => c.id)).toEqual([
       AIR_QUALITY_LAYER_ID,
       "precipitationIntensity",
@@ -207,6 +218,7 @@ describe("map chips (full-screen map)", () => {
       "cloudCover",
       "satellite",
       "satelliteRain",
+      "wildfire",
     ]);
     for (const chip of MAP_CHIPS) {
       expect(chip.label).toBeTruthy();
@@ -517,5 +529,93 @@ describe("mapPixelRatioOverride (#476)", () => {
       /\.\.\.\(pixelRatioOverride !== undefined && \{\s*pixelRatio: pixelRatioOverride,\s*\}\)/,
     );
     expect(map).not.toMatch(/^\s*pixelRatio: mapPixelRatio/m);
+  });
+});
+
+describe("wildfire layer (satellite fire detections)", () => {
+  const chip = getMapChip(WILDFIRE_LAYER_ID)!;
+
+  it("is a single-select chip labelled 'Wildfires', in MAP_CHIPS (so it is remembered like the others)", () => {
+    expect(WILDFIRE_LAYER_ID).toBe("wildfire");
+    expect(chip.label).toBe("Wildfires");
+    expect(MAP_CHIPS).toContain(chip);
+    // Not a Tomorrow.io tile layer: it is not in the display kiosk's layer list.
+    expect(MAP_LAYERS.some((l) => l.id === WILDFIRE_LAYER_ID)).toBe(false);
+  });
+
+  it("remembers the last choice through the existing localStorage key", () => {
+    const store = new Map<string, string>();
+    const storage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+    };
+    writeStoredMapLayer(storage, WILDFIRE_LAYER_ID);
+    expect(store.get(MAP_LAYER_STORAGE_KEY)).toBe("wildfire");
+    expect(readStoredMapLayer(storage)).toBe("wildfire");
+  });
+
+  it("prints what a dot is, by name beside its swatch (colour is never the only signal)", () => {
+    expect(chip.legend.unit).toBe("detections");
+    expect(chip.legend.segments).toEqual([]);
+    expect(chip.legend.marker).toEqual({
+      className: FIRE_SCALE.bands[0].bg,
+      label: "Fire detected by satellite",
+    });
+    // A static Tailwind class on the data colour token, never a raw colour.
+    expect(chip.legend.marker!.className).toBe("bg-wx-fire-1");
+    expect(chip.legend.marker!.className).not.toMatch(/#|rgb/);
+  });
+
+  it("states the honest limits in the legend card", () => {
+    expect(chip.legend.limits).toBe(WILDFIRE_LIMITS);
+    expect(WILDFIRE_LIMITS).toContain("not a confirmed wildfire");
+    expect(WILDFIRE_LIMITS).toContain("planned burn");
+    expect(WILDFIRE_LIMITS).toContain("gas flare");
+    expect(WILDFIRE_LIMITS).toContain("industrial heat");
+    expect(WILDFIRE_LIMITS).toContain("Cloud can hide a real fire");
+    expect(WILDFIRE_LIMITS).toContain("lag by hours");
+    // Plain words, short enough to read on a phone.
+    expect(WILDFIRE_LIMITS.length).toBeLessThan(220);
+  });
+
+  it("names the sensor and its detail (the UTC day is on the status line and the timeline)", () => {
+    expect(chip.legend.note).toBe("NOAA-20 VIIRS, about 375 m");
+  });
+
+  it("gets its credits from attributionForLayer, never a hand-written string", () => {
+    const labels = attributionForLayer(WILDFIRE_LAYER_ID).map((p) => p.label);
+    expect(labels).toContain(MAP_PROVIDERS["nasa-firms"].label);
+    const src = buildWeatherOverlaySource(WILDFIRE_LAYER_ID, "2026-11-04");
+    expect(src.attribution).toContain(MAP_PROVIDERS["nasa-firms"].label);
+    const own = readFileSync(resolve(__dirname, "map-layers.ts"), "utf-8");
+    expect(own).not.toContain("acknowledge");
+  });
+
+  it("builds a GIBS WMS source for the chosen day, drawn solid", () => {
+    const src = buildWeatherOverlaySource(WILDFIRE_LAYER_ID, "2026-11-04");
+    expect(src.tiles[0]).toContain("gibs.earthdata.nasa.gov/wms/epsg3857/");
+    expect(src.tiles[0]).toContain(
+      "LAYERS=VIIRS_NOAA20_Thermal_Anomalies_375m_All",
+    );
+    expect(src.tiles[0]).toContain("TIME=2026-11-04");
+    expect(src.tileSize).toBe(512);
+    expect(weatherOverlayOpacity(WILDFIRE_LAYER_ID)).toBe(1);
+  });
+
+  it("with no time ('now') still asks for a day that exists, never a future one", () => {
+    const src = buildWeatherOverlaySource(WILDFIRE_LAYER_ID, "now");
+    const day = /TIME=(\d{4}-\d{2}-\d{2})$/.exec(src.tiles[0])![1];
+    expect(Date.parse(`${day}T00:00:00Z`)).toBeLessThanOrEqual(Date.now());
+  });
+
+  it("offers the timeline (an observed loop), opening on the newest day", () => {
+    expect(layerSupportsTimeline(WILDFIRE_LAYER_ID)).toBe(true);
+    const frames = satelliteFrames(
+      getGibsLayer(WILDFIRE_LAYER_ID)!,
+      null,
+      new Date("2026-11-05T03:52:00Z"),
+    ).map((f) => ({ timestamp: f.time, label: f.label }));
+    expect(frames).toHaveLength(3);
+    expect(timelineDefaultIndex(WILDFIRE_LAYER_ID, frames)).toBe(2);
   });
 });
