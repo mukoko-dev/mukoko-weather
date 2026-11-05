@@ -387,12 +387,12 @@ async function checkViewport(browser, viewport) {
   );
   const settingsText = await dialog(page).innerText();
   note(
-    `${tag} Delivery: in the app always on, push not switched on yet, Telegram and Campfire coming soon, best effort`,
+    `${tag} Delivery: in the app always on, push not switched on yet, Campfire coming soon (no Telegram), best effort`,
     /Always on/.test(settingsText) &&
       /Push on this device/.test(settingsText) &&
       /Not switched on yet/.test(settingsText) &&
-      (settingsText.match(/Coming soon/g) ?? []).length === 2 &&
-      /Telegram/.test(settingsText) &&
+      (settingsText.match(/Coming soon/g) ?? []).length === 1 &&
+      !/Telegram/.test(settingsText) &&
       /Campfire/.test(settingsText) &&
       /Delivery is best effort\./.test(settingsText),
   );
@@ -400,7 +400,7 @@ async function checkViewport(browser, viewport) {
     .locator('[role="dialog"] button')
     .allInnerTexts();
   note(
-    `${tag} no button does nothing: push, Telegram and Campfire offer no control`,
+    `${tag} no button does nothing: push and Campfire offer no control`,
     !pushButtons.some((b) => /push|telegram|campfire/i.test(b)),
     JSON.stringify(pushButtons),
   );

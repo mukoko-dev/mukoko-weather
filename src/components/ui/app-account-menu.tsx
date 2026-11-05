@@ -290,8 +290,9 @@ function AccountMenu({
           "cursor-pointer list-none outline-none [&::-webkit-details-marker]:hidden",
           triggerClassName ??
             "flex min-h-[var(--touch-target-min)] items-center gap-2 rounded-[var(--radius-sm)] px-[var(--inset-floor)] hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
-          // The round hero trigger crops an avatar photo to its circle.
-          triggerClassName && "overflow-hidden",
+          // No overflow clip here: a photo crops itself (`rounded-full
+          // object-cover` on the <img>), and a clip would cut off the
+          // `.plover::after` tap area that runs the bar's whole height.
         )}
       >
         {avatar}

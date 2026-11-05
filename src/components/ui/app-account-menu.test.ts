@@ -24,6 +24,21 @@ function render(props: Record<string, unknown> = {}) {
   return renderToStaticMarkup(createElement(AccountMenu, props as never, row));
 }
 
+describe("AccountMenu — a custom trigger class", () => {
+  it("does not clip the trigger, so a .plover tap area can reach the bar's height", () => {
+    const html = render({
+      name: "Tendai Moyo",
+      imageUrl: "/avatar.png",
+      triggerClassName: "plover relative size-[var(--touch-target-min)]",
+    });
+    const summary = html.match(/<summary[^>]*>/)?.[0] ?? "";
+    expect(summary).toContain("plover");
+    expect(summary).not.toContain("overflow-hidden");
+    // The photo still crops itself to the circle.
+    expect(html).toMatch(/<img[^>]*rounded-full[^>]*object-cover/);
+  });
+});
+
 describe("AccountMenu — signed in", () => {
   const html = render({
     name: "Tendai Moyo",
@@ -102,14 +117,17 @@ describe("AccountMenu — signed out", () => {
 });
 
 describe("AccountMenu — trigger variants", () => {
-  it("a trigger class replaces the avatar-row look and crops to a circle (the hero's round control)", () => {
+  it("a trigger class replaces the avatar-row look (the bar's round control)", () => {
     const html = render({
       name: "A",
       initials: "A",
       triggerClassName: "kestrel-round",
     });
     expect(html).toMatch(/<summary[^>]*class="[^"]*kestrel-round/);
-    expect(html).toContain("overflow-hidden");
+    // Not clipped: a photo crops itself, and a clip would cut a .plover tap area.
+    expect(html.match(/<summary[^>]*class="([^"]*)"/)![1]).not.toContain(
+      "overflow-hidden",
+    );
     expect(html).not.toContain(
       "pointer-coarse:min-h-[var(--touch-target-min)]",
     );
