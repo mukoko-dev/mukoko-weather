@@ -431,7 +431,7 @@ export function AviationWeather({ slug, lat, lon }: Props) {
                         {latest.flight_category}
                       </span>
                     </div>
-                    <dl className="mt-3 grid grid-cols-3 gap-3">
+                    <dl className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(5.5rem,1fr))] gap-3">
                       <div className="flex flex-col justify-between">
                         <dt className="text-sm text-text-tertiary">
                           Cloud Cover

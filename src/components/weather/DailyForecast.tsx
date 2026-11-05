@@ -89,7 +89,7 @@ export function DailyForecast({ daily }: Props) {
                 {/* Main row: day, icon, temps, bar */}
                 <div className="flex items-center gap-2 sm:gap-3">
                   {/* Day + date */}
-                  <div className="flex w-10 shrink-0 flex-col items-center sm:w-12">
+                  <div className="flex min-w-10 shrink-0 flex-col items-center sm:min-w-12">
                     <span className="text-base font-medium text-text-secondary leading-tight">
                       {dayName}
                     </span>
