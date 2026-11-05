@@ -32,7 +32,7 @@ export function MapPreview({ location }: MapPreviewProps) {
     <section aria-labelledby="map-preview-heading">
       {/* mzizi-spacing-exempt: the card is edge to edge for the map picture; its header row carries the card inset (--space-card, 16 to 20px) itself */}
       <div className="baobab p-0 overflow-hidden">
-        <div className="flex items-center justify-between gap-2 px-[var(--space-card)] pt-[var(--space-card)] pb-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-[var(--space-card)] pt-[var(--space-card)] pb-2">
           <h2 id="map-preview-heading" className="giraffe">
             Weather Map
           </h2>
