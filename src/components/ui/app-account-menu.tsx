@@ -96,6 +96,26 @@
  *    panel's edge and rows whose own text inset is the floor, and carries a
  *    `mzizi-spacing-exempt` marker for `mzizi check`.
  *
+ * 13. `panelPlacement="above"` (the phone bottom bar's account control). The
+ *    panel opens UPWARD and INTO the screen. It is `absolute` with
+ *    `bottom-full left-0`, and the `<details>` is `static`, so the panel is
+ *    placed against the nearest positioned ancestor and not against the 49px
+ *    trigger. In the bottom bar that ancestor is the bar: its `<nav>` is
+ *    `fixed`, so the panel's bottom edge is `--float-gap` above the bar's top
+ *    edge and its left edge is the bar's own, `--float-left` from the screen
+ *    (the trigger is the bar's second slot, about 129px in, so a panel
+ *    anchored to it ran off the right edge). It is not `fixed` like the
+ *    below-the-trigger panel (change 11): the bar has a `backdrop-filter`,
+ *    which makes it the containing block of any `fixed` descendant, so a
+ *    `fixed` panel inside it would not be anchored to the viewport. The width
+ *    is capped to the bar's span (`100vw - --float-left - --float-right`) and
+ *    the height to the room above the bar (`100dvh` less the top inset, the
+ *    bar, its lift and the gap), so at any phone size the panel scrolls
+ *    instead of leaving the screen. Escape, an outside tap, blur and
+ *    `aria-controls` are unchanged (change 7, 8). The contract for a caller:
+ *    no positioned element between the menu and the ancestor it should hang
+ *    from (`MobileNav.render.test.ts` checks it for the bar).
+ *
  * Sign-out stays upstream's POST form (so no other page can trigger it with a
  * link). `/auth/signout` accepts the POST (a same-origin check) and answers
  * 303 to the existing sign-out route, which performs the WorkOS sign-out, so
@@ -129,6 +149,11 @@ export interface AccountMenuProps {
   triggerClassName?: string;
   /** Called with the new open state (the disclosure's toggle). */
   onOpenChange?: (open: boolean) => void;
+  /**
+   * Where the panel opens (local change 13). `below` (default) is under the
+   * trigger; `above` opens upward from the phone bottom bar, against that bar.
+   */
+  panelPlacement?: "below" | "above";
   children?: ReactNode;
 }
 
@@ -144,6 +169,25 @@ const ROW_GUTTER = "p-1"; // mzizi-spacing-exempt: gutter around full-width rows
 export const ACCOUNT_MENU_ROW_CLASS =
   "flex min-h-[var(--touch-target-min)] w-full items-center gap-2 rounded-[var(--radius-sm)] px-[var(--inset-floor)] text-left text-base font-semibold text-text-primary transition-colors hover:bg-surface-dim focus-visible:outline-2 focus-visible:outline-primary aria-[current=page]:text-primary";
 
+/** What every panel shares: the card surface, its scroll and its stacking. */
+const PANEL_CLASS =
+  "z-40 overflow-y-auto rounded-[var(--radius-card)] border border-border bg-popover text-left text-popover-foreground";
+
+/**
+ * Under the trigger (change 11): pinned to the viewport's right gutter on
+ * phones, upstream's `absolute right-0` from `sm`.
+ */
+const PANEL_BELOW =
+  "fixed right-2 sm:absolute sm:right-0 mt-1 max-h-[calc(100dvh-7rem)] w-[min(18rem,calc(100vw-1rem))]";
+
+/**
+ * Upward from the phone bottom bar (change 13). The room above the bar is the
+ * viewport less the top inset, the bar, its lift (`--float-bottom`) and the
+ * gap, so the panel scrolls rather than reaching past the top of the screen.
+ */
+const PANEL_ABOVE =
+  "absolute bottom-full left-0 mb-[var(--float-gap)] max-h-[calc(100dvh-var(--float-top)-var(--float-bottom)-var(--mobile-nav-bar-height)-var(--float-gap))] w-[min(18rem,calc(100vw-var(--float-left)-var(--float-right)))]";
+
 function AccountMenu({
   name = null,
   email = null,
@@ -157,8 +201,10 @@ function AccountMenu({
   triggerLabel,
   triggerClassName,
   onOpenChange,
+  panelPlacement = "below",
   children,
 }: AccountMenuProps) {
+  const above = panelPlacement === "above";
   const signedIn = Boolean(name || email);
   const shown = name ?? email ?? "Your account";
   const panelId = useId();
@@ -223,7 +269,8 @@ function AccountMenu({
   return (
     <details
       ref={ref}
-      className="group relative"
+      // `above` hangs from the bar, not from this 49px box (change 13).
+      className={cn("group", !above && "relative")}
       data-slot="account-menu"
       onToggle={(e) => {
         setOpen(e.currentTarget.open);
@@ -243,8 +290,9 @@ function AccountMenu({
           "cursor-pointer list-none outline-none [&::-webkit-details-marker]:hidden",
           triggerClassName ??
             "flex min-h-[var(--touch-target-min)] items-center gap-2 rounded-[var(--radius-sm)] px-[var(--inset-floor)] hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
-          // The round hero trigger crops an avatar photo to its circle.
-          triggerClassName && "overflow-hidden",
+          // No overflow clip here: a photo crops itself (`rounded-full
+          // object-cover` on the <img>), and a clip would cut off the
+          // `.plover::after` tap area that runs the bar's whole height.
         )}
       >
         {avatar}
@@ -261,7 +309,8 @@ function AccountMenu({
       <div
         id={panelId}
         className={cn(
-          "fixed right-2 sm:absolute sm:right-0 z-40 mt-1 max-h-[calc(100dvh-7rem)] w-[min(18rem,calc(100vw-1rem))] overflow-y-auto rounded-[var(--radius-card)] border border-border bg-popover text-left text-popover-foreground",
+          PANEL_CLASS,
+          above ? PANEL_ABOVE : PANEL_BELOW,
           ROW_GUTTER,
         )}
         data-slot="account-menu-panel"

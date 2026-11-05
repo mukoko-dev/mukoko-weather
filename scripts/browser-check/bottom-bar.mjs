@@ -17,7 +17,7 @@ import { BASE, SHOTS, chromium, proxyApi, reporter, run } from "./harness.mjs";
 const { note, finish } = reporter();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const TOUCH_TARGET_PX = 49; // --touch-target-min
-const LANE_MIN_PX = 110; // My Location and part of one more chip
+const LANE_MIN_PX = 110; // the account control and part of one more chip
 
 const WIDTHS = [
   { name: "iphone-se", width: 375, height: 667 },

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, type ReactNode } from "react";
-import { PhoneMenu } from "@/components/layout/PhoneMenu";
+import { MyLocationLink } from "@/components/layout/MyLocationLink";
 import { ShareControl } from "@/components/weather/ShareControl";
 import { NavigationIcon, WeatherIcon, nightIcon } from "@/lib/weather-icons";
 import {
@@ -177,7 +177,9 @@ export function CurrentConditions({
     >
       {/* Top row — the breadcrumb at the left; Share at the right from `sm` up.
           On phones the site header is not drawn over the sky (see globals.css,
-          [data-sky-hero]), so Share and the profile menu live in ONE round icon
+          [data-sky-hero]), so Share and My Location (the round arrow link to
+          `/`; it swapped places with the account avatar, which is now the
+          bottom bar's first slot, owner 2026-11-05) live in ONE round icon
           group (`.hadeda`) fixed to the top of the screen: it stays in reach
           while the page scrolls, and the breadcrumb leaves room for it. Round
           49px controls: content stays distinct from controls. */}
@@ -194,9 +196,7 @@ export function CurrentConditions({
             locationName={locationName}
             variant="card"
           />
-          <div className="relative">
-            <PhoneMenu trigger="profile" buttonClassName="duiker" />
-          </div>
+          <MyLocationLink className="duiker" />
         </div>
       </div>
       <div className="flex flex-col items-center pt-4 pb-[26px] text-center">
