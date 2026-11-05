@@ -97,20 +97,19 @@ Nothing writes production data and there is no migration script.
 
 ## Deploy order (required): two releases
 
-The change ships as two pull requests, and **the Workers go first**.
+The change shipped as two pull requests, and **the Workers went first**.
 
-1. **Workers half** (`feat/canonical-slugs-workers`, #506): everything under
-   `workers/**` plus the pinned table's source file
-   `src/lib/slug-migration-data.ts`. It is backward compatible with the app in
-   production, which only sends legacy slugs: every answer keeps the spelling
-   it was asked by, and a canonical slug, which nothing sends yet, is read as
-   the seed. A push to `main` that touches `workers/**` deploys every Worker
-   (`workers-deploy.yml`) while Vercel deploys the app on the same push, so
-   this half must be released ON ITS OWN, and its live checks (listed in the
-   PR) run before the next step.
-2. **App half** (#326): `src/**`, `docs/**` and the rest. Release it only
-   after step 1 is live. Once #506 is in `staging`, `staging` is merged into
-   #326 and the `workers/**` diff disappears from it.
+1. **Workers half** (#506, release 0.24.0): everything under `workers/**` plus
+   the pinned table's source file `src/lib/slug-migration-data.ts`. It is
+   backward compatible with the app that was in production, which only sent
+   legacy slugs: every answer keeps the spelling it was asked by, and a
+   canonical slug, which nothing sent yet, is read as the seed. A push to
+   `main` that touches `workers/**` deploys every Worker
+   (`workers-deploy.yml`) while Vercel deploys the app on the same push, so a
+   Workers change like this one is released ON ITS OWN and checked live first.
+   It is live and verified.
+2. **App half** (#326, release 0.25.0): `src/**`, `docs/**` and the rest,
+   released after step 1.
 
 Why the order matters: the new app sends the canonical slug of a seed. An old
 Worker does not know it as a seed and reads it as a spot: history is clamped
