@@ -96,7 +96,7 @@ interface WeatherLayerPanelProps {
 /**
  * Bottom-sheet layer chips. Every chip is labelled (no icon-only controls) and
  * single-select, so only one overlay is shown at a time. Each chip is a
- * 48px-minimum touch target.
+ * 49px-minimum touch target (`--touch-target-min`).
  */
 export function WeatherLayerPanel({
   activeLayer,
@@ -120,6 +120,7 @@ export function WeatherLayerPanel({
     <div
       role="group"
       aria-label="Map layers"
+      // mzizi-spacing-exempt: full-bleed sideways scroller; -mx-4 reaches into the sheet's own padding (ps-4 puts it back at the start, pe-6 clears the 1.5rem edge fade at the end) so chips scroll to the card's edge and overlap no target
       className="scrollbar-hide scroll-fade-x scroll-px-6 -mx-4 flex gap-2 overflow-x-auto ps-4 pe-6 pb-1"
     >
       {chips.map((chip) => {
@@ -152,6 +153,7 @@ export function WeatherLayerPanel({
       <div
         role="group"
         aria-label="Forecast model"
+        // mzizi-spacing-exempt: the same full-bleed sideways scroller as the layer chips above
         className="scrollbar-hide scroll-fade-x scroll-px-6 -mx-4 mt-1 flex gap-2 overflow-x-auto ps-4 pe-6 pb-1"
       >
         {models.map((model) => {

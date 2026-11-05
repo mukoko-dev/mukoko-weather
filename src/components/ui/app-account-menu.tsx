@@ -3,10 +3,16 @@
 /**
  * Mzizi App Account Menu — vendored from the Mzizi registry
  * (`npx shadcn@latest add https://api.mzizi.dev/v1/ui/app-account-menu`,
- * components/registry/n7-shell/app-account-menu.tsx at registry commit
- * 780457ae94afd5229a78a5d7ba5146bda8260812, contract `app/account-menu`).
- * Keep it in step with upstream: behaviour changes go to
- * mzizi-dev/mzizi-registry first.
+ * components/registry/n7-shell/app-account-menu.tsx, contract
+ * `app/account-menu`). First vendored at registry commit
+ * 780457ae94afd5229a78a5d7ba5146bda8260812; re-checked on 2026-11-05 against
+ * registry tag v4.26.5 (commit bcd07b08f21b311fc1e7acacad65b40fa0615709, the
+ * upstream file's sha256 is
+ * 6cd41bfa5f0d402715a2e636448976f5e925e6d4b7775578f00004f6c5c03878). Between the
+ * two the only upstream change to this file is the sign-out row's inline
+ * padding, `px-2` to `px-3.5` (registry 4.26.1), which this copy takes through
+ * `--inset-floor` (14px, local change 12). Keep it in step with upstream:
+ * behaviour changes go to mzizi-dev/mzizi-registry first.
  *
  * Upstream: who is signed in, the app's own account actions (children), and
  * sign-out as a POST form, in a `<details>` disclosure — it opens with the
@@ -14,7 +20,7 @@
  * phone menu (owner rule: Mzizi registry components first). Why a `<details>`
  * popover and not the registry `bottom-sheet` / `drawer`: the menu is the
  * account menu (identity, the app's links, sign-out) that the Mzizi shell
- * standard puts at the end of the top bar, and about ten 48px rows fit a
+ * standard puts at the end of the top bar, and about ten 49px rows fit a
  * scrolling 18rem panel under the trigger; a sheet would add a second overlay
  * pattern to a screen that already has the My Weather dialog.
  *
@@ -25,22 +31,27 @@
  *    Here a visitor with no `name`/`email` gets the user icon, no identity
  *    header and a "Sign in" row (`signInHref`) instead of the sign-out form.
  * 2. `trigger`, `triggerLabel`, `triggerClassName`. The hero's top row is a
- *    round 48px control over the sky (`kestrel-round`), and the header's action
+ *    round 49px control over the sky (`kestrel-round`), and the header's action
  *    pill carries a ⋯; upstream fixes the trigger to a 32px row with a 24px
  *    avatar and a name from `xl`. With no `triggerClassName` the upstream look
- *    is kept (avatar row, name from `xl`).
+ *    is kept (avatar row, name from `xl`), at the Bundu floor: the row is
+ *    `--touch-target-min` tall at every pointer (upstream is 32px, 44px on
+ *    touch) and has the `--inset-floor` inline padding (upstream `px-1`).
  * 3. `initials` and `imageUrl` are passed in. Upstream derives initials by
  *    splitting the name; this app already has `initialsFor` (first and last
  *    name, else the email's first letter) and a profile picture guarded by
  *    `isValidImageUrl`.
- * 4. Touch targets use `--touch-target-min` (48px). Upstream's coarse-pointer
- *    height is 44px (`pointer-coarse:h-11`); this app's floor is 48px.
+ * 4. Touch targets use `--touch-target-min` (49px, the Bundu floor).
+ *    Upstream's coarse-pointer height is 44px (`pointer-coarse:h-11`).
  * 5. No shadow and a token radius: upstream's panel is `shadow-lg` and
  *    `rounded-md`. Mzizi separates surfaces with borders and this repo
  *    refuses the shorthand radii (`rounded-[var(--radius-card)]`,
  *    `rounded-[var(--radius-sm)]`). Text sizes are the `--text-*` scale tokens
  *    (the registry's `text-body-sm` / `text-caption` utilities are not
- *    registered in this app's Tailwind theme).
+ *    registered in this app's Tailwind theme). The email line and the default
+ *    avatar's initials use `--text-body-sm` (14px), which is what upstream's
+ *    `text-caption` is since registry 4.23.0; this app's own `--text-caption`
+ *    is still 12px, under the Bundu floor, until its text sizes follow (#479).
  * 6. The panel scrolls (`max-h-[calc(100dvh-7rem)]`): with the app's rows it is
  *    taller than a landscape phone. The slot wrapper is `p-1`, not `px-3 py-2`,
  *    because the slot holds full-width rows that carry their own padding.
@@ -76,6 +87,14 @@
  *    calc(100vw-1rem))]` never exceeds the viewport minus the 0.5rem gutters,
  *    so its left edge is always at or past the left gutter whatever the
  *    trigger's place. From `sm` it is the upstream `absolute right-0` again.
+ * 12. Inline insets read the Bundu floor token. Every row (`ACCOUNT_MENU_ROW_CLASS`,
+ *    the sign-in and sign-out rows included) and the identity block take
+ *    `px-[var(--inset-floor)]` (14px). Upstream writes the sign-out row's
+ *    14px as the literal `px-3.5` (registry 4.26.1) and still leaves the
+ *    identity block at `px-3` (12px), under the floor. The 4px `p-1` around
+ *    the rows (`ROW_GUTTER`) is not a text inset, it is the gutter between the
+ *    panel's edge and rows whose own text inset is the floor, and carries a
+ *    `mzizi-spacing-exempt` marker for `mzizi check`.
  *
  * Sign-out stays upstream's POST form (so no other page can trigger it with a
  * link). `/auth/signout` accepts the POST (a same-origin check) and answers
@@ -113,9 +132,17 @@ export interface AccountMenuProps {
   children?: ReactNode;
 }
 
-/** One 48px row, for the slot and the sign-in / sign-out rows. */
+/**
+ * The gutter between the panel's edge and its full-width rows. Not a text
+ * inset: every row carries its own `--inset-floor` padding, so the text is
+ * 14px from the row's edge, and this keeps the row's hover fill off the panel
+ * border.
+ */
+const ROW_GUTTER = "p-1"; // mzizi-spacing-exempt: gutter around full-width rows that carry the 14px text inset themselves
+
+/** One 49px row (`--touch-target-min`), for the slot and the sign-in / sign-out rows. */
 export const ACCOUNT_MENU_ROW_CLASS =
-  "flex min-h-[var(--touch-target-min)] w-full items-center gap-2 rounded-[var(--radius-sm)] px-3 text-left text-base font-semibold text-text-primary transition-colors hover:bg-surface-dim focus-visible:outline-2 focus-visible:outline-primary aria-[current=page]:text-primary";
+  "flex min-h-[var(--touch-target-min)] w-full items-center gap-2 rounded-[var(--radius-sm)] px-[var(--inset-floor)] text-left text-base font-semibold text-text-primary transition-colors hover:bg-surface-dim focus-visible:outline-2 focus-visible:outline-primary aria-[current=page]:text-primary";
 
 function AccountMenu({
   name = null,
@@ -181,7 +208,7 @@ function AccountMenu({
         <span
           aria-hidden="true"
           className={cn(
-            "inline-flex items-center justify-center text-[length:var(--text-caption)] leading-[var(--text-caption-leading)] font-semibold",
+            "inline-flex items-center justify-center text-[length:var(--text-body-sm)] leading-[var(--text-body-sm-leading)] font-semibold",
             !triggerClassName &&
               "h-6 w-6 rounded-full bg-muted ring-1 ring-border",
           )}
@@ -215,7 +242,7 @@ function AccountMenu({
         className={cn(
           "cursor-pointer list-none outline-none [&::-webkit-details-marker]:hidden",
           triggerClassName ??
-            "flex h-8 items-center gap-2 rounded-[var(--radius-sm)] px-1 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:min-h-[var(--touch-target-min)]",
+            "flex min-h-[var(--touch-target-min)] items-center gap-2 rounded-[var(--radius-sm)] px-[var(--inset-floor)] hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
           // The round hero trigger crops an avatar photo to its circle.
           triggerClassName && "overflow-hidden",
         )}
@@ -233,31 +260,34 @@ function AccountMenu({
       </summary>
       <div
         id={panelId}
-        className="fixed right-2 sm:absolute sm:right-0 z-40 mt-1 max-h-[calc(100dvh-7rem)] w-[min(18rem,calc(100vw-1rem))] overflow-y-auto rounded-[var(--radius-card)] border border-border bg-popover p-1 text-left text-popover-foreground"
+        className={cn(
+          "fixed right-2 sm:absolute sm:right-0 z-40 mt-1 max-h-[calc(100dvh-7rem)] w-[min(18rem,calc(100vw-1rem))] overflow-y-auto rounded-[var(--radius-card)] border border-border bg-popover text-left text-popover-foreground",
+          ROW_GUTTER,
+        )}
         data-slot="account-menu-panel"
         onClick={(e) => {
           if ((e.target as Element).closest("a, [data-close-menu]")) close();
         }}
       >
         {signedIn && (
-          <div className="px-3 py-2">
+          <div className="px-[var(--inset-floor)] py-2">
             <p className="truncate text-[length:var(--text-body-sm)] leading-[var(--text-body-sm-leading)] font-semibold">
               {name ?? "Signed in"}
             </p>
             {email && (
-              <p className="truncate text-[length:var(--text-caption)] leading-[var(--text-caption-leading)] text-muted-foreground">
+              <p className="truncate text-[length:var(--text-body-sm)] leading-[var(--text-body-sm-leading)] text-muted-foreground">
                 {email}
               </p>
             )}
           </div>
         )}
         {hasChildren && (
-          <div className={cn("p-1", signedIn && "border-t border-border")}>
+          <div className={cn(ROW_GUTTER, signedIn && "border-t border-border")}>
             {children}
           </div>
         )}
         {!signedIn && signInHref && (
-          <div className="border-t border-border p-1">
+          <div className={cn("border-t border-border", ROW_GUTTER)}>
             <Link
               href={signInHref}
               prefetch={false}
@@ -276,7 +306,7 @@ function AccountMenu({
           <form
             method="post"
             action={signOutAction}
-            className="border-t border-border p-1"
+            className={cn("border-t border-border", ROW_GUTTER)}
           >
             <button type="submit" className={ACCOUNT_MENU_ROW_CLASS}>
               <LogOut
