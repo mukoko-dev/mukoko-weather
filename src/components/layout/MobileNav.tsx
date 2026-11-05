@@ -73,7 +73,7 @@ function LaneFallback() {
       href={MY_LOCATION_HREF}
       prefetch={false}
       aria-label="My Location"
-      className="lark press-scale min-w-[var(--touch-target-min)] px-0"
+      className="lark press-scale min-w-[var(--touch-target-min)]"
     >
       <NavigationIcon size={18} />
     </Link>
@@ -86,7 +86,7 @@ function LaneFallback() {
  * src/components/ui/mzizi-bottom-nav.tsx) with Map pinned at the start, the
  * places lane in the middle and Locations pinned at the end. The lane
  * (PlaceLane) is My Location first and pinned, then one chip per saved
- * place, scrolling sideways behind it; each chip is a real link (48px target,
+ * place, scrolling sideways behind it; each chip is a real link (49px target,
  * the place's name as its label, `aria-current` on the current one,
  * `location_changed` method "saved" on tap) that switches place in place.
  * Swiping left/right on the dashboard (useLocationSwipe) moves between the

@@ -113,11 +113,22 @@ describe("AccountMenu — trigger variants", () => {
     expect(html).not.toContain(
       "pointer-coarse:min-h-[var(--touch-target-min)]",
     );
+    // The default look's own height and inset are not applied to it.
+    expect(html.match(/<summary[^>]*class="([^"]*)"/)![1]).not.toContain(
+      "px-[var(--inset-floor)]",
+    );
   });
 
-  it("without a trigger class it keeps the upstream avatar row, 48px on touch", () => {
+  it("without a trigger class it keeps the upstream avatar row, at the Bundu floor (49px tall at every pointer, 14px inline inset)", () => {
     const html = render({ name: "A", initials: "A" });
-    expect(html).toContain("pointer-coarse:min-h-[var(--touch-target-min)]");
+    const summary = html.match(/<summary[^>]*class="([^"]*)"/)![1];
+    expect(summary).toContain("min-h-[var(--touch-target-min)]");
+    expect(summary).toContain("px-[var(--inset-floor)]");
+    // Upstream's 32px row (44px on touch) and its 4px inset are gone.
+    expect(summary).not.toMatch(/(^|\s)h-8(\s|$)/);
+    expect(summary).not.toContain("pointer-coarse:");
+    // mzizi-spacing-exempt: names the class this asserts is gone
+    expect(summary).not.toMatch(/(^|\s)px-1(\s|$)/);
   });
 
   it("a trigger node and label replace the avatar and the name (the header's ⋯)", () => {

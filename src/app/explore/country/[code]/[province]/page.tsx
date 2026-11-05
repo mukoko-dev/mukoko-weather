@@ -12,6 +12,7 @@ import {
   getProvinceBySlug,
 } from "@/lib/db";
 import { getFlagEmoji, PROVINCES } from "@/lib/countries";
+import { locationPath } from "@/lib/slug-migration";
 
 export const revalidate = 3600;
 
@@ -106,7 +107,7 @@ export default async function ProvinceDetailPage({ params }: Props) {
         {locations.map((loc) => (
           <ExploreCard
             key={loc.slug}
-            href={`/${loc.slug}`}
+            href={locationPath(loc.slug)}
             as="h2"
             title={loc.name}
             meta={

@@ -26,7 +26,10 @@ export function MapSkeleton({
       aria-label="Loading map"
     >
       {/* Simulated map grid */}
-      <div className="absolute inset-0 grid grid-cols-4 grid-rows-3 gap-px opacity-[0.04]">
+      <div
+        // mzizi-spacing-exempt: decorative placeholder grid lines (no controls, no text); the 1px gap is the line
+        className="absolute inset-0 grid grid-cols-4 grid-rows-3 gap-px opacity-[0.04]"
+      >
         {Array.from({ length: 12 }).map((_, i) => (
           <div key={i} className="bg-text-primary" />
         ))}

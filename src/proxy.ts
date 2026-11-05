@@ -6,6 +6,7 @@ import {
   classifyLocationPath,
   isRenderableLocation,
 } from "@/lib/location-gate";
+import { LEGACY_TO_CANONICAL } from "@/lib/slug-migration";
 import { isBareNameCandidate, resolveBareName } from "@/lib/bare-name";
 import { resolveLocationSlug } from "@/lib/places";
 import { isFeatureEnabled } from "@/lib/feature-flags";
@@ -174,8 +175,18 @@ export default async function proxy(
     ? rewriteWithAuthkit(request, headers, LOCATION_NOT_FOUND_REWRITE)
     : handleAuthkitProxy(request, headers);
 
+  // ── Legacy lastLocation cookie → canonical (home page, once) ────────────
+  // A cookie set before the canonical-slug move holds `harare`. The home
+  // page still resolves it (the resolver accepts both), so this only tidies
+  // the cookie; table only, no lookup, idempotent.
+  if (pathname === "/") {
+    const stored = request.cookies.get(LAST_LOCATION_COOKIE)?.value;
+    const canonical = stored ? LEGACY_TO_CANONICAL.get(stored) : undefined;
+    if (canonical) setLastLocationCookie(response, canonical);
+  }
+
   // ── Location pages: persist slug in cookie (30 days) ────────────────────
-  // Only the first path segment — sub-routes like /harare/forecast set "harare".
+  // Only the first path segment — sub-routes like /{slug}/forecast set "{slug}".
   // Deliberately still set for a slug the gate just 404'd: whether a 404 slug
   // may overwrite the cookie is an open owner decision (#238).
   const slug = pathname.slice(1).split("/")[0];
@@ -190,20 +201,7 @@ export default async function proxy(
     LOCATION_SLUG_RE.test(slug) &&
     !KNOWN_ROUTES.has(slug)
   ) {
-    // `response.cookies` was built before AuthKit's Set-Cookie headers were
-    // applied, and setting through it rewrites the whole header from its own
-    // copy, dropping a refreshed session cookie. So set it (Next's cookie
-    // bookkeeping included), then put back whatever AuthKit had sent.
-    const authkitCookies = response.headers.getSetCookie();
-    response.cookies.set(LAST_LOCATION_COOKIE, slug, {
-      maxAge: LAST_LOCATION_MAX_AGE_S,
-      path: "/",
-      sameSite: "lax",
-    });
-    const kept = new Set(response.headers.getSetCookie());
-    for (const cookie of authkitCookies) {
-      if (!kept.has(cookie)) response.headers.append("set-cookie", cookie);
-    }
+    setLastLocationCookie(response, slug);
   }
 
   // ── The app shell the service worker may keep (src/lib/sw-navigation.ts) ──
@@ -226,6 +224,25 @@ export default async function proxy(
   }
 
   return response;
+}
+
+/**
+ * `response.cookies` was built before AuthKit's Set-Cookie headers were
+ * applied, and setting through it rewrites the whole header from its own
+ * copy, dropping a refreshed session cookie. So set it (Next's cookie
+ * bookkeeping included), then put back whatever AuthKit had sent.
+ */
+function setLastLocationCookie(response: NextResponse, slug: string): void {
+  const authkitCookies = response.headers.getSetCookie();
+  response.cookies.set(LAST_LOCATION_COOKIE, slug, {
+    maxAge: LAST_LOCATION_MAX_AGE_S,
+    path: "/",
+    sameSite: "lax",
+  });
+  const kept = new Set(response.headers.getSetCookie());
+  for (const cookie of authkitCookies) {
+    if (!kept.has(cookie)) response.headers.append("set-cookie", cookie);
+  }
 }
 
 /**

@@ -4,7 +4,11 @@
  *
  * A page's shell must not wait on data. Two kinds of place need none:
  *
- * - a shipped seed place (`harare`, `nairobi-ke`), known at build time;
+ * - a shipped seed place (`harare`, `nairobi-ke`), known at build time, under
+ *   its legacy slug or its canonical one (`harare--ksy4dd1`, #317). A
+ *   canonical seed slug is a spot by grammar, so it is matched as the seed
+ *   FIRST: the place keeps its own province, tags and elevation instead of
+ *   becoming a bare coordinate;
  * - a spot (`{name}--{geohash}`), which carries its own coordinate.
  *
  * Anything else (a community place created through the platform, an OSM place
@@ -19,19 +23,29 @@
 
 import { nearestWithin } from "./geo";
 import { LOCATIONS, type WeatherLocation } from "./locations";
+import { CANONICAL_TO_LEGACY, canonicalSlug } from "./slug-migration";
 import {
   coordinateLabel,
   isCoordinateNameSlug,
   parseSmartSlug,
 } from "./smart-slug";
 
+/**
+ * The shipped places, keyed by the LEGACY slug (the seed list's own key).
+ * Each carries its CANONICAL slug, which is what a page, a link and a saved
+ * place use (#317).
+ */
 const CATALOGUE = new Map<string, WeatherLocation>(
-  LOCATIONS.map((loc) => [loc.slug, loc]),
+  LOCATIONS.map((loc) => [loc.slug, { ...loc, slug: canonicalSlug(loc.slug) }]),
 );
 
-/** A shipped seed place, or null. */
+/**
+ * A shipped seed place, or null. Accepts the legacy slug (`harare`) or the
+ * canonical one (`harare--ksy4dd1`); the place returned carries the canonical
+ * slug either way.
+ */
 export function catalogueLocation(slug: string): WeatherLocation | null {
-  return CATALOGUE.get(slug) ?? null;
+  return CATALOGUE.get(CANONICAL_TO_LEGACY.get(slug) ?? slug) ?? null;
 }
 
 /**

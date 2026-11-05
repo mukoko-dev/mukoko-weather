@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useDebounce } from "./use-debounce";
 import { fetchPlaces } from "./weather-api";
+import { canonicalSlug } from "./slug-migration";
 
 export interface QuickSearchLocation {
   slug: string;
@@ -96,7 +97,12 @@ export function useLocationQuickSearch({
           if (!res.ok) throw new Error(`Search failed (${res.status})`);
           const data = await res.json();
           if (!disposed) {
-            setResults(data?.locations ?? []);
+            // A shipped seed is answered by its legacy slug; the link and the
+            // saved place are the canonical one (#317).
+            const found: QuickSearchLocation[] = data?.locations ?? [];
+            setResults(
+              found.map((loc) => ({ ...loc, slug: canonicalSlug(loc.slug) })),
+            );
             setError(false);
           }
         })

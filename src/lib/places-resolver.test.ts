@@ -32,6 +32,8 @@ vi.mock("./places-geo-collection", () => ({
 }));
 
 const { resolveLocationSlug } = await import("./places");
+const { SEED_SLUG_TABLE } = await import("./slug-migration-data");
+const { canonicalSlug } = await import("./slug-migration");
 
 /** The Worker knows no place unless a test says so; never the live network. */
 let workerFetch: ReturnType<typeof vi.fn>;
@@ -65,7 +67,8 @@ describe("resolveLocationSlug — seed fallback", () => {
     const loc = await resolveLocationSlug("singapore-sg");
     expect(loc).not.toBeNull();
     expect(loc?.name).toBe("Singapore");
-    expect(loc?.slug).toBe("singapore-sg");
+    // The legacy slug resolves, and comes back as the canonical one.
+    expect(loc?.slug).toBe(canonicalSlug("singapore-sg"));
     // Real coordinates, so the weather fetch downstream actually works.
     expect(loc?.lat).toBeCloseTo(1.35, 1);
     expect(loc?.lon).toBeCloseTo(103.82, 1);
@@ -475,7 +478,10 @@ describe("resolveLocationSlug — platform slugs from search", () => {
     };
     const loc = await resolveLocationSlug("bulawayo-e7b1f4");
     expect(loc?.name).toBe("Bulawayo");
+    // A platform slug keeps its slug (#317): only the pinned seed table moves
+    // to the canonical form, so what is stored under this slug is still found.
     expect(loc?.slug).toBe("bulawayo-e7b1f4");
+    expect(loc?.platformSlug).toBe("bulawayo-e7b1f4");
     expect(loc?.lat).toBeCloseTo(-20.15, 1);
   });
 
@@ -563,7 +569,7 @@ describe("resolveLocationSlug — a shipped place never 404s (#414)", () => {
       };
       findArrayImpl = findOneImpl as () => Promise<unknown[]>;
       const loc = await resolveLocationSlug(slug);
-      expect(loc?.slug).toBe(slug);
+      expect(loc?.slug).toBe(canonicalSlug(slug));
       expect(loc?._id).toBe(`seed:${slug}`);
     },
   );
@@ -573,7 +579,7 @@ describe("resolveLocationSlug — a shipped place never 404s (#414)", () => {
     findArrayImpl = () => new Promise(() => undefined);
     const started = Date.now();
     const loc = await resolveLocationSlug("harare", { dbTimeoutMs: 30 });
-    expect(loc?.slug).toBe("harare");
+    expect(loc?.slug).toBe(canonicalSlug("harare"));
     expect(Date.now() - started).toBeLessThan(1000);
   });
 
@@ -606,7 +612,7 @@ describe("resolveLocationSlug — a shipped place never 404s (#414)", () => {
     ).rejects.toThrow("malformed placesGeo document");
     // ...and absorbed on the render path: the shipped place renders.
     const loc = await resolveLocationSlug("harare");
-    expect(loc?.slug).toBe("harare");
+    expect(loc?.slug).toBe(canonicalSlug("harare"));
     expect(loc?._id).toBe("seed:harare");
   });
 });
@@ -624,6 +630,7 @@ describe("resolveLocationSlug — a place the Worker names (#414)", () => {
         : notFound(),
     );
     const loc = await resolveLocationSlug("sembawang-sg");
+    // A community place keeps its slug (#317).
     expect(loc).toMatchObject({
       slug: "sembawang-sg",
       name: "Sembawang",
@@ -757,5 +764,91 @@ describe("resolveLocationSlug — a place the Worker names (#414)", () => {
     stubWorker(notFound);
     await resolveLocationSlug("canberra-residences--osm-w890123");
     expect(workerFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("resolveLocationSlug — canonical slugs (#317)", () => {
+  beforeEach(() => {
+    findOneImpl = async () => null;
+    findArrayImpl = async () => [];
+  });
+
+  it("resolves a canonical seed slug as the seed itself, not as a bare spot", async () => {
+    const loc = await resolveLocationSlug(canonicalSlug("bulawayo"));
+    expect(loc?.slug).toBe(canonicalSlug("bulawayo"));
+    expect(loc?._id).toBe("seed:bulawayo");
+    // The seed's own province, tags and elevation, not a neighbour's.
+    expect(loc?.province).toBe("Bulawayo");
+    expect(loc?.tags).toContain("city");
+    expect(loc?.elevationApproximate).toBeUndefined();
+    expect(loc?.regionApproximate).toBeUndefined();
+  });
+
+  it("resolves the legacy and the canonical slug to the same place", async () => {
+    const legacy = await resolveLocationSlug("nairobi-ke");
+    const canonical = await resolveLocationSlug(canonicalSlug("nairobi-ke"));
+    expect(legacy).toEqual({ ...canonical, updatedAt: legacy?.updatedAt });
+    expect(legacy?.slug).toBe(canonicalSlug("nairobi-ke"));
+  });
+
+  it("leaves a spot and its own slug alone (a fixed point)", async () => {
+    const loc = await resolveLocationSlug("west-paddock--ksy4dd7");
+    expect(loc?.slug).toBe("west-paddock--ksy4dd7");
+  });
+
+  it("keeps the slug of a community place that is not a shipped seed (its stored data is found by it)", async () => {
+    findOneImpl = async (filter) => {
+      const f = filter as Record<string, unknown>;
+      if (f["sourceProvenance.mukokoSlug"] === "mbare-musika-zw") {
+        return {
+          _id: "pg-mbare",
+          name: "Mbare Musika",
+          slug: "mbare-musika-9f8e7d",
+          geoType: "town",
+          isoCode: "ZW",
+          geo: { type: "Point", coordinates: [31.0397, -17.8559] },
+          sourceProvenance: {
+            mukokoSlug: "mbare-musika-zw",
+            mukokoProvince: "Harare",
+            mukokoTags: ["market"],
+          },
+        };
+      }
+      return null;
+    };
+    const loc = await resolveLocationSlug("mbare-musika-zw");
+    // Not `mbare-musika--<geohash>`: that is a spot, which would lose the
+    // record's province and tags and every report and day stored by this slug.
+    expect(loc?.slug).toBe("mbare-musika-zw");
+    expect(loc?.province).toBe("Harare");
+    expect(loc?.tags).toEqual(["market"]);
+    expect(loc?.country).toBe("ZW");
+  });
+
+  it("keeps a platform slug even when it names a shipped city's twin", async () => {
+    findOneImpl = async (filter) =>
+      (filter as Record<string, unknown>).slug === "harare-35c223"
+        ? {
+            _id: "pg-harare",
+            name: "Harare",
+            slug: "harare-35c223",
+            geoType: "city",
+            isoCode: "ZW",
+            geo: { type: "Point", coordinates: [31.04, -17.84] },
+          }
+        : null;
+    const loc = await resolveLocationSlug("harare-35c223");
+    expect(loc?.slug).toBe("harare-35c223");
+    expect(loc?.slug).not.toBe(canonicalSlug("harare"));
+  });
+
+  it("moves only a slug in the pinned table", async () => {
+    // Every shipped seed, by its legacy slug, comes back canonical...
+    for (const [legacy, canonical] of SEED_SLUG_TABLE) {
+      expect((await resolveLocationSlug(legacy))?.slug, legacy).toBe(canonical);
+    }
+    // ...and a slug that is not in the table is never rewritten.
+    expect(canonicalSlug("kakamega-ke")).toBe("kakamega-ke");
+    expect(canonicalSlug("harare-35c223")).toBe("harare-35c223");
   });
 });

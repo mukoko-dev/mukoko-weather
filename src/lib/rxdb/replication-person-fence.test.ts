@@ -5,6 +5,7 @@
  * only those: everything else it pulls is unchanged.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { canonicalSlug } from "../slug-migration";
 
 const captured = vi.hoisted(() => ({
   pull: null as
@@ -99,8 +100,10 @@ describe("the legacy device-profile pull and the person sync", () => {
     expect(doc).toMatchObject({
       id: "device-1",
       theme: "dark",
-      selectedLocation: "harare",
-      savedLocations: ["harare"],
+      // The profile was saved before the canonical-slug move; the pull maps
+      // its places and touches nothing else (#317).
+      selectedLocation: canonicalSlug("harare"),
+      savedLocations: [canonicalSlug("harare")],
       hasOnboarded: true,
       homeLocation: "bulawayo",
     });
