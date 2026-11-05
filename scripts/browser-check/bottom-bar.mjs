@@ -8,7 +8,9 @@
 // several phone widths, the longest label ("Locations") fits whole inside its
 // item (not cut, not overflowing), the lane keeps a usable width, the items
 // stay inside the bar, and below 360px (labels screen-reader-only) both are
-// still equal and one touch target wide. Screenshots go to SHOTS.
+// still equal and one touch target wide, and the places lane moves sideways
+// only (owner, 2026-11-05: "movable up and down as well, it should only move
+// left and right"). Screenshots go to SHOTS.
 import { join } from "node:path";
 import { BASE, SHOTS, chromium, proxyApi, reporter, run } from "./harness.mjs";
 
@@ -23,6 +25,27 @@ const WIDTHS = [
   { name: "iphone-pro-max", width: 430, height: 932 },
   { name: "small", width: 340, height: 640 },
 ];
+
+// Try to scroll the lane's scroller up and down, the way a finger drag would
+// when the content is taller than the box. A lane that only moves sideways
+// keeps scrollTop at 0 whatever is asked of it.
+const probeVertical = (page) =>
+  page.evaluate(() => {
+    const lane = document.querySelector('[data-slot="mzizi-bottom-nav-lane"]');
+    const scroller = lane?.querySelector(".sanderling");
+    if (!scroller) return null;
+    const style = getComputedStyle(scroller);
+    const before = scroller.scrollTop;
+    scroller.scrollTop = 40;
+    const afterDown = scroller.scrollTop;
+    scroller.scrollTop = before;
+    return {
+      overflowX: style.overflowX,
+      overflowY: style.overflowY,
+      overflowsVertically: scroller.scrollHeight > scroller.clientHeight + 0.5,
+      scrollable: afterDown !== before,
+    };
+  });
 
 const measure = (page) =>
   page.evaluate(() => {
@@ -113,6 +136,18 @@ run(async () => {
           locations.right <= m.nav.right &&
           m.lane >= (compact ? LANE_MIN_PX + 30 : LANE_MIN_PX),
         `lane ${m.lane.toFixed(1)}px`,
+      );
+      const v = await probeVertical(page);
+      note(
+        `${tag}: the places lane scrolls sideways only`,
+        v !== null &&
+          v.overflowX !== "visible" &&
+          v.overflowY === "hidden" &&
+          !v.overflowsVertically &&
+          !v.scrollable,
+        v
+          ? `overflow ${v.overflowX}/${v.overflowY}, taller than its box: ${v.overflowsVertically}, moved by scrollTop: ${v.scrollable}`
+          : "no places scroller in the lane",
       );
       await page.screenshot({
         path: join(SHOTS, `bottom-bar-${size.name}.png`),

@@ -43,6 +43,15 @@ const ICONS: Record<DeviceFormFactor, typeof Laptop> = {
   desktop: Laptop,
 };
 
+/** The caller's signed-in devices; throws on any failure. Sets no state. */
+async function readDevices(): Promise<SignedInDevice[]> {
+  const body = await fetchJsonOrThrow<{ devices?: SignedInDevice[] }>(
+    "/api/devices",
+    { init: { credentials: "same-origin" } },
+  );
+  return body.devices ?? [];
+}
+
 export function ProfileDevices() {
   const [load, setLoad] = useState<Load>({ status: "loading" });
   const [local, setLocal] = useState<DeviceState | null>(null);
@@ -56,22 +65,38 @@ export function ProfileDevices() {
 
   const refresh = useCallback(async () => {
     try {
-      const body = await fetchJsonOrThrow<{ devices?: SignedInDevice[] }>(
-        "/api/devices",
-        { init: { credentials: "same-origin" } },
-      );
-      setLoad({ status: "ready", devices: body.devices ?? [] });
+      setLoad({ status: "ready", devices: await readDevices() });
     } catch {
       setLoad({ status: "error" });
     }
   }, []);
 
   useEffect(() => {
-    setLocal(readDeviceState());
-    setStandalone(isStandalone());
-    setNow(Date.now());
-    void refresh();
-  }, [refresh]);
+    // Browser-only facts (the stored permission state, the display mode, the
+    // clock) are not in the server HTML, so they are read after mount and
+    // applied from a frame callback, as `useStableNow` does: the first paint
+    // matches the server and the commit is not asked to render twice at once.
+    const frame = requestAnimationFrame(() => {
+      setLocal(readDeviceState());
+      setStandalone(isStandalone());
+      setNow(Date.now());
+    });
+    // The first load. State is set from the promise callbacks, and only while
+    // this effect is still current (`refresh`, above, serves the sign-out).
+    let current = true;
+    readDevices().then(
+      (devices) => {
+        if (current) setLoad({ status: "ready", devices });
+      },
+      () => {
+        if (current) setLoad({ status: "error" });
+      },
+    );
+    return () => {
+      current = false;
+      cancelAnimationFrame(frame);
+    };
+  }, []);
 
   async function signOut(id: string) {
     setBusyId(id);
