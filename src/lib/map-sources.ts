@@ -29,6 +29,7 @@ export type MapProviderId =
   | "nasa-gibs"
   | "nasa-viirs"
   | "nasa-imerg"
+  | "nasa-firms"
   | "open-meteo"
   | "cams"
   | "ecmwf"
@@ -101,6 +102,19 @@ export const MAP_PROVIDERS: Readonly<Record<MapProviderId, MapProvider>> = {
     label: "NASA GPM IMERG",
     href: "https://gpm.nasa.gov/data/imerg",
     licence: "NASA Earth science data policy",
+    commercialUse: "allowed",
+  },
+  "nasa-firms": {
+    id: "nasa-firms",
+    // NASA asks anyone showing FIRMS data to acknowledge "NASA's Fire
+    // Information for Resource Management System (FIRMS), part of NASA's
+    // Land, Atmosphere Near real-time Capability for Earth observations
+    // (LANCE) and NASA's Earth Science Data and Information System (ESDIS)"
+    // (earthdata.nasa.gov/data/tools/firms, read 2026-11-05).
+    label: "Fire data: NASA FIRMS (LANCE, ESDIS)",
+    href: "https://www.earthdata.nasa.gov/data/tools/firms",
+    licence:
+      "NASA Earth science data policy (full and open sharing; acknowledgement requested; provided as is)",
     commercialUse: "allowed",
   },
   "open-meteo": {
@@ -233,6 +247,7 @@ const LAYER_PROVIDERS: Readonly<Record<string, readonly MapProviderId[]>> = {
   humidity: ["tomorrow"],
   satellite: ["nasa-gibs", "nasa-viirs"],
   satelliteRain: ["nasa-gibs", "nasa-imerg"],
+  wildfire: ["nasa-firms", "nasa-gibs", "nasa-viirs"],
 };
 
 /**
@@ -321,9 +336,23 @@ export interface GibsLayer {
   chipId: string;
   /** GIBS layer identifier (WMTS capabilities). */
   gibsId: string;
-  /** Web Mercator tile matrix set; its level is the native max zoom. */
+  /**
+   * How the pictures come from GIBS. "wmts": pre-rendered REST tiles (z/y/x).
+   * "wms": a GetMap drawn on request for each tile's bounding box, for a layer
+   * GIBS publishes as vector tiles only (wildfire, see GIBS_LAYERS).
+   */
+  service: "wmts" | "wms";
+  /**
+   * Web Mercator tile matrix set. Its level is the native max zoom of a WMTS
+   * layer; for a WMS layer it only names the matrix set DescribeDomains is
+   * asked about (the time lookup is the same for both).
+   */
   matrixSet: string;
-  /** Highest TILE zoom GIBS serves (the matrix set's level). */
+  /**
+   * Highest TILE zoom requested. A WMTS layer: the matrix set's level (GIBS
+   * serves nothing deeper). A WMS layer: GIBS draws any scale, so it is the
+   * deepest tile zoom we ask for (512 px tiles, so tile zoom = map zoom).
+   */
   maxZoom: number;
   /**
    * Highest MAP zoom the layer is shown at. The tiles are 256 px, so tile zoom
@@ -347,6 +376,15 @@ export interface GibsLayer {
   fallbackLatencyHours: number;
   /** Raster opacity. True colour is opaque imagery; precipitation is an overlay. */
   opacity: number;
+  /**
+   * Daily layers only: the hour of the UTC day from which TODAY's frame is
+   * offered. Omitted: DAILY_COMPLETE_HOUR_UTC (imagery is a partial mosaic
+   * until the afternoon passes are processed). null: whenever GIBS lists the
+   * day (a list of detections is real as soon as it has any entries).
+   */
+  todayFromHourUtc?: number | null;
+  /** Accessible name of the timeline range input; default "Observation time". */
+  timeLabel?: string;
 }
 
 /**
@@ -356,11 +394,31 @@ export interface GibsLayer {
  *  - IMERG 30-minute precipitation rate: PNG, Level 6. Early run, about 4–6 h
  *    behind real time; the loop is the last 6 hours of observed rain.
  * GIBS has no Meteosat layer; GOES-East only reaches West Africa's edge.
+ *
+ * Checked live on 2026-11-05 (GetCapabilities, DescribeDomains, tile requests):
+ *  - Wildfire: VIIRS NOAA-20 375 m "Thermal Anomalies and Fires (All)", the
+ *    day and night passes together. Daily (P1D), listed through the previous
+ *    UTC day. GIBS lists it as Mapbox Vector Tiles only (`.mvt`), and the
+ *    EPSG:3857 `.mvt` endpoint answered 404 for every tile tried (every zoom
+ *    over Harare, the world tile, three dates, the older layers too); the
+ *    vector tiles exist only in EPSG:4326 and EPSG:3413, which a Web Mercator
+ *    map cannot use. Its WMS in EPSG:3857 draws the same layer as PNG in the
+ *    layer's own NASA style (red dots, rgb(240, 40, 40): the `circle-color` of
+ *    gibs.earthdata.nasa.gov/vector-styles/v1.0/FIRMS_VIIRS_Thermal_Anomalies.json),
+ *    so that is what the map draws (`service: "wms"`). A WMS answers a date it
+ *    has no data for with HTTP 200 and an XML error, not a 404, so a frame is
+ *    only ever a date DescribeDomains lists. NOAA-21 (same orbit, about 50
+ *    minutes apart) and Suomi NPP (listed only to 2 Nov) are not added: they
+ *    would repeat the same fires or lag.
+ *    Dots are 3 px in a 512 px tile at every zoom, about one 375 m pixel at map
+ *    zoom 10 (72 m per CSS px at 18 degrees), so the map stops there: deeper,
+ *    a dot would claim a precision the sensor does not have.
  */
 export const GIBS_LAYERS: Readonly<Record<string, GibsLayer>> = {
   satellite: {
     chipId: "satellite",
     gibsId: "VIIRS_NOAA20_CorrectedReflectance_TrueColor",
+    service: "wmts",
     matrixSet: "GoogleMapsCompatible_Level9",
     maxZoom: 9,
     maxMapZoom: 9,
@@ -373,6 +431,7 @@ export const GIBS_LAYERS: Readonly<Record<string, GibsLayer>> = {
   satelliteRain: {
     chipId: "satelliteRain",
     gibsId: "IMERG_Precipitation_Rate_30min",
+    service: "wmts",
     matrixSet: "GoogleMapsCompatible_Level6",
     maxZoom: 6,
     maxMapZoom: 8,
@@ -381,6 +440,24 @@ export const GIBS_LAYERS: Readonly<Record<string, GibsLayer>> = {
     frames: 13,
     fallbackLatencyHours: 8,
     opacity: 0.75,
+  },
+  wildfire: {
+    chipId: "wildfire",
+    gibsId: "VIIRS_NOAA20_Thermal_Anomalies_375m_All",
+    service: "wms",
+    matrixSet: "GoogleMapsCompatible_Level8",
+    maxZoom: 10,
+    maxMapZoom: 10,
+    ext: "png",
+    cadence: "P1D",
+    // The newest three UTC days: enough to see whether a fire persists, and
+    // not a record of past burning (the legend says one UTC day per frame).
+    frames: 3,
+    fallbackLatencyHours: 24,
+    // The dots are NASA's own colour; drawn solid so the swatch is the pixel.
+    opacity: 1,
+    todayFromHourUtc: null,
+    timeLabel: "Detection day (UTC)",
   },
 };
 
@@ -425,8 +502,36 @@ export function planZoomCap(
     : { easeTo: null, lockNow: true };
 }
 
-/** XYZ tile template for a GIBS layer at one time (MapLibre fills {z}/{x}/{y}). */
+/** Pixels of one WMS tile: 512, so a screen needs about a quarter of the requests 256 would. */
+export const GIBS_WMS_TILE_SIZE = 512;
+
+/** GIBS's WMS endpoint for Web Mercator (EPSG:3857). Same host, same CORS, no key. */
+export const GIBS_WMS_PATH = "/wms/epsg3857/best/wms.cgi";
+
+/**
+ * Tile URL template for a GIBS layer at one time. A WMTS layer is the REST
+ * template (MapLibre fills {z}/{y}/{x}). A WMS layer is a GetMap for the
+ * tile's own bounding box: MapLibre fills `{bbox-epsg-3857}` (minx,miny,maxx,
+ * maxy in metres, the axis order WMS 1.3.0 uses for EPSG:3857).
+ */
 export function gibsTileUrl(layer: GibsLayer, time: string): string {
+  if (layer.service === "wms") {
+    const query = [
+      "SERVICE=WMS",
+      "VERSION=1.3.0",
+      "REQUEST=GetMap",
+      `LAYERS=${layer.gibsId}`,
+      "STYLES=",
+      "FORMAT=image/png",
+      "TRANSPARENT=true",
+      "CRS=EPSG:3857",
+      "BBOX={bbox-epsg-3857}",
+      `WIDTH=${GIBS_WMS_TILE_SIZE}`,
+      `HEIGHT=${GIBS_WMS_TILE_SIZE}`,
+      `TIME=${encodeURIComponent(time)}`,
+    ].join("&");
+    return `${GIBS_WMTS_ORIGIN}${GIBS_WMS_PATH}?${query}`;
+  }
   return `${GIBS_WMTS_ORIGIN}/wmts/epsg3857/best/${layer.gibsId}/default/${encodeURIComponent(time)}/${layer.matrixSet}/{z}/{y}/{x}.${layer.ext}`;
 }
 
@@ -566,8 +671,14 @@ export function satelliteFrames(
   let notAfter = now.getTime();
   if (layer.cadence === "P1D") {
     const today = Date.parse(`${utcDate(now)}T00:00:00Z`);
+    const fromHour =
+      layer.todayFromHourUtc === undefined
+        ? DAILY_COMPLETE_HOUR_UTC
+        : layer.todayFromHourUtc;
     notAfter =
-      now.getUTCHours() >= DAILY_COMPLETE_HOUR_UTC ? today : today - 86_400_000;
+      fromHour === null || now.getUTCHours() >= fromHour
+        ? today
+        : today - 86_400_000;
   }
 
   let instants: number[];
@@ -601,11 +712,25 @@ export function buildGibsSource(layer: GibsLayer, time: string) {
   return {
     type: "raster" as const,
     tiles: [gibsTileUrl(layer, time)],
-    tileSize: 256,
+    tileSize: layer.service === "wms" ? GIBS_WMS_TILE_SIZE : 256,
     minzoom: 0,
     maxzoom: layer.maxZoom,
     attribution: attributionHtml(overlayAttribution(layer.chipId)),
   };
+}
+
+/**
+ * "4 Nov" for a daily GIBS frame time ("2026-11-04"), read as the UTC day it
+ * is. Never the viewer's zone: a frame is one UTC day of data.
+ */
+export function utcDayLabel(time: string): string {
+  const t = Date.parse(`${time.slice(0, 10)}T00:00:00Z`);
+  if (!Number.isFinite(t)) return time;
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(new Date(t));
 }
 
 /**
