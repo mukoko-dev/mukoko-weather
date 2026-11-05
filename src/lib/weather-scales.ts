@@ -26,6 +26,11 @@
  *           yellow (f7e400) and orange (f85900) are read from the WHO guide;
  *           the green, red and violet hex are the commonly published WHO web
  *           colours and were NOT re-verified against a fetched copy.
+ *      fire NASA GIBS's own style for its satellite fire-detection layers:
+ *           red, rgb(240, 40, 40) (the `circle-color` in
+ *           https://gibs.earthdata.nasa.gov/vector-styles/v1.0/FIRMS_VIIRS_Thermal_Anomalies.json,
+ *           read 2026-11-05). A published layer style, not a standard; adopted
+ *           as is so the legend swatch is the pixel the map draws. One band.
  *  - "adapted": the ordering, hue progression and breakpoints follow a
  *    published convention, but the exact hex values are ours.
  *      temp   Diverging blue - pale yellow - red, ColorBrewer RdYlBu (9
@@ -673,6 +678,33 @@ export const FLIGHT_SCALE: WeatherScale = {
   ],
 };
 
+/**
+ * Satellite fire detection on the map (the Wildfires layer). One band, because
+ * a detection is present or it is not: the map draws NASA GIBS's own dots, and
+ * this is the colour of those pixels (see the `--wx-fire-1` note in
+ * globals.css). Not a severity: a bigger or brighter fire is not a different
+ * colour here, and the legend says a dot is a detection, not a confirmed
+ * wildfire.
+ */
+export const FIRE_SCALE: WeatherScale = {
+  id: "fire",
+  quantity: "satellite fire detection",
+  unit: "1",
+  status: "published",
+  bands: [
+    {
+      from: 0,
+      label: "Detection",
+      name: "Fire detected by satellite",
+      token: "--wx-fire-1",
+      bg: "bg-wx-fire-1",
+      stroke: "stroke-wx-fire-1",
+      border: "border-wx-fire-1",
+      on: "text-wx-fg-dark",
+    },
+  ],
+};
+
 export const WEATHER_SCALES: readonly WeatherScale[] = [
   TEMP_SCALE,
   RAIN_SCALE,
@@ -682,6 +714,7 @@ export const WEATHER_SCALES: readonly WeatherScale[] = [
   UV_SCALE,
   FROST_SCALE,
   FLIGHT_SCALE,
+  FIRE_SCALE,
 ];
 
 /**

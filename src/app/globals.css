@@ -446,6 +446,10 @@
   --wx-flight-2: #2f6fd0;
   --wx-flight-3: #d62828;
   --wx-flight-4: #c026d3;
+  /* Satellite fire detection: NASA GIBS's own colour for its fire layers
+     (rgb(240, 40, 40), the circle-color of its FIRMS vector style), so the
+     legend swatch is the pixel the map draws. Same in both themes. */
+  --wx-fire-1: #f02828;
   --wx-fg-dark: #0a0a0a;
   --wx-fg-light: #ffffff;
   /* Outline for data fills and swatches: the official fill colours (EPA, WHO)
@@ -671,6 +675,7 @@
   --wx-flight-2: #2f6fd0;
   --wx-flight-3: #d62828;
   --wx-flight-4: #c026d3;
+  --wx-fire-1: #f02828;
   --wx-fg-dark: #0a0a0a;
   --wx-fg-light: #ffffff;
   --wx-outline: #b5b5b0;
@@ -847,6 +852,7 @@
   --color-wx-flight-2: var(--wx-flight-2);
   --color-wx-flight-3: var(--wx-flight-3);
   --color-wx-flight-4: var(--wx-flight-4);
+  --color-wx-fire-1: var(--wx-fire-1);
   --color-wx-fg-dark: var(--wx-fg-dark);
   --color-wx-fg-light: var(--wx-fg-light);
   --color-wx-outline: var(--wx-outline);
