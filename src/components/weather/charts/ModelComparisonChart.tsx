@@ -105,7 +105,7 @@ export function ModelComparisonChart({
 
   return (
     <section aria-labelledby="model-comparison-heading" className="baobab">
-      <div className="mb-2 flex items-baseline justify-between gap-2">
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="model-comparison-heading" className="giraffe">
           Model comparison
         </h2>

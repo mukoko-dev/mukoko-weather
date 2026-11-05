@@ -150,7 +150,7 @@ export function AirQualityMapView({
 
   return (
     <section aria-labelledby={headingId} className="baobab overflow-hidden p-0">
-      <div className="flex items-center justify-between gap-2 px-[var(--space-card)] pt-[var(--space-card)] pb-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-[var(--space-card)] pt-[var(--space-card)] pb-2">
         <h2 id={headingId} className="giraffe">
           Air Quality Map
         </h2>
