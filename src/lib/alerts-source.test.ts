@@ -33,6 +33,7 @@ import {
   peekReports,
 } from "./alerts-source";
 import type { WeatherData } from "./weather";
+import { canonicalSlug } from "./slug-migration";
 
 const NOW = new Date("2026-07-10T14:05:00Z"); // 16:05 in Harare
 const HOUR = 3_600_000;
@@ -69,7 +70,26 @@ describe("alertPlaceSlugs", () => {
         lastHomePlace: "harare",
         savedLocations: ["gweru", "mutare", "bulawayo"],
       }),
-    ).toEqual(["harare", "mutare", "gweru", "bulawayo"]);
+    ).toEqual(
+      ["harare", "mutare", "gweru", "bulawayo"].map((slug) =>
+        canonicalSlug(slug),
+      ),
+    );
+  });
+
+  it("lists a shipped place once, under its canonical slug, whichever spelling asked", () => {
+    expect(
+      alertPlaceSlugs({
+        selectedLocation: "harare--ksy4dd1",
+        homeLocation: "harare",
+        savedLocations: ["harare", "harare--ksy4dd1", "mutare"],
+      }),
+    ).toEqual(["harare--ksy4dd1", canonicalSlug("mutare")]);
+    expect(alertPlaceSlugs({ savedLocations: ["harare"] })).toEqual([
+      "harare--ksy4dd1",
+    ]);
+    // A place outside the table keeps its slug.
+    expect(alertPlaceSlugs({ savedLocations: ["foo-ke"] })).toEqual(["foo-ke"]);
   });
 
   it("skips empty and missing entries", () => {
@@ -80,7 +100,7 @@ describe("alertPlaceSlugs", () => {
         lastHomePlace: undefined,
         savedLocations: ["", "harare"],
       }),
-    ).toEqual(["harare"]);
+    ).toEqual([canonicalSlug("harare")]);
     expect(alertPlaceSlugs({})).toEqual([]);
   });
 

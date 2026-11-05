@@ -736,7 +736,7 @@ describe("NotificationsCentre: the container", () => {
   it("reads the community reports for the place on screen when it opens, once, never per saved place", () => {
     const src = read("NotificationsCentre.tsx");
     expect(src.match(/loadReports\(/g)).toHaveLength(1);
-    expect(src).toContain("loadReports(placeOnScreen)");
+    expect(src).toContain("loadReports(canonicalSlug(placeOnScreen))");
     // Through the shared store: no hand-rolled fetch, no loop over places.
     expect(src).not.toMatch(/\bfetch\(|fetchWorker|postWorker/);
     expect(src).not.toMatch(/savedLocations/);

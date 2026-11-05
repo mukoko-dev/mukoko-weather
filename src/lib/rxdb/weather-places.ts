@@ -264,20 +264,31 @@ export async function readPlaces(
   slugs: readonly string[],
   now: number = Date.now(),
 ): Promise<ReadPlace[]> {
-  const wanted = [...new Set(slugs.filter(Boolean))];
+  const wanted = [...new Set(slugs.filter(Boolean).map(canonicalSlug))];
   if (wanted.length === 0) return [];
   const col = await collection();
   if (!col) return [];
   const out: ReadPlace[] = [];
-  for (const slug of wanted) {
+  for (const canonical of wanted) {
     try {
-      const doc = await col.findOne(slug).exec();
+      // A shipped place has two spellings (see `recallPlace`): a copy stored
+      // before the move sits under the legacy slug. Either is found, and the
+      // place always carries the canonical slug.
+      let doc: PlaceDoc | null = null;
+      for (const key of new Set([canonical, storageKeySlug(canonical)])) {
+        doc = await col.findOne(key).exec();
+        if (doc) break;
+      }
       if (!doc) continue;
-      const payload = parsePayload(doc.payload);
+      const stored = parsePayload(doc.payload);
+      const payload =
+        stored && stored.location.slug !== canonical
+          ? { ...stored, location: { ...stored.location, slug: canonical } }
+          : stored;
       const view = payload
         ? deviceViewOf({ payload, fetchedAt: doc.fetchedAt }, now)
         : null;
-      if (view) out.push({ ...view, slug: doc.slug });
+      if (view) out.push({ ...view, slug: canonical });
     } catch {
       // one unreadable place never hides the others
     }

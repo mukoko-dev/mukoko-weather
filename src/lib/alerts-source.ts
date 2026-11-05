@@ -17,6 +17,7 @@ import {
 } from "./alerts";
 import { laneChipName } from "./location-pager";
 import { REPORT_WINDOW_HOURS } from "./reports-api";
+import { canonicalSlug } from "./slug-migration";
 import { readPlaces } from "./rxdb/weather-places";
 import { workerData } from "./worker-data";
 
@@ -31,16 +32,18 @@ export interface AlertPlaceSlugInput {
   savedLocations?: readonly string[];
 }
 
-/** The places whose alerts the bell lists, in order, without repeats. */
+/**
+ * The places whose alerts the bell lists, in order, without repeats. A
+ * shipped place has two spellings (a legacy slug and a canonical one, #317);
+ * each place is listed once, under its canonical slug, the one the report
+ * lane and the stored forecast use.
+ */
 export function alertPlaceSlugs(input: AlertPlaceSlugInput): string[] {
   const out: string[] = [];
-  const add = (slug: string | null | undefined) => {
-    if (
-      typeof slug === "string" &&
-      slug.length > 0 &&
-      !out.includes(slug) &&
-      out.length < MAX_ALERT_SOURCE_PLACES
-    ) {
+  const add = (raw: string | null | undefined) => {
+    if (typeof raw !== "string" || raw.length === 0) return;
+    const slug = canonicalSlug(raw);
+    if (!out.includes(slug) && out.length < MAX_ALERT_SOURCE_PLACES) {
       out.push(slug);
     }
   };

@@ -12,6 +12,7 @@ import { DetailSheet } from "@/components/ui/detail-sheet";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { getReportTypeInfo } from "@/lib/report-types";
 import { loadReports } from "@/lib/reports-api";
+import { canonicalSlug } from "@/lib/slug-migration";
 import { trackEvent } from "@/lib/analytics";
 import { useAppStore } from "@/lib/store";
 import { useAlertSnapshot } from "@/lib/use-alerts";
@@ -124,7 +125,8 @@ export function NotificationsCentre({
   // notices and the list updates.
   useEffect(() => {
     if (!placeOnScreen) return;
-    loadReports(placeOnScreen).catch(() => {
+    // Under the canonical slug, the key the report lane and the card use.
+    loadReports(canonicalSlug(placeOnScreen)).catch(() => {
       // Supplementary: the list simply has no community alerts then.
     });
   }, [placeOnScreen]);

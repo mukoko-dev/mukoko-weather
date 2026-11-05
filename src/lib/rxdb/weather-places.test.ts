@@ -379,6 +379,26 @@ describe("readPlaces (what the alerts read)", () => {
     expect(col.docs.has("a")).toBe(true);
   });
 
+  it("finds a copy stored under the legacy slug and shows it under the canonical one", async () => {
+    const t = harare(11, 9);
+    const canonical = canonicalSlug("harare");
+    // Stored before the move: under the legacy slug, with the legacy slug inside.
+    await rememberPlace(payload("harare"), { now: t });
+    expect(col.docs.has("harare")).toBe(true);
+    for (const asked of ["harare", canonical]) {
+      const read = await readPlaces([asked], t + 1000);
+      expect(
+        read.map((p) => p.slug),
+        asked,
+      ).toEqual([canonical]);
+      expect(read[0].payload.location.slug).toBe(canonical);
+    }
+    // Asked by both spellings: one place.
+    expect(
+      (await readPlaces(["harare", canonical], t + 1000)).map((p) => p.slug),
+    ).toEqual([canonical]);
+  });
+
   it("reads empty for no slugs, and when storage is unavailable", async () => {
     expect(await readPlaces([])).toEqual([]);
     expect(await readPlaces(["", ""])).toEqual([]);
