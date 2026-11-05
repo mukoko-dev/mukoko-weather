@@ -146,7 +146,10 @@ export function PhoneMenu({ trigger, buttonClassName, iconClassName }: Props) {
       }}
     >
       <section aria-labelledby={groupLabel("account")}>
-        <h2 id={groupLabel("account")} className="guineafowl-heading !px-3">
+        <h2
+          id={groupLabel("account")}
+          className="guineafowl-heading !px-[var(--inset-floor)]"
+        >
           Account
         </h2>
         <ul className="flex flex-col">
@@ -190,7 +193,7 @@ export function PhoneMenu({ trigger, buttonClassName, iconClassName }: Props) {
       <section aria-labelledby={groupLabel("weather")}>
         <h2
           id={groupLabel("weather")}
-          className="guineafowl-heading !px-3 pt-2"
+          className="guineafowl-heading !px-[var(--inset-floor)] pt-2"
         >
           Weather
         </h2>
@@ -222,7 +225,7 @@ export function PhoneMenu({ trigger, buttonClassName, iconClassName }: Props) {
             {notificationsOpen && (
               <p
                 id={notificationsId}
-                className="dove px-3 pb-2"
+                className="dove px-[var(--inset-floor)] pb-2"
                 aria-live="polite"
               >
                 {NOTIFICATIONS_EMPTY_TEXT}
@@ -232,7 +235,10 @@ export function PhoneMenu({ trigger, buttonClassName, iconClassName }: Props) {
         </ul>
       </section>
       <section aria-labelledby={groupLabel("pages")}>
-        <h2 id={groupLabel("pages")} className="guineafowl-heading !px-3 pt-2">
+        <h2
+          id={groupLabel("pages")}
+          className="guineafowl-heading !px-[var(--inset-floor)] pt-2"
+        >
           Pages
         </h2>
         <ul className="flex flex-col">

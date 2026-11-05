@@ -279,10 +279,13 @@ describe("Header — the phone menu is the Mzizi account menu, filled with the h
     expect(acct).toContain("aria-controls={panelId}");
     expect(acct).toContain('method="post"');
     expect(acct).toContain("https://api.mzizi.dev/v1/ui/app-account-menu");
+    // First vendored at 780457ae, re-checked against registry v4.26.5.
     expect(acct).toContain("780457ae94afd5229a78a5d7ba5146bda8260812");
+    expect(acct).toContain("v4.26.5");
+    expect(acct).toContain("bcd07b08f21b311fc1e7acacad65b40fa0615709");
     // Each deviation is listed in the header (numbered), like mzizi-bottom-nav.
     expect(acct).toMatch(/Local changes from upstream/);
-    for (let n = 1; n <= 11; n++) expect(acct).toContain(` * ${n}. `);
+    for (let n = 1; n <= 12; n++) expect(acct).toContain(` * ${n}. `);
   });
 
   it("closes on Escape (focus returns to the trigger), an outside click and a chosen row", () => {
@@ -344,7 +347,7 @@ describe("Header — the phone menu is the Mzizi account menu, filled with the h
     expect(menu).toContain("if (locating) return;");
   });
 
-  it("rows are 48px and grouped under labelled sections (Account, Weather, Pages)", () => {
+  it("rows are 49px and grouped under labelled sections (Account, Weather, Pages)", () => {
     expect(acct).toContain("min-h-[var(--touch-target-min)]");
     expect(menu).toContain("ACCOUNT_MENU_ROW_CLASS");
     for (const name of ["account", "weather", "pages"]) {
