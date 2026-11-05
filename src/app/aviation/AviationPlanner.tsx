@@ -19,7 +19,7 @@ import { Field } from "@/components/ui/field";
 function FlightCategoryBadge({ fc }: { fc: string }) {
   return (
     <span
-      className={`inline-flex items-center rounded-[var(--radius-badge)] px-2 py-0.5 text-xs font-bold tracking-wide ${getFlightCategoryClass(fc)}`}
+      className={`inline-flex items-center rounded-[var(--radius-badge)] px-2 py-0.5 text-sm font-bold tracking-wide ${getFlightCategoryClass(fc)}`}
     >
       {fc}
     </span>
@@ -113,7 +113,7 @@ function AirportSearch({
             aria-autocomplete="list"
           />
           {loading && (
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary text-xs">
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary text-sm">
               …
             </span>
           )}
@@ -122,7 +122,7 @@ function AirportSearch({
 
       {searchError && !value && (
         <Alert variant="warning" className="mt-1.5 p-3">
-          <AlertDescription className="text-xs">{searchError}</AlertDescription>
+          <AlertDescription className="text-sm">{searchError}</AlertDescription>
         </Alert>
       )}
 
@@ -137,18 +137,18 @@ function AirportSearch({
             {value.name}
           </span>
           {icaoForResult(value) ? (
-            <span className="text-xs font-mono text-primary font-bold">
+            <span className="text-sm font-mono text-primary font-bold">
               {icaoForResult(value)}
             </span>
           ) : (
-            <span className="text-xs text-severity-moderate">
+            <span className="text-sm text-severity-moderate">
               No METAR station
             </span>
           )}
           <button
             type="button"
             onClick={clear}
-            className="ml-1 text-text-tertiary hover:text-text-primary text-xs"
+            className="ml-1 text-text-tertiary hover:text-text-primary text-sm"
             aria-label="Clear selection"
           >
             ✕
@@ -177,16 +177,16 @@ function AirportSearch({
                   />
                   <div className="flex-1 min-w-0">
                     <span className="text-sm text-text-primary">{r.name}</span>
-                    <span className="ml-1.5 text-xs text-text-tertiary">
+                    <span className="ml-1.5 text-sm text-text-tertiary">
                       {r.province}
                     </span>
                   </div>
                   {icao ? (
-                    <span className="text-xs font-mono font-bold text-primary">
+                    <span className="text-sm font-mono font-bold text-primary">
                       {icao}
                     </span>
                   ) : (
-                    <span className="text-xs text-text-tertiary">No METAR</span>
+                    <span className="text-sm text-text-tertiary">No METAR</span>
                   )}
                 </button>
               </li>
@@ -203,7 +203,7 @@ function MetarCard({ obs }: { obs: MetarObs }) {
     <div className="rounded-[var(--radius-card)] border border-primary/15 bg-surface-base p-4">
       <div className="flex items-center justify-between mb-3">
         <FlightCategoryBadge fc={obs.flight_category} />
-        <span className="text-xs text-text-tertiary">
+        <span className="text-sm text-text-tertiary">
           {new Date(obs.time).toLocaleTimeString("en-ZW", {
             hour: "2-digit",
             minute: "2-digit",
@@ -214,33 +214,33 @@ function MetarCard({ obs }: { obs: MetarObs }) {
       </div>
       <div className="grid grid-cols-2 gap-2 text-sm mb-3 sm:grid-cols-4">
         <div>
-          <p className="text-xs text-text-tertiary">Temp / Dew</p>
+          <p className="text-sm text-text-tertiary">Temp / Dew</p>
           <p className="font-medium text-text-primary">
             {obs.temp}° / {obs.dewp}°C
           </p>
         </div>
         <div>
-          <p className="text-xs text-text-tertiary">Wind</p>
+          <p className="text-sm text-text-tertiary">Wind</p>
           <p className="font-medium text-text-primary">{windStr(obs)}</p>
         </div>
         <div>
-          <p className="text-xs text-text-tertiary">Visibility</p>
+          <p className="text-sm text-text-tertiary">Visibility</p>
           <p className="font-medium text-text-primary">
             {obs.visibility === "9999" ? ">10km" : `${obs.visibility}m`}
           </p>
         </div>
         <div>
-          <p className="text-xs text-text-tertiary">QNH</p>
+          <p className="text-sm text-text-tertiary">QNH</p>
           <p className="font-medium text-text-primary">
             {obs.pressure_hpa ? `${obs.pressure_hpa} hPa` : "—"}
           </p>
         </div>
       </div>
       <div className="text-sm mb-3">
-        <p className="text-xs text-text-tertiary mb-0.5">Clouds</p>
+        <p className="text-sm text-text-tertiary mb-0.5">Clouds</p>
         <p className="text-text-primary">{cloudsStr(obs)}</p>
       </div>
-      <pre className="text-xs font-mono bg-surface-dim rounded-[var(--radius-input)] p-2 whitespace-pre-wrap break-all text-text-secondary">
+      <pre className="text-sm font-mono bg-surface-dim rounded-[var(--radius-input)] p-2 whitespace-pre-wrap break-all text-text-secondary">
         {obs.raw}
       </pre>
     </div>
@@ -274,13 +274,13 @@ function AirportBriefingCard({
       )}
       {briefing.taf ? (
         <div>
-          <p className="text-xs font-medium text-text-tertiary mb-1">TAF</p>
-          <pre className="text-xs font-mono bg-surface-dim rounded-[var(--radius-input)] p-3 whitespace-pre-wrap break-all text-text-secondary overflow-x-auto">
+          <p className="text-sm font-medium text-text-tertiary mb-1">TAF</p>
+          <pre className="text-sm font-mono bg-surface-dim rounded-[var(--radius-input)] p-3 whitespace-pre-wrap break-all text-text-secondary overflow-x-auto">
             {briefing.taf}
           </pre>
         </div>
       ) : (
-        <p className="text-xs text-text-tertiary">
+        <p className="text-sm text-text-tertiary">
           No TAF available for this station.
         </p>
       )}
@@ -462,12 +462,12 @@ export function AviationPlanner() {
             {loading ? "Loading…" : "Get Briefing"}
           </button>
           {!canBrief && dep && !depIcao && (
-            <p className="text-xs text-severity-moderate">
+            <p className="text-sm text-severity-moderate">
               Departure has no METAR station
             </p>
           )}
           {!canBrief && dest && !destIcao && (
-            <p className="text-xs text-severity-moderate">
+            <p className="text-sm text-severity-moderate">
               Destination has no METAR station
             </p>
           )}
@@ -495,7 +495,7 @@ export function AviationPlanner() {
                   {briefingData.destination.icao}
                 </span>
               </h2>
-              <p className="text-xs text-text-tertiary mt-0.5">
+              <p className="text-sm text-text-tertiary mt-0.5">
                 Briefing generated {briefingData.generatedAt}
               </p>
             </div>
@@ -516,7 +516,7 @@ export function AviationPlanner() {
             </h3>
             <div className="flex gap-6">
               <div className="text-center">
-                <p className="text-xs text-text-tertiary mb-1">Departure</p>
+                <p className="text-sm text-text-tertiary mb-1">Departure</p>
                 <p className="text-sm font-mono font-bold text-text-primary mb-1">
                   {briefingData.departure.icao}
                 </p>
@@ -526,7 +526,7 @@ export function AviationPlanner() {
               </div>
               {briefingData.alternate && (
                 <div className="text-center">
-                  <p className="text-xs text-text-tertiary mb-1">Alternate</p>
+                  <p className="text-sm text-text-tertiary mb-1">Alternate</p>
                   <p className="text-sm font-mono font-bold text-text-primary mb-1">
                     {briefingData.alternate.icao}
                   </p>
@@ -538,7 +538,7 @@ export function AviationPlanner() {
                 </div>
               )}
               <div className="text-center">
-                <p className="text-xs text-text-tertiary mb-1">Destination</p>
+                <p className="text-sm text-text-tertiary mb-1">Destination</p>
                 <p className="text-sm font-mono font-bold text-text-primary mb-1">
                   {briefingData.destination.icao}
                 </p>
@@ -572,7 +572,7 @@ export function AviationPlanner() {
           )}
 
           {/* Data source note */}
-          <p className="text-xs text-text-tertiary text-center pb-4">
+          <p className="text-sm text-text-tertiary text-center pb-4">
             METAR/TAF data from Aviation Weather Center (NOAA) · For planning
             purposes only
           </p>

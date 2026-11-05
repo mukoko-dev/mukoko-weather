@@ -192,7 +192,7 @@ export function ProfileIdentity({
           </div>
           {email && <p className="text-text-secondary">{email}</p>}
           {saved && (
-            <p role="status" className="mt-2 text-xs text-severity-low">
+            <p role="status" className="mt-2 text-sm text-severity-low">
               Profile updated across your Mukoko account.
             </p>
           )}

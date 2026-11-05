@@ -282,7 +282,7 @@ function renderAqiBubbles(
       "flex items-center justify-center rounded-full border-2 border-wx-outline font-semibold shadow-md",
       AQI_BAND_BG_CLASS[b.band],
       AQI_BAND_FG_CLASS[b.band],
-      b.isCenter ? "size-12 text-sm" : "size-8 text-xs",
+      b.isCenter ? "size-12 text-sm" : "size-8 text-sm",
     );
     el.setAttribute("role", "img");
     el.setAttribute(
@@ -951,7 +951,7 @@ export function MapLibreMap({
           <p className="text-sm font-semibold text-text-primary">
             Base map unavailable — map key not configured
           </p>
-          <p className="max-w-xs text-xs text-text-tertiary">
+          <p className="max-w-xs text-sm text-text-tertiary">
             Set NEXT_PUBLIC_MAPTILER_API_KEY to enable the interactive weather
             map.
           </p>
@@ -965,7 +965,7 @@ export function MapLibreMap({
           <p className="text-sm font-semibold text-text-primary">
             Base map unavailable
           </p>
-          <p className="max-w-xs text-xs text-text-tertiary">
+          <p className="max-w-xs text-sm text-text-tertiary">
             The base map could not be loaded. This is usually a temporary issue
             — please try again later.
           </p>
@@ -974,7 +974,7 @@ export function MapLibreMap({
       {overlayError && !baseMapMissingKey && !baseMapError && (
         <div
           role="status"
-          className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-[var(--radius-button)] border border-severity-high/30 bg-surface-card/95 px-[var(--inset-floor)] py-1.5 text-xs font-medium text-severity-high shadow-lg backdrop-blur-sm"
+          className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-[var(--radius-button)] border border-severity-high/30 bg-surface-card/95 px-[var(--inset-floor)] py-1.5 text-sm font-medium text-severity-high shadow-lg backdrop-blur-sm"
         >
           Weather layer unavailable — please try again later
         </div>
