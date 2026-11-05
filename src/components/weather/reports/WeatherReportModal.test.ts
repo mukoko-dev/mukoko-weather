@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { getReportTypeInfo } from "@/lib/report-types";
 
 const source = readFileSync(
   resolve(__dirname, "WeatherReportModal.tsx"),
@@ -84,6 +88,49 @@ describe("3-step wizard flow", () => {
     expect(source).toContain("reportType");
     expect(source).toContain("severity");
     expect(source).toContain("description");
+  });
+});
+
+describe("a report where someone could be in danger (wildfire)", () => {
+  it("says it is not an emergency service in the step that holds Submit", () => {
+    // Rendered from the type's own notice (report-types.ts), as a note, above
+    // the questions and the Submit button; read by assistive technology but
+    // not announced as an alert.
+    const clarify = source.slice(
+      source.indexOf('{step === "clarify" && ('),
+      source.indexOf("Submit Report"),
+    );
+    expect(clarify).toContain("typeInfo?.notice");
+    expect(clarify).toContain('role="note"');
+    expect(clarify.indexOf("typeInfo?.notice")).toBeLessThan(
+      clarify.indexOf("Help us understand"),
+    );
+    // The words live once, in report-types.ts, with no phone number.
+    expect(source).not.toContain("emergency services");
+    expect(source).not.toMatch(/tel:|\d{3}[ -]\d{3}/);
+  });
+
+  it("renders the notice as a calm note, not an assertive alert", () => {
+    const notice = getReportTypeInfo("wildfire")?.notice ?? "";
+    const html = renderToStaticMarkup(
+      createElement(
+        Alert,
+        { variant: "warning", role: "note" },
+        createElement(AlertDescription, null, notice),
+      ),
+    );
+    expect(html).toContain('role="note"');
+    expect(html).not.toContain('role="alert"');
+    expect(html).toContain("This is not an emergency service.");
+    expect(html).toContain(
+      "If anyone is in danger, call your local emergency services first.",
+    );
+  });
+
+  it("repeats the notice and how the report is shown once it is sent", () => {
+    const confirm = source.slice(source.indexOf('{step === "confirm"'));
+    expect(confirm).toContain("typeInfo.sentNote");
+    expect(confirm).toContain("typeInfo.notice");
   });
 });
 

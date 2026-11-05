@@ -300,6 +300,39 @@ describe("reports", () => {
     expect(doc.upvotes).toBe(0);
     expect(doc.upvotedBy).toEqual([]);
   });
+  it("stores a wildfire report unverified, with the usual expiry and shape", async () => {
+    const { call, reports } = setup();
+    const r = await call("POST", "/reports", {
+      ...goodReport,
+      reportType: "wildfire",
+      severity: "moderate",
+      description: "Smoke over the ridge",
+      verified: false,
+    });
+    expect(r.status).toBe(201);
+    expect(r.body).toEqual({
+      id: "000000000000000000000001",
+      verified: false,
+      expiresIn: 172_800,
+    });
+    const doc = reports.docs[0]!;
+    expect(doc.reportType).toBe("wildfire");
+    expect(doc.verified).toBe(false);
+    expect(doc.upvotes).toBe(0);
+  });
+  it("refuses a wildfire report marked verified, without writing", async () => {
+    const { call, reports } = setup();
+    const r = await call("POST", "/reports", {
+      ...goodReport,
+      reportType: "wildfire",
+      verified: true,
+    });
+    expect(r.status).toBe(400);
+    expect(r.body).toMatchObject({
+      error_description: "A wildfire report cannot be verified",
+    });
+    expect(reports.docs).toHaveLength(0);
+  });
   it("ignores caller-supplied times, votes and ids", async () => {
     const { call, reports } = setup();
     await call("POST", "/reports", {

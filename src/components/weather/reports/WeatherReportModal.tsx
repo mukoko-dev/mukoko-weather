@@ -20,6 +20,7 @@ import {
   reportsSubmitUrl,
 } from "@/lib/reports-api";
 import { postWorker } from "@/lib/weather-api";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const SEVERITIES = [
   { id: "mild", label: "Mild", description: "Noticeable but not disruptive" },
@@ -189,6 +190,16 @@ export function WeatherReportModal() {
         {/* Step 2: Clarify + severity */}
         {step === "clarify" && (
           <div className="space-y-4 px-5 pb-5">
+            {/* A type where someone could be in danger says what this is not,
+                before anything is sent. */}
+            {typeInfo?.notice && (
+              <Alert variant="warning" role="note">
+                <AlertDescription className="mt-0 font-medium">
+                  {typeInfo.notice}
+                </AlertDescription>
+              </Alert>
+            )}
+
             {/* AI clarification questions */}
             {questions.length > 0 && (
               <div className="rounded-[var(--radius-button)] bg-primary/5 p-3">
@@ -292,6 +303,16 @@ export function WeatherReportModal() {
               Your <strong>{typeInfo?.label}</strong> report has been submitted.
               Other users in the area will see it.
             </p>
+            {typeInfo?.sentNote && (
+              <p className="text-base text-text-secondary">
+                {typeInfo.sentNote}
+              </p>
+            )}
+            {typeInfo?.notice && (
+              <p className="text-base font-medium text-text-primary">
+                {typeInfo.notice}
+              </p>
+            )}
             <DialogClose asChild>
               <Button onClick={handleClose}>Done</Button>
             </DialogClose>
