@@ -248,7 +248,7 @@ export function SiteHeader() {
                     />
                   ) : (
                     <span
-                      className="text-xs font-medium text-primary-foreground"
+                      className="text-sm font-medium text-primary-foreground"
                       aria-hidden="true"
                     >
                       {initialsFor(authedUser)}

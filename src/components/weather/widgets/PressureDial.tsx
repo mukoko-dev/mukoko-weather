@@ -12,7 +12,11 @@ const CX = 60;
 const CY = 60;
 const R = 46;
 
-/** Barometer: upper-semicircle arc with 10 hPa ticks, needle, value and trend. */
+/**
+ * Barometer: upper-semicircle arc with 10 hPa ticks and a needle; the scale
+ * ends, value and trend are HTML under it (SVG text scales with the tile, and
+ * the Bundu floor is 14px as drawn: stage 2 of #479).
+ */
 export function PressureDial({
   hPa,
   trend,
@@ -43,63 +47,45 @@ export function PressureDial({
   const track = `M ${start.x} ${start.y} A ${R} ${R} 0 0 1 ${end.x} ${end.y}`;
 
   return (
-    <svg
-      viewBox="0 0 120 96"
-      className="h-auto w-full max-w-[var(--size-insight-dial-max)]"
-      role="img"
-      aria-label={`Pressure ${Math.round(hPa)} hPa, ${trend}`}
-    >
-      <path
-        d={track}
-        fill="none"
-        strokeWidth={4}
-        strokeLinecap="round"
-        className="stroke-text-tertiary/20"
-      />
-      {ticks}
-      <line
-        x1={CX}
-        y1={CY}
-        x2={needle.x}
-        y2={needle.y}
-        strokeWidth={2.2}
-        strokeLinecap="round"
-        className="stroke-primary"
-      />
-      <circle cx={CX} cy={CY} r={3} className="fill-primary" />
-      <text
-        x={12}
-        y={76}
-        textAnchor="middle"
-        className="fill-text-tertiary text-[10px]"
-        aria-hidden="true"
+    <div className="flex w-full max-w-[var(--size-insight-dial-max)] flex-col gap-[var(--gap-floor)]">
+      <svg
+        viewBox="0 8 120 58"
+        className="h-auto w-full"
+        role="img"
+        aria-label={`Pressure ${Math.round(hPa)} hPa, ${trend}`}
       >
-        {min}
-      </text>
-      <text
-        x={108}
-        y={76}
-        textAnchor="middle"
-        className="fill-text-tertiary text-[10px]"
-        aria-hidden="true"
-      >
-        {max}
-      </text>
-      <text
-        x={CX}
-        y={84}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        className="fill-text-primary text-[13px] font-bold tabular-nums"
-        aria-hidden="true"
-      >
-        {Math.round(hPa)}
-        <tspan className="text-[8.5px] font-normal fill-text-tertiary">
-          {" "}
-          hPa{" "}
-        </tspan>
-        <tspan className="fill-text-secondary">{trendGlyph(trend)}</tspan>
-      </text>
-    </svg>
+        <path
+          d={track}
+          fill="none"
+          strokeWidth={4}
+          strokeLinecap="round"
+          className="stroke-text-tertiary/20"
+        />
+        {ticks}
+        <line
+          x1={CX}
+          y1={CY}
+          x2={needle.x}
+          y2={needle.y}
+          strokeWidth={2.2}
+          strokeLinecap="round"
+          className="stroke-primary"
+        />
+        <circle cx={CX} cy={CY} r={3} className="fill-primary" />
+      </svg>
+      <div className="flex flex-col items-center" aria-hidden="true">
+        <p className="flex w-full justify-between text-sm text-text-tertiary tabular-nums">
+          <span>{min}</span>
+          <span>{max}</span>
+        </p>
+        <p className="text-sm font-bold tabular-nums text-text-primary">
+          {Math.round(hPa)}{" "}
+          <span className="font-normal text-text-tertiary">hPa</span>{" "}
+          <span className="font-normal text-text-secondary">
+            {trendGlyph(trend)}
+          </span>
+        </p>
+      </div>
+    </div>
   );
 }

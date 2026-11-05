@@ -154,7 +154,7 @@ export function AirQualityMapView({
         <h2 id={headingId} className="giraffe">
           Air Quality Map
         </h2>
-        <span className="dove text-xs">{data.source}</span>
+        <span className="dove text-sm">{data.source}</span>
       </div>
 
       {tilesShown ? (
@@ -239,7 +239,7 @@ export function AirQualityMapView({
             ? attributionForLayer("airQuality")
             : overlayAttribution("airQuality")
         }
-        className="mt-0 px-[var(--space-card)] py-2 text-xs"
+        className="mt-0 px-[var(--space-card)] py-2 text-sm"
       />
     </section>
   );

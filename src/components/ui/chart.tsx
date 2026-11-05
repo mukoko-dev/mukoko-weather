@@ -38,6 +38,15 @@ ChartJS.register(
   Legend,
 );
 
+// ── Chart text at the Bundu floor ─────────────────────────────────────────
+// Everything Chart.js draws as text (axis ticks, tooltips, legends) is read by
+// a person, so it is drawn at the 14px floor of Mzizi registry 4.23.0, not
+// Chart.js's 12px default or the 11px the axes used (stage 2 of #479).
+// A canvas cannot read CSS, so the number lives here; bundu-floor.test.ts
+// keeps it at or above the --text-caption token.
+export const CHART_FONT_PX = 14;
+ChartJS.defaults.font.size = CHART_FONT_PX;
+
 // ── Chart config types ─────────────────────────────────────────────────────
 // Chart config type for colour/label definitions per dataset key.
 

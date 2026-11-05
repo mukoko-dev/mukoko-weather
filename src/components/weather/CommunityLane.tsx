@@ -323,7 +323,7 @@ export function CommunityLane({
                         </span>
                         <span
                           aria-hidden="true"
-                          className="absolute right-0.5 top-1 rounded-full bg-text-primary px-1 text-xs font-bold text-surface-card"
+                          className="absolute right-0.5 top-1 rounded-full bg-text-primary px-1 text-sm font-bold text-surface-card"
                         >
                           {group.total}
                         </span>
@@ -380,7 +380,7 @@ export function CommunityLane({
                 <div key={i} className="relative h-5">
                   {i % 3 === 0 && (
                     <span
-                      className={`absolute left-0 whitespace-nowrap font-mono text-xs ${i === LANE_PAST_HOURS ? "font-bold text-text-primary" : "text-text-tertiary"}`}
+                      className={`absolute left-0 whitespace-nowrap font-mono text-sm ${i === LANE_PAST_HOURS ? "font-bold text-text-primary" : "text-text-tertiary"}`}
                     >
                       {label}
                     </span>

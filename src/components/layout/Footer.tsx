@@ -23,7 +23,7 @@ export function SiteFooter() {
 
   const col = "flex flex-col gap-1";
   const heading =
-    "mb-2 text-xs font-semibold uppercase tracking-widest text-text-tertiary";
+    "mb-2 text-sm font-semibold uppercase tracking-widest text-text-tertiary";
   const link =
     "text-base text-text-secondary transition-colors hover:text-text-primary";
 
