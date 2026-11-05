@@ -1,0 +1,73 @@
+commit 4975dbaea4d78d16f52d503f5f6a3e6928d34a62
+Author: Bryan Fawcett <noreply@anthropic.com>
+Date:   Wed Nov 4 11:45:30 2026 +0000
+
+    docs(claude): record the owner's decisions of 2026-11-04 and the command gotchas
+    
+    /init pass on the existing CLAUDE.md. It already covers the architecture in depth,
+    so this adds only what was missing or wrong:
+    
+    - "Owner decisions in force" at the top: Astro is the platform (decided, plan in
+      #475), speed and one global layout are the product, low-memory crashes are fixed
+      at the root (#476), the extra background requests for warming places are
+      accepted, Apple's principles applied through Mzizi tokens and components.
+    - The Framework line says Next.js is being replaced by Astro.
+    - Key Commands: running one test file or one test, and three gotchas that cost
+      time: the formatter reads only vite.config.ts's fmt block (bare oxfmt wants to
+      reformat ~720 files), the dev server needs --webpack and why, and the untracked
+      AGENTS.md that next dev writes.
+    
+    Numbers that describe unmerged PRs (#470, #471, #473) are not in here: each of
+    those PRs updates its own paragraph so CLAUDE.md never describes code that is
+    not on staging.
+    
+    Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+    Claude-Session: https://claude.ai/code/session_0114U9k6xzx3Bpjzq4KJW6Lg
+
+diff --git a/CLAUDE.md b/CLAUDE.md
+index c12ddcc..1be44d1 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -10,6 +10,16 @@ mukoko weather is a global weather intelligence platform. It provides real-time
+ 
+ If a standard does not exist we build one and publish it in `bundu-labs/bundu-standards`; otherwise we adopt the global standard. Data pulled from another source that does not match is converted at the edge and only the standard form (CF names, UCUM units, ISO codes, WIGOS ids) is stored or served. A provider's schema, names and units never become ours. `weather_core::external_feeds` is the pattern; `legacy_metrics()` is a temporary bridge to the older store names. The decisions are in the playbooks at docs.nyuchi.com/playbooks.
+ 
++## Owner decisions in force (read first)
++
++Each of these is decided by the owner, not open. Do not re-ask them, re-argue them or defer work because of them. When one conflicts with an older paragraph below, this section wins and the paragraph is to be fixed.
++
++- **The platform is built on Astro (owner, 2026-11-04: "It is not an open decision. It is decided this is how we build our entire platform").** This app is Next.js 16 today and moves to Astro with React islands on Cloudflare. The plan and phases are in #475. Until it is done: no new `next/*` import outside a thin adapter, logic in pure modules (`src/lib`, `weather-core`) and policy as data (as `src/lib/security-headers.ts` already is), and new pages and components written so they move unchanged. Never present Astro as an open question and never argue for staying on Next.js.
++- **Speed, one global layout and simplicity are the product (owner, 2026-11-04).** They decide whether people stay on the app and come back. Work that simplifies the layout, the page frame or a page-to-page switch is not scope creep: do it.
++- **Low-memory crashes are fixed at the root (owner, 2026-11-04).** The bounded `LazySection` queue, the `deviceMemory`/Save-Data gates and the memory-pressure hook are workarounds, not the design. Do not add another one. Measure (heap after garbage collection, DOM nodes, WebGL contexts, repeated place switches), name what is retained, remove it. Tracked in #476.
++- **Extra background requests are accepted (owner, 2026-11-04).** Warming the next saved places while a place is read (up to four extra forecast requests per place view, through the shared Worker read) is an approved cost.
++- **Apple's design principles, applied through Mzizi (owner, 2026-10-31 and 2026-11-04).** Clarity, deference to content, consistent spacing, safe areas and 44pt-or-larger targets across the whole app, built from Mzizi tokens, fauna classes and registry components, never hand-rolled sizes, radii or colours. A hand-rolled value where a token exists is a defect.
++
+ ## Company Structure
+ 
+ - **Nyuchi Africa (PVT) Ltd** — parent company
+@@ -22,7 +32,7 @@ Social: Twitter @mukokoafrica, Instagram @mukoko.africa
+ 
+ ## Tech Stack
+ 
+-- **Framework:** Next.js 16.1.6 (App Router, TypeScript 5.9.3)
++- **Framework:** Next.js 16 (App Router, TypeScript 5.9.3), **being replaced by Astro** (decided 2026-11-04, plan in #475; see "Owner decisions in force")
+ - **UI components:** shadcn/ui (new-york style, Lucide icons). The shadcn CLI is NOT a devDependency (its fast-glob → micromatch → braces tree carries an advisory with no patched release) — run it on demand with `npx shadcn@latest add …`; its `tailwind.css` is vendored at `src/app/shadcn-tailwind.css`
+ - **Charts:** Chart.js 4 + react-chartjs-2 (Canvas 2D rendering via `src/components/ui/chart.tsx`)
+ - **Maps:** MapLibre GL JS + MapTiler Cloud (vector tiles direct from CDN via `NEXT_PUBLIC_MAPTILER_API_KEY` — no server proxy; GPU-rendered; theme-aware streets-v2 / streets-v2-dark styles); Tomorrow.io raster weather overlays come from the Rust tiles Worker (`https://weather-tiles.mukoko.com/v1/map-tiles`, `src/lib/map-layers.ts`); NASA GIBS satellite layers (`satellite` = NOAA-20 VIIRS true colour, daily; `satelliteRain` = IMERG 30-min precipitation) load keyless straight from `gibs.earthdata.nasa.gov`, animated over the frames GIBS's DescribeDomains reports (never a future frame — those 404); per-model forecast fields (`modelTemperature` / `modelPrecipitation` / `modelWind`, one blend member at a time, model picker opens on `selectedForecastModel` but never writes it, so comparing models on the map leaves the dashboard baseline alone) come from `/v1/model-grid (Rust Worker)` behind `FLAGS.model_map_layers` (off: Open-Meteo's free API is non-commercial). **Map attribution has one source of truth:** `src/lib/map-sources.ts` (`MAP_PROVIDERS`, `attributionForLayer(layerId, modelId)`) — every overlay source carries its `attribution`, `MapLibreMap`'s control takes the base-map credits from it, and `/[location]/map` renders the same list (`MapCredits`, in the sheet, or in the legend card while the sheet is hidden). Never hand-write a credit string. **MapLibre v6 worker:** v6 ships its web worker as a separate ES module (`maplibre-gl-worker.mjs` → imports `maplibre-gl-shared.mjs`) and by default loads it from beside the bundled chunk, where webpack never emits it, so the worker fails and every map renders blank. `scripts/copy-maplibre-worker.mjs` (run by the `prebuild`/`predev` npm scripts) copies both files (and their source maps) to `public/vendor/maplibre-gl/<version>/` (gitignored), and `MapLibreMap` calls `setWorkerUrl(maplibreWorkerUrl(getVersion()))` before creating a map — the version in the path keeps a tab on an old bundle paired with its own worker after a deploy. **Container sizing:** MapLibre's unlayered `.maplibregl-map { position: relative }` beats Tailwind 4's layered utilities, so never put `absolute inset-0` on the map container itself — wrap it in an absolutely-positioned div and give the container `h-full w-full`
+@@ -56,8 +66,16 @@ npm run test:watch    # Run Vitest in watch mode
+ npm run test:coverage # Run Vitest with v8 coverage reporting
+ npx tsc --noEmit      # Type check (no output)
+ (cd workers && cargo test -p weather-core -p weather-mongo -p weather-webpush)  # Rust Workers tests
++npx vitest run src/lib/some.test.ts            # one test file
++npx vitest run src/lib/some.test.ts -t "name"  # one test by name
+ ```
+ 
++Gotchas that cost time:
++
++- **Formatting.** CI's `vite-plus / fmt` reads only the `fmt` block of `vite.config.ts` (print width 80, trailing commas `all`; it mirrors `nyuchi/.github/.oxfmtrc.json`). A bare `npx oxfmt` ignores it and wants to reformat ~720 files. Write a throwaway JSON file with the same values and pass it: `npx oxfmt -c /tmp/oxfmt-repo.json --check src workers`. Markdown and JSON are checked by Prettier 3.9.4 (see the pre-commit checklist); `npx vp` is not a command.
++- **Dev server.** `next dev` (Turbopack) fails on a CSS parse error: Tailwind's automatic source scan reads the literal `rounded-[var(--radius-*)]` written in prose (this file and a comment in `src/lib/mzizi-alignment.test.ts`) as a class, and Lightning CSS rejects the rule it generates (the webpack build only warns about it). Use `npx next dev --webpack` until the scan is told to skip tests and Markdown (`@source not`). It needs dummy WorkOS variables (`WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, a 32+ character `WORKOS_COOKIE_PASSWORD`, `NEXT_PUBLIC_WORKOS_REDIRECT_URI`). It also generates an untracked `AGENTS.md` at the repo root: delete it, never commit it (`no agent-local files` fails the PR).
++- **Memory.** Two `next build` processes at once on a 16 GB machine get killed; run one.
++
+ ## Project Structure
+ 
+ ```
