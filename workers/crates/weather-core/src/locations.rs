@@ -305,8 +305,11 @@ pub fn parse_spot_slug(slug: &str) -> Option<(String, f64, f64)> {
 /// places Worker asks in this order and stops at the first that applies).
 #[derive(Debug, Clone, PartialEq)]
 pub enum SlugBranch {
-    /// A shipped seed place, by its legacy or its canonical slug (#317).
-    Seed(&'static LocationDoc),
+    /// A shipped seed place, by its legacy or its canonical slug (#317). The
+    /// document carries the slug it was ASKED by, so an answer never changes
+    /// spelling under a caller: `harare` stays `harare`, `harare--ksy4dd1`
+    /// stays `harare--ksy4dd1`.
+    Seed(Box<LocationDoc>),
     /// A `{name}--{geohash}` slug: it carries its own coordinate.
     Spot(Box<LocationDoc>),
     /// Anything else: a community, platform or Nyuchi place. Only the Nyuchi
@@ -322,7 +325,9 @@ pub enum SlugBranch {
 /// is never shadowed by one.
 pub fn slug_branch(slug: &str) -> SlugBranch {
     if let Some(seed) = find_seed(slug) {
-        return SlugBranch::Seed(seed);
+        let mut doc = seed.clone();
+        doc.slug = slug.to_owned();
+        return SlugBranch::Seed(Box::new(doc));
     }
     match LocationDoc::spot(slug) {
         Some(spot) => SlugBranch::Spot(Box::new(spot)),
@@ -800,7 +805,16 @@ mod tests {
         );
         for slug in ["harare", canonical] {
             match slug_branch(slug) {
-                SlugBranch::Seed(seed) => assert_eq!(seed.slug, "harare", "{slug}"),
+                SlugBranch::Seed(seed) => {
+                    // The seed itself (its own height, region and tags), under
+                    // the spelling it was asked by.
+                    assert_eq!(seed.slug, slug, "{slug}");
+                    assert_eq!(seed.name, "Harare", "{slug}");
+                    assert_eq!(seed.province, "Harare", "{slug}");
+                    assert!(seed.elevation > 1000.0, "{slug}");
+                    assert!(seed.tags.iter().any(|t| t == "city"), "{slug}");
+                    assert_eq!(seed.source, "seed", "{slug}");
+                }
                 other => panic!("{slug} should be the seed, got {other:?}"),
             }
         }

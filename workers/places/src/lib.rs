@@ -38,7 +38,6 @@ use weather_core::budget::Action;
 use weather_core::geo::valid_coordinates;
 use weather_core::locations::{self, LocationDoc, SlugBranch};
 use weather_core::resolve::{self, Naming, PointAnswer, SpotKind};
-use weather_core::slug_migration;
 use weather_edge::{error, json, query_pairs};
 use worker::{event, Context, Env, Method, Request, Response, Result};
 
@@ -126,13 +125,10 @@ pub(crate) async fn find_location(
     slug: &str,
 ) -> std::result::Result<Option<LocationDoc>, ()> {
     match locations::slug_branch(slug) {
-        SlugBranch::Seed(l) => {
-            // Either spelling finds the seed; the answer carries the canonical
-            // slug (#317). Durable data stays keyed by the legacy one.
-            let mut seed = l.clone();
-            seed.slug = slug_migration::canonical_slug(&seed.slug).to_owned();
-            return Ok(Some(seed));
-        }
+        // Either spelling finds the seed (#317), and the answer keeps the
+        // spelling it was asked by, so nothing a caller already gets changes.
+        // Durable data stays keyed by the legacy slug (`storage_slug`).
+        SlugBranch::Seed(seed) => return Ok(Some(*seed)),
         SlugBranch::Spot(spot) => {
             let named = sources::reverse_cached(env, spot.lat, spot.lon)
                 .await

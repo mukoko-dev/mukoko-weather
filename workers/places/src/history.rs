@@ -343,9 +343,10 @@ fn stamped(mut body: Value, missing: usize, policy: CachePolicy) -> Result<Respo
 
 fn target_of(loc: &LocationDoc) -> Target {
     let catalogue = locations::find_seed(&loc.slug).is_some() || loc.source == "places";
-    // A shipped seed answers to its canonical slug (#317), but every stored
-    // day (MongoDB, D1 `place_daily`) lives under its LEGACY slug, so that is
-    // the key both stores are read by; `storage_slug` maps it.
+    // A shipped seed answers to either spelling (#317), but every stored day
+    // (MongoDB, D1 `place_daily`) lives under its LEGACY slug, so that is the
+    // key both stores are read by; `storage_slug` and `d1_slug` map it. The
+    // answer's `location` keeps the spelling it was asked by.
     let storage = storage_slug(&loc.slug, catalogue);
     Target {
         key: loc.slug.clone(),

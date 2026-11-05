@@ -95,20 +95,34 @@ sends, so they need no mapping.
 For **every other place**, nothing changes: its slug is its key, as before.
 Nothing writes production data and there is no migration script.
 
-## Deploy order (required)
+## Deploy order (required): two releases
 
-Deploy the **places, forecast and ai Workers first**, then promote Vercel.
+The change ships as two pull requests, and **the Workers go first**.
 
-The new app sends the canonical slug of a seed. An old Worker does not know it
-as a seed and reads it as a spot: history is clamped to 366 days with no
-recorded days, it draws on the spot budgets (`history-backfill-coords`, 10 an
-hour), archive days are written under `geo:<cell>` keys the new Workers never
-read, reports are filed under `geo:<cell>` and vanish from the page until the
-Workers land, and the profile and agriculture routes treat the place as a
-spot. No data is destroyed, but orphaned archive documents are written. The
-other order is safe: an old app on new Workers only ever sends legacy slugs,
-which the new Workers still accept. `jobs` shares the crate but its behaviour
-is unchanged; `mongo-bridge`, `public-api` and `internal-api` need no ordering.
+1. **Workers half** (`feat/canonical-slugs-workers`, #506): everything under
+   `workers/**` plus the pinned table's source file
+   `src/lib/slug-migration-data.ts`. It is backward compatible with the app in
+   production, which only sends legacy slugs: every answer keeps the spelling
+   it was asked by, and a canonical slug, which nothing sends yet, is read as
+   the seed. A push to `main` that touches `workers/**` deploys every Worker
+   (`workers-deploy.yml`) while Vercel deploys the app on the same push, so
+   this half must be released ON ITS OWN, and its live checks (listed in the
+   PR) run before the next step.
+2. **App half** (#326): `src/**`, `docs/**` and the rest. Release it only
+   after step 1 is live. Once #506 is in `staging`, `staging` is merged into
+   #326 and the `workers/**` diff disappears from it.
+
+Why the order matters: the new app sends the canonical slug of a seed. An old
+Worker does not know it as a seed and reads it as a spot: history is clamped
+to 366 days with no recorded days, it draws on the spot budgets
+(`history-backfill-coords`, 10 an hour), archive days are written under
+`geo:<cell>` keys the new Workers never read, reports are filed under
+`geo:<cell>` and vanish from the page until the Workers land, and the profile
+and agriculture routes treat the place as a spot. No data is destroyed, but
+orphaned archive documents are written. The other order is safe: an old app
+on new Workers only ever sends legacy slugs, which the new Workers still
+accept. `jobs` shares the crate but its behaviour is unchanged; `mongo-bridge`,
+`public-api` and `internal-api` need no ordering.
 
 ## Owner decisions and risks
 
@@ -129,9 +143,9 @@ is unchanged; `mongo-bridge`, `public-api` and `internal-api` need no ordering.
 
 ## Known limits and follow-ups (not in this change)
 
-- **Worker answers are not uniform.** `/v1/locations?slug=` answers a seed with
-  its canonical slug; `/v1/search`, `/v1/geo` and the list answer the legacy
-  one. The app canonicalises them where it reads them
+- **Worker answers are not uniform.** `/v1/locations?slug=` and `/v1/history`
+  answer a seed with the spelling they were asked by; `/v1/search`, `/v1/geo`
+  and the list answer the legacy slug. The app canonicalises what it reads
   (`useLocationQuickSearch`, `detectUserLocation`, the home page, bare-name); a
   new caller must do the same. `resolve.rs` is the place to move them.
 - **Alert keys.** `alertPlaceKey` (`src/lib/push/place-key.ts`) treats a slug

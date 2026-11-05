@@ -1,14 +1,17 @@
-//! Canonical slugs (#317): the Rust mirror of `src/lib/slug-migration.ts`.
+//! Canonical slugs (#317): the Workers' side of the move.
 //!
 //! Every shipped seed place has a legacy slug (`harare`, `nairobi-ke`) and one
 //! canonical slug (`harare--ksy4dd1`, `{name}--{geohash7}`). The pinned pairs
-//! are `data/slug-migration.json`, generated from the app's
-//! `src/lib/slug-migration-data.ts` by `workers/scripts/gen-seed-locations.mjs`
+//! are `data/slug-migration.json`, generated from `src/lib/slug-migration-data.ts`
+//! (the one source the app reads too) by `workers/scripts/gen-seed-locations.mjs`
 //! (CI runs it with `--check`).
 //!
 //! The Workers accept BOTH spellings of a seed and key durable data (the D1
-//! `place_daily` history, cached answers) by the LEGACY slug, which is where
-//! every existing row lives, so the move never splits or loses history.
+//! `place_daily` history, the MongoDB reports and archive days) by the LEGACY
+//! slug, which is where every existing row lives, so the move never splits or
+//! loses a seed's history. Nothing a caller already gets changes: an answer
+//! keeps the spelling it was asked by, and a slug that is not a seed is never
+//! touched.
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
