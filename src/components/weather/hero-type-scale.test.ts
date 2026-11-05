@@ -25,7 +25,7 @@ const SCALE: Record<string, [number, number]> = {
   "body-lg": [18, 1.6],
   body: [16, 1.6],
   "body-sm": [14, 1.5],
-  caption: [12, 1.5],
+  caption: [14, 1.5],
 };
 
 const HERO_FILES = [
@@ -38,7 +38,11 @@ const HERO_FILES = [
   "components/ui/app-account-menu.tsx",
 ];
 
-/** Tailwind size steps that equal a Mzizi scale size. */
+/**
+ * Tailwind size steps that equal a Mzizi scale size. text-xs and text-sm are
+ * both the 14px caption / body-sm size since stage 2 of #479 (the Bundu text
+ * floor), which is why `xs` stays on the list.
+ */
 const TAILWIND_ON_SCALE = new Set([
   "xs",
   "sm",

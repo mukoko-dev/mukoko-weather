@@ -217,6 +217,49 @@ describe("PressureDial", () => {
   });
 });
 
+describe("text outside the SVG (the 14px floor, stage 2 of #479)", () => {
+  // SVG text scales with the viewBox, so it drew at 7 to 13px in a phone-width
+  // tile. The dials print their labels in HTML at text-sm (14px) instead.
+  const dials = {
+    CompassDial: render(
+      h(CompassDial, { directionDeg: 70, speed: 5, gust: 14 }),
+    ),
+    PressureDial: render(h(PressureDial, { hPa: 1013, trend: "falling" })),
+    SunArc: render(
+      h(SunArc, { arcPct: 50, sunrise: "06:12", sunset: "18:03" }),
+    ),
+  };
+
+  for (const [name, html] of Object.entries(dials)) {
+    it(`${name} draws no SVG text and no size under 14px`, () => {
+      expect(html).not.toContain("<text");
+      expect(html).not.toContain("<tspan");
+      expect(html).not.toMatch(/text-\[\d/);
+      expect(html).toContain("text-sm");
+    });
+  }
+
+  it("CompassDial prints N, E, S, W, the speed and the gust as HTML", () => {
+    const html = dials.CompassDial;
+    for (const letter of ["N", "E", "S", "W"]) {
+      expect(html).toContain(`>${letter}</span>`);
+    }
+    expect(html).toContain(">5</span>");
+    expect(html).toContain("km/h");
+    expect(html).toContain("gusts 14");
+    // Said once, by the SVG's own label: the HTML copy is hidden from readers.
+    expect(html.match(/aria-hidden="true"/g)?.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("PressureDial and SunArc print their scale ends and times as HTML", () => {
+    expect(dials.PressureDial).toContain("<span>960</span>");
+    expect(dials.PressureDial).toContain("<span>1050</span>");
+    expect(dials.PressureDial).toContain("1013");
+    expect(dials.SunArc).toContain("<span>06:12</span>");
+    expect(dials.SunArc).toContain("<span>18:03</span>");
+  });
+});
+
 describe("MiniBars", () => {
   it("renders one bar per value and emphasises the highlighted one", () => {
     const html = render(

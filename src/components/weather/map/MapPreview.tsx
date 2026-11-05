@@ -82,7 +82,7 @@ export function MapPreview({ location }: MapPreviewProps) {
         {map && (
           <MapCredits
             credits={attributionForLayer(null)}
-            className="mt-0 px-[var(--space-card)] py-2 text-xs"
+            className="mt-0 px-[var(--space-card)] py-2 text-sm"
           />
         )}
       </div>

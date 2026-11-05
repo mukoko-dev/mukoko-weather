@@ -358,8 +358,8 @@ export function AviationWeather({ slug, lat, lon }: Props) {
               className={`quail inline-flex shrink-0 items-center gap-1 text-sm ${weight}`}
               title={title}
             >
-              <span className="font-mono text-xs font-bold">{s.icao}</span>
-              <span className="text-xs opacity-70">
+              <span className="font-mono text-sm font-bold">{s.icao}</span>
+              <span className="text-sm opacity-70">
                 {Math.round(s.distanceKm)}km
               </span>
             </button>
@@ -425,37 +425,37 @@ export function AviationWeather({ slug, lat, lon }: Props) {
                         Clouds &amp; Ceiling
                       </h3>
                       <span
-                        className={`inline-flex items-center justify-center rounded-[var(--radius-badge)] px-2 py-0.5 text-xs font-bold min-w-[3rem] ${getFlightCategoryClass(latest.flight_category)}`}
+                        className={`inline-flex items-center justify-center rounded-[var(--radius-badge)] px-2 py-0.5 text-sm font-bold min-w-[3rem] ${getFlightCategoryClass(latest.flight_category)}`}
                         aria-label={`Flight category: ${latest.flight_category}`}
                       >
                         {latest.flight_category}
                       </span>
                     </div>
                     <dl className="mt-3 grid grid-cols-3 gap-3">
-                      <div>
-                        <dt className="text-xs text-text-tertiary">
+                      <div className="flex flex-col justify-between">
+                        <dt className="text-sm text-text-tertiary">
                           Cloud Cover
                         </dt>
                         <dd className="mt-0.5 text-base font-semibold text-text-primary">
                           {cover}
                         </dd>
                       </div>
-                      <div>
-                        <dt className="text-xs text-text-tertiary">
+                      <div className="flex flex-col justify-between">
+                        <dt className="text-sm text-text-tertiary">
                           Cloud Base
                         </dt>
                         <dd className="mt-0.5 text-base font-semibold text-text-primary">
                           {formatFt(base)}
                         </dd>
                       </div>
-                      <div>
-                        <dt className="text-xs text-text-tertiary">Ceiling</dt>
+                      <div className="flex flex-col justify-between">
+                        <dt className="text-sm text-text-tertiary">Ceiling</dt>
                         <dd className="mt-0.5 text-base font-semibold text-text-primary">
                           {ceiling === null ? "Unlimited" : formatFt(ceiling)}
                         </dd>
                       </div>
                     </dl>
-                    <p className="mt-2 text-xs text-text-tertiary">
+                    <p className="mt-2 text-sm text-text-tertiary">
                       Ceiling is the lowest broken (BKN) or overcast (OVC) layer
                       — the primary driver of the flight category.
                     </p>
@@ -469,7 +469,7 @@ export function AviationWeather({ slug, lat, lon }: Props) {
                 TAF
               </h3>
               {view.taf ? (
-                <pre className="font-mono text-xs text-text-primary bg-surface-base rounded-[var(--radius-input)] p-3 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">
+                <pre className="font-mono text-sm text-text-primary bg-surface-base rounded-[var(--radius-input)] p-3 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">
                   {view.taf}
                 </pre>
               ) : (
@@ -527,7 +527,7 @@ export function AviationWeather({ slug, lat, lon }: Props) {
                           </td>
                           <td className="px-1 py-1.5">
                             <span
-                              className={`inline-flex items-center justify-center rounded-[var(--radius-badge)] px-2 py-0.5 text-xs font-bold ${getFlightCategoryClass(obs.flight_category)}`}
+                              className={`inline-flex items-center justify-center rounded-[var(--radius-badge)] px-2 py-0.5 text-sm font-bold ${getFlightCategoryClass(obs.flight_category)}`}
                               aria-label={`Flight category: ${obs.flight_category}`}
                             >
                               {obs.flight_category}
@@ -565,7 +565,7 @@ export function AviationWeather({ slug, lat, lon }: Props) {
               )}
             </div>
 
-            <p className="mt-3 text-xs text-text-tertiary">
+            <p className="mt-3 text-sm text-text-tertiary">
               METAR data from{" "}
               <span className="font-medium">
                 Aviation Weather Center (NOAA)
