@@ -34,8 +34,11 @@ vi.mock("@workos-inc/authkit-nextjs", () => ({
 const mockResolve = vi.fn(
   async (slug: string, _opts?: { strict?: boolean }) => {
     if (slug === "community-place-a1b2c3") return { slug };
-    // A platform slug resolves to a place whose canonical slug differs.
+    // A non-seed place whose lookup answers with a DIFFERENT slug (what the
+    // resolver used to return for a platform slug): the proxy must not follow
+    // it, only the pinned seed table redirects (#317).
     if (slug === "old-town-a1b2c3") return { slug: "old-town--ksy4dd7" };
+    if (slug === "kakamega-ke") return { slug };
     if (slug === "db-down") throw new Error("mongo down");
     return null;
   },
@@ -218,17 +221,25 @@ describe("proxy — unknown location slugs get a server-rendered 404 (#263)", ()
       ).toBe(false);
     });
 
-    it("308s a platform slug to the canonical slug its place resolves to", async () => {
+    it("does not redirect a legacy slug that is not in the pinned table (a community or platform place keeps its URL)", async () => {
       resetLocationGateCache();
-      const res = await go("/old-town-a1b2c3/forecast?x=1");
-      expect(res.status).toBe(308);
-      expect(to(res)).toBe("/old-town--ksy4dd7/forecast?x=1");
-      // Cached: the second request redirects without another lookup.
-      mockResolve.mockClear();
-      const again = await go("/old-town-a1b2c3");
-      expect(again.status).toBe(308);
-      expect(to(again)).toBe("/old-town--ksy4dd7");
-      expect(mockResolve).not.toHaveBeenCalled();
+      for (const path of [
+        "/kakamega-ke",
+        "/kakamega-ke/forecast?x=1",
+        // Its lookup answers with another slug; the proxy never follows it.
+        "/old-town-a1b2c3",
+        "/old-town-a1b2c3/map",
+      ]) {
+        const res = await go(path);
+        expect(res.status, path).toBe(200);
+        expect(res.headers.get("location"), path).toBeNull();
+      }
+      // The cookie keeps the slug the visitor asked for, so the place is found
+      // again by the same stored history, reports and region.
+      const cookie = (await go("/kakamega-ke")).headers
+        .getSetCookie()
+        .find((c) => c.startsWith("lastLocation="));
+      expect(cookie?.split(";")[0]).toBe("lastLocation=kakamega-ke");
     });
 
     it("never redirects a slug that is already canonical (no loop)", async () => {

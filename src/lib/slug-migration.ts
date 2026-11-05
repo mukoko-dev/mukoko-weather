@@ -1,26 +1,28 @@
 /**
  * Canonical slugs: every place is `{name}--{ref}`.
  *
- * Until now ~265 shipped seed places lived under legacy slugs (`harare`,
+ * Until now the shipped seed places lived under legacy slugs (`harare`,
  * `nairobi-ke`), community places under `{name}-{cc}` or a platform slug
  * (`harare-a1b2c3`), and everything else under the smart-slug grammar
- * (`{name}--{geohash7}`, `{name}--osm-{ref}`). Owner decision: move ALL of
- * them to the smart-slug model. This module is the one place that knows the
- * mapping; it is pure and light (no database, no `LOCATIONS`), so the edge
- * proxy, the stores and the resolvers all import it.
+ * (`{name}--{geohash7}`, `{name}--osm-{ref}`). Owner decision: the shipped
+ * seeds move to the smart-slug model. This module is the one place that knows
+ * the mapping; it is pure and light (no database, no `LOCATIONS`), so the
+ * edge proxy, the stores and the resolvers all import it.
  *
  * - Every legacy seed slug has ONE canonical slug, pinned in
  *   `slug-migration-data.ts` (derived once from the seed's name and
  *   coordinate; see docs/canonical-slugs.md). The map is a bijection and
  *   canonical slugs are never legacy slugs, so redirects cannot loop.
- * - A legacy slug redirects (308) to its canonical slug forever; nothing
+ * - A legacy seed slug redirects (308) to its canonical slug forever; nothing
  *   that was ever linked 404s.
- * - Durable data (history, reports, AI caches) stays under the LEGACY key:
- *   {@link storageKeySlug} maps a canonical seed slug back, so a place's
+ * - Durable data (history, reports) of a seed stays under the LEGACY key:
+ *   {@link storageKeySlug} maps a canonical seed slug back, so a seed's
  *   history is never split or lost by the move.
- * - Platform and community slugs cannot be tabulated (their ids live in the
- *   database), so they are normalised by the resolver, see
- *   `canonicalSlugForPlace` in `places.ts`.
+ * - ONLY a slug in the pinned table moves. A platform, community or Nyuchi
+ *   place (`foo-ke`, `harare-35c223`) keeps its slug: its stored history,
+ *   reports, country, province and tags are found by that slug, and a
+ *   `{name}--{geohash}` spot would reach none of them. Saved places follow the
+ *   same rule (`migrateSlugPrefs` touches table slugs only).
  */
 import { SEED_SLUG_TABLE } from "./slug-migration-data";
 import { SMART_SLUG_DELIMITER } from "./smart-slug";

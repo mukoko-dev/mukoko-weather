@@ -21,7 +21,7 @@ import {
   serialisePayload,
   servedStaleAgeMs,
 } from "../device-weather";
-import { storageKeySlug } from "../slug-migration";
+import { canonicalSlug, storageKeySlug } from "../slug-migration";
 import type { WeatherPlaceDocType } from "./schemas";
 
 /** The slice of an RxDB collection this module uses (so tests can fake it). */
@@ -154,18 +154,24 @@ export async function recallPlace(
   const col = await collection();
   if (!col) return null;
   try {
-    let doc = await col.findOne(slug).exec();
-    // A copy stored before the canonical-slug move (#317) sits under the
-    // seed's legacy slug: a saved place keeps its offline copy through the
-    // move instead of starting empty. It is shown under the canonical slug,
-    // and the next good forecast stores it there.
-    const legacy = storageKeySlug(slug);
-    if (!doc && legacy !== slug) doc = await col.findOne(legacy).exec();
+    // A shipped place has two spellings (#317). A copy stored before the move
+    // sits under the legacy slug, one stored since under the canonical one;
+    // whichever is asked for finds whichever is there, and the view always
+    // carries the canonical slug, so the place on screen, its URL and its
+    // memory entry are one. A slug that is not in the pinned table has one
+    // spelling and is looked up as it always was.
+    const canonical = canonicalSlug(slug);
+    let doc: PlaceDoc | null = null;
+    // The canonical copy first: it can only have been stored since the move.
+    for (const key of new Set([canonical, storageKeySlug(slug)])) {
+      doc = await col.findOne(key).exec();
+      if (doc) break;
+    }
     if (!doc) return null;
     const stored = parsePayload(doc.payload);
     const payload =
-      stored && doc.slug !== slug
-        ? { ...stored, location: { ...stored.location, slug } }
+      stored && stored.location.slug !== canonical
+        ? { ...stored, location: { ...stored.location, slug: canonical } }
         : stored;
     const view = payload
       ? deviceViewOf({ payload, fetchedAt: doc.fetchedAt }, now)

@@ -197,27 +197,6 @@ export const TIMEOUTS_BEFORE_BACKOFF = 2;
 
 const known = new Map<string, number>();
 const unknown = new Map<string, number>();
-/** Slugs a lookup resolved to a DIFFERENT canonical slug (platform and
- * community slugs, `harare-35c223`), so the proxy can 308 to it. Bounded;
- * the value is deterministic for a slug, so it needs no expiry. */
-const canonicalTargets = new Map<string, string>();
-const MAX_CANONICAL_TARGETS = 1000;
-
-/** Record that `slug` resolved to a place whose canonical slug is `target`. */
-export function rememberCanonicalTarget(slug: string, target: string): void {
-  if (!target || target === slug) return;
-  canonicalTargets.delete(slug);
-  if (canonicalTargets.size >= MAX_CANONICAL_TARGETS) {
-    const oldest = canonicalTargets.keys().next().value;
-    if (oldest !== undefined) canonicalTargets.delete(oldest);
-  }
-  canonicalTargets.set(slug, target);
-}
-
-/** The canonical slug a looked-up `slug` should redirect to, if known. */
-export function canonicalTargetFor(slug: string): string | undefined {
-  return canonicalTargets.get(slug);
-}
 interface Lookup {
   promise: Promise<boolean>;
   /** Counted toward the backoff already (once per lookup, not per waiter). */
@@ -235,7 +214,6 @@ let consecutiveTimeouts = 0;
 export function resetLocationGateCache(): void {
   known.clear();
   unknown.clear();
-  canonicalTargets.clear();
   inFlight.clear();
   degradedUntil = 0;
   consecutiveTimeouts = 0;

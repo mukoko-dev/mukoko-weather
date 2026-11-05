@@ -5,8 +5,12 @@ import { readdirSync } from "fs";
 import { resolve as resolvePath } from "path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LOCATIONS } from "./locations";
-import { slugifyName } from "./smart-slug";
-import { canonicalSlug } from "./slug-migration";
+import { buildSmartSlug, slugifyName } from "./smart-slug";
+import {
+  canonicalSlug,
+  isCanonicalSeedSlug,
+  storageKeySlug,
+} from "./slug-migration";
 import {
   DEGRADED_BACKOFF_MS,
   TIMEOUTS_BEFORE_BACKOFF,
@@ -482,9 +486,14 @@ describe("bare seed names redirect to the canonical slug in one hop (#302, #317)
     const seedSlugs = new Set(LOCATIONS.map((l) => l.slug));
     for (const [alias, target] of SEED_NAME_ALIASES) {
       expect(seedSlugs.has(alias)).toBe(false);
-      // The target is a canonical seed slug, never a legacy one.
+      // The target is the pinned canonical slug of the ONE seed that carries
+      // the name: in the table, never a legacy slug, and the seed's own cell.
       expect(seedSlugs.has(target)).toBe(false);
-      expect(target.includes("--")).toBe(true);
+      expect(isCanonicalSeedSlug(target), target).toBe(true);
+      const seed = LOCATIONS.find((l) => l.slug === storageKeySlug(target));
+      expect(seed, target).toBeDefined();
+      expect(slugifyName(seed!.name), alias).toBe(alias);
+      expect(target).toBe(buildSmartSlug(seed!.name, seed!.lat, seed!.lon));
       expect(KNOWN.has(alias)).toBe(false);
     }
     const withRoute = new Set([...KNOWN, "phuket"]);

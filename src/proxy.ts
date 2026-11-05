@@ -3,10 +3,8 @@ import { authkit, handleAuthkitProxy } from "@workos-inc/authkit-nextjs";
 import {
   LOCATION_NOT_FOUND_REWRITE,
   LOCATION_SLUG_RE,
-  canonicalTargetFor,
   classifyLocationPath,
   isRenderableLocation,
-  rememberCanonicalTarget,
 } from "@/lib/location-gate";
 import { LEGACY_TO_CANONICAL } from "@/lib/slug-migration";
 import { isBareNameCandidate, resolveBareName } from "@/lib/bare-name";
@@ -23,16 +21,9 @@ import {
   LAST_LOCATION_MAX_AGE_S,
 } from "@/lib/last-location";
 
-/**
- * The gate needs DB errors to throw, not to read as "not found". It also
- * notes a place that resolves to a different canonical slug (a platform slug
- * such as `harare-35c223`), so the proxy can 308 it to the canonical URL.
- */
-const strictResolve = async (slug: string) => {
-  const found = await resolveLocationSlug(slug, { strict: true });
-  if (found) rememberCanonicalTarget(slug, found.slug);
-  return found;
-};
+/** The gate needs DB errors to throw, not to read as "not found". */
+const strictResolve = (slug: string) =>
+  resolveLocationSlug(slug, { strict: true });
 
 /**
  * AuthKit options per path. Only the CouchDB sync's credential route asks for
@@ -135,25 +126,6 @@ export default async function proxy(
       redirect: new URL(path.location + request.nextUrl.search, request.url),
       redirectStatus: 308,
     });
-  }
-  // ── Platform / community slug → the canonical URL (#317) ────────────────
-  // `/harare-35c223` (a placesGeo platform slug) and `/foo-ke` (an old
-  // community slug) resolve to a place whose canonical slug is
-  // `{name}--{geohash}`. The seed table above needs no lookup; these do, and
-  // the gate's lookup has just made it (or cached it), so the redirect is
-  // free. Never fires for a slug that is already canonical.
-  if (path.kind === "slug" && renderable === true) {
-    const target = canonicalTargetFor(path.slug);
-    if (target && target !== path.slug) {
-      const sub = pathname.split("/").filter(Boolean)[1];
-      return handleAuthkitProxy(request, headers, {
-        redirect: new URL(
-          `/${target}${sub ? `/${sub}` : ""}${request.nextUrl.search}`,
-          request.url,
-        ),
-        redirectStatus: 308,
-      });
-    }
   }
   // ── Bare place name (/koh-samui) → the canonical spot URL (#317) ────────
   // The coordinate is the identity and the name in a URL is cosmetic, so a

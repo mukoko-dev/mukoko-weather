@@ -123,8 +123,8 @@ describe("sitemap.ts", () => {
       expect(urls.has(`${base}/${legacy}/forecast`), legacy).toBe(false);
     }
     // The boosted static entries are canonical (with no database here, the
-    // per-location pages are not listed; sitemap.ts maps them through
-    // canonicalSlug, which the table tests pin).
+    // per-location pages are not listed; sitemap-canonical.test.ts feeds the
+    // sitemap real locations and checks them).
     for (const legacy of ["harare", "bulawayo", "victoria-falls"]) {
       expect(urls.has(`${base}/${canonicalSlug(legacy)}`), legacy).toBe(true);
     }

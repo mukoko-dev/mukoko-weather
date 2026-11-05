@@ -205,6 +205,38 @@ describe("saved-slug migration (store / RxDB / device sync)", () => {
     expect(slugPrefsChanged(legacyPrefs, next)).toBe(true);
   });
 
+  it("leaves a saved non-seed place untouched: only the pinned table moves", () => {
+    // A community place (`foo-ke`), a platform place (`harare-35c223`) and a
+    // spot keep their slug, their label and their place in the list, so the
+    // history and reports stored by that slug are still the ones it opens.
+    const prefs = {
+      selectedLocation: "foo-ke",
+      savedLocations: ["foo-ke", "harare-35c223", "harare", "x--ksy4dd7"],
+      homeLocation: "foo-ke",
+      hiddenPresetSlugs: ["foo-ke"],
+      locationLabels: { "foo-ke": "Gran's farm", "harare-35c223": "Office" },
+    };
+    const next = migrateSlugPrefs(prefs);
+    expect(next.selectedLocation).toBe("foo-ke");
+    expect(next.savedLocations).toEqual([
+      "foo-ke",
+      "harare-35c223",
+      canonicalSlug("harare"),
+      "x--ksy4dd7",
+    ]);
+    expect(next.homeLocation).toBe("foo-ke");
+    expect(next.hiddenPresetSlugs).toEqual(["foo-ke"]);
+    expect(next.locationLabels).toEqual(prefs.locationLabels);
+    // Nothing but the one table slug changed.
+    const onlyNonSeed = {
+      ...prefs,
+      savedLocations: ["foo-ke", "harare-35c223", "x--ksy4dd7"],
+    };
+    expect(slugPrefsChanged(onlyNonSeed, migrateSlugPrefs(onlyNonSeed))).toBe(
+      false,
+    );
+  });
+
   it("is idempotent: a second pass changes nothing", () => {
     const once = migrateSlugPrefs(legacyPrefs);
     const twice = migrateSlugPrefs(once);

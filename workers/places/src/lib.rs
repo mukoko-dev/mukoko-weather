@@ -36,7 +36,7 @@ mod sources;
 use serde_json::{json, Value};
 use weather_core::budget::Action;
 use weather_core::geo::valid_coordinates;
-use weather_core::locations::{self, LocationDoc};
+use weather_core::locations::{self, LocationDoc, SlugBranch};
 use weather_core::resolve::{self, Naming, PointAnswer, SpotKind};
 use weather_core::slug_migration;
 use weather_edge::{error, json, query_pairs};
@@ -125,19 +125,24 @@ pub(crate) async fn find_location(
     env: &Env,
     slug: &str,
 ) -> std::result::Result<Option<LocationDoc>, ()> {
-    if let Some(l) = locations::find_seed(slug) {
-        // Either spelling finds the seed; the answer carries the canonical
-        // slug (#317). Durable data stays keyed by the legacy one.
-        let mut seed = l.clone();
-        seed.slug = slug_migration::canonical_slug(&seed.slug).to_owned();
-        return Ok(Some(seed));
-    }
-    if let Some(spot) = LocationDoc::spot(slug) {
-        let named = sources::reverse_cached(env, spot.lat, spot.lon)
-            .await
-            .flatten()
-            .filter(|l| l.slug == slug);
-        return Ok(Some(named.unwrap_or(spot)));
+    match locations::slug_branch(slug) {
+        SlugBranch::Seed(l) => {
+            // Either spelling finds the seed; the answer carries the canonical
+            // slug (#317). Durable data stays keyed by the legacy one.
+            let mut seed = l.clone();
+            seed.slug = slug_migration::canonical_slug(&seed.slug).to_owned();
+            return Ok(Some(seed));
+        }
+        SlugBranch::Spot(spot) => {
+            let named = sources::reverse_cached(env, spot.lat, spot.lon)
+                .await
+                .flatten()
+                .filter(|l| l.slug == slug);
+            return Ok(Some(named.unwrap_or(*spot)));
+        }
+        // A community, platform or Nyuchi place: not a spot, so the spot
+        // branch never shadows it. Asked next, in this order.
+        SlugBranch::Other => {}
     }
     let nyuchi = sources::nyuchi_place(env, slug).await;
     if let Ok(Some(l)) = nyuchi {
