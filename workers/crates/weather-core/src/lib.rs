@@ -57,6 +57,7 @@ pub mod secrets;
 pub mod severe_alert;
 pub mod sg_air;
 pub mod slug;
+pub mod slug_migration;
 pub mod station;
 pub mod station_alert;
 pub mod status;
