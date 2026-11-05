@@ -96,9 +96,11 @@ pub fn seed_locations() -> &'static [LocationDoc] {
     })
 }
 
-/// A seed location by exact slug.
+/// A seed location by exact slug, under either spelling: its legacy slug
+/// (`harare`) or its canonical one (`harare--ksy4dd1`, #317).
 pub fn find_seed(slug: &str) -> Option<&'static LocationDoc> {
-    seed_locations().iter().find(|l| l.slug == slug)
+    let key = crate::slug_migration::storage_key_slug(slug);
+    seed_locations().iter().find(|l| l.slug == key)
 }
 
 /// Seed locations matching `q` (name, slug or province, case-insensitive),
@@ -297,6 +299,40 @@ pub fn parse_spot_slug(slug: &str) -> Option<(String, f64, f64)> {
         .collect::<Vec<_>>()
         .join(" ");
     Some((name, lat, lon))
+}
+
+/// Which branch of the place lookup a slug takes (`find_location` in the
+/// places Worker asks in this order and stops at the first that applies).
+#[derive(Debug, Clone, PartialEq)]
+pub enum SlugBranch {
+    /// A shipped seed place, by its legacy or its canonical slug (#317). The
+    /// document carries the slug it was ASKED by, so an answer never changes
+    /// spelling under a caller: `harare` stays `harare`, `harare--ksy4dd1`
+    /// stays `harare--ksy4dd1`.
+    Seed(Box<LocationDoc>),
+    /// A `{name}--{geohash}` slug: it carries its own coordinate.
+    Spot(Box<LocationDoc>),
+    /// Anything else: a community, platform or Nyuchi place. Only the Nyuchi
+    /// API and the community records can say what it is, so the lookup goes
+    /// on to them, and its stored history, reports and region are found by
+    /// this slug as they always were.
+    Other,
+}
+
+/// The branch a slug takes. A seed is tried before a spot (a canonical seed
+/// slug is a spot by grammar but names the seed), and a slug without the `--`
+/// delimiter can never be a spot, so an old `{city}-{cc}` or a platform slug
+/// is never shadowed by one.
+pub fn slug_branch(slug: &str) -> SlugBranch {
+    if let Some(seed) = find_seed(slug) {
+        let mut doc = seed.clone();
+        doc.slug = slug.to_owned();
+        return SlugBranch::Seed(Box::new(doc));
+    }
+    match LocationDoc::spot(slug) {
+        Some(spot) => SlugBranch::Spot(Box::new(spot)),
+        None => SlugBranch::Other,
+    }
 }
 
 impl LocationDoc {
@@ -737,6 +773,57 @@ mod tests {
         let (lat, lon) = decode_geohash("gcpvj0").unwrap();
         assert!((lat - 51.5074).abs() < 0.01 && (lon + 0.1278).abs() < 0.01);
         assert!(decode_geohash("abc").is_none()); // a is not in the alphabet
+    }
+
+    #[test]
+    fn an_old_form_or_platform_slug_is_never_a_spot_so_the_community_lookup_is_reached() {
+        // `find_location` stops at the first branch that applies. These are
+        // community, platform and Nyuchi places, whose history, reports and
+        // region are stored by the slug as written: they must reach the
+        // Nyuchi / community lookups, not be read as a coordinate (#317).
+        for slug in [
+            "kakamega-ke",
+            "foo-ke",
+            "sembawang-sg",
+            "windsor-avenue-zw",
+            "harare-35c223",
+            "bulawayo-e7b1f4",
+            "nairobi-518dd4",
+        ] {
+            assert!(find_seed(slug).is_none(), "{slug} is not a seed");
+            assert!(LocationDoc::spot(slug).is_none(), "{slug} is not a spot");
+            assert_eq!(slug_branch(slug), SlugBranch::Other, "{slug}");
+        }
+    }
+
+    #[test]
+    fn a_seed_is_tried_before_a_spot_in_either_spelling() {
+        let canonical = crate::slug_migration::canonical_slug("harare");
+        assert!(
+            LocationDoc::spot(canonical).is_some(),
+            "a canonical seed slug is a spot by grammar"
+        );
+        for slug in ["harare", canonical] {
+            match slug_branch(slug) {
+                SlugBranch::Seed(seed) => {
+                    // The seed itself (its own height, region and tags), under
+                    // the spelling it was asked by.
+                    assert_eq!(seed.slug, slug, "{slug}");
+                    assert_eq!(seed.name, "Harare", "{slug}");
+                    assert_eq!(seed.province, "Harare", "{slug}");
+                    assert!(seed.elevation > 1000.0, "{slug}");
+                    assert!(seed.tags.iter().any(|t| t == "city"), "{slug}");
+                    assert_eq!(seed.source, "seed", "{slug}");
+                }
+                other => panic!("{slug} should be the seed, got {other:?}"),
+            }
+        }
+        // A real spot, and a slug that only looks like one, stay what they were.
+        assert!(matches!(
+            slug_branch("west-paddock--ksy4dd7"),
+            SlugBranch::Spot(_)
+        ));
+        assert_eq!(slug_branch("not-a-geohash--a1b2"), SlugBranch::Other);
     }
 
     #[test]
