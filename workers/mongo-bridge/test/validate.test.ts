@@ -9,6 +9,7 @@ import {
   ttlSeconds,
   validStorageKey,
   FORECAST_MODELS,
+  NEVER_VERIFIED_REPORT_TYPES,
   REPORT_TYPES,
 } from "../src/validate";
 
@@ -141,9 +142,38 @@ describe("report", () => {
     expect(r.ok).toBe(true);
   });
   it("accepts every report type and rejects others", () => {
-    for (const t of REPORT_TYPES)
-      expect(validateReport({ ...report, reportType: t }).ok).toBe(true);
+    for (const t of REPORT_TYPES) {
+      // A type a forecast cannot confirm is only ever stored unverified.
+      const verified = !(
+        NEVER_VERIFIED_REPORT_TYPES as readonly string[]
+      ).includes(t);
+      expect(validateReport({ ...report, reportType: t, verified }).ok).toBe(
+        true,
+      );
+    }
     expect(validateReport({ ...report, reportType: "tornado" }).ok).toBe(false);
+  });
+  it("has the wildfire type, as the 14th", () => {
+    expect(REPORT_TYPES).toContain("wildfire");
+    expect(REPORT_TYPES).toHaveLength(14);
+  });
+  it("never accepts a wildfire report as verified", () => {
+    const fire = { ...report, reportType: "wildfire" };
+    expect(validateReport({ ...fire, verified: false }).ok).toBe(true);
+    expect(validateReport({ ...fire, verified: true })).toEqual({
+      ok: false,
+      detail: "A wildfire report cannot be verified",
+    });
+    // Whatever the severity or the snapshot, the mark is refused.
+    for (const severity of ["mild", "moderate", "severe"]) {
+      expect(validateReport({ ...fire, severity, verified: true }).ok).toBe(
+        false,
+      );
+    }
+    // Other types keep their own verified mark.
+    expect(
+      validateReport({ ...report, reportType: "flooding", verified: true }).ok,
+    ).toBe(true);
   });
   it("rejects a bad severity (the Rust side normalises first)", () => {
     expect(validateReport({ ...report, severity: "extreme" }).ok).toBe(false);

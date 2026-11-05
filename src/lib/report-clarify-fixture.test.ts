@@ -15,6 +15,7 @@ const fixture = JSON.parse(
   readFileSync(resolve(ROOT, "tests/fixtures/report-clarify.json"), "utf-8"),
 ) as {
   _generated: { by: string; commit: string; source: string };
+  _extended?: { note: string; reportType: string };
   prompts: { reportType: string; place: string | null }[];
   answers: { name: string; expected: { questions: string[] } }[];
   refused: { expected: { error: { status: number; detail: string } } }[];
@@ -29,6 +30,14 @@ describe("report-clarify fixture", () => {
     expect(fixture._generated.source).toBe("api/py/_reports.py clarify_report");
   });
 
+  it("says which case was added by hand (the 14th type, wildfire)", () => {
+    // The Python cannot run any more, so a type added after it was deleted is
+    // written into the fixture by hand and named here.
+    expect(fixture._extended?.reportType).toBe("wildfire");
+    expect(fixture._extended?.note).toContain("added by hand");
+    expect(fixture.prompts.some((p) => p.reportType === "wildfire")).toBe(true);
+  });
+
   it("is authoritative: the oracle Python and its generator are gone", () => {
     expect(existsSync(resolve(ROOT, "api"))).toBe(false);
     expect(
@@ -38,7 +47,7 @@ describe("report-clarify fixture", () => {
 
   it("covers every report type, the failures and the refusals", () => {
     const types = new Set(fixture.prompts.map((p) => p.reportType));
-    expect(types.size).toBeGreaterThanOrEqual(13);
+    expect(types.size).toBeGreaterThanOrEqual(14);
     expect(fixture.answers.length).toBeGreaterThanOrEqual(20);
     for (const refused of fixture.refused) {
       expect(refused.expected.error.status).toBe(400);

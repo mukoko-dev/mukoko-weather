@@ -14,12 +14,13 @@ use serde::{Deserialize, Serialize};
 use crate::budget::Decision;
 use crate::slug::valid_slug;
 
-pub const REPORT_TYPES: [&str; 13] = [
+pub const REPORT_TYPES: [&str; 14] = [
     "light-rain",
     "heavy-rain",
     "thunderstorm",
     "hail",
     "flooding",
+    "wildfire",
     "strong-wind",
     "clear-skies",
     "cloudy",
@@ -29,6 +30,13 @@ pub const REPORT_TYPES: [&str; 13] = [
     "dust",
     "frost",
 ];
+
+/// Report types a forecast cannot confirm, and must never be taken to. A report
+/// of one is NEVER marked verified, whatever the cached weather at the place
+/// says: a wildfire is seen by people and satellites, and "hot, dry and windy"
+/// is not a fire. It stays a community report. [`cross_validate`] checks this
+/// list first, so a rule added to its match later cannot verify one by accident.
+pub const NEVER_VERIFIED: [&str; 1] = ["wildfire"];
 
 pub const MAX_DESCRIPTION: usize = 300;
 /// Submissions per client per hour.
@@ -156,9 +164,15 @@ impl Snapshot {
 }
 
 /// Does the weather data back up what the person reported? With no snapshot
-/// nothing can be confirmed. Missing numbers read as the Python's defaults
+/// nothing can be confirmed, and a type in [`NEVER_VERIFIED`] is never
+/// confirmed. Missing numbers read as the Python's defaults
 /// (0 for rain, wind and code; 20 degrees for temperature).
 pub fn cross_validate(report_type: &str, snapshot: Option<&Snapshot>) -> bool {
+    // Before anything is read: a wildfire is unverified with a snapshot, with
+    // none, and with any numbers in it.
+    if NEVER_VERIFIED.contains(&report_type) {
+        return false;
+    }
     let Some(s) = snapshot else { return false };
     let precip = s.precipitation.unwrap_or(0.0);
     let wind = s.wind_speed.unwrap_or(0.0);
@@ -198,6 +212,12 @@ pub fn fallback_questions(report_type: &str) -> [&'static str; 2] {
         "flooding" => [
             "How deep is the water on the road?",
             "Are vehicles able to pass?",
+        ],
+        // Two questions about what is seen, nothing to do: a wildfire report
+        // never tells anyone to go near a fire.
+        "wildfire" => [
+            "What can you see: smoke, flames, or both?",
+            "About how far away is it?",
         ],
         "strong-wind" => [
             "Are tree branches bending or breaking?",
@@ -714,6 +734,123 @@ mod tests {
         }
     }
 
+    /// Conditions that look as much like a fire as a forecast can: hot, dry,
+    /// windy, smoky-looking haze codes, no rain at all.
+    fn fire_weather() -> Snapshot {
+        Snapshot {
+            temperature: Some(41.0),
+            weather_code: Some(0),
+            precipitation: Some(0.0),
+            wind_speed: Some(45.0),
+            humidity: Some(8.0),
+        }
+    }
+
+    #[test]
+    fn a_wildfire_report_is_a_valid_type_with_the_usual_limits() {
+        assert!(REPORT_TYPES.contains(&"wildfire"));
+        assert!(valid_report_type("wildfire"));
+        assert_eq!(REPORT_TYPES.len(), 14);
+        // The same lives as every other report: 24, 48 and 72 hours.
+        assert_eq!(ttl_seconds(severity_or_default("mild")), 86_400);
+        assert_eq!(ttl_seconds(severity_or_default("severe")), 259_200);
+        let req = SubmitRequest {
+            location_slug: "harare".into(),
+            report_type: "wildfire".into(),
+            ..SubmitRequest::default()
+        };
+        assert!(check_submit(&req).is_ok());
+        // The 5-an-hour limit is per client, not per type.
+        assert_eq!(SUBMIT_PER_HOUR, 5);
+    }
+
+    #[test]
+    fn a_wildfire_report_is_never_verified() {
+        assert!(NEVER_VERIFIED.contains(&"wildfire"));
+        // No forecast at hand (cold cache): nothing to confirm it against.
+        assert!(!cross_validate("wildfire", None));
+        // A snapshot with nothing in it.
+        assert!(!cross_validate("wildfire", Some(&Snapshot::default())));
+        // Hot, dry and windy is not a fire: the weather never confirms one.
+        assert!(!cross_validate("wildfire", Some(&fire_weather())));
+        // Nor does smoky or hazy-looking weather (the codes `haze` reads).
+        for code in [0, 1, 2, 3, 45, 48, 61, 95] {
+            let s = Snapshot {
+                weather_code: Some(code),
+                ..fire_weather()
+            };
+            assert!(!cross_validate("wildfire", Some(&s)), "code {code}");
+        }
+        // Whatever the severity, the place, the reporter or the description,
+        // the stored report and the answer both say `false`.
+        for severity in ["mild", "moderate", "severe", "catastrophic"] {
+            for snapshot in [None, Some(fire_weather())] {
+                let req = SubmitRequest {
+                    location_slug: "harare".into(),
+                    report_type: "wildfire".into(),
+                    severity: Some(severity.into()),
+                    description: Some("Smoke over the ridge, flames at the top.".into()),
+                    ..SubmitRequest::default()
+                };
+                let place = ReportPlace {
+                    name: "Harare",
+                    lat: -17.83,
+                    lon: 31.05,
+                    storage_key: "harare",
+                };
+                let sub = build_report(&req, place, snapshot.as_ref(), &hash_ip("203.0.113.9"));
+                assert!(!sub.verified, "{severity}");
+                assert_eq!(sub.body["verified"], serde_json::json!(false), "{severity}");
+                assert_eq!(sub.body["reportType"], "wildfire");
+            }
+        }
+    }
+
+    #[test]
+    fn never_verified_does_not_change_the_other_types() {
+        // The guard names wildfire only; every other type is judged as before.
+        assert_eq!(NEVER_VERIFIED, ["wildfire"]);
+        let rain = Snapshot {
+            precipitation: Some(1.2),
+            ..Snapshot::default()
+        };
+        assert!(cross_validate("heavy-rain", Some(&rain)));
+        assert!(cross_validate(
+            "frost",
+            Some(&Snapshot {
+                temperature: Some(1.0),
+                ..Snapshot::default()
+            })
+        ));
+        // Flooding and hail were never confirmable by a forecast either.
+        assert!(!cross_validate("flooding", Some(&rain)));
+        assert!(!cross_validate("hail", Some(&rain)));
+    }
+
+    #[test]
+    fn the_wildfire_questions_ask_what_is_seen_and_never_tell_anyone_to_act() {
+        let qs = fallback_questions("wildfire");
+        assert_eq!(
+            qs,
+            [
+                "What can you see: smoke, flames, or both?",
+                "About how far away is it?"
+            ]
+        );
+        for q in qs {
+            // Questions, short, and nothing that sends a person toward a fire
+            // or promises help.
+            assert!(q.ends_with('?'), "{q}");
+            assert!(q.split_whitespace().count() <= 15, "{q}");
+            let lower = q.to_lowercase();
+            for word in ["approach", "go to", "go near", "fight", "put out", "call "] {
+                assert!(!lower.contains(word), "{q}");
+            }
+        }
+        // Not the generic pair a type with no questions of its own gets.
+        assert_ne!(qs[0], fallback_questions("zzz")[0]);
+    }
+
     #[test]
     fn fallback_questions_match_the_shared_vectors() {
         let f = fixture();
@@ -972,7 +1109,8 @@ mod tests {
         assert_eq!(
             with(&|r| r.report_type = "tornado".into()).unwrap_err(),
             "Invalid report type. Must be one of: clear-skies, cloudy, dust, flooding, fog, \
-             frost, hail, haze, heavy-rain, light-rain, mist, strong-wind, thunderstorm"
+             frost, hail, haze, heavy-rain, light-rain, mist, strong-wind, thunderstorm, \
+             wildfire"
         );
         assert_eq!(
             with(&|r| r.description = Some("x".repeat(301))).unwrap_err(),

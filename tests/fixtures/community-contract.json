@@ -308,6 +308,10 @@
     "frost": [
       "Is the frost visible on surfaces?",
       "Are your car windows frosted over?"
+    ],
+    "wildfire": [
+      "What can you see: smoke, flames, or both?",
+      "About how far away is it?"
     ]
   },
   "fallbackDefault": [

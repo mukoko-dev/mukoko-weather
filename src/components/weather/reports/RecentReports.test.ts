@@ -62,6 +62,18 @@ describe("report display", () => {
     expect(source).toContain("Verified");
   });
 
+  it("never marks a wildfire verified: it is a community report, unverified", () => {
+    // The verified mark goes through the shared rule, which refuses it for a
+    // type no forecast can confirm, whatever the stored flag says.
+    expect(source).toContain(
+      "showsVerified(report.reportType, report.verified)",
+    );
+    expect(source).not.toMatch(/\{report\.verified &&/);
+    expect(source).toContain("unverifiedLabel(report.reportType)");
+    // The label itself lives once, in report-types.ts.
+    expect(source).not.toContain("Community report, unverified");
+  });
+
   it("shows time ago via the shared i18n formatRelative", () => {
     expect(source).toContain("formatRelative");
     expect(source).not.toContain("function timeAgo");
