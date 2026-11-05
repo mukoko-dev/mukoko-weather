@@ -11,6 +11,7 @@ import { isFeatureEnabled } from "@/lib/feature-flags";
 import { SITE_URL } from "@/lib/site";
 import { loadReleaseNotes } from "@/lib/release-notes-source";
 import { releaseDate } from "@/lib/release-notes";
+import { canonicalSlug } from "@/lib/slug-migration";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 3600;
@@ -51,19 +52,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 1.0,
     },
     {
-      url: `${SITE_URL}/harare`,
+      url: `${SITE_URL}/${canonicalSlug("harare")}`,
       lastModified: now,
       changeFrequency: "hourly",
       priority: 0.9,
     },
     {
-      url: `${SITE_URL}/bulawayo`,
+      url: `${SITE_URL}/${canonicalSlug("bulawayo")}`,
       lastModified: now,
       changeFrequency: "hourly",
       priority: 0.9,
     },
     {
-      url: `${SITE_URL}/victoria-falls`,
+      url: `${SITE_URL}/${canonicalSlug("victoria-falls")}`,
       lastModified: now,
       changeFrequency: "hourly",
       priority: 0.9,
@@ -208,7 +209,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const locationPages: MetadataRoute.Sitemap = locations
     .filter((loc) => !boostedSlugs.has(loc.slug))
     .map((loc) => ({
-      url: `${SITE_URL}/${loc.slug}`,
+      url: `${SITE_URL}/${canonicalSlug(loc.slug)}`,
       lastModified: now,
       changeFrequency: "hourly" as const,
       priority: loc.tags.includes("city") ? 0.9 : 0.7,
@@ -222,7 +223,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...(loc.tags.includes("farming")
       ? [
           {
-            url: `${SITE_URL}/${loc.slug}/agriculture`,
+            url: `${SITE_URL}/${canonicalSlug(loc.slug)}/agriculture`,
             lastModified: now,
             changeFrequency: "daily" as const,
             priority: 0.7,
@@ -230,19 +231,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         ]
       : []),
     {
-      url: `${SITE_URL}/${loc.slug}/atmosphere`,
+      url: `${SITE_URL}/${canonicalSlug(loc.slug)}/atmosphere`,
       lastModified: now,
       changeFrequency: "hourly" as const,
       priority: loc.tags.includes("city") ? 0.6 : 0.4,
     },
     {
-      url: `${SITE_URL}/${loc.slug}/forecast`,
+      url: `${SITE_URL}/${canonicalSlug(loc.slug)}/forecast`,
       lastModified: now,
       changeFrequency: "hourly" as const,
       priority: loc.tags.includes("city") ? 0.7 : 0.5,
     },
     {
-      url: `${SITE_URL}/${loc.slug}/map`,
+      url: `${SITE_URL}/${canonicalSlug(loc.slug)}/map`,
       lastModified: now,
       changeFrequency: "daily" as const,
       priority: loc.tags.includes("city") ? 0.5 : 0.3,

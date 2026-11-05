@@ -14,6 +14,7 @@ import { countryDisplayName } from "@/lib/location-country";
 import { SITE_URL } from "@/lib/site";
 import { fetchPlaces } from "@/lib/weather-api";
 import { usableIpGeo } from "@/lib/location-choice";
+import { canonicalSlug } from "@/lib/slug-migration";
 import { LocationSkeleton } from "@/components/weather/LocationSkeleton";
 
 // Bound the Worker geo fetch so a hung or protected upstream can't stall
@@ -164,7 +165,13 @@ async function buildHome() {
           // A coordinate label is not a name for the visitor's place: the
           // IP-city fallback below names it better (`usableIpGeo`).
           if (usableIpGeo(data?.nearest)) {
-            detectedLocation = data.nearest as WeatherLocation;
+            const nearest = data.nearest as WeatherLocation;
+            // The Worker answers a shipped seed by its legacy slug; the page
+            // and every link carry the canonical one (#317).
+            detectedLocation = {
+              ...nearest,
+              slug: canonicalSlug(nearest.slug),
+            };
           }
         }
       } catch {

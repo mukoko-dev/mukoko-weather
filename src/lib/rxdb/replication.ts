@@ -17,6 +17,7 @@ import {
   suitabilityRulesCollection,
 } from "./collections";
 import { fetchWorker } from "../weather-api";
+import { migrateSlugPrefs } from "../slug-migration";
 import { getDeviceId } from "./bridge";
 import { isPersonSyncActive } from "../person-preferences-state";
 import {
@@ -106,12 +107,20 @@ async function startPrefsReplication(): Promise<void> {
           // it, so keep the local value rather than letting the pull null it.
           const localDoc = await col.findOne(deviceId).exec();
 
-          const doc = {
-            id: deviceId,
-            theme: serverPrefs.theme ?? "system",
+          // A device profile saved before the canonical-slug move still holds
+          // legacy slugs; map them here so a pull never re-introduces one.
+          const slugs = migrateSlugPrefs({
             selectedLocation: serverPrefs.selectedLocation ?? "",
             savedLocations: serverPrefs.savedLocations ?? [],
             locationLabels: serverPrefs.locationLabels ?? {},
+          });
+
+          const doc = {
+            id: deviceId,
+            theme: serverPrefs.theme ?? "system",
+            selectedLocation: slugs.selectedLocation,
+            savedLocations: slugs.savedLocations,
+            locationLabels: slugs.locationLabels,
             // While a signed-in person's activities are synced to their
             // profile (person-preferences-sync.ts) this device-profile pull
             // must not write them: it would overwrite what the person chose

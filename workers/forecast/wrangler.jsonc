@@ -9,13 +9,13 @@
 //            shared with the other Workers that need it); OPEN_METEO_API_KEY
 //            (optional: the paid Open-Meteo plan), the store secret
 //            OPEN_METEO_API_KEY bound as MUKOKO_WEATHER_OPEN_METEO_API_KEY
-//   vars:    NYUCHI_API_URL
-//   optional var, NOT declared here (keep_vars keeps one set in the
-//   dashboard; see workers/README.md "Open-Meteo paid plan"):
-//            OPEN_METEO_ARCHIVE_LICENSED=1 once the plan includes the
-//            historical weather API (Professional and up). Without it the
-//            archive calls (climate normals, the place profile) stay on the
-//            free archive host even with the key.
+//   vars:    NYUCHI_API_URL, OPEN_METEO_ARCHIVE_LICENSED (=1: the owner's
+//            Open-Meteo licence includes the historical weather API, so the
+//            archive calls (climate normals, the place profile) use the paid
+//            archive host with the key; owner, 2026-11-05. If the plan did not
+//            include it, a refused key falls back to the free host once per
+//            call, so remove the var rather than leave it set. See
+//            workers/README.md "Open-Meteo paid plan".)
 // OWNER: replace the placeholder ids below with the created resources'
 // ids (workers/README.md, "Owner steps").
 {
@@ -63,7 +63,10 @@
       "secret_name": "OPEN_METEO_API_KEY",
     },
   ],
-  "vars": { "NYUCHI_API_URL": "https://api.nyuchi.com" },
+  "vars": {
+    "NYUCHI_API_URL": "https://api.nyuchi.com",
+    "OPEN_METEO_ARCHIVE_LICENSED": "1",
+  },
   "kv_namespaces": [
     // Forecasts (15 min), air quality (1 h) and place lookups (1 day / 1 hour
     // for misses).

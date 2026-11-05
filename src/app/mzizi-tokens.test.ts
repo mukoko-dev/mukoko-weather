@@ -48,6 +48,9 @@ describe("Mzizi token adoption", () => {
     });
 
     it("keeps the Mzizi radius scale", () => {
+      // 4px is new in @nyuchi/mzizi-skills 0.18.0 (the scale is 4/7/12/14/17/pill).
+      expect(declValue(canon, "--radius-xs")).toBe("4px");
+      expect(declValue(globals, "--radius-xs")).toBe("4px");
       expect(declValue(canon, "--radius-sm")).toBe("7px");
       expect(declValue(canon, "--radius-md")).toBe("12px");
       expect(declValue(canon, "--radius-lg")).toBe("14px");

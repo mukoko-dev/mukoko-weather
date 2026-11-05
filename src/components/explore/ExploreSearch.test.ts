@@ -85,7 +85,7 @@ describe("search flow", () => {
 
 describe("results rendering", () => {
   it("renders location cards as links", () => {
-    expect(source).toContain("href={`/${loc.slug}`}");
+    expect(source).toContain("href={locationPath(loc.slug)}");
   });
 
   it("shows temperature when available", () => {

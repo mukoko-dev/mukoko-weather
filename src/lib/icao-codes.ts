@@ -1,5 +1,6 @@
 import { nearestWithin } from "./geo";
 import { fetchWorker } from "./weather-api";
+import { storageKeySlug } from "./slug-migration";
 
 /**
  * Maps location slugs to ICAO airport codes.
@@ -305,7 +306,8 @@ const ICAO_MAP: Record<string, string> = {
 
 /** Returns the ICAO airport code for a location slug, or null if not mapped. */
 export function getIcaoForSlug(slug: string): string | null {
-  return ICAO_MAP[slug] ?? null;
+  // The map keys on the legacy seed slug; callers hold the canonical one.
+  return ICAO_MAP[storageKeySlug(slug)] ?? null;
 }
 
 /**

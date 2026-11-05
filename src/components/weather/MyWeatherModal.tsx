@@ -47,6 +47,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { SelectRow } from "./SelectRow";
 import { prefsSummary } from "@/lib/notification-prefs";
 import { navigateToPlace } from "@/lib/place-bus";
+import { locationPath } from "@/lib/slug-migration";
 import {
   fetchActivities,
   fetchActivityCategories,
@@ -184,7 +185,7 @@ export function MyWeatherModal() {
       });
       // In place when a place stage is mounted (the app stays open and only
       // that place's data is fetched); the router otherwise.
-      navigateToPlace(`/${pendingSlug}`, (href) => router.push(href));
+      navigateToPlace(locationPath(pendingSlug), (href) => router.push(href));
     }
   };
 

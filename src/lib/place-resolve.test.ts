@@ -2,6 +2,7 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { workerData } from "./worker-data";
+import { canonicalSlug } from "./slug-migration";
 import {
   catalogueLocation,
   locationFromWorker,
@@ -47,6 +48,24 @@ describe("resolvePlaceSeed", () => {
     const seed = await resolvePlaceSeed("harare");
     expect(seed?.location.name).toBe("Harare");
     expect(seed?.countryName).toBe("Zimbabwe");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it("an in-place switch to a legacy seed slug lands on the canonical place, with no request (#317)", async () => {
+    // `navigateToPlace("/harare")` from an old link: the place the stage shows
+    // (and so the URL it pushes and the memory entry it keeps) is the
+    // canonical one, so a place never has two URLs in one session.
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    for (const asked of ["harare", canonicalSlug("harare")]) {
+      const seed = await resolvePlaceSeed(asked);
+      expect(seed?.location.slug, asked).toBe(canonicalSlug("harare"));
+      expect(seed?.location.province, asked).toBe("Harare");
+      const looked = await lookupPlace(asked);
+      expect(looked.kind === "found" && looked.seed.location.slug, asked).toBe(
+        canonicalSlug("harare"),
+      );
+    }
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
   });

@@ -946,7 +946,7 @@ export function MapLibreMap({
       {baseMapMissingKey && (
         <div
           role="status"
-          className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-surface-base p-6 text-center"
+          className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-[var(--gap-floor)] bg-surface-base p-6 text-center"
         >
           <p className="text-sm font-semibold text-text-primary">
             Base map unavailable — map key not configured
@@ -960,7 +960,7 @@ export function MapLibreMap({
       {baseMapError && !baseMapMissingKey && (
         <div
           role="status"
-          className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 bg-surface-base p-6 text-center"
+          className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-[var(--gap-floor)] bg-surface-base p-6 text-center"
         >
           <p className="text-sm font-semibold text-text-primary">
             Base map unavailable
@@ -974,7 +974,7 @@ export function MapLibreMap({
       {overlayError && !baseMapMissingKey && !baseMapError && (
         <div
           role="status"
-          className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-[var(--radius-button)] border border-severity-high/30 bg-surface-card/95 px-3 py-1.5 text-xs font-medium text-severity-high shadow-lg backdrop-blur-sm"
+          className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-[var(--radius-button)] border border-severity-high/30 bg-surface-card/95 px-[var(--inset-floor)] py-1.5 text-xs font-medium text-severity-high shadow-lg backdrop-blur-sm"
         >
           Weather layer unavailable — please try again later
         </div>
