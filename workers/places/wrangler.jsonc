@@ -27,7 +27,7 @@
   "compatibility_date": "2026-09-15",
   "build": { "command": "worker-build --release" },
   "workers_dev": false,
-  "preview_urls": false,
+  "preview_urls": true,
   "keep_vars": true,
   // Traces and invocation metadata, with query strings (search text and
   // coordinates) redacted. The code logs no queries, points or keys.
