@@ -62,6 +62,10 @@ jobs:
           branch="release/$date"
           git fetch --no-tags origin staging main
           if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            # A second release on the same day gets its own branch.
+            branch="release/$date-$(date -u +%H%M)"
+          fi
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
             echo "::error::$branch already exists on origin — pass a different date or delete it first"
             exit 1
           fi
@@ -130,6 +134,8 @@ jobs:
         run: |
           set -euo pipefail
           {
+            echo "No issue: routine staging → main release."
+            echo
             echo "Release of \`staging\` to \`main\` ($DATE)."
             echo
             echo "Cut by the **Release PR** workflow from \`origin/staging\` at \`$(git rev-parse --short origin/staging)\`."
