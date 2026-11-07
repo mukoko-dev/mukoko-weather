@@ -545,19 +545,19 @@ describe("NotificationSettingsView", () => {
     }
   });
 
-  it("delivery: Telegram and Campfire are Coming soon rows with no control", () => {
+  it("delivery: Campfire is a Coming soon row with no control, and Telegram is not offered", () => {
     const tree = settings();
     const out = html(tree);
-    expect(out).toContain("Telegram");
     expect(out).toContain("Campfire");
-    expect(out.match(/Coming soon/g)).toHaveLength(2);
+    expect(out).not.toMatch(/telegram/i);
+    expect(out.match(/Coming soon/g)).toHaveLength(1);
     // The only buttons in the whole settings view are the ones above: no
-    // control carries either channel's name.
+    // control carries the channel's name.
     for (const b of buttons(tree)) {
-      expect(textOf(b)).not.toMatch(/telegram|campfire/i);
+      expect(textOf(b)).not.toMatch(/campfire/i);
     }
     for (const li of walk(tree).filter((e) => e.type === "li")) {
-      if (/Telegram|Campfire/.test(textOf(li))) {
+      if (/Campfire/.test(textOf(li))) {
         expect(buttons(li.props.children)).toEqual([]);
       }
     }

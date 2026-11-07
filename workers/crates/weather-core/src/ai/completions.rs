@@ -547,12 +547,23 @@ mod tests {
     fn the_model_is_allowlisted() {
         let glm = "@cf/zai-org/glm-5.3";
         assert_eq!(pick_model(None, Some(glm)), glm);
+        // A caller may pick another GLM model, never another family.
         assert_eq!(
-            pick_model(Some("@cf/qwen/qwen3.8-27b"), Some(glm)),
-            "@cf/qwen/qwen3.8-27b"
+            pick_model(Some("@cf/zai-org/glm-5.3-flash"), Some(glm)),
+            "@cf/zai-org/glm-5.3-flash"
+        );
+        assert_eq!(pick_model(Some("@cf/qwen/qwen3.8-27b"), Some(glm)), glm);
+        assert_eq!(
+            pick_model(Some("@cf/meta/llama-3.3-70b-instruct-fp8-fast"), None),
+            DEFAULT_MODEL
         );
         assert_eq!(pick_model(Some("gpt-4o"), Some(glm)), glm);
         assert_eq!(pick_model(None, Some("anthropic/claude")), DEFAULT_MODEL);
+        // A configured non-GLM model falls back to the default, not to itself.
+        assert_eq!(
+            pick_model(None, Some("@cf/qwen/qwen3.8-27b")),
+            DEFAULT_MODEL
+        );
         assert_eq!(pick_model(None, None), DEFAULT_MODEL);
     }
 

@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
 import { MukokoLogo } from "@/components/brand/MukokoLogo";
 import { LayersIcon, BellIcon, UserIcon } from "@/lib/weather-icons";
-import { PhoneMenu } from "@/components/layout/PhoneMenu";
+import { MyLocationLink } from "@/components/layout/MyLocationLink";
 import { NotificationsBoundary } from "@/components/notifications/NotificationsBoundary";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { useChromeClaimed } from "@/components/layout/chrome-context";
@@ -182,16 +182,17 @@ export function SiteHeader() {
                 <LayersIcon size={20} className="text-primary-foreground" />
               </Link>
 
-              {/* Mobile only — Explore, History, Aviation, My Weather and the
-                  GPS action live here now that the bottom bar is map / pages /
-                  list. Desktop keeps its text nav instead. */}
-              <div className="relative sm:hidden">
-                <PhoneMenu
-                  trigger="ellipsis"
-                  buttonClassName="bee"
-                  iconClassName="text-primary-foreground"
-                />
-              </div>
+              {/* Mobile only — My Location, the round arrow link to `/`. It
+                  swapped places with the avatar (owner, 2026-11-05): this slot
+                  held the ⋯ account menu, which now opens from the first slot
+                  of the bottom bar, and on a place page My Location is in the
+                  hero's top group (the phone header is not drawn there), so it
+                  is reachable on every phone page. Desktop keeps its text
+                  nav and has no My Location icon. */}
+              <MyLocationLink
+                className="bee sm:hidden"
+                iconClassName="text-primary-foreground"
+              />
 
               <div className="relative" ref={notificationsRef}>
                 {/* The bell opens the notifications centre (alerts for your
@@ -232,11 +233,14 @@ export function SiteHeader() {
                 )}
               </div>
 
+              {/* The account icon is desktop's (`sm` up). On a phone the
+                  avatar is the bottom bar's first slot, with the account
+                  menu behind it. */}
               {authedUser ? (
                 <Link
                   href="/profile"
                   aria-label={`Profile${authedUser.email ? ` (${authedUser.email})` : ""}`}
-                  className="bee overflow-hidden"
+                  className="bee hidden overflow-hidden sm:flex"
                 >
                   {authedUser.profilePictureUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -260,7 +264,7 @@ export function SiteHeader() {
                   href="/auth/signin"
                   prefetch={false}
                   aria-label="Sign in"
-                  className="bee"
+                  className="bee hidden sm:flex"
                 >
                   <UserIcon size={20} className="text-primary-foreground" />
                 </Link>

@@ -24,6 +24,21 @@ function render(props: Record<string, unknown> = {}) {
   return renderToStaticMarkup(createElement(AccountMenu, props as never, row));
 }
 
+describe("AccountMenu — a custom trigger class", () => {
+  it("does not clip the trigger, so a .plover tap area can reach the bar's height", () => {
+    const html = render({
+      name: "Tendai Moyo",
+      imageUrl: "/avatar.png",
+      triggerClassName: "plover relative size-[var(--touch-target-min)]",
+    });
+    const summary = html.match(/<summary[^>]*>/)?.[0] ?? "";
+    expect(summary).toContain("plover");
+    expect(summary).not.toContain("overflow-hidden");
+    // The photo still crops itself to the circle.
+    expect(html).toMatch(/<img[^>]*rounded-full[^>]*object-cover/);
+  });
+});
+
 describe("AccountMenu — signed in", () => {
   const html = render({
     name: "Tendai Moyo",
@@ -102,14 +117,17 @@ describe("AccountMenu — signed out", () => {
 });
 
 describe("AccountMenu — trigger variants", () => {
-  it("a trigger class replaces the avatar-row look and crops to a circle (the hero's round control)", () => {
+  it("a trigger class replaces the avatar-row look (the bar's round control)", () => {
     const html = render({
       name: "A",
       initials: "A",
       triggerClassName: "kestrel-round",
     });
     expect(html).toMatch(/<summary[^>]*class="[^"]*kestrel-round/);
-    expect(html).toContain("overflow-hidden");
+    // Not clipped: a photo crops itself, and a clip would cut a .plover tap area.
+    expect(html.match(/<summary[^>]*class="([^"]*)"/)![1]).not.toContain(
+      "overflow-hidden",
+    );
     expect(html).not.toContain(
       "pointer-coarse:min-h-[var(--touch-target-min)]",
     );
@@ -214,5 +232,93 @@ describe("AccountMenu — the panel never leaves the viewport on a phone", () =>
   it("still scrolls inside the viewport height", () => {
     expect(tokens).toContain("max-h-[calc(100dvh-7rem)]");
     expect(tokens).toContain("overflow-y-auto");
+  });
+});
+
+describe("AccountMenu — panelPlacement", () => {
+  const panelOf = (props: Record<string, unknown>) =>
+    render({ name: "A", initials: "A", ...props }).match(
+      /<div[^>]*class="([^"]*)"[^>]*data-slot="account-menu-panel"/,
+    )![1];
+  const detailsOf = (props: Record<string, unknown>) =>
+    render({ name: "A", initials: "A", ...props }).match(/^<details[^>]*>/)![0];
+
+  it("defaults to below the trigger: the details is the panel's positioned anchor", () => {
+    expect(detailsOf({})).toContain("relative");
+    expect(panelOf({}).split(/\s+/)).toContain("fixed");
+    expect(panelOf({ panelPlacement: "below" })).toBe(panelOf({}));
+  });
+
+  describe("above (the phone bottom bar's account control)", () => {
+    const panel = panelOf({ panelPlacement: "above" });
+    const tokens = panel.split(/\s+/).filter(Boolean);
+
+    it("opens upward from the nearest positioned ancestor, not the trigger: static details, absolute bottom-full panel", () => {
+      expect(detailsOf({ panelPlacement: "above" })).not.toContain("relative");
+      expect(tokens).toContain("absolute");
+      expect(tokens).toContain("bottom-full");
+      expect(tokens).toContain("left-0");
+      // A gap from the float grid between the panel and the bar.
+      expect(tokens).toContain("mb-[var(--float-gap)]");
+    });
+
+    it("is not fixed: a backdrop-filter bar would make it the containing block", () => {
+      expect(tokens).not.toContain("fixed");
+      expect(tokens).not.toContain("right-2");
+      expect(tokens).not.toContain("mt-1");
+    });
+
+    it("keeps the card surface, the scroll and the stacking of the other placement", () => {
+      for (const token of [
+        "z-40",
+        "overflow-y-auto",
+        "rounded-[var(--radius-card)]",
+        "border",
+        "bg-popover",
+      ]) {
+        expect(tokens, token).toContain(token);
+      }
+    });
+
+    it("never leaves the bar's span sideways: the width is capped by the float insets at every phone width and inset", () => {
+      const w = panel.match(
+        /w-\[min\((\d+(?:\.\d+)?)rem,calc\(100vw-var\(--float-left\)-var\(--float-right\)\)\)\]/,
+      );
+      expect(
+        w,
+        "width must be min(Nrem, 100vw - float-left - float-right)",
+      ).not.toBeNull();
+      const maxPx = Number(w![1]) * 16;
+      // --float-left / --float-right = max(1rem, safe-area inset).
+      for (const inset of [0, 20, 47]) {
+        const edge = Math.max(16, inset);
+        for (let viewport = 280; viewport < 640; viewport++) {
+          const width = Math.min(maxPx, viewport - edge - edge);
+          // The panel's left edge is the bar's (left-0 of the fixed bar).
+          const left = edge;
+          expect(
+            left,
+            `left edge at ${viewport}px, inset ${inset}`,
+          ).toBeGreaterThanOrEqual(16);
+          expect(
+            left + width,
+            `right edge at ${viewport}px, inset ${inset}`,
+          ).toBeLessThanOrEqual(viewport - edge);
+        }
+      }
+    });
+
+    it("never leaves the screen upward: its height is the room above the bar", () => {
+      const h = panel.match(/max-h-\[calc\(([^\]]+)\)\]/);
+      expect(h).not.toBeNull();
+      expect(h![1]).toBe(
+        "100dvh-var(--float-top)-var(--float-bottom)-var(--mobile-nav-bar-height)-var(--float-gap)",
+      );
+      // 16px top, 20px lift, 72px bar, 8px gap: room even on a 568px screen.
+      const room = (height: number) => height - 16 - 20 - 72 - 8;
+      for (const height of [480, 568, 640, 740, 852, 932]) {
+        expect(room(height), `${height}px`).toBeGreaterThan(300);
+      }
+    });
   });
 });

@@ -4,7 +4,6 @@ import { useId, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
-import { Ellipsis } from "lucide-react";
 import {
   ACCOUNT_MENU_ROW_CLASS,
   AccountMenu,
@@ -34,15 +33,11 @@ import {
 
 interface Props {
   /**
-   * The trigger: `profile` is the hero's top-row control (the Mzizi account
-   * avatar: photo or initials when signed in, the user icon otherwise),
-   * `ellipsis` the ⋯ in the header's action pill.
+   * Class of the round trigger: the bar's account control (`plover` + its
+   * geometry, MobileNav.tsx). The trigger shows the Mzizi account avatar:
+   * the profile photo or the initials when signed in, the user icon otherwise.
    */
-  trigger: "profile" | "ellipsis";
-  /** Class of the round trigger (`kestrel-round` in the hero, `bee` in the header pill). */
   buttonClassName: string;
-  /** Class of the ⋯ glyph (colour on its surface). */
-  iconClassName?: string;
 }
 
 /**
@@ -52,11 +47,15 @@ interface Props {
  * its slot with the rows the site header carries — My Weather, Use my
  * location, the weather map, notifications and the header's destinations
  * (`HEADER_DESTINATIONS`) — and wires them to the app's store and routes, so
- * nothing is lost where the phone header is not drawn (over the sky hero). One
- * wrapper, two homes: the hero's top row (profile trigger) and the header's
- * action pill (⋯ trigger).
+ * nothing is lost where the phone header is not drawn (over the sky hero).
+ *
+ * One wrapper, one home: the first slot of the phone bottom bar
+ * (owner, 2026-11-05: the avatar and My Location swapped places — My Location
+ * is now the round link in the hero's top group and the header's pill, see
+ * MyLocationLink). The menu opens UPWARD from the bar (`panelPlacement`), so it
+ * stays on screen over the content instead of under a control at the top.
  */
-export function PhoneMenu({ trigger, buttonClassName, iconClassName }: Props) {
+export function PhoneMenu({ buttonClassName }: Props) {
   const openMyWeather = useAppStore((s) => s.openMyWeather);
   const openNotifications = useAppStore((s) => s.openNotifications);
   const selectedLocation = useAppStore((s) => s.selectedLocation);
@@ -128,18 +127,12 @@ export function PhoneMenu({ trigger, buttonClassName, iconClassName }: Props) {
       signOutAction="/auth/signout"
       signInHref="/auth/signin"
       triggerClassName={buttonClassName}
-      trigger={
-        trigger === "ellipsis" ? (
-          <Ellipsis size={20} className={iconClassName} aria-hidden="true" />
-        ) : undefined
-      }
       triggerLabel={
-        trigger === "ellipsis"
-          ? "More options"
-          : authedUser
-            ? `Account menu for ${displayNameFor(authedUser)}`
-            : "Account menu"
+        authedUser
+          ? `Account menu for ${displayNameFor(authedUser)}`
+          : "Account menu"
       }
+      panelPlacement="above"
     >
       <section aria-labelledby={groupLabel("account")}>
         <h2
