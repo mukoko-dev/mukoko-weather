@@ -9,15 +9,12 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-// The ⋯ menu pulls in the auth client (needs the Next runtime); its own
-// structure is covered in Header.test.ts.
-vi.mock("@/components/layout/PhoneMenu", () => ({
-  PhoneMenu: (p: { buttonClassName: string }) =>
-    createElement("button", {
-      type: "button",
-      "aria-label": "More options",
-      className: p.buttonClassName,
-    }),
+// My Location (the round arrow link in the phone icon group) reads the route
+// and the router; its own structure is covered in MyLocationLink.test.ts.
+const nav = vi.hoisted(() => ({ pathname: "/harare" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => nav.pathname,
+  useRouter: () => ({ push: () => undefined }),
 }));
 
 import { CurrentConditions } from "./CurrentConditions";
@@ -127,7 +124,7 @@ describe("CurrentConditions render — the sky hero", () => {
     expect(html).not.toContain("kudu");
   });
 
-  it("puts the breadcrumb, Share and the phone ⋯ menu in the top row, before the stack", () => {
+  it("puts the breadcrumb, Share and My Location in the top row, before the stack", () => {
     const html = render(
       {},
       {
@@ -148,18 +145,48 @@ describe("CurrentConditions render — the sky hero", () => {
     expect(html).toMatch(
       /<div class="hidden shrink-0 sm:block"><div class="relative"><button[^>]*kestrel-round/,
     );
-    // On phones, Share and the profile menu are ONE fixed group, both round
+    // On phones, Share and My Location are ONE fixed group, both round
     // `duiker` controls on its card surface, Share first.
     const inGroup = html.slice(group, name);
     const share = inGroup.indexOf('aria-label="Share weather for Harare"');
-    const more = inGroup.indexOf('aria-label="More options"');
+    const here = inGroup.indexOf('aria-label="My Location"');
     expect(share).toBeGreaterThan(-1);
-    expect(share).toBeLessThan(more);
+    expect(share).toBeLessThan(here);
     expect(inGroup.match(/class="duiker"/g)).toHaveLength(2);
     expect(inGroup).not.toContain("kestrel-round");
     // The breadcrumb leaves room for the group on phones, none from `sm`.
     expect(html).toContain("pr-[var(--hadeda-reserve)]");
     expect(html).toContain("sm:pr-0");
+  });
+
+  it("holds My Location (a link to `/`) in the phone group and no account menu: the avatar moved to the bottom bar", () => {
+    const html = render();
+    const group = html.slice(
+      html.indexOf('class="hadeda sm:hidden"'),
+      html.indexOf('id="current-conditions-heading"'),
+    );
+    const link = group.match(/<a[^>]*aria-label="My Location"[^>]*>/)![0];
+    expect(link).toContain('href="/"');
+    expect(link).toContain('class="duiker"');
+    // Not the current page on a place's own page.
+    expect(link).not.toContain("aria-current");
+    // The account menu (its <details>, its summary, its panel) is not in the hero.
+    expect(html).not.toContain("<details");
+    expect(html).not.toContain("account-menu");
+    expect(html).not.toContain("Account menu");
+    expect(html).not.toContain("More options");
+  });
+
+  it("marks My Location as the current page on `/`", () => {
+    nav.pathname = "/";
+    try {
+      const html = render();
+      expect(html).toMatch(
+        /<a[^>]*aria-label="My Location"[^>]*aria-current="page"|<a[^>]*aria-current="page"[^>]*aria-label="My Location"/,
+      );
+    } finally {
+      nav.pathname = "/harare";
+    }
   });
 
   it("renders the phone Share and the desktop Share as two instances, one hidden at each width", () => {
@@ -174,13 +201,19 @@ describe("CurrentConditions render — the sky hero", () => {
   });
 
   it("shows the eyebrow only for current location or home, keeping the line reserved", () => {
+    // The eyebrow line, not the page: My Location is also the name of the
+    // round link in the phone icon group.
+    const eyebrow = (html: string) =>
+      html.match(
+        /<p class="flex min-h-\[calc\(var\(--text-caption\)[^"]*">([\s\S]*?)<\/p>/,
+      )?.[1] ?? "";
     const plain = render();
-    expect(plain).not.toContain("My Location");
+    expect(eyebrow(plain)).not.toContain("My Location");
     expect(plain).toContain(
       "min-h-[calc(var(--text-caption)*var(--text-caption-leading))]",
     );
     const html = render({}, { isCurrentLocation: true });
-    expect(html).toContain("My Location");
+    expect(eyebrow(html)).toContain("My Location");
     expect(html).toContain("uppercase");
   });
 });

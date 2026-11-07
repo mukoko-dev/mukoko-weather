@@ -1,9 +1,11 @@
 /**
- * Tests for Header — the mobile navigation island (a floating, centred pill
- * with map / page indicator / list, matching the mukoko-news island) and the
- * mobile "⋯" menu that holds the destinations the island does not show.
- * Desktop header stays as it was. Reads source directly (no DOM renderer
- * needed for structural checks).
+ * Tests for Header — the mobile navigation island (a floating, centred pill:
+ * map / the account control and the places lane / list, matching the
+ * mukoko-news island), the account menu behind the bar's first slot that holds
+ * the destinations the island does not show, and My Location, the round arrow
+ * link in the header's pill (owner, 2026-11-05: the avatar and My Location
+ * swapped places). Desktop header stays as it was. Reads source directly (no
+ * DOM renderer needed for structural checks).
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
@@ -218,8 +220,10 @@ describe("MobileNav — pinned items and the places lane", () => {
     expect(nav).toContain("leading={leading}");
     expect(nav).toContain("trailing={trailing}");
     expect(nav).toContain("lane={");
-    // My Location is the lane's first chip, not a bar item.
+    // My Location and the account control are not bar items: the first is a
+    // round link at the top of the page, the second the lane's first slot.
     expect(nav).not.toContain('id: "my-location"');
+    expect(nav).not.toContain('id: "account"');
     expect(nav).toContain("href: mapHref");
     expect(nav).toContain('href: "/locations"');
     expect(nav).toContain('? "Weather map"');
@@ -241,6 +245,23 @@ describe("MobileNav — pinned items and the places lane", () => {
     expect(lane).toContain("trackPlaceChange(chip.href, chip.slug, from)");
     // The chips are .lark: one touch target tall (see globals.css).
     expect(rule("lark")).toContain("min-h-[var(--touch-target-min)]");
+  });
+
+  it("starts the lane with the account control (the avatar), behind its own harness boundary that keeps a profile link", () => {
+    expect(nav).toContain(
+      'import { PhoneMenu } from "@/components/layout/PhoneMenu"',
+    );
+    expect(nav).toMatch(/<MziziHarness\s+name="account-menu"/);
+    expect(nav).toContain("fallback={<AccountFallback />}");
+    expect(nav).toContain("<PhoneMenu buttonClassName={ACCOUNT_SLOT_CLASS} />");
+    // The account control comes first, then the places lane.
+    expect(nav.indexOf("<PhoneMenu")).toBeLessThan(nav.indexOf("<PlaceLane"));
+    // A round pinned target in the bar's own look (.plover), one touch target.
+    const slot = nav.match(/ACCOUNT_SLOT_CLASS =\s*"([^"]*)"/);
+    expect(slot).not.toBeNull();
+    expect(slot![1]).toContain("plover");
+    expect(slot![1]).toContain("size-[var(--touch-target-min)]");
+    expect(slot![1]).toContain("rounded-full");
   });
 
   it("labels use the 14px (Mzizi body-sm) --text-nav-label token, not upstream's 10px or the 16px that read as too large", () => {
@@ -290,7 +311,7 @@ describe("Header — the phone menu is the Mzizi account menu, filled with the h
     expect(acct).toContain("bcd07b08f21b311fc1e7acacad65b40fa0615709");
     // Each deviation is listed in the header (numbered), like mzizi-bottom-nav.
     expect(acct).toMatch(/Local changes from upstream/);
-    for (let n = 1; n <= 12; n++) expect(acct).toContain(` * ${n}. `);
+    for (let n = 1; n <= 13; n++) expect(acct).toContain(` * ${n}. `);
   });
 
   it("closes on Escape (focus returns to the trigger), an outside click and a chosen row", () => {
@@ -326,12 +347,13 @@ describe("Header — the phone menu is the Mzizi account menu, filled with the h
     expect(acct).toContain('querySelector<HTMLElement>("summary")?.focus()');
   });
 
-  it("is mobile-only in the header, sitting inside the existing icon pill (ellipsis trigger)", () => {
-    expect(source).toContain('<div className="relative sm:hidden">');
-    expect(source).toContain("<PhoneMenu");
-    expect(source).toContain('trigger="ellipsis"');
-    expect(source).toContain('buttonClassName="bee"');
-    expect(menu).toContain('"More options"');
+  it("is no longer in the header: its ⋯ slot in the pill is My Location, and the menu opens from the bar", () => {
+    // The ⋯ trigger and its "More options" name are gone with the move.
+    expect(source).not.toContain("PhoneMenu");
+    expect(source).not.toContain('trigger="ellipsis"');
+    expect(menu).not.toContain("More options");
+    expect(menu).not.toContain("Ellipsis");
+    expect(source).toContain("<MyLocationLink");
   });
 
   it("lists the header's destinations from the shared list (Shamwari behind its flag)", () => {
@@ -444,8 +466,9 @@ describe("Header — nothing the header offers is lost in the phone menu", () =>
     expect(route).not.toContain("new URL(");
   });
 
-  it("the hero's phone trigger is the profile button: photo, initials or the user icon", () => {
-    expect(menu).toContain('trigger === "ellipsis"');
+  it("the bar's trigger is the account avatar: photo, initials or the user icon", () => {
+    // PhoneMenu passes no trigger node, so the Mzizi component draws its own.
+    expect(menu).not.toContain("trigger={");
     expect(menu).toContain(
       "initials={authedUser ? initialsFor(authedUser) : undefined}",
     );
@@ -453,11 +476,38 @@ describe("Header — nothing the header offers is lost in the phone menu", () =>
     expect(acct).toContain("isValidImageUrl(imageUrl)");
     expect(acct).toContain("<User size={20}");
   });
+
+  it("opens its panel upward from the bar", () => {
+    expect(menu).toContain('panelPlacement="above"');
+    expect(acct).toContain('panelPlacement = "below"');
+  });
 });
 
 describe("Header — header pill on phones", () => {
   it("hides the duplicate map button on phones (the bottom bar has it)", () => {
     expect(source).toContain('className="bee hidden sm:flex"');
+  });
+
+  it("holds My Location (the round arrow link, phones only) where the ⋯ account menu was", () => {
+    expect(source).toContain(
+      'import { MyLocationLink } from "@/components/layout/MyLocationLink"',
+    );
+    expect(source).toContain('className="bee sm:hidden"');
+    expect(source).toContain('iconClassName="text-primary-foreground"');
+    // Before the bell, where the ⋯ was: map (desktop), My Location (phone), bell.
+    expect(source.indexOf("<MyLocationLink")).toBeGreaterThan(
+      source.indexOf("href={mapHref}"),
+    );
+    expect(source.indexOf("<MyLocationLink")).toBeLessThan(
+      source.indexOf("data-notifications-trigger"),
+    );
+    expect(source.match(/<MyLocationLink/g)).toHaveLength(1);
+  });
+
+  it("keeps the account icon for `sm` up only: on a phone the avatar is the bottom bar's first slot", () => {
+    expect(source).toContain('className="bee hidden overflow-hidden sm:flex"');
+    const signIn = source.slice(source.indexOf('aria-label="Sign in"'));
+    expect(signIn.slice(0, 120)).toContain('className="bee hidden sm:flex"');
   });
 
   it("keeps the desktop text nav unchanged", () => {
@@ -599,20 +649,38 @@ describe("Header — My Location button", () => {
   });
 });
 
-describe("PhoneMenu — one menu, two homes", () => {
+describe("PhoneMenu and MyLocationLink — the avatar and My Location swapped places", () => {
   const hero = readFileSync(
     resolve(__dirname, "../weather/CurrentConditions.tsx"),
     "utf-8",
   );
+  const link = readFileSync(resolve(__dirname, "MyLocationLink.tsx"), "utf-8");
 
-  it("is the header's phone menu and the hero's, from one component", () => {
-    expect(source).toContain("<PhoneMenu");
-    expect(hero).toContain("<PhoneMenu");
-    // In the hero it is the profile trigger, a round card-surface control in
-    // the fixed phone icon group (.hadeda) beside Share.
-    expect(hero).toContain(
-      '<PhoneMenu trigger="profile" buttonClassName="duiker" />',
-    );
+  it("the account menu has one home, the bar's first slot: neither the header nor the hero mounts it", () => {
+    expect(nav).toContain("<PhoneMenu");
+    expect(source).not.toContain("<PhoneMenu");
+    expect(hero).not.toContain("PhoneMenu");
+  });
+
+  it("My Location is one component with two homes: the hero's phone icon group and the header's pill", () => {
+    expect(source.match(/<MyLocationLink/g)).toHaveLength(1);
+    expect(hero.match(/<MyLocationLink/g)).toHaveLength(1);
+    // In the hero it is a round card-surface control in the fixed phone icon
+    // group (.hadeda) beside Share.
+    expect(hero).toContain('<MyLocationLink className="duiker" />');
+    // Neither home hand-rolls the arrow link.
+    expect(source).not.toContain("NavigationIcon");
+    expect(hero).not.toMatch(/<Link\b[^>]*href="\/"/);
+  });
+
+  it("is a real link to `/` named My Location, current on `/`, turned into an in-place switch by a plain click", () => {
+    expect(link).toContain("<Link");
+    expect(link).toContain("href={MY_LOCATION_HREF}");
+    expect(link).toContain("aria-label={MY_LOCATION_NAME}");
+    expect(link).toContain('aria-current={current ? "page" : undefined}');
+    expect(link).toContain("const current = pathname === MY_LOCATION_HREF;");
+    expect(link).toContain("handlePlaceLinkClick(event, MY_LOCATION_HREF");
+    expect(link).toContain("router.push(href)");
   });
 
   it("lists the account (Account when signed in, Sign in otherwise)", () => {

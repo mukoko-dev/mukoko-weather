@@ -32,8 +32,8 @@ export interface NotificationSettingsViewProps {
  * so it renders and tests on its own.
  *
  * Honest by construction: the push row is `pushRow()`'s answer and shows a
- * button only when there is something to do; Telegram and Campfire are plain
- * "Coming soon" rows with no control.
+ * button only when there is something to do; Campfire is a plain "Coming
+ * soon" row with no control.
  */
 export function NotificationSettingsView({
   prefs,

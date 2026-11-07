@@ -13,7 +13,9 @@ import {
  * and the swipe gesture walk through, in the same order as the Locations list:
  * index 0 is the home page (`/`, always "My Location"), then one page per
  * saved location, then one page per visible suggested place (see
- * location-presets.ts). Nothing here reads the DOM or the store.
+ * location-presets.ts). My Location is page 0 of the sequence but has no chip
+ * in the lane: its control is the round link in the hero's top group and the
+ * header's pill (MyLocationLink). Nothing here reads the DOM or the store.
  */
 
 /** Href of the "My Location" page (index 0 of every sequence). */
@@ -87,18 +89,17 @@ export function neighbour(
 }
 
 /**
- * The place hrefs shown after the "My Location" chip, capped at
- * `MAX_PAGER_PLACES`. The home page is excluded: it is the lane's pinned first
- * chip.
+ * The place hrefs the lane draws as chips, capped at `MAX_PAGER_PLACES`. The
+ * home page is excluded: it has its own control (MyLocationLink).
  */
 export function pagerPlaces(sequence: readonly string[]): string[] {
   return sequence.slice(1, MAX_PAGER_PLACES + 1);
 }
 
-/** One chip in the bottom bar's places lane. */
+/** One chip of the pager sequence, as the bottom bar's places lane reads it. */
 export interface LaneChip {
   href: string;
-  /** "home" is My Location (`/`); every other chip is a place. */
+  /** "home" is My Location (`/`, not drawn in the lane); every other chip is a place. */
   kind: "home" | "place";
   /** The place slug, null for My Location. */
   slug: string | null;
@@ -106,7 +107,7 @@ export interface LaneChip {
   name: string;
 }
 
-/** What My Location is called, on its chip and in its accessible name. */
+/** What My Location is called, in its accessible name (MyLocationLink). */
 export const MY_LOCATION_NAME = "My Location";
 
 /**
@@ -138,10 +139,12 @@ export function laneChipName(
 }
 
 /**
- * The chips of the places lane, in order. My Location is ALWAYS first (current
- * location comes before every saved place, owner rule), whatever the sequence
- * holds, and the lane is never empty. The rest are `pagerPlaces(sequence)`,
- * each named by `nameOf` (default: `laneChipName` with no stored labels).
+ * The chips of the pager sequence, in order. My Location is ALWAYS first
+ * (current location comes before every saved place, owner rule), whatever the
+ * sequence holds, which keeps a chip's index equal to its page's index in the
+ * sequence; the lane draws only the places among them (`kind: "place"`). The
+ * rest are `pagerPlaces(sequence)`, each named by `nameOf` (default:
+ * `laneChipName` with no stored labels).
  */
 export function laneChips(
   sequence: readonly string[],
@@ -167,7 +170,8 @@ export function laneChips(
  * Index of the lane chip that is the current page: the chip for the pager page
  * `pagerIndex` found (the sequence and the chips line up one to one up to the
  * cap), or -1 when no chip is current (e.g. `/explore`, `/locations`, or a
- * place past the cap).
+ * place past the cap). On `/` it is 0, My Location, which the lane does not
+ * draw.
  */
 export function laneActiveIndex(
   pathname: string | null | undefined,
@@ -176,16 +180,6 @@ export function laneActiveIndex(
 ): number {
   const index = pagerIndex(pathname, sequence);
   return index >= 0 && index < chipCount ? index : -1;
-}
-
-/**
- * Whether the pinned My Location chip spells its name out. Only when it is
- * the lane's single chip: with places beside it the chip is the glyph alone
- * (its accessible name stays "My Location"), which keeps its width constant
- * and leaves the lane to the places.
- */
-export function homeChipShowsLabel(chipCount: number): boolean {
-  return chipCount <= 1;
 }
 
 /** Measurements `laneScrollLeft` needs, all in CSS pixels. */
@@ -201,9 +195,9 @@ export interface LaneMeasure {
 
 /**
  * Where to scroll the lane's places so the active chip is centred, clamped to
- * the scrollable range. My Location (index 0) is pinned outside the scroller,
- * so it never needs scrolling to: the lane goes back to its start. A chip
- * near either end stays where the clamp puts it.
+ * the scrollable range. My Location (index 0) is not in the scroller, so it
+ * never needs scrolling to: the lane goes back to its start. A chip near
+ * either end stays where the clamp puts it.
  */
 export function laneScrollLeft(m: LaneMeasure, activeIndex: number): number {
   if (activeIndex <= 0) return 0;

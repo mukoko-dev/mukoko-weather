@@ -90,7 +90,7 @@ pub struct Call<'a> {
     pub max_tokens: u32,
 }
 
-/// The configured model (`AI_MODEL`, `@cf/` only), else the default.
+/// The configured model (`AI_MODEL`, a GLM id only), else the default.
 pub fn configured_model(env: &Env) -> String {
     completions::pick_model(None, config(env, "AI_MODEL").as_deref())
 }

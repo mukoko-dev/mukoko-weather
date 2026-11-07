@@ -1,13 +1,15 @@
-// The hero's phone icon group (`.hadeda`): Share and the profile menu in ONE
-// round pill fixed to the top of the screen.
+// The hero's phone icon group (`.hadeda`): Share and My Location (the round
+// arrow link to `/`) in ONE round pill fixed to the top of the screen.
 //
 //   BASE=http://localhost:3100 node scripts/browser-check/hero-icon-group.mjs
 //
 // What only a browser can show: that the group really stays where it is while
 // the page scrolls (an ancestor with a transform, filter or backdrop-filter
 // would make it scroll away), that it lines up with the hero's top row at the
-// top of the page, that the profile menu opens under it inside the screen, and
-// that from `sm` up there is no fixed group and Share is back in the top row.
+// top of the page, that My Location is a 49px link to `/` in it (the account
+// avatar it swapped places with is the bottom bar's: see account-menu-bar.mjs),
+// and that from `sm` up there is no fixed group and Share is back in the top
+// row.
 import {
   BASE,
   PHONE,
@@ -49,7 +51,7 @@ run(async () => {
   });
   note("the group is position: fixed", style.position === "fixed");
   note(
-    "the group itself has no backdrop-filter (it would capture the menu's fixed panel)",
+    "the group itself has no backdrop-filter (it would capture a fixed descendant)",
     style.backdrop === "none",
   );
 
@@ -91,22 +93,31 @@ run(async () => {
     `moved ${moved.map((d) => d.toFixed(1)).join(", ")} px`,
   );
 
-  await page.click(".hadeda summary");
-  await page.waitForTimeout(400);
-  const panel = await rect(page, '.hadeda [data-slot="account-menu-panel"]');
-  const group = await rect(page, ".hadeda");
-  note(
-    "the profile menu opens under the group, inside the screen",
-    panel &&
-      panel.w > 0 &&
-      panel.x >= 0 &&
-      panel.right <= PHONE.width &&
-      panel.y >= group.y + group.h - 2,
-    panel
-      ? `panel ${Math.round(panel.x)}..${Math.round(panel.right)}, y ${Math.round(panel.y)}`
-      : "no panel",
+  // The loading skeleton draws the same group with two bars; wait for the
+  // real controls.
+  await page.waitForSelector('.hadeda a[aria-label="My Location"]', {
+    timeout: 60000,
+  });
+  const here = await rect(page, '.hadeda a[aria-label="My Location"]');
+  const href = await page.getAttribute(
+    '.hadeda a[aria-label="My Location"]',
+    "href",
   );
-  await page.screenshot({ path: `${SHOTS}/hero-icon-group-menu.png` });
+  note(
+    "My Location is a 49px round link to / inside the group",
+    here &&
+      href === "/" &&
+      Math.abs(here.w - 49) < 0.6 &&
+      Math.abs(here.h - 49) < 0.6 &&
+      here.x >= top.x &&
+      here.right <= top.right,
+    here ? `${here.w}x${here.h}` : "no link",
+  );
+  note(
+    "the group holds no account menu (it is the bottom bar's first slot)",
+    (await page.locator(".hadeda details").count()) === 0,
+  );
+  await page.screenshot({ path: `${SHOTS}/hero-icon-group.png` });
   await phone.close();
 
   // Desktop width: no fixed group; Share is in the top row.

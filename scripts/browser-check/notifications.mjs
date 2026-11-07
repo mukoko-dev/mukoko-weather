@@ -23,6 +23,10 @@ import { mockNetwork, weatherPayload } from "./memory-harness.mjs";
 
 const { note, finish } = reporter();
 
+/** The account menu's trigger: the avatar, first slot of the phone bottom bar. */
+const ACCOUNT_TRIGGER =
+  '[data-slot="mzizi-bottom-nav"] [data-slot="account-menu"] summary';
+
 const VIEWPORTS = [
   { name: "393x852", width: 393, height: 852, phone: true },
   { name: "375x667", width: 375, height: 667, phone: true },
@@ -383,12 +387,12 @@ async function checkViewport(browser, viewport) {
   );
   const settingsText = await dialog(page).innerText();
   note(
-    `${tag} Delivery: in the app always on, push not switched on yet, Telegram and Campfire coming soon, best effort`,
+    `${tag} Delivery: in the app always on, push not switched on yet, Campfire coming soon (no Telegram), best effort`,
     /Always on/.test(settingsText) &&
       /Push on this device/.test(settingsText) &&
       /Not switched on yet/.test(settingsText) &&
-      (settingsText.match(/Coming soon/g) ?? []).length === 2 &&
-      /Telegram/.test(settingsText) &&
+      (settingsText.match(/Coming soon/g) ?? []).length === 1 &&
+      !/Telegram/.test(settingsText) &&
       /Campfire/.test(settingsText) &&
       /Delivery is best effort\./.test(settingsText),
   );
@@ -396,7 +400,7 @@ async function checkViewport(browser, viewport) {
     .locator('[role="dialog"] button')
     .allInnerTexts();
   note(
-    `${tag} no button does nothing: push, Telegram and Campfire offer no control`,
+    `${tag} no button does nothing: push and Campfire offer no control`,
     !pushButtons.some((b) => /push|telegram|campfire/i.test(b)),
     JSON.stringify(pushButtons),
   );
@@ -551,8 +555,9 @@ async function checkPhoneEntries(browser) {
   const context = await newContext(browser, viewport, true);
   const page = await context.newPage();
   await loadPlace(page);
-  // The hero's profile menu (the phone header is not drawn over the sky).
-  await page.click(".hadeda summary");
+  // The account menu: the first slot of the bottom bar (the avatar), which
+  // opens upward (the phone header is not drawn over the sky).
+  await page.click(ACCOUNT_TRIGGER);
   await page.getByRole("button", { name: "Notifications" }).click();
   await dialog(page).waitFor({ state: "visible", timeout: 10000 });
   await page.waitForSelector("article", { timeout: 10000 });
@@ -565,17 +570,17 @@ async function checkPhoneEntries(browser) {
   const focus = await page.evaluate(() => {
     const a = document.activeElement;
     return a
-      ? `${a.tagName.toLowerCase()}${a.closest(".hadeda") ? " in the hero group" : ""}`
+      ? `${a.tagName.toLowerCase()}${a.closest('[data-slot="mzizi-bottom-nav"]') ? " in the bar" : ""}`
       : "none";
   });
   note(
     `${tag} closing the sheet gives focus back to the menu's trigger`,
-    /summary in the hero group/.test(focus),
+    /summary in the bar/.test(focus),
     focus,
   );
 
   // My Weather, Settings tab.
-  await page.click(".hadeda summary");
+  await page.click(ACCOUNT_TRIGGER);
   await page.getByRole("button", { name: "My Weather" }).click();
   await page.getByRole("tab", { name: "Settings" }).click();
   await page.getByRole("button", { name: "Notification settings" }).click();
