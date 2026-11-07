@@ -21,7 +21,7 @@
   "compatibility_date": "2026-09-15",
   "build": { "command": "worker-build --release" },
   "workers_dev": false,
-  "preview_urls": false,
+  "preview_urls": true,
   "keep_vars": true,
   // Query strings carry station keys (Wunderground PASSWORD): always redacted.
   // The code logs no payloads and no keys.
