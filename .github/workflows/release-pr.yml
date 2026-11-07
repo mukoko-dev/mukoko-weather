@@ -130,6 +130,8 @@ jobs:
         run: |
           set -euo pipefail
           {
+            echo "No issue: routine staging → main release."
+            echo
             echo "Release of \`staging\` to \`main\` ($DATE)."
             echo
             echo "Cut by the **Release PR** workflow from \`origin/staging\` at \`$(git rev-parse --short origin/staging)\`."
