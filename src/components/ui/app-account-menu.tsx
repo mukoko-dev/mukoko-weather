@@ -30,10 +30,11 @@
  * 1. Signed-out visitors. Upstream always says "Signed in" with initials.
  *    Here a visitor with no `name`/`email` gets the user icon, no identity
  *    header and a "Sign in" row (`signInHref`) instead of the sign-out form.
- * 2. `trigger`, `triggerLabel`, `triggerClassName`. The hero's top row is a
- *    round 49px control over the sky (`kestrel-round`), and the header's action
- *    pill carries a ⋯; upstream fixes the trigger to a 32px row with a 24px
- *    avatar and a name from `xl`. With no `triggerClassName` the upstream look
+ * 2. `trigger`, `triggerLabel`, `triggerClassName`. The phone bottom bar's
+ *    last slot is a round 49px target (`plover`; the trigger was once a round
+ *    control over the sky, and the header's action pill once carried a ⋯);
+ *    upstream fixes the trigger to a 32px row with a 24px avatar and a name
+ *    from `xl`. With no `triggerClassName` the upstream look
  *    is kept (avatar row, name from `xl`), at the Bundu floor: the row is
  *    `--touch-target-min` tall at every pointer (upstream is 32px, 44px on
  *    touch) and has the `--inset-floor` inline padding (upstream `px-1`).

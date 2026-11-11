@@ -150,10 +150,11 @@ export function SidebarSkeleton() {
  * - The sky follows the last weather this device cached for the place (the
  *   same hint WeatherDashboard writes); a first visit gets a neutral sky.
  *   The hero is bars on that sky, with no plate colour to get wrong. The hint is read after mount, so hydration never differs.
- * - The header and the floating bottom nav are the persistent app chrome and
- *   are not drawn here; the hero's own top row (breadcrumb bar, round
- *   controls) is part of the hero placeholder, and `data-sky-hero` hides the
- *   phone header exactly as the real hero does.
+ * - The header, the Quick actions group and the floating bottom nav are the
+ *   persistent app chrome and are not drawn here (the group is live and
+ *   clear over the sky while the place loads); the hero's own top row
+ *   (breadcrumb bar) is part of the hero placeholder, and `data-sky-hero`
+ *   hides the phone header exactly as the real hero does.
  * - Same frame as WeatherDashboard (`max-w-7xl`, `--space-section`, the
  *   column classes) and the same bottom clearance, so safe areas and the nav
  *   are respected.

@@ -44,8 +44,6 @@ export const CONTROL_CLASSES = new Set([
   // Round icon control on a card surface (nav island, map overlays)
   "duiker",
   "duiker-solid",
-  // Round icon control on the hero sky (Share)
-  "kestrel-round",
   // Pill chip / toggle chip (aria-pressed)
   "quail",
   // Inline text actions and nav links (Mzizi Button `link` variant)
@@ -341,17 +339,18 @@ describe("Mzizi alignment guard — every button", () => {
     }
   });
 
-  it("the hero's Share is a Mzizi control: kestrel-round on the sky, duiker in the phone icon group", () => {
-    // The hero itself holds no button of its own; its Share is ShareControl's
-    // one button, and Locations is LocationsLink's link.
+  it("the Quick actions group's buttons are Mzizi controls: Share and Notifications are .bee, and the hero holds no button of its own", () => {
+    // The hero itself holds no button: the group is the layout's, one mount
+    // for every page. Share is ShareControl's one button, Notifications is
+    // NotificationsButton's, and Locations is LocationsLink's link.
     expect(
       FOUND.filter((f) => f.file.endsWith("CurrentConditions.tsx")),
     ).toHaveLength(0);
-    const share = FOUND.filter((f) => f.file.endsWith("ShareControl.tsx"));
-    expect(share.length).toBe(1);
-    const tokens = classTokens(share[0].tag);
-    expect(tokens).toContain("kestrel-round");
-    expect(tokens).toContain("duiker");
+    for (const file of ["ShareControl.tsx", "NotificationsButton.tsx"]) {
+      const found = FOUND.filter((f) => f.file.endsWith(file));
+      expect(found, file).toHaveLength(1);
+      expect(classTokens(found[0].tag), file).toContain("bee");
+    }
   });
 });
 
@@ -390,19 +389,23 @@ describe("Mzizi alignment guard — menus", () => {
   it("the phone menu is reached only through PhoneMenu, and only from the bottom bar", () => {
     // The account menu is the bar's last slot, at the far right (owner,
     // 2026-11-11), and neither the header nor the hero
-    // mounts it any more.
+    // mounts it any more. Locations is the Quick actions group's third
+    // control, the group's one mount.
     const bar = read("src/components/layout/MobileNav.tsx");
     expect(bar).toContain("<PhoneMenu");
     expect(bar).not.toMatch(/menuOpen|setMenuOpen|mobile-.*-menu/);
     for (const file of [
       "src/components/layout/Header.tsx",
       "src/components/weather/CurrentConditions.tsx",
+      "src/components/layout/QuickActions.tsx",
     ]) {
       const src = read(file);
       expect(src, file).not.toContain("PhoneMenu");
       expect(src, file).not.toContain("<AccountMenu");
-      expect(src, file).toContain("<LocationsLink");
     }
+    expect(read("src/components/layout/QuickActions.tsx")).toContain(
+      "<LocationsLink",
+    );
     const homes = sources.filter((f) =>
       /<(PhoneMenu|AccountMenu)\b/.test(readFileSync(f, "utf-8")),
     );

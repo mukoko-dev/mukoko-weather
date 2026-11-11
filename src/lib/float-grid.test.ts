@@ -6,8 +6,8 @@ import { describe, expect, it } from "vitest";
  * Everything that floats over a page or a map sits on ONE grid (owner,
  * 2026-11-04, from Apple's Find My: the same distance from the screen edge for
  * every control and the same gap between neighbours). The numbers live once,
- * as --float-* tokens in globals.css; the bottom bar, the phone hero's icon
- * group and the map's controls and sheet read them. This guard fails when one
+ * as --float-* tokens in globals.css; the bottom bar, the Quick actions group
+ * and the map's controls and sheet read them. This guard fails when one
  * of them grows a number of its own again.
  */
 const root = join(__dirname, "..");
@@ -47,7 +47,7 @@ describe("the float grid", () => {
     );
   });
 
-  it("is what the bottom bar, the hero's icon group and the map read", () => {
+  it("is what the bottom bar, the Quick actions group and the map read", () => {
     // The page clearance and the bar's position are the same lift: one token.
     expect(css).not.toContain("--mobile-nav-inset");
     expect(css.replace(/\s+/g, " ")).toContain(
@@ -77,7 +77,7 @@ describe("the float grid", () => {
         /(^|[\s"`])-?(left|right|top|bottom|inset|inset-x|inset-y)-[0-9]+(?![/\d.])/,
       );
       expect(source).not.toMatch(
-        /(^|[\s"`])(left|right|top|bottom|inset|inset-x|inset-y)-\[(?!var\(--(float|inset-floor|gap-floor))/,
+        /(^|[\s"`])(left|right|top|bottom|inset|inset-x|inset-y)-\[(?!var\(--(float|inset-floor|gap-floor|hadeda-below))/,
       );
       expect(source).not.toMatch(/safe-area-inset/);
       expect(source).not.toContain("0.75rem");

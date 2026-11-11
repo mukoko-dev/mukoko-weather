@@ -242,33 +242,29 @@ describe("focus on the sky (WCAG 1.4.11, 3:1)", () => {
     expect(declsFor("[data-site-header]")).not.toContain("--focus-ring");
   });
 
-  it("gives the phone icon group (a light card pill inside the hero) the page ring back", () => {
-    // The ring var is inherited from the sky scope (white); on the group's card
-    // surface that would be invisible.
-    expect(declsFor("[data-sky-hero] .hadeda")).toMatch(
-      /--focus-ring:\s*var\(--exp-storm\)\s*;/,
+  it("draws the Quick actions group's ring in the group's own colour: the sky foreground while clear over the sky, the on-primary foreground on the brand pill", () => {
+    // The group is not inside the hero, so it takes no sky scope: its
+    // controls (.bee) read --hadeda-ring, which the group sets per look.
+    expect(declsFor("[data-sky-hero] .hadeda")).toBe("");
+    const bee = focusVisibleGroups(css).find((g) =>
+      g.selectors.includes("bee"),
     );
-  });
-
-  it(".kestrel-round has an unlayered :focus-visible ring on the sky foreground that keeps the round shape", () => {
-    const group = focusVisibleGroups(css).find((g) =>
-      g.selectors.includes("kestrel-round"),
+    expect(bee, "no top-level .bee:focus-visible rule").toBeDefined();
+    expect(bee!.body).toContain(
+      "var(--hadeda-ring, var(--color-primary-foreground))",
     );
-    expect(
-      group,
-      "no top-level .kestrel-round:focus-visible rule",
-    ).toBeDefined();
-    expect(group!.body).toContain("solid var(--sky-fg)");
-    expect(group!.body).toContain("var(--focus-ring-width");
+    expect(bee!.body).toContain("var(--focus-ring-width");
     // The global rule forces border-radius: var(--radius-sm) on focus.
-    expect(group!.body).toContain("border-radius: var(--radius-full)");
+    expect(bee!.body).toContain("border-radius: var(--radius-full)");
+    const group = css.slice(css.indexOf("  .hadeda {"));
+    expect(group.slice(0, group.indexOf("}"))).toContain(
+      "--hadeda-ring: var(--color-primary-foreground)",
+    );
+    expect(css).toMatch(/--hadeda-ring:\s*var\(--sky-fg\)\s*;/);
   });
 
-  it("keeps no .kestrel-round:focus-visible rule inside @layer (it would lose to the global rule)", () => {
-    const layerStart = css.indexOf("@layer components {");
-    const layerEnd = css.indexOf("\n}\n", layerStart);
-    const inLayer = css.slice(layerStart, layerEnd);
-    expect(inLayer).not.toMatch(/\.kestrel-round:focus-visible\s*\{/);
+  it("has no .kestrel-round left: Share is a .bee in the group", () => {
+    expect(css).not.toContain(".kestrel-round");
   });
 
   it("leaves no Tailwind focus-visible:outline-* utility on a sky control (the utility cannot beat the global rule)", () => {
