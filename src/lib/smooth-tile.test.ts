@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  LruCache,
   MIN_SIGMA_PX,
-  SMOOTH_ALPHA_GAIN,
   SMOOTH_PROTOCOL,
   SMOOTH_SIGMA_PER_CELL,
   SMOOTH_UPSCALE,
@@ -226,11 +226,11 @@ describe("smoothTile (a tile smoothed with its neighbours' margin)", () => {
     paint(east, size, 0, 8, 6, 16, [20, 150, 30, 255]);
     const t1 = nine(west);
     t1[5] = east;
-    const a = smoothTile(t1, size, sigma, { alphaGain: 1, scale: 1 })!;
+    const a = smoothTile(t1, size, sigma, { scale: 1 })!;
     // Same data seen from the eastern tile: its western neighbour is `west`.
     const t2 = nine(east);
     t2[3] = west;
-    const b = smoothTile(t2, size, sigma, { alphaGain: 1, scale: 1 })!;
+    const b = smoothTile(t2, size, sigma, { scale: 1 })!;
     // Moving across the boundary the alpha is continuous: the last column of
     // the western tile and the first of the eastern differ by about one
     // pixel's slope, not by a box edge.
@@ -241,41 +241,31 @@ describe("smoothTile (a tile smoothed with its neighbours' margin)", () => {
       Math.abs(lastA - beforeLastA) + 2,
     );
     // And without the neighbour's margin the same pixel would be much weaker.
-    const alone = smoothTile(nine(west), size, sigma, {
-      alphaGain: 1,
-      scale: 1,
-    })!;
+    const alone = smoothTile(nine(west), size, sigma, { scale: 1 })!;
     expect(px(alone, size, size - 1, 16)[3]).toBeLessThan(lastA - 20);
   });
 
-  it("keeps a lone rain cell visible: the gain restores the opacity the blur took", () => {
-    // One IMERG-sized cell (4-5 px) in the middle of an otherwise dry tile.
+  it("keeps a lone rain cell visible and keeps rain where the data put it", () => {
+    // One IMERG-sized cell (5 px at tile zoom 6) in the middle of a dry tile.
     const c = clear();
     paint(c, size, 14, 14, 5, 5, [30, 160, 40, 255]);
-    const plain = smoothTile(nine(c), size, smoothSigma(0.1, 6), {
-      alphaGain: 1,
-      scale: 1,
-    })!;
-    const gained = smoothTile(nine(c), size, smoothSigma(0.1, 6), {
-      scale: 1,
-    })!;
-    const peak = (t: Uint8ClampedArray) => px(t, size, 16, 16)[3];
-    expect(peak(plain)).toBeLessThan(0.75 * 255); // the blur alone washes it out
-    expect(peak(gained)).toBeGreaterThan(peak(plain));
-    expect(peak(gained)).toBeGreaterThanOrEqual(0.7 * 255);
-    expect(SMOOTH_ALPHA_GAIN).toBeGreaterThan(1);
-    // It is still soft: the tile's far corner is clear and the edge ramps.
-    expect(px(gained, size, 0, 0)[3]).toBe(0);
-    const ramp = [16, 19, 22, 25].map((x) => px(gained, size, x, 16)[3]);
+    const out = smoothTile(nine(c), size, smoothSigma(0.1, 6), { scale: 1 })!;
+    const a = (x: number, y: number) => px(out, size, x, y)[3];
+    // Still clearly there (a blur of about 0.4 cell keeps a cell near 70%)...
+    expect(a(16, 16)).toBeGreaterThanOrEqual(0.55 * 255);
+    // ...with the colour of the cell, not greyed...
+    expect(px(out, size, 16, 16).slice(0, 3)).toEqual([30, 160, 40]);
+    // ...and no opacity boost: the edge is at half opacity where the cell's
+    // edge was (x = 14 is the cell's first column, so its outer edge is 14.0),
+    // so the rain has not grown.
+    expect(Math.abs(a(14, 16) - a(16, 16) / 2)).toBeLessThan(0.2 * 255);
+    expect(a(10, 16)).toBeLessThan(0.15 * 255);
+    // The tile's far corner is clear, and alpha falls moving out of the cell.
+    expect(a(0, 0)).toBe(0);
+    const ramp = [16, 18, 20, 22, 25].map((x) => a(x, 16));
     for (let i = 1; i < ramp.length; i++)
       expect(ramp[i]).toBeLessThanOrEqual(ramp[i - 1]);
-    expect(ramp[0]).toBeGreaterThan(ramp[3]);
-  });
-
-  it("never lets the gain push alpha past opaque", () => {
-    const c = flat(size, [10, 20, 30, 255]);
-    const out = smoothTile(nine(c), size, sigma, { alphaGain: 3, scale: 1 })!;
-    expect(px(out, size, size / 2, size / 2)[3]).toBe(255);
+    expect(ramp[0]).toBeGreaterThan(ramp[4]);
   });
 
   it("treats a missing neighbour as clear rather than failing", () => {
@@ -301,7 +291,10 @@ describe("smoothTile (a tile smoothed with its neighbours' margin)", () => {
     expect(px(fine, size * 2, 28, 28).slice(0, 3)).toEqual(
       px(native, size, 14, 14).slice(0, 3),
     );
-    expect(px(fine, size * 2, 28, 28)[3]).toBe(px(native, size, 14, 14)[3]);
+    // The field is sampled corner to corner, so a value can differ a little.
+    expect(
+      Math.abs(px(fine, size * 2, 28, 28)[3] - px(native, size, 14, 14)[3]),
+    ).toBeLessThan(0.08 * 255);
   });
 
   it("makes neighbouring tiles agree exactly on their shared border (no seam)", () => {
@@ -368,5 +361,39 @@ describe("smoothTile (a tile smoothed with its neighbours' margin)", () => {
     const t = nine(c);
     t[1] = new Uint8ClampedArray(7);
     expect(() => smoothTile(t, size, sigma)).not.toThrow();
+  });
+});
+
+describe("LruCache", () => {
+  it("drops the least recently used entry past its limit", () => {
+    const c = new LruCache<number>(2);
+    c.set("a", 1);
+    c.set("b", 2);
+    c.get("a"); // a is now the most recently used
+    c.set("c", 3);
+    expect(c.get("b")).toBeUndefined();
+    expect(c.get("a")).toBe(1);
+    expect(c.get("c")).toBe(3);
+    expect(c.size).toBe(2);
+  });
+
+  it("replaces a key without growing", () => {
+    const c = new LruCache<number>(2);
+    c.set("a", 1);
+    c.set("a", 2);
+    expect(c.size).toBe(1);
+    expect(c.get("a")).toBe(2);
+  });
+
+  it("deleteIf removes an entry only while it is still the same value", () => {
+    const c = new LruCache<object>(3);
+    const slow = {};
+    const fresh = {};
+    c.set("k", slow);
+    c.set("k", fresh); // the map has since been given a newer value
+    c.deleteIf("k", slow); // the slow one's failure must not evict it
+    expect(c.get("k")).toBe(fresh);
+    c.deleteIf("k", fresh);
+    expect(c.get("k")).toBeUndefined();
   });
 });
