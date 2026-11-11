@@ -21,16 +21,14 @@
 /** MapLibre protocol name; a smoothed tile's URL is `mksmooth://<cell>/<real url>`. */
 export const SMOOTH_PROTOCOL = "mksmooth";
 
-/** Gaussian sigma as a share of one data cell (about 0.45 reads as soft, not smeared). */
-export const SMOOTH_SIGMA_PER_CELL = 0.45;
-
 /**
- * Alpha is multiplied by this after the blur (and clamped), so the inside of a
- * cell keeps its colour at full strength and only its edge is soft. Without it
- * a lone 11 km cell, blurred, peaks at about a third of its opacity and reads
- * as a smudge instead of a rain cell.
+ * Gaussian sigma as a share of one data cell. With no opacity boost, the
+ * blurred alpha of a straight cell edge is exactly one half where the edge was,
+ * so the rain's visible boundary stays where the data put it. 0.4 cell keeps a
+ * lone cell at about 60% opacity at its centre and rounds a corner by about
+ * half a cell; wider blurs wash lone cells out, narrower ones leave boxes.
  */
-export const SMOOTH_ALPHA_GAIN = 1.7;
+export const SMOOTH_SIGMA_PER_CELL = 0.4;
 
 /**
  * The smoothed tile is made this many times finer than the provider's. Sampled
@@ -314,16 +312,15 @@ function isClear(tile: Uint8ClampedArray): boolean {
  * Returns the smoothed middle tile, or null when the middle tile is missing.
  * The result is `size * scale` pixels a side (`SMOOTH_UPSCALE` by default, see
  * there); `scale: 1` keeps the provider's size. A sigma under `MIN_SIGMA_PX`
- * returns the middle tile unchanged, at its own size. `alphaGain` (default
- * `SMOOTH_ALPHA_GAIN`) strengthens the blurred alpha, clamped.
+ * returns the middle tile unchanged, at its own size. The blurred alpha is used
+ * as it is: no gain, so the rain does not grow.
  */
 export function smoothTile(
   tiles: readonly (Uint8ClampedArray | null)[],
   size: number,
   sigma: number,
-  options: { alphaGain?: number; scale?: number } = {},
+  options: { scale?: number } = {},
 ): Uint8ClampedArray | null {
-  const alphaGain = options.alphaGain ?? SMOOTH_ALPHA_GAIN;
   const scale = Math.max(1, Math.floor(options.scale ?? SMOOTH_UPSCALE));
   const centre = tiles[4];
   if (!centre || centre.length !== size * size * 4) return null;
@@ -373,9 +370,43 @@ export function smoothTile(
   } else {
     out = sampleTileEdgeToEdge(soft, side, margin, size, outSize);
   }
-  if (alphaGain !== 1) {
-    // Uint8ClampedArray clamps to 255 and rounds.
-    for (let i = 3; i < out.length; i += 4) out[i] = out[i] * alphaGain;
-  }
   return out;
+}
+
+/**
+ * A small least-recently-used map. `get` counts as a use; `set` drops the
+ * oldest entries past `limit`. `deleteIf` removes an entry only while it is
+ * still the value the caller put there, so a slow failure cannot evict the
+ * fresh entry that replaced it.
+ */
+export class LruCache<T> {
+  private readonly entries = new Map<string, T>();
+
+  constructor(private readonly limit: number) {}
+
+  get(key: string): T | undefined {
+    const value = this.entries.get(key);
+    if (value === undefined) return undefined;
+    this.entries.delete(key);
+    this.entries.set(key, value);
+    return value;
+  }
+
+  set(key: string, value: T): void {
+    this.entries.delete(key);
+    this.entries.set(key, value);
+    while (this.entries.size > this.limit) {
+      const oldest = this.entries.keys().next().value;
+      if (oldest === undefined) break;
+      this.entries.delete(oldest);
+    }
+  }
+
+  deleteIf(key: string, value: T): void {
+    if (this.entries.get(key) === value) this.entries.delete(key);
+  }
+
+  get size(): number {
+    return this.entries.size;
+  }
 }
