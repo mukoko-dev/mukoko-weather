@@ -23,6 +23,7 @@ import {
   weatherOverlayOpacity,
 } from "@/lib/map-layers";
 import { overlayFrameId, planOverlayFrames } from "@/lib/overlay-frames";
+import { registerSmoothProtocol } from "@/lib/smooth-tile-protocol";
 import {
   BASE_MAP_PROVIDERS,
   MAP_MAX_ZOOM_DEFAULT,
@@ -631,8 +632,12 @@ export function MapLibreMap({
         AttributionControl,
         setWorkerUrl,
         getVersion,
+        addProtocol,
       }) => {
         if (cancelled || !containerRef.current) return;
+        // Satellite rain is drawn as hard 11 km squares by its provider; its
+        // tiles are smoothed in the browser through this protocol (smooth-tile.ts).
+        registerSmoothProtocol(addProtocol);
         // Must run before the first Map is created: the default worker URL
         // points at a file webpack never emits (see maplibreWorkerUrl).
         setWorkerUrl(

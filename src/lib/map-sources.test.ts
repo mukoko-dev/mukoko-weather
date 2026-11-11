@@ -29,6 +29,7 @@ import {
   satelliteFrames,
   utcDayLabel,
 } from "./map-sources";
+import { parseSmoothTileUrl } from "./smooth-tile";
 import { MAP_CHIPS, MODEL_CHIPS } from "./map-layers";
 
 const viirs = GIBS_LAYERS.satellite;
@@ -327,7 +328,7 @@ describe("GIBS zoom caps (the data is magnified past its native zoom)", () => {
     const note = (id: string) =>
       MAP_CHIPS.find((c) => c.id === id)?.legend.note;
     expect(note("satelliteRain")).toBe(
-      "NASA IMERG, about 10 km grid, 4–\u20606 hours behind",
+      "NASA IMERG, about 10 km grid, smoothed, 4–\u20606 hours behind",
     );
     expect(note("satellite")).toBe(
       "NOAA-20 VIIRS, about 250 m detail, one pass a day",
@@ -594,6 +595,32 @@ describe("Wildfire layer (NASA GIBS fire detections, drawn through GIBS WMS)", (
     expect(src.maxzoom).toBe(fire.maxMapZoom);
     expect(src.attribution).toContain("NASA FIRMS");
     expect(src.attribution).toContain("NASA GIBS");
+  });
+
+  it("smooths only the layer whose data is hard square cells", () => {
+    // IMERG (0.1 degree cells) goes through the smoothing protocol; the real
+    // GIBS URL, with MapLibre's placeholders, rides inside it.
+    expect(imerg.smoothCellDegrees).toBe(0.1);
+    const rain = buildGibsSource(imerg, "2026-10-10T14:00:00Z");
+    expect(rain.tiles[0].startsWith("mksmooth://0.1/https://")).toBe(true);
+    expect(parseSmoothTileUrl(rain.tiles[0])).toEqual({
+      url: gibsTileUrl(imerg, "2026-10-10T14:00:00Z"),
+      cellDegrees: 0.1,
+    });
+    expect(rain.tiles[0]).toContain("{z}/{y}/{x}");
+    // Imagery and the WMS fire dots have real detail: plain GIBS URLs.
+    expect(viirs.smoothCellDegrees).toBeUndefined();
+    expect(fire.smoothCellDegrees).toBeUndefined();
+    expect(buildGibsSource(viirs, "2026-10-10").tiles[0]).toBe(
+      gibsTileUrl(viirs, "2026-10-10"),
+    );
+    expect(buildGibsSource(fire, "2026-11-04").tiles[0]).toBe(
+      gibsTileUrl(fire, "2026-11-04"),
+    );
+    // Smoothing never changes the credit, the zoom range or the tile size.
+    expect(rain.attribution).toContain("NASA GIBS");
+    expect(rain.maxzoom).toBe(6);
+    expect(rain.tileSize).toBe(256);
   });
 
   it("keeps the existing GIBS layers on their 256 px WMTS tiles", () => {
