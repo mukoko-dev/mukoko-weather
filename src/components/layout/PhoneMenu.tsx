@@ -49,11 +49,11 @@ interface Props {
  * (`HEADER_DESTINATIONS`) — and wires them to the app's store and routes, so
  * nothing is lost where the phone header is not drawn (over the sky hero).
  *
- * One wrapper, one home: the first slot of the phone bottom bar
- * (owner, 2026-11-05: the avatar and My Location swapped places — My Location
- * is now the round link in the hero's top group and the header's pill, see
- * MyLocationLink). The menu opens UPWARD from the bar (`panelPlacement`), so it
- * stays on screen over the content instead of under a control at the top.
+ * One wrapper, one home: the last slot of the phone bottom bar, at its far
+ * right (owner, 2026-11-11; it was the first slot from 2026-11-05, when the
+ * avatar and My Location swapped places). The menu opens UPWARD from the bar
+ * (`panelPlacement`), from the bar's right edge, so it stays on screen over the
+ * content instead of under a control at the top.
  */
 export function PhoneMenu({ buttonClassName }: Props) {
   const openMyWeather = useAppStore((s) => s.openMyWeather);

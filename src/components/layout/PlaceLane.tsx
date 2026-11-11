@@ -28,9 +28,12 @@ import { handlePlaceLinkClick, isPlainLeftClick } from "@/lib/place-bus";
 /**
  * The places lane in the middle of the phone bottom bar (option B, owner
  * 2026-11-02): My Location first and pinned, then one chip per saved or
- * suggested place, scrolling sideways beside it. It is the `lane` slot of the
- * vendored Mzizi bottom nav (src/components/ui/mzizi-bottom-nav.tsx); Map and
- * Locations are that bar's pinned items.
+ * suggested place, scrolling sideways beside it. It is the first part of the
+ * `lane` slot of the vendored Mzizi bottom nav
+ * (src/components/ui/mzizi-bottom-nav.tsx); Map is that bar's pinned item and
+ * the account control (PhoneMenu) is the lane's last slot, after this
+ * component (owner, 2026-11-11). Locations is the round list link at the top
+ * of the page (LocationsLink).
  *
  * My Location sits OUTSIDE the scroller, so it can never scroll away and the
  * places are simply clipped at its edge (a sticky chip would have to hide
@@ -180,9 +183,7 @@ export function PlaceLaneView({
     <div
       role="group"
       aria-label="Places"
-      className={`relative flex h-full min-w-0 flex-1 items-center gap-2 ${
-        places.length === 0 ? "justify-center" : ""
-      }`}
+      className="relative flex h-full min-w-0 flex-1 items-center gap-2"
     >
       {home && (
         <Link

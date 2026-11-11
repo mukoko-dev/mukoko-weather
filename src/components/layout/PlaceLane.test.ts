@@ -87,9 +87,9 @@ describe("PlaceLane — accessible lane", () => {
     expect(source.replace(/\/\*[\s\S]*?\*\//g, "")).not.toContain("sticky");
   });
 
-  it("with no places the lane is My Location alone, centred, and renders no scroller", () => {
+  it("with no places the lane is My Location alone, at the start (second from the left), and renders no scroller", () => {
     const html = view([], 0);
-    expect(html).toContain("justify-center");
+    expect(html).not.toContain("justify-center");
     expect(html).not.toContain("sanderling");
     expect(html).not.toContain("<ul");
     expect(html).toContain(">My Location</span>");

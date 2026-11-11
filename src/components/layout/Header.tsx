@@ -234,8 +234,8 @@ export function SiteHeader() {
               </div>
 
               {/* The account icon is desktop's (`sm` up). On a phone the
-                  avatar is the bottom bar's first slot, with the account
-                  menu behind it. */}
+                  avatar is the bottom bar's last slot (its far right), with
+                  the account menu behind it. */}
               {authedUser ? (
                 <Link
                   href="/profile"

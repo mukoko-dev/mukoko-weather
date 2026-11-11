@@ -114,11 +114,11 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
     );
   });
 
-  it("gives the pinned items one preset width, wide enough for the longest label (owner, 2026-11-05)", () => {
-    expect(css).toContain("--mobile-nav-item-width: 6rem;");
+  it("gives the pinned items one preset width, wide enough for the longest label (owner, 2026-11-05; Map alone since 2026-11-11)", () => {
+    expect(css).toContain("--mobile-nav-item-width: 4rem;");
     expect(bottomNav).toContain("w-[var(--mobile-nav-item-width)]");
     // Rem, so it follows the label's text size; the real browser check
-    // (scripts/browser-check/bottom-bar.mjs) measures that "Locations" fits.
+    // (scripts/browser-check/bottom-bar.mjs) measures that "Map" fits.
     expect(css).toMatch(/--mobile-nav-item-width:\s*[\d.]+rem;/);
   });
 
