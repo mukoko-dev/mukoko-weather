@@ -37,7 +37,8 @@ function setup() {
   const announce = vi.fn();
   const restoreFocus = vi.fn();
   type Props = { layer: string; lat?: number };
-  const hook = (props: Props) =>
+  // Named `use…` so the rules of hooks accept the call: renderHook runs it as a hook.
+  const useUnderTest = (props: Props) =>
     useLayerCapacity({
       layer: props.layer,
       lat: props.lat ?? -17.83,
@@ -53,7 +54,7 @@ function setup() {
     requests,
     announce,
     restoreFocus,
-    hook,
+    hook: useUnderTest,
     answerWith: (next: typeof answer) => (answer = next),
     /** From now on a request stays out until `release` is called. */
     hold: () => {
