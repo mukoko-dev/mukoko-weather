@@ -56,7 +56,7 @@ describe("MapDashboard — top-right controls", () => {
 });
 
 describe("MapDashboard — layer state", () => {
-  it("defaults to rain", () => {
+  it("falls back to DEFAULT_LAYER when nothing is stored (which layer that is, and that it works, is in MapDashboard.render.test.ts and map-layers.test.ts)", () => {
     expect(source).toContain("DEFAULT_LAYER");
   });
 

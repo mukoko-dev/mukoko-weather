@@ -1,6 +1,12 @@
 "use client";
 
-import { createElement, useCallback, type FocusEvent } from "react";
+import {
+  createElement,
+  useCallback,
+  useEffect,
+  useRef,
+  type FocusEvent,
+} from "react";
 import {
   Cloud,
   CloudRain,
@@ -77,10 +83,48 @@ export function scrollChipIntoView(event: FocusEvent<HTMLButtonElement>) {
   });
 }
 
+/**
+ * How far to scroll a chip row sideways (CSS px, forward positive) so a chip
+ * sits wholly inside it, clear of the row's own padding at both ends (the edge
+ * fade at the end). 0 when it already does. Pure: boxes are `getBoundingClientRect`
+ * edges, the insets the row's padding.
+ */
+export function chipScrollDelta(
+  row: { left: number; right: number },
+  chip: { left: number; right: number },
+  inset: { start: number; end: number },
+): number {
+  const past = chip.right - (row.right - inset.end);
+  if (past > 0) return past;
+  const before = row.left + inset.start - chip.left;
+  return before > 0 ? -before : 0;
+}
+
 interface WeatherLayerPanelProps {
-  /** Selected chip id (always one: the map shows exactly one layer at a time). */
+  /**
+   * The chip shown as pressed: the layer on screen (always one: the map shows
+   * exactly one layer at a time).
+   */
   activeLayer: string;
+  /**
+   * The layer the person chose, when it is not the one on screen (a Tomorrow.io
+   * layer that is busy, with the default shown instead). A tap is compared with
+   * THIS, so the chip pressed for the fallback can still be chosen. Defaults to
+   * `activeLayer`.
+   */
+  chosenLayer?: string;
   onLayerChange: (layerId: string) => void;
+  /**
+   * A tap on the chosen layer's own chip while it is busy: look again. It is
+   * not a change of layer, so it is not tracked as one.
+   */
+  onRecheck?: () => void;
+  /**
+   * Whether the panel is on screen. The chip row cannot be measured while its
+   * sheet is folded (`hidden`), so the active chip is brought into view each
+   * time the panel shows. Defaults to true.
+   */
+  visible?: boolean;
   locationSlug: string;
   /** Chips to offer (defaults to MAP_CHIPS; the dashboard adds flagged ones). */
   chips?: readonly MapChip[];
@@ -100,7 +144,10 @@ interface WeatherLayerPanelProps {
  */
 export function WeatherLayerPanel({
   activeLayer,
+  chosenLayer,
   onLayerChange,
+  onRecheck,
+  visible = true,
   locationSlug,
   chips = MAP_CHIPS,
   models,
@@ -109,15 +156,48 @@ export function WeatherLayerPanel({
 }: WeatherLayerPanelProps) {
   const handleSelect = useCallback(
     (id: string) => {
-      if (id === activeLayer) return;
+      if (id === (chosenLayer ?? activeLayer)) {
+        // Already chosen. If it is not on screen it is busy: look again.
+        if (id !== activeLayer) onRecheck?.();
+        return;
+      }
       onLayerChange(id);
       trackEvent("map_layer_changed", { layer: id, location: locationSlug });
     },
-    [activeLayer, onLayerChange, locationSlug],
+    [activeLayer, chosenLayer, onLayerChange, onRecheck, locationSlug],
   );
+
+  // Brings the active chip into view when the layer changes and each time the
+  // panel shows: the layer the map opens on (Satellite) is the sixth chip, off
+  // screen on a phone, so the visitor would see no chip selected. Only the row
+  // moves (never the sheet). A folded sheet is `hidden`, so its row has no size:
+  // nothing is measured until it shows again.
+  //
+  // Instant, to an absolute position, never smooth and never `scrollBy`. The
+  // layer can change twice in a moment (the stored layer, then the fallback for
+  // it); a smooth scroll still under way makes the next measurement find the
+  // chip "in view" where it is passing, and a relative one is added to where the
+  // earlier scroll was going, not to where the row is.
+  const layerRow = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!visible) return;
+    const row = layerRow.current;
+    const chip = row?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (!row || !chip) return;
+    const rowBox = row.getBoundingClientRect();
+    if (rowBox.width === 0) return;
+    const pad = getComputedStyle(row);
+    const delta = chipScrollDelta(rowBox, chip.getBoundingClientRect(), {
+      start: parseFloat(pad.paddingInlineStart) || 0,
+      end: parseFloat(pad.paddingInlineEnd) || 0,
+    });
+    if (delta !== 0)
+      row.scrollTo({ left: row.scrollLeft + delta, behavior: "instant" });
+  }, [activeLayer, visible]);
 
   const chipRow = (
     <div
+      ref={layerRow}
       role="group"
       aria-label="Map layers"
       // mzizi-spacing-exempt: full-bleed sideways scroller; -mx-4 reaches into the sheet's own padding (ps-4 puts it back at the start, pe-6 clears the 1.5rem edge fade at the end) so chips scroll to the card's edge and overlap no target
