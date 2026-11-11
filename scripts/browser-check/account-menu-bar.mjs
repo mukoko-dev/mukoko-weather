@@ -1,8 +1,9 @@
 // The phone bar's order (owner, 2026-11-11): Map, My Location (the lane's first
 // chip, second from the left), the places, and the account avatar at the far
-// right, whose menu opens UPWARD. Locations is the round list link in the
-// hero's top group (beside Share) and in the header's pill; it is not in the
-// bar. (2026-11-05, #525 had swapped the avatar and My Location.)
+// right, whose menu opens UPWARD. Locations is the round list link, the third
+// control of the Quick actions group at the top right (see quick-actions.mjs);
+// it is not in the bar. (2026-11-05, #525 had swapped the avatar and My
+// Location.)
 //
 //   BASE=http://localhost:3100 SHOTS=/tmp/shots node scripts/browser-check/account-menu-bar.mjs
 //
@@ -10,12 +11,12 @@
 // has a backdrop-filter, so a `fixed` panel would not be viewport-anchored),
 // so at 393x852 and 360x740 it is fully on screen, its right edge is the bar's,
 // its bottom edge is a gap above the bar and it is the top layer; Escape and a
-// tap outside close it and Escape gives focus back; Locations sits in the
-// hero group on a place page and in the header pill on a page with no hero
-// (/locations), as a 49px link that goes to /locations and is current there;
-// My Location is a bar chip that goes to `/` and is current there; and the
-// header's account icon is not drawn on a phone. Desktop at 1280px is
-// unchanged: no phone group, no bar, no Locations icon.
+// tap outside close it and Escape gives focus back; Locations is a 49px link
+// in the group, on a place page and on a page with no hero (/locations), that
+// goes to /locations and is current there; My Location is a bar chip that goes
+// to `/` and is current there; and the header's account icon is not drawn on
+// a phone. Desktop at 1280px: the group has Locations too, no bar, and the
+// account icon is the group's last control.
 import { BASE, SHOTS, chromium, proxyApi, reporter, run } from "./harness.mjs";
 
 const { note, finish } = reporter();
@@ -62,18 +63,24 @@ run(async () => {
     await page.goto(`${BASE}/harare`, { waitUntil: "domcontentloaded" });
     await page.waitForSelector(`.hadeda ${LOCATIONS}`, { timeout: 60000 });
     await page.waitForSelector(`${ACCOUNT} summary`, { timeout: 20000 });
+    // The page is hydrated once the real hero has replaced the skeleton (a
+    // tap before that opens the native <details> without its Escape handler).
+    await page.waitForSelector("[data-sky-hero]:not([data-skeleton])", {
+      timeout: 60000,
+    });
     await page.waitForTimeout(1500);
 
     const group = await page.evaluate(() => {
       const g = document.querySelector(".hadeda");
+      const visible = (el) => el.getClientRects().length > 0;
       return {
-        controls: g.querySelectorAll("a, button").length,
+        controls: [...g.querySelectorAll("a, button")].filter(visible).length,
         menu: g.querySelectorAll("details").length,
       };
     });
     note(
-      `[${tag}] the hero group holds Share and Locations, no account menu`,
-      group.controls === 2 && group.menu === 0,
+      `[${tag}] the group holds Share, Notifications and Locations, no account menu`,
+      group.controls === 3 && group.menu === 0,
       JSON.stringify(group),
     );
     const here = await rect(page, `.hadeda ${LOCATIONS}`);
@@ -211,18 +218,14 @@ run(async () => {
           ),
       );
 
-    // A page with no hero: Locations is in the header's pill, the account
-    // icon is not drawn on a phone, the bar still has the account control.
+    // A page with no hero: the same group, the account icon is not drawn on a
+    // phone, the bar still has the account control.
     await page.goto(`${BASE}/locations`, { waitUntil: "domcontentloaded" });
-    await page.waitForSelector("[data-site-header]", { timeout: 30000 });
+    await page.waitForSelector(".hadeda", { timeout: 30000 });
     await page.waitForTimeout(1500);
     const pill = await page.evaluate(() => {
       const visible = (el) => el.getClientRects().length > 0;
-      return [
-        ...document.querySelectorAll(
-          '[data-site-header] [role="toolbar"] a, [data-site-header] [role="toolbar"] button',
-        ),
-      ]
+      return [...document.querySelectorAll(".hadeda a, .hadeda button")]
         .filter(visible)
         .map((el) => ({
           label: el.getAttribute("aria-label"),
@@ -231,10 +234,11 @@ run(async () => {
         }));
     });
     note(
-      `[${tag}] /locations: the header pill is Locations and Notifications, ${TOUCH}px each`,
-      pill.length === 2 &&
-        pill[0].label === "All locations" &&
+      `[${tag}] /locations: the group is Share, Notifications and Locations, ${TOUCH}px each`,
+      pill.length === 3 &&
+        pill[0].label === "Share this page" &&
         /Notifications/.test(pill[1].label ?? "") &&
+        pill[2].label === "All locations" &&
         pill.every((p) => p.w === TOUCH && p.h === TOUCH),
       JSON.stringify(pill),
     );
@@ -248,7 +252,8 @@ run(async () => {
     await context.close();
   }
 
-  // Desktop is unchanged.
+  // Desktop: the group has Locations too (consistent across the app), the
+  // account icon is its last control, and there is no bottom bar.
   const desktop = await browser.newContext({
     viewport: { width: 1280, height: 800 },
   });
@@ -263,18 +268,18 @@ run(async () => {
       group: visible(document.querySelector(".hadeda")),
       bar: visible(document.querySelector('[data-slot="mzizi-bottom-nav"]')),
       locations: [
-        ...document.querySelectorAll('a[aria-label="All locations"]'),
+        ...document.querySelectorAll('.hadeda a[aria-label="All locations"]'),
       ].some(visible),
       account: [
         ...document.querySelectorAll(
-          '[data-site-header] a[aria-label="Sign in"], [data-site-header] a[href="/profile"]',
+          '.hadeda a[aria-label="Sign in"], .hadeda a[href="/profile"]',
         ),
       ].some(visible),
     };
   });
   note(
-    "[1280] desktop: no phone group, no bar, no Locations icon; the header's account icon is shown",
-    !d.group && !d.bar && !d.locations && d.account,
+    "[1280] desktop: the group has Locations and the account icon, and there is no bottom bar",
+    d.group && !d.bar && d.locations && d.account,
     JSON.stringify(d),
   );
   await desktop.close();

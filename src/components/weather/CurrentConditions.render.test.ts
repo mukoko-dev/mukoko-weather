@@ -9,8 +9,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-// Locations (the round list link in the phone icon group) reads the route; its
-// own structure is covered in Header.test.ts.
+// The hero holds no controls of its own (the Quick actions group is the
+// layout's: see QuickActions.render.test.ts); the mocks keep its imports whole.
 const nav = vi.hoisted(() => ({ pathname: "/harare" }));
 vi.mock("next/navigation", () => ({
   usePathname: () => nav.pathname,
@@ -124,7 +124,7 @@ describe("CurrentConditions render — the sky hero", () => {
     expect(html).not.toContain("kudu");
   });
 
-  it("puts the breadcrumb, Share and Locations in the top row, before the stack", () => {
+  it("puts the breadcrumb in the top row, before the stack, and leaves room for the Quick actions group on phones", () => {
     const html = render(
       {},
       {
@@ -136,75 +136,41 @@ describe("CurrentConditions render — the sky hero", () => {
       },
     );
     const crumb = html.indexOf("Home / Harare");
-    const group = html.indexOf('class="hadeda sm:hidden"');
     const name = html.indexOf('id="current-conditions-heading"');
     expect(crumb).toBeGreaterThan(-1);
-    expect(crumb).toBeLessThan(group);
-    expect(group).toBeLessThan(name);
-    // From `sm` up, Share sits in the top row on the sky.
-    expect(html).toMatch(
-      /<div class="hidden shrink-0 sm:block"><div class="relative"><button[^>]*kestrel-round/,
-    );
-    // On phones, Share and Locations are ONE fixed group, both round
-    // `duiker` controls on its card surface, Share first.
-    const inGroup = html.slice(group, name);
-    const share = inGroup.indexOf('aria-label="Share weather for Harare"');
-    const here = inGroup.indexOf('aria-label="All locations"');
-    expect(share).toBeGreaterThan(-1);
-    expect(share).toBeLessThan(here);
-    expect(inGroup.match(/class="duiker"/g)).toHaveLength(2);
-    expect(inGroup).not.toContain("kestrel-round");
-    // The breadcrumb leaves room for the group on phones, none from `sm`.
+    expect(crumb).toBeLessThan(name);
+    // The group (Share, Notifications, Locations) floats at the top right,
+    // mounted once by the layout; the trail leaves room for it on phones
+    // (three controls wide) and has the whole row from `sm`.
     expect(html).toContain("pr-[var(--hadeda-reserve)]");
     expect(html).toContain("sm:pr-0");
   });
 
-  it("holds Locations (a link to `/locations`) in the phone group, no My Location and no account menu: the avatar is the bottom bar's last slot", () => {
+  it("holds no controls of its own: no Share, no Notifications, no Locations, no group, no account menu", () => {
     const html = render();
-    const group = html.slice(
-      html.indexOf('class="hadeda sm:hidden"'),
-      html.indexOf('id="current-conditions-heading"'),
-    );
-    const link = group.match(/<a[^>]*aria-label="All locations"[^>]*>/)![0];
-    expect(link).toContain('href="/locations"');
-    expect(link).toContain('class="duiker"');
-    // Not the current page on a place's own page.
-    expect(link).not.toContain("aria-current");
-    // My Location is in the bottom bar now, not up here.
-    expect(group).not.toContain('aria-label="My Location"');
-    // The account menu (its <details>, its summary, its panel) is not in the hero.
+    expect(html).not.toContain("hadeda sm:hidden");
+    expect(html).not.toContain('class="hadeda');
+    expect(html).not.toMatch(/aria-label="Share/);
+    expect(html).not.toContain('aria-label="All locations"');
+    expect(html).not.toContain("Notifications");
+    expect(html).not.toContain("kestrel-round");
+    expect(html).not.toContain('role="toolbar"');
     expect(html).not.toContain("<details");
     expect(html).not.toContain("account-menu");
-    expect(html).not.toContain("Account menu");
-    expect(html).not.toContain("More options");
   });
 
-  it("marks Locations as the current page on `/locations`", () => {
-    nav.pathname = "/locations";
-    try {
-      const html = render();
-      expect(html).toMatch(
-        /<a[^>]*aria-label="All locations"[^>]*aria-current="page"|<a[^>]*aria-current="page"[^>]*aria-label="All locations"/,
-      );
-    } finally {
-      nav.pathname = "/harare";
-    }
-  });
-
-  it("renders the phone Share and the desktop Share as two instances, one hidden at each width", () => {
+  it("is the sky hero the group watches: it carries data-sky-hero, and its first line (the eyebrow) is the element the group observes", () => {
     const html = render();
-    expect(html.match(/aria-label="Share weather for Harare"/g)).toHaveLength(
-      2,
+    expect(html).toContain("data-sky-hero");
+    // The first line of the content stack is the eyebrow: always drawn, with
+    // its height reserved, after the top row.
+    expect(html).toMatch(
+      /<div class="flex flex-col items-center pt-4 pb-\[26px\] text-center"><p class="flex min-h-\[calc\(var\(--text-caption\)/,
     );
-    expect(html.match(/<div class="hidden shrink-0 sm:block">/g)).toHaveLength(
-      1,
-    );
-    expect(html.match(/class="hadeda sm:hidden"/g)).toHaveLength(1);
   });
 
   it("shows the eyebrow only for current location or home, keeping the line reserved", () => {
-    // The eyebrow line, not the page: My Location is also the name of the
-    // round link in the phone icon group.
+    // The eyebrow line, not the page.
     const eyebrow = (html: string) =>
       html.match(
         /<p class="flex min-h-\[calc\(var\(--text-caption\)[^"]*">([\s\S]*?)<\/p>/,

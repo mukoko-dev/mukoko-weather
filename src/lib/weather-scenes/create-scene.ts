@@ -78,7 +78,12 @@ export async function createWeatherScene(
   container: HTMLElement,
   config: WeatherSceneConfig,
 ): Promise<WeatherSceneHandle> {
-  const noop: WeatherSceneHandle = { dispose() {}, pause() {}, resume() {} };
+  const noop: WeatherSceneHandle = {
+    live: false,
+    dispose() {},
+    pause() {},
+    resume() {},
+  };
 
   const width = container.clientWidth;
   const height = container.clientHeight;
@@ -164,6 +169,7 @@ export async function createWeatherScene(
   window.addEventListener("resize", handleResize, { passive: true });
 
   return {
+    live: true,
     dispose() {
       disposed = true;
       cancelAnimationFrame(frameId);

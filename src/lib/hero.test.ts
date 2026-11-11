@@ -577,13 +577,48 @@ describe("sky tokens — contrast", () => {
     }
   });
 
-  it("the round control (Share, ⋯) is 48px, round, bordered, shadowless", () => {
-    const round = blockBody(".kestrel-round");
-    expect(round).toContain("w-[var(--touch-target-min)]");
-    expect(round).toContain("h-[var(--touch-target-min)]");
-    expect(round).toContain("rounded-full");
-    expect(round).toContain("border");
-    expect(round).not.toMatch(/shadow|blur/);
+  it("the Quick actions group is clear over the sky: no fill, no border, no shadow, its icons in --sky-fg", () => {
+    // "clear" asked for, or "auto" with a sky hero on the page and nothing of
+    // its content under the group yet.
+    const at = css.indexOf('.hadeda[data-tone="clear"],');
+    expect(at, "no clear look").toBeGreaterThan(-1);
+    const clear = css.slice(at, css.indexOf("}", at));
+    expect(clear).toContain(
+      'body:has([data-sky-hero]) .hadeda[data-tone="auto"]:not([data-past-sky])',
+    );
+    expect(clear).toContain("--hadeda-fill: transparent");
+    expect(clear).toContain("--hadeda-ink: var(--sky-fg)");
+    expect(clear).toContain("--hadeda-control: transparent");
+    expect(clear).toContain("--hadeda-ring: var(--sky-fg)");
+    expect(clear).not.toMatch(/border|shadow|blur/);
+    // Neither look draws a border, a shadow or a blur on the group.
+    const group = blockBody(".hadeda");
+    expect(group).not.toMatch(
+      /(^|\s)border(-(width|color|style))?:|box-shadow:|blur|filter/,
+    );
+    expect(group).toContain("background-color: var(--hadeda-fill)");
+    expect(group).toContain("color: var(--hadeda-ink)");
+  });
+
+  it("the clear group's icons (--sky-fg) are 3:1 or better on every sky family, light and dark, at every stop (WCAG 1.4.11)", () => {
+    let lowest = Infinity;
+    let checked = 0;
+    for (const f of families) {
+      for (const scope of ["light", "dark"] as const) {
+        for (const stop of STOPS) {
+          const bg = resolveColour(`--sky-${f}-${stop}`, scope);
+          const ratio = contrastRatio(resolveColour("--sky-fg", scope), bg);
+          expect(ratio, `${f} ${scope} ${stop} ${bg}`).toBeGreaterThanOrEqual(
+            3,
+          );
+          lowest = Math.min(lowest, ratio);
+          checked++;
+        }
+      }
+    }
+    expect(checked).toBe(48);
+    // Measured, not designed: the weakest stop still clears the text floor.
+    expect(lowest).toBeGreaterThanOrEqual(4.5);
   });
 
   it("the sky box starts at the top of the page, is one screen + 8rem tall (60rem at least) and fades out over 6rem", () => {

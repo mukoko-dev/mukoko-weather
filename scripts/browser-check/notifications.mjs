@@ -160,10 +160,13 @@ async function loadPlace(page) {
   await page.waitForTimeout(1500);
 }
 
-/** Open the page the bell is on (the phone header is not drawn over the sky hero, so use a plain page). */
-async function gotoBellPage(page, phone) {
-  if (!phone) return;
-  await page.goto(`${BASE}/about`, { waitUntil: "domcontentloaded" });
+/**
+ * The bell is in the Quick actions group, on every page and at every width,
+ * the top of a phone place page included (it used to be missing there, where
+ * the header is not drawn over the sky), so the place the check loaded is the
+ * page it uses.
+ */
+async function gotoBellPage(page) {
   await page.waitForSelector("[data-notifications-trigger]", {
     timeout: 20000,
   });
@@ -230,7 +233,7 @@ async function checkViewport(browser, viewport) {
   // ---------------------------------------------------------------- alerts
   state.scenario = "alerts";
   await loadPlace(page);
-  await gotoBellPage(page, phone);
+  await gotoBellPage(page);
 
   await page
     .waitForSelector("[data-alert-dot]", { timeout: 15000 })
@@ -293,9 +296,9 @@ async function checkViewport(browser, viewport) {
     .locator('[role="dialog"] button')
     .allInnerTexts();
   note(
-    `${tag} Report flooding is offered on flooding alerts; Report wildfire only once the type exists`,
+    `${tag} Report flooding and Report wildfire are both offered (the wildfire type shipped in #514)`,
     buttonsText.includes("Report flooding") &&
-      !buttonsText.includes("Report wildfire"),
+      buttonsText.includes("Report wildfire"),
     JSON.stringify(buttonsText.filter((b) => /Report/.test(b))),
   );
   note(
@@ -445,6 +448,10 @@ async function checkViewport(browser, viewport) {
   await page.waitForSelector("[data-notifications-trigger]", {
     timeout: 20000,
   });
+  // The place page is hydrated once its hero has replaced the skeleton.
+  await page.waitForSelector("[data-sky-hero]:not([data-skeleton])", {
+    timeout: 60000,
+  });
   await page.waitForTimeout(2500);
   await page.locator("[data-notifications-trigger]").first().click();
   await dialog(page).waitFor({ state: "visible" });
@@ -487,7 +494,7 @@ async function checkViewport(browser, viewport) {
   const quiet = await newContext(browser, viewport, phone, "denied");
   const quietPage = await quiet.newPage();
   await loadPlace(quietPage);
-  await gotoBellPage(quietPage, phone);
+  await gotoBellPage(quietPage);
   await quietPage.waitForTimeout(3500);
   const quietDot = await quietPage.locator("[data-alert-dot]").count();
   note(
@@ -513,9 +520,9 @@ async function checkViewport(browser, viewport) {
     .locator('[role="dialog"] button')
     .allInnerTexts();
   note(
-    `${tag} the empty state offers Report flooding (Report wildfire once the type exists)`,
+    `${tag} the empty state offers Report flooding and Report wildfire (the wildfire type shipped in #514)`,
     emptyButtons.includes("Report flooding") &&
-      !emptyButtons.includes("Report wildfire"),
+      emptyButtons.includes("Report wildfire"),
     JSON.stringify(emptyButtons),
   );
   await quietPage.getByRole("button", { name: "Alert settings" }).click();
@@ -555,10 +562,14 @@ async function checkPhoneEntries(browser) {
   const context = await newContext(browser, viewport, true);
   const page = await context.newPage();
   await loadPlace(page);
-  // The account menu: the first slot of the bottom bar (the avatar), which
-  // opens upward (the phone header is not drawn over the sky).
+  // The account menu: the last slot of the bottom bar (the avatar), which
+  // opens upward from the bar.
   await page.click(ACCOUNT_TRIGGER);
-  await page.getByRole("button", { name: "Notifications" }).click();
+  // The menu's own row (the group's bell is also a "Notifications" button).
+  await page
+    .locator('[data-slot="account-menu-panel"]')
+    .getByRole("button", { name: "Notifications" })
+    .click();
   await dialog(page).waitFor({ state: "visible", timeout: 10000 });
   await page.waitForSelector("article", { timeout: 10000 });
   note(
@@ -567,15 +578,18 @@ async function checkPhoneEntries(browser) {
   );
   await page.keyboard.press("Escape");
   await page.waitForTimeout(700);
+  // The row that opened the centre is gone (its menu closed with the choice),
+  // so focus goes to the Notifications control that is on screen: the bell in
+  // the Quick actions group, which every page has.
   const focus = await page.evaluate(() => {
     const a = document.activeElement;
     return a
-      ? `${a.tagName.toLowerCase()}${a.closest('[data-slot="mzizi-bottom-nav"]') ? " in the bar" : ""}`
+      ? `${a.tagName.toLowerCase()}${a.hasAttribute("data-notifications-trigger") ? " (the bell)" : ""}`
       : "none";
   });
   note(
-    `${tag} closing the sheet gives focus back to the menu's trigger`,
-    /summary in the bar/.test(focus),
+    `${tag} closing the sheet the menu's row opened gives focus to the bell`,
+    /\(the bell\)/.test(focus),
     focus,
   );
 

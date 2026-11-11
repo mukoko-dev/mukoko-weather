@@ -4,7 +4,10 @@
  * mukoko-news island), the account menu behind the bar's last slot that holds
  * the destinations the island does not show, and Locations, the round list
  * link in the header's pill (owner, 2026-11-11: the avatar is the far right of
- * the bar, My Location is second from the left, Locations is at the top right).
+ * the bar, My Location is second from the left, Locations is at the top right)
+ * and now the Quick actions group, which the header mounts once beside itself
+ * (src/components/layout/QuickActions.tsx; its render and tone are held by
+ * QuickActions.render.test.ts and src/lib/sky-hero.test.ts).
  * Desktop header stays as it was. Reads source directly (no
  * DOM renderer needed for structural checks).
  */
@@ -19,6 +22,12 @@ const acct = readFileSync(
   "utf-8",
 );
 const nav = readFileSync(resolve(__dirname, "MobileNav.tsx"), "utf-8");
+/** The group and the bell the header mounts (one mount, for every page). */
+const group = readFileSync(resolve(__dirname, "QuickActions.tsx"), "utf-8");
+const bell = readFileSync(
+  resolve(__dirname, "NotificationsButton.tsx"),
+  "utf-8",
+);
 /** The notifications centre: the sheet on phones, the popover under the bell. */
 const centre = readFileSync(
   resolve(__dirname, "../notifications/NotificationsCentre.tsx"),
@@ -352,7 +361,9 @@ describe("Header — the phone menu is the Mzizi account menu, filled with the h
     expect(source).not.toContain('trigger="ellipsis"');
     expect(menu).not.toContain("More options");
     expect(menu).not.toContain("Ellipsis");
-    expect(source).toContain("<LocationsLink");
+    // Locations is the Quick actions group's third control, not the header's.
+    expect(group).toContain("<LocationsLink");
+    expect(source).not.toContain("<LocationsLink");
   });
 
   it("lists the header's destinations from the shared list (Shamwari behind its flag)", () => {
@@ -431,15 +442,16 @@ describe("Header — nothing the header offers is lost in the phone menu", () =>
     expect(menu).toContain("href={weatherMapHref(mapSlug)}");
     expect(menu).toContain("Choose a location for the weather map");
 
-    // Notifications: the header's bell and the menu row call themselves the
+    // Notifications: the group's bell and the menu row call themselves the
     // same thing and open the SAME centre (the store's openNotifications).
-    expect(source).toContain("NOTIFICATIONS_LABEL");
+    expect(bell).toContain("NOTIFICATIONS_LABEL");
     expect(menu).toContain("{NOTIFICATIONS_LABEL}");
     expect(nav).toContain('export const NOTIFICATIONS_LABEL = "Notifications"');
-    expect(source).toContain("openNotifications");
+    expect(bell).toContain("openNotifications");
     expect(menu).toContain("openNotifications()");
     // The old "No notifications yet" stub is gone from both.
     expect(source).not.toContain("No notifications yet");
+    expect(bell).not.toContain("No notifications yet");
     expect(menu).not.toContain("No notifications yet");
     expect(nav).not.toContain("No notifications yet");
 
@@ -482,36 +494,54 @@ describe("Header — nothing the header offers is lost in the phone menu", () =>
   });
 });
 
-describe("Header — header pill on phones", () => {
-  it("hides the duplicate map button on phones (the bottom bar has it)", () => {
-    expect(source).toContain('className="bee hidden sm:flex"');
-  });
-
-  it("holds Locations (the round list link, phones only) where the ⋯ account menu was", () => {
+describe("Header — the Quick actions group (one group on every page)", () => {
+  it("mounts the group once, beside <header>, and leaves the row room for it", () => {
     expect(source).toContain(
-      'import { LocationsLink } from "@/components/layout/LocationsLink"',
+      'import { QuickActions } from "@/components/layout/QuickActions"',
     );
-    expect(source).toContain('className="bee sm:hidden"');
-    expect(source).toContain('iconClassName="text-primary-foreground"');
-    // Before the bell, where the ⋯ was: map (desktop), Locations (phone), bell.
-    expect(source.indexOf("<LocationsLink")).toBeGreaterThan(
-      source.indexOf("href={mapHref}"),
+    expect(source.match(/<QuickActions/g)).toHaveLength(1);
+    // The slot is the group's own width and height, from its tokens.
+    expect(source).toContain("data-quick-actions-slot");
+    expect(source).toContain(
+      "h-[var(--hadeda-height)] w-[var(--hadeda-width)]",
     );
-    expect(source.indexOf("<LocationsLink")).toBeLessThan(
-      source.indexOf("data-notifications-trigger"),
-    );
-    expect(source.match(/<LocationsLink/g)).toHaveLength(1);
+    // No pill, toolbar or bell of its own is left in the header.
+    expect(source).not.toContain('role="toolbar"');
+    expect(source).not.toContain("rounded-full bg-primary p-0.5");
+    expect(source).not.toContain("BellIcon");
+    expect(source).not.toContain("useAlertBadge");
+    expect(source).not.toContain("NotificationsBoundary");
   });
 
-  it("keeps the account icon for `sm` up only: on a phone the avatar is the bottom bar's last slot", () => {
-    expect(source).toContain('className="bee hidden overflow-hidden sm:flex"');
-    const signIn = source.slice(source.indexOf('aria-label="Sign in"'));
-    expect(signIn.slice(0, 120)).toContain('className="bee hidden sm:flex"');
+  it("asks for the auto tone, and solid once its own surface is behind the group (scrolled, from `sm`)", () => {
+    expect(source).toContain('tone={isScrolled && !phone ? "solid" : "auto"}');
+    expect(source).toContain("const phone = useMediaQuery(PHONE_QUERY);");
   });
 
-  it("keeps the desktop text nav unchanged", () => {
+  it("adds the account icon from `md` and Map from `lg` after the three (the bottom bar holds them on a phone)", () => {
+    const extra = source.slice(source.indexOf("extra={"));
+    expect(extra).toContain("href={mapHref}");
+    expect(extra.indexOf("href={mapHref}")).toBeLessThan(
+      extra.indexOf("{authedUser ? ("),
+    );
+    // What the row can hold beside the brand and the nav, measured: Map waits
+    // for 1024px, the account icon for 768px (globals.css has the numbers).
+    expect(extra).toContain('className="bee hidden lg:flex"');
+    expect(extra).toContain('className="bee hidden overflow-hidden md:flex"');
+    const signIn = extra.slice(extra.indexOf('aria-label="Sign in"'));
+    expect(signIn.slice(0, 120)).toContain('className="bee hidden md:flex"');
+    // Their icons take the group's ink (the pill's or the sky's), no colour of their own.
+    expect(extra).not.toContain("text-primary-foreground");
+  });
+
+  it("keeps the desktop text nav, closer together below `lg`, and the wordmark only from `md`", () => {
     expect(source).toContain('aria-label="Main navigation"');
-    expect(source).toContain('className="hidden sm:flex items-center gap-6"');
+    expect(source).toContain(
+      'className="hidden sm:flex items-center gap-4 lg:gap-6"',
+    );
+    expect(source).toContain(
+      '<MukokoLogo wordmarkClassName="hidden md:inline" />',
+    );
   });
 });
 
@@ -542,11 +572,11 @@ describe("Header — My Location (GPS) action", () => {
   });
 });
 
-describe("Header — the bell opens the notifications centre (issue #95, #289)", () => {
+describe("The group's bell opens the notifications centre (issue #95, #289)", () => {
   it("announces as a dialog, not a menu (it has no menuitems)", () => {
     expect(centre).toContain('role="dialog"');
     expect(centre).not.toContain('role="menu"');
-    expect(source).toContain('aria-haspopup="dialog"');
+    expect(bell).toContain('aria-haspopup="dialog"');
     expect(menu).toContain('aria-haspopup="dialog"');
   });
 
@@ -555,7 +585,7 @@ describe("Header — the bell opens the notifications centre (issue #95, #289)",
     expect(centre).toContain("NOTIFICATIONS_TRIGGER_ATTR");
     expect(centre).toContain(".focus()");
     // The bell carries the attribute the centre looks for.
-    expect(source).toContain("data-notifications-trigger");
+    expect(bell).toContain("data-notifications-trigger");
   });
 
   it("cleans up both the outside-press and keydown listeners", () => {
@@ -570,20 +600,22 @@ describe("Header — the bell opens the notifications centre (issue #95, #289)",
   });
 
   it("is mounted on demand, behind the store's notificationsOpen, and lazily loaded", () => {
-    expect(source).toContain("const NotificationsCentre = lazy(");
-    expect(source).toContain("{notificationsOpen && (");
-    expect(source).toContain(
-      "<NotificationsCentre anchorRef={notificationsRef} />",
-    );
+    expect(bell).toContain("const NotificationsCentre = lazy(");
+    expect(bell).toContain("{notificationsOpen && (");
+    expect(bell).toContain("<NotificationsCentre anchorRef={anchorRef} />");
+    expect(source).not.toContain("NotificationsCentre");
   });
 
   it("is isolated: a failed chunk or a render error never reaches the page's error boundary", () => {
-    expect(source).toContain(
+    expect(bell).toContain(
       "<NotificationsBoundary onClose={closeNotifications}>",
     );
     // The boundary sits outside the Suspense that loads the lazy centre.
-    expect(source.indexOf("<NotificationsBoundary")).toBeLessThan(
-      source.indexOf("<Suspense>\n                      <NotificationsCentre"),
+    expect(bell.indexOf("<NotificationsBoundary")).toBeLessThan(
+      bell.indexOf("<Suspense>"),
+    );
+    expect(bell.indexOf("<Suspense>")).toBeLessThan(
+      bell.indexOf("<NotificationsCentre anchorRef"),
     );
     const boundary = readFileSync(
       resolve(__dirname, "../notifications/NotificationsBoundary.tsx"),
@@ -597,11 +629,11 @@ describe("Header — the bell opens the notifications centre (issue #95, #289)",
   });
 
   it("shows a dot with the count in the bell's name, never the count alone", () => {
-    expect(source).toContain("useAlertBadge()");
-    expect(source).toContain("data-alert-dot");
-    expect(source).toMatch(/alertCount === 1 \? "alert" : "alerts"/);
+    expect(bell).toContain("useAlertBadge()");
+    expect(bell).toContain("data-alert-dot");
+    expect(bell).toMatch(/alertCount === 1 \? "alert" : "alerts"/);
     // The dot is decorative.
-    expect(source).toMatch(/aria-hidden="true"\s+data-alert-dot/);
+    expect(bell).toMatch(/aria-hidden="true"\s+data-alert-dot/);
   });
 });
 
@@ -661,14 +693,15 @@ describe("PhoneMenu and LocationsLink — the avatar is the bar's far right, Loc
     expect(hero).not.toContain("PhoneMenu");
   });
 
-  it("Locations is one component with two homes: the hero's phone icon group and the header's pill", () => {
-    expect(source.match(/<LocationsLink/g)).toHaveLength(1);
-    expect(hero.match(/<LocationsLink/g)).toHaveLength(1);
-    // In the hero it is a round card-surface control in the fixed phone icon
-    // group (.hadeda) beside Share.
-    expect(hero).toContain('<LocationsLink className="duiker" />');
-    // Neither home hand-rolls the list link, and My Location is not up there.
+  it("Locations is one component with one home: the third control of the Quick actions group", () => {
+    expect(group.match(/<LocationsLink/g)).toHaveLength(1);
+    expect(source).not.toContain("<LocationsLink");
+    expect(hero).not.toContain("<LocationsLink");
+    // It is the group's round .bee control, like Share and Notifications.
+    expect(group).toContain('<LocationsLink className="bee" />');
+    // Nobody hand-rolls the list link, and My Location is not up there.
     expect(source).not.toContain("ListIcon");
+    expect(group).not.toContain("ListIcon");
     expect(hero).not.toMatch(/<Link\b[^>]*href="\/locations"/);
     expect(source).not.toContain("MyLocationLink");
     expect(hero).not.toContain("MyLocationLink");
@@ -705,6 +738,15 @@ describe("Header over the sky hero", () => {
     expect(source).toContain("<MobileNav");
   });
 
+  it("hides only the <header> on phones: the Quick actions group is its sibling, so it stays, clear, over the sky", () => {
+    expect(source.indexOf("<QuickActions")).toBeGreaterThan(
+      source.indexOf("</header>"),
+    );
+    expect(css).not.toMatch(
+      /\[data-sky-hero\][^{]*\.hadeda[^{]*\{[^}]*display:\s*none/,
+    );
+  });
+
   it("gains its blurred surface only after scroll (unchanged)", () => {
     expect(source).toContain("bg-surface-base/70 backdrop-blur-xl");
   });
@@ -738,11 +780,11 @@ describe("Header over the sky: white text never reaches the popovers", () => {
   });
 
   it("keeps the notifications popover and the ⋯ menu outside the ink scopes, on a card surface", () => {
-    // The popover is rendered by the centre, inside the bell's wrapper, which
-    // follows both ink elements (the logo wrapper and the desktop nav).
-    expect(source.indexOf("<NotificationsCentre")).toBeGreaterThan(
-      source.indexOf("</nav>"),
-    );
+    // The popover is rendered by the centre, inside the bell's wrapper, in the
+    // group: outside the <header> and its ink elements altogether.
+    expect(source).not.toContain("<NotificationsCentre");
+    expect(bell).toContain("<NotificationsCentre");
+    expect(bell).not.toContain("data-header-ink");
     const dialog = centre.indexOf('role="dialog"');
     expect(dialog).toBeGreaterThan(-1);
     expect(centre.slice(dialog, dialog + 900)).toContain("bg-surface-card");

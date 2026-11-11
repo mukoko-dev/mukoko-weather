@@ -17,6 +17,13 @@ import {
  * Pages still render `<Header />` (and the loaders `<HeaderSkeleton />`); while
  * the chrome is claimed here those render nothing, so a page can be moved
  * over one at a time and never shows two headers.
+ *
+ * It does NOT own the Quick actions group (Share, Notifications, Locations):
+ * whatever renders the site header draws the group with it (SiteHeader), and
+ * the weather map, which has no header, draws its own. AppChrome mounts no
+ * group of its own and reads no path to decide who does, so a page that
+ * renders a header under a path AppChrome treats as immersive (the not-found
+ * page of an unknown place's map) gets one group, not two.
  */
 export function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

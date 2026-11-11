@@ -121,9 +121,9 @@ describe("AccountMenu — trigger variants", () => {
     const html = render({
       name: "A",
       initials: "A",
-      triggerClassName: "kestrel-round",
+      triggerClassName: "plover",
     });
-    expect(html).toMatch(/<summary[^>]*class="[^"]*kestrel-round/);
+    expect(html).toMatch(/<summary[^>]*class="[^"]*plover/);
     // Not clipped: a photo crops itself, and a clip would cut a .plover tap area.
     expect(html.match(/<summary[^>]*class="([^"]*)"/)![1]).not.toContain(
       "overflow-hidden",

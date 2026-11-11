@@ -107,6 +107,20 @@ export async function proxyApi(
   });
 }
 
+/**
+ * Answer the weather tiles host with a 1x1 PNG, so a check that opens the map
+ * never spends the tile provider's quota (nothing leaves the machine).
+ */
+export async function stubTiles(context) {
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  await context.route("**/weather-tiles.mukoko.com/**", (route) =>
+    route.fulfill({ status: 200, contentType: "image/png", body: png }),
+  );
+}
+
 /** Install the service worker and let it take control of the page (visit, wait, reload). */
 export async function installServiceWorker(page, path = "/") {
   await page.goto(BASE + path, { waitUntil: "domcontentloaded" });

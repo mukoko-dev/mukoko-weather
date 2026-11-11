@@ -50,8 +50,14 @@ describe("WeatherBackdrop — performance discipline", () => {
     expect(factory).toContain("config.maxPixelRatio");
   });
 
-  it("drops the still rain streaks and stars under the 2D effects, which draw their own", () => {
-    expect(source).toContain('texture={mode === "canvas" ? null : texture}');
+  it("drops the still rain streaks and stars once a live layer draws the same thing, so nothing is shown twice", () => {
+    expect(source).toContain(
+      "texture={stillTexture(texture, mode, sceneType, live)}",
+    );
+    // The layer says whether it is really drawing, and the still sky returns
+    // between scenes, so a failed or not-yet-started layer never leaves it bare.
+    expect(source).toContain("setLive(result.live)");
+    expect(source).toContain("setLive(false)");
   });
 
   it("pauses/resumes on tab visibility changes", () => {

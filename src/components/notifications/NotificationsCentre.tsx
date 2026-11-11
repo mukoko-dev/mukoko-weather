@@ -66,8 +66,9 @@ function focusTargetFor(opener: Element | null): HTMLElement | null {
   ) {
     return opener;
   }
-  // The first one on screen: the header's bell is not drawn over the sky hero
-  // on a phone, where the account menu is the bottom bar's last slot.
+  // The first one on screen: the bell is in the Quick actions group, on every
+  // page with it; the account menu (the phone bottom bar's last slot) is the
+  // fallback when no bell is drawn.
   const firstVisible = (selector: string): HTMLElement | null =>
     [...document.querySelectorAll(selector)].find(isVisible) ?? null;
   return (

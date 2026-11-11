@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo, type ReactNode } from "react";
-import { LocationsLink } from "@/components/layout/LocationsLink";
-import { ShareControl } from "@/components/weather/ShareControl";
+import { useState, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useRegisterSkyHero } from "@/lib/sky-hero";
 import { NavigationIcon, WeatherIcon, nightIcon } from "@/lib/weather-icons";
 import {
   weatherCodeToInfo,
@@ -168,6 +167,13 @@ export function CurrentConditions({
 
   const localTime = heroLocalTime(now, utcOffsetSeconds);
 
+  // Tell the Quick actions group (mounted once, in the layout) where this
+  // hero's first line of content is and which place it shows: the group is
+  // clear while only bare sky is behind it (until that line scrolls up to it),
+  // and its Share names this place.
+  const contentRef = useRef<HTMLParagraphElement>(null);
+  useRegisterSkyHero(contentRef, { name: locationName, slug });
+
   return (
     <section
       aria-labelledby="current-conditions-heading"
@@ -175,35 +181,30 @@ export function CurrentConditions({
       data-sky={family}
       className="relative text-[var(--sky-fg)]"
     >
-      {/* Top row — the breadcrumb at the left; Share at the right from `sm` up.
-          On phones the site header is not drawn over the sky (see globals.css,
-          [data-sky-hero]), so Share and Locations (the round list link to
-          `/locations`, owner 2026-11-11; the account avatar is the bottom
-          bar's last slot) live in ONE round icon
-          group (`.hadeda`) fixed to the top of the screen: it stays in reach
-          while the page scrolls, and the breadcrumb leaves room for it. Round
-          49px controls: content stays distinct from controls. */}
+      {/* Top row — the breadcrumb at the left. The Quick actions group
+          (Share, Notifications, Locations: the same on every page, owner
+          2026-11-11) is not drawn here: the layout mounts it once, fixed to
+          the top right of the screen, clear over this sky and solid after the
+          page scrolls past it (see QuickActions). On phones the breadcrumb
+          leaves room for it (`--hadeda-reserve`, sized from the group's own
+          tokens); from `sm` the group is in the site header row above, so the
+          trail has the whole row. Round 49px controls: content stays
+          distinct from controls. */}
       <div className="flex items-center justify-between gap-3 pt-1 pr-[env(safe-area-inset-right,0px)] pl-[env(safe-area-inset-left,0px)]">
         <div className="min-h-[var(--touch-target-min)] min-w-0 pr-[var(--hadeda-reserve)] text-[length:var(--text-body-sm)] leading-[var(--text-body-sm-leading)] text-[var(--sky-fg-dim)] sm:pr-0">
           {breadcrumb}
-        </div>
-        <div className="hidden shrink-0 sm:block">
-          <ShareControl slug={slug} locationName={locationName} variant="sky" />
-        </div>
-        <div className="hadeda sm:hidden">
-          <ShareControl
-            slug={slug}
-            locationName={locationName}
-            variant="card"
-          />
-          <LocationsLink className="duiker" />
         </div>
       </div>
       <div className="flex flex-col items-center pt-4 pb-[26px] text-center">
         {/* Eyebrow: MY LOCATION / HOME, else the place's own clock. The line is
             always reserved so the clock arriving after mount never shifts
-            the page. */}
-        <p className="flex min-h-[calc(var(--text-caption)*var(--text-caption-leading))] flex-wrap items-center justify-center gap-x-2 font-mono text-[length:var(--text-caption)] leading-[var(--text-caption-leading)] font-semibold uppercase tracking-widest text-[var(--sky-fg-dim)]">
+            the page. It is the hero's first line of content, the one the Quick
+            actions group watches (the block's own padding above it is bare
+            sky, so the block's edge is not the line's). */}
+        <p
+          ref={contentRef}
+          className="flex min-h-[calc(var(--text-caption)*var(--text-caption-leading))] flex-wrap items-center justify-center gap-x-2 font-mono text-[length:var(--text-caption)] leading-[var(--text-caption-leading)] font-semibold uppercase tracking-widest text-[var(--sky-fg-dim)]"
+        >
           {badges.length > 0
             ? badges.map((badge, i) => (
                 <span key={badge} className="inline-flex items-center gap-2">

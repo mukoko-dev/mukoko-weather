@@ -10,7 +10,14 @@ import { useEffect, useState } from "react";
  * Defaults to the light variant for SSR; switches client-side to match
  * the active theme by watching the data-theme attribute on <html>.
  */
-export function MukokoLogo({ className = "" }: { className?: string }) {
+export function MukokoLogo({
+  className = "",
+  wordmarkClassName = "",
+}: {
+  className?: string;
+  /** Extra classes for the "weather" wordmark (the header hides it below `md`). */
+  wordmarkClassName?: string;
+}) {
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
@@ -40,7 +47,9 @@ export function MukokoLogo({ className = "" }: { className?: string }) {
         className="h-8 w-8 shrink-0"
         priority
       />
-      <span className="font-heading font-bold tracking-tight text-text-primary leading-none">
+      <span
+        className={`font-heading font-bold tracking-tight text-text-primary leading-none ${wordmarkClassName}`.trim()}
+      >
         weather
       </span>
     </span>

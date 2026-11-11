@@ -46,7 +46,12 @@ vi.mock("next/dynamic", () => ({
       return null;
     },
 }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push() {} }) }));
+// The dashboard draws the Quick actions group (its Locations link reads the
+// route), so the mock answers with the page this test stands in for.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push() {} }),
+  usePathname: () => "/harare/map",
+}));
 vi.mock("next/link", () => ({
   default: ({
     href,
