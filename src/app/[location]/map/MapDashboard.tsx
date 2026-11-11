@@ -18,7 +18,7 @@ import {
   LayerIcon,
 } from "@/components/weather/map/WeatherLayerPanel";
 import { MapTimeline } from "@/components/weather/map/MapTimeline";
-import { LayerCapacityNote } from "@/components/weather/map/LayerCapacityNote";
+import { LayerCapacityStatus } from "@/components/weather/map/LayerCapacityNote";
 import { useLayerCapacity } from "@/components/weather/map/use-layer-capacity";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { useMziziHarness } from "@/lib/harness";
@@ -27,6 +27,7 @@ import {
   resolveUtcOffsetSeconds,
 } from "@/lib/location-card";
 import { fetchPlaceOffset, type PlaceOffset } from "@/lib/map-timeline";
+import { fallbackLayerLabel } from "@/lib/map-capacity";
 import { detectUserLocation } from "@/lib/geolocation";
 import {
   AQI_BAND_LABELS,
@@ -120,6 +121,15 @@ function subscribeNoop(): () => void {
 /** The zoom the map opens at (also the zoom its first overlay tile is asked at). */
 const MAP_ZOOM = 8;
 
+/** Puts keyboard focus on the pressed layer chip (after the busy note, and its button, went away). */
+function focusActiveChip(): void {
+  document
+    .querySelector<HTMLElement>(
+      '[role="group"][aria-label="Map layers"] [aria-pressed="true"]',
+    )
+    ?.focus();
+}
+
 /** Every map control icon: one size, one stroke (Lucide default). */
 const ICON_CLASS = "h-5 w-5";
 
@@ -159,18 +169,24 @@ export function MapDashboard({ location }: MapDashboardProps) {
   // A choice made in this visit overrides the stored value.
   const [chosenLayer, setChosenLayer] = useState<string | null>(null);
   const requestedLayer = chosenLayer ?? storedLayer;
-  // The Tomorrow.io layers (Rain, Temperature, Wind, Cloud) run on a small free
-  // quota; when it is spent the tiles Worker answers with a blank tile. One
-  // tile is asked for first (at most once a minute per layer); while the layer
-  // is busy the default layer is shown instead and the choice is kept, so the
-  // layer comes back by itself (#542).
+  // The Tomorrow.io layers (Rain, Temperature, Wind, Cloud) run on one small
+  // free quota; when it is spent the tiles Worker answers with a blank tile.
+  // One tile is asked for first (one verdict for all four layers, kept a
+  // minute); while they are busy the default layer is shown instead and the
+  // choice is kept. Nothing asks again by itself: the layer is tried again when
+  // the person changes layer or place, reloads, or taps "Try again" (#542).
   const capacity = useLayerCapacity({
     layer: requestedLayer,
     lat: location.lat,
     lon: location.lon,
     mapZoom: MAP_ZOOM,
+    announce,
+    restoreFocus: focusActiveChip,
   });
   const recheckCapacity = capacity.recheck;
+  const onRecheck = useCallback(() => {
+    void recheckCapacity();
+  }, [recheckCapacity]);
   const activeLayer = capacity.layer;
   const [sheetOpen, setSheetOpen] = useState(true);
   // null = the layer's default frame (Now for forecasts, newest for imagery).
@@ -326,12 +342,6 @@ export function MapDashboard({ location }: MapDashboardProps) {
 
   const handleLayerChange = useCallback(
     (id: string) => {
-      // The chip of the busy layer is not the active one, so a tap on it
-      // reaches here: it means "look again", not "switch".
-      if (id === requestedLayer) {
-        recheckCapacity();
-        return;
-      }
       setChosenLayer(id);
       setPlaying(false);
       setStepChoice(null);
@@ -339,7 +349,7 @@ export function MapDashboard({ location }: MapDashboardProps) {
       const next = getMapChip(id);
       if (next) announce(`${next.label} layer, ${next.legend.unit}`);
     },
-    [announce, requestedLayer, recheckCapacity],
+    [announce],
   );
 
   const handleModelChange = useCallback((id: string) => {
@@ -690,19 +700,17 @@ export function MapDashboard({ location }: MapDashboardProps) {
           </button>
         </div>
 
-        {/* A Tomorrow.io layer with no live tiles right now: the default layer
-            is on screen and this says so. In the always-visible header, so it
-            is read even when the sheet is folded. */}
-        {capacity.busy && (
-          <LayerCapacityNote
-            layerId={requestedLayer}
-            fallbackLabel={
-              getMapChip(DEFAULT_LAYER)?.label ?? "the default layer"
-            }
-            rechecking={capacity.rechecking}
-            onRetry={capacity.recheck}
-          />
-        )}
+        {/* The live layers' capacity: the note while the default layer stands in
+            for a busy Tomorrow.io one, the checking line while the overlay is
+            held. In the always-visible header, so it is seen with the sheet
+            folded. */}
+        <LayerCapacityStatus
+          layerId={requestedLayer}
+          fallbackLabel={fallbackLayerLabel()}
+          state={capacity}
+          recent={capacity.recent}
+          onRetry={onRecheck}
+        />
 
         {/* A layer with limits (wildfire) keeps its note, the day on screen and
             what the data cannot tell you together, at full width (under the
@@ -733,7 +741,10 @@ export function MapDashboard({ location }: MapDashboardProps) {
           <ChartErrorBoundary name="map layers">
             <WeatherLayerPanel
               activeLayer={activeLayer}
+              chosenLayer={requestedLayer}
               onLayerChange={handleLayerChange}
+              onRecheck={onRecheck}
+              visible={sheetOpen}
               locationSlug={location.slug}
               chips={chips}
               models={modelOn ? MAP_MODELS : undefined}

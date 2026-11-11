@@ -6,8 +6,6 @@
  * Worker's own source, so the detection is tied to the real thing.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readFileSync } from "fs";
-import { resolve } from "path";
 import {
   CAPACITY_PROBE_TIMEOUT_MS,
   CAPACITY_RECHECK_FLOOR_MS,
@@ -16,6 +14,7 @@ import {
   capacityNoteText,
   capacityState,
   createCapacityProbe,
+  fallbackLayerLabel,
   isPlaceholderPng,
   isTomorrowLayer,
   probeTileFor,
@@ -30,62 +29,13 @@ import {
   WEATHER_OVERLAY_MIN_ZOOM,
   WEATHER_TILES_ORIGIN,
 } from "./map-layers";
-
-/** The Worker's 68-byte placeholder, parsed out of weather-core's source. */
-function workerPlaceholder(): Uint8Array {
-  const source = readFileSync(
-    resolve(__dirname, "../../workers/crates/weather-core/src/tiles.rs"),
-    "utf-8",
-  );
-  const decl = source.slice(source.indexOf("pub const TRANSPARENT_PNG"));
-  const body = decl.slice(decl.indexOf("= [") + 3, decl.indexOf("];"));
-  const bytes = [
-    ...body.replace(/\/\/.*$/gm, "").matchAll(/0x([0-9A-Fa-f]{2})/g),
-  ];
-  return Uint8Array.from(bytes.map((m) => parseInt(m[1], 16)));
-}
-
-/** A PNG header for a `width` x `height` picture (enough for the size check). */
-function pngHeader(width: number, height: number): Uint8Array {
-  const bytes = new Uint8Array(33);
-  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-  const view = new DataView(bytes.buffer);
-  view.setUint32(8, 13);
-  bytes.set([0x49, 0x48, 0x44, 0x52], 12); // IHDR
-  view.setUint32(16, width);
-  view.setUint32(20, height);
-  return bytes;
-}
-
-function response(
-  init: {
-    status?: number;
-    headers?: Record<string, string>;
-    body?: Uint8Array;
-  } = {},
-): ProbeResponse {
-  const status = init.status ?? 200;
-  const headers = new Map(
-    Object.entries(init.headers ?? {}).map(([k, v]) => [k.toLowerCase(), v]),
-  );
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    headers: { get: (name) => headers.get(name.toLowerCase()) ?? null },
-    arrayBuffer: async () => {
-      const body = init.body ?? pngHeader(256, 256);
-      return body.buffer.slice(
-        body.byteOffset,
-        body.byteOffset + body.byteLength,
-      ) as ArrayBuffer;
-    },
-  };
-}
-
-const BLANK = (): ProbeResponse =>
-  response({ headers: { "X-Map-Tile": "empty" }, body: workerPlaceholder() });
-const REAL = (): ProbeResponse =>
-  response({ headers: { "X-Cache": "HIT", "X-Map-Layer": "temperature" } });
+import {
+  BLANK,
+  REAL,
+  pngHeader,
+  probeResponse as response,
+  workerPlaceholder,
+} from "./map-capacity-fixtures";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -230,12 +180,22 @@ describe("verdictFromResponse", () => {
 });
 
 describe("capacityState", () => {
+  const nothing = { verdict: null, inFlight: false } as const;
+
   it("holds a Tomorrow.io layer until its first answer", () => {
-    expect(capacityState("precipitationIntensity", null)).toEqual({
+    expect(capacityState("precipitationIntensity", nothing)).toEqual({
       layer: "precipitationIntensity",
       busy: false,
       held: true,
+      checking: false,
     });
+    // ...and says it is checking only once a request is really out.
+    expect(
+      capacityState("precipitationIntensity", {
+        verdict: null,
+        inFlight: true,
+      }),
+    ).toMatchObject({ held: true, checking: true });
   });
 
   it("swaps a busy Tomorrow.io layer for the default, whichever of the four", () => {
@@ -245,32 +205,61 @@ describe("capacityState", () => {
       "windSpeed",
       "cloudCover",
     ]) {
-      expect(capacityState(id, "busy")).toEqual({
+      expect(capacityState(id, { verdict: "busy", inFlight: false })).toEqual({
         layer: DEFAULT_LAYER,
         busy: true,
         held: false,
+        checking: false,
       });
     }
   });
 
+  it("keeps the fallback on screen while a busy verdict is asked again", () => {
+    expect(
+      capacityState("temperature", { verdict: "busy", inFlight: true }),
+    ).toEqual({
+      layer: DEFAULT_LAYER,
+      busy: true,
+      held: false,
+      checking: true,
+    });
+  });
+
   it("keeps the layer when a tile came back, or when the answer could not be read", () => {
     for (const verdict of ["live", "unknown"] as const) {
-      expect(capacityState("temperature", verdict)).toEqual({
+      expect(
+        capacityState("temperature", { verdict, inFlight: false }),
+      ).toEqual({
         layer: "temperature",
         busy: false,
         held: false,
+        checking: false,
       });
     }
+  });
+
+  it("holds the overlay again while an expired verdict is asked again", () => {
+    expect(
+      capacityState("temperature", { verdict: "live", inFlight: true }),
+    ).toEqual({
+      layer: "temperature",
+      busy: false,
+      held: true,
+      checking: true,
+    });
   });
 
   it("never holds or swaps a layer that needs no Tomorrow.io tile", () => {
     for (const id of [DEFAULT_LAYER, "airQuality", "wildfire", "modelWind"]) {
       for (const verdict of [null, "live", "busy", "unknown"] as const) {
-        expect(capacityState(id, verdict)).toEqual({
-          layer: id,
-          busy: false,
-          held: false,
-        });
+        for (const inFlight of [false, true]) {
+          expect(capacityState(id, { verdict, inFlight })).toEqual({
+            layer: id,
+            busy: false,
+            held: false,
+            checking: false,
+          });
+        }
       }
     }
   });
@@ -279,9 +268,13 @@ describe("capacityState", () => {
     expect(MAP_CHIPS.some((c) => c.id === DEFAULT_LAYER)).toBe(true);
     expect(isTomorrowLayer(DEFAULT_LAYER)).toBe(false);
     // A different fallback can be asked for.
-    expect(capacityState("windSpeed", "busy", "wildfire").layer).toBe(
-      "wildfire",
-    );
+    expect(
+      capacityState(
+        "windSpeed",
+        { verdict: "busy", inFlight: false },
+        "wildfire",
+      ).layer,
+    ).toBe("wildfire");
   });
 });
 
@@ -293,6 +286,7 @@ describe("the note's words", () => {
     expect(capacityNoteText("windSpeed", "Satellite")).toBe(
       "Live wind map is busy right now. Showing satellite instead.",
     );
+    expect(fallbackLayerLabel()).toBe("Satellite");
   });
 
   it("has a subject for each chip that can be busy, and a safe one for any other", () => {
@@ -309,117 +303,149 @@ describe("the note's words", () => {
 
 describe("createCapacityProbe", () => {
   const place = { lat: -17.8292, lon: 31.0522, mapZoom: 8 };
+  const FOUR = [
+    "precipitationIntensity",
+    "temperature",
+    "windSpeed",
+    "cloudCover",
+  ];
 
   function harness(answer: () => ProbeResponse | Promise<ProbeResponse>) {
     let t = 1_000_000;
-    const calls: string[] = [];
+    const calls: { url: string; cache?: RequestCache }[] = [];
     const probe = createCapacityProbe({
       now: () => t,
-      fetch: async (url) => {
-        calls.push(url);
+      fetch: async (url, init) => {
+        calls.push({ url, cache: init?.cache });
         return answer();
       },
     });
     return { probe, calls, advance: (ms: number) => (t += ms) };
   }
 
-  it("asks for ONE tile of the layer: the one under the place, from the tiles Worker", async () => {
+  it("asks for ONE tile: the one under the place, from the tiles Worker", async () => {
     const { probe, calls } = harness(BLANK);
     expect(
       await probe.check({ layer: "precipitationIntensity", ...place }),
     ).toBe("busy");
-    expect(calls).toEqual([
+    expect(calls.map((c) => c.url)).toEqual([
       `${WEATHER_TILES_ORIGIN}/v1/map-tiles?z=8&x=150&y=140&layer=precipitationIntensity`,
     ]);
   });
 
-  it("answers from memory for a minute: no request, however often it is asked", async () => {
+  it("has ONE verdict for all four layers: the quota is one key, so a minute's asking covers them all", async () => {
     const { probe, calls, advance } = harness(BLANK);
-    await probe.check({ layer: "temperature", ...place });
-    for (let i = 0; i < 20; i++) {
-      advance(1_000);
-      expect(await probe.check({ layer: "temperature", ...place })).toBe(
-        "busy",
-      );
+    // Switching between the four chips, over and over, within the minute.
+    for (let round = 0; round < 3; round++) {
+      for (const layer of FOUR) {
+        expect(await probe.check({ layer, ...place })).toBe("busy");
+        advance(1_000);
+      }
     }
     expect(calls).toHaveLength(1);
-    // 20 s later: still inside the minute.
-    expect(CAPACITY_VERDICT_TTL_MS).toBe(60_000);
   });
 
-  it("asks the browser's cache normally, but never takes 'Try again' from it (the placeholder is kept 30 s)", async () => {
-    const inits: unknown[] = [];
-    let t = 0;
+  it("a live verdict from any of the four is live for all four", async () => {
+    const { probe, calls } = harness(REAL);
+    expect(await probe.check({ layer: "windSpeed", ...place })).toBe("live");
+    for (const layer of FOUR)
+      expect(await probe.check({ layer, ...place })).toBe("live");
+    expect(calls).toHaveLength(1);
+  });
+
+  it("answers from memory up to the minute, and asks again after it", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-11T10:00:00Z"));
+    let answer: () => ProbeResponse = BLANK;
+    const calls: string[] = [];
+    // The real clock and the default settings, not injected ones.
     const probe = createCapacityProbe({
-      now: () => t,
-      fetch: async (_url, init) => {
-        inits.push(init?.cache);
+      fetch: async (url) => {
+        calls.push(url);
+        return answer();
+      },
+    });
+    expect(await probe.check({ layer: "temperature", ...place })).toBe("busy");
+    answer = REAL; // the provider is back
+    vi.setSystemTime(new Date("2026-11-11T10:00:59Z"));
+    expect(await probe.check({ layer: "temperature", ...place })).toBe("busy");
+    expect(calls).toHaveLength(1);
+    vi.setSystemTime(new Date("2026-11-11T10:01:01Z"));
+    expect(await probe.check({ layer: "temperature", ...place })).toBe("live");
+    expect(calls).toHaveLength(2);
+  });
+
+  it("never asks by itself: nothing is sent while nobody calls it, however long it is left", async () => {
+    vi.useFakeTimers();
+    const calls: string[] = [];
+    const probe = createCapacityProbe({
+      fetch: async (url) => {
+        calls.push(url);
         return BLANK();
       },
     });
     await probe.check({ layer: "temperature", ...place });
-    t += CAPACITY_RECHECK_FLOOR_MS;
-    await probe.check({ layer: "temperature", ...place, force: true });
-    expect(inits).toEqual(["default", "no-cache"]);
+    await vi.advanceTimersByTimeAsync(30 * 60_000);
+    expect(calls).toHaveLength(1);
+    // The old verdict is still what it knows; it is not asked about again.
+    expect(probe.getSnapshot()).toEqual({ verdict: "busy", inFlight: false });
   });
 
-  it("shares a request already in flight instead of sending another", async () => {
+  it("shares a request already in flight instead of sending another, across layers", async () => {
     let release: (r: ProbeResponse) => void = () => {};
     const { probe, calls } = harness(
       () => new Promise<ProbeResponse>((resolve) => (release = resolve)),
     );
     const first = probe.check({ layer: "windSpeed", ...place });
-    const second = probe.check({ layer: "windSpeed", ...place });
-    const forced = probe.check({ layer: "windSpeed", ...place, force: true });
+    const second = probe.check({ layer: "temperature", ...place });
+    const tapped = probe.recheck({ layer: "cloudCover", ...place });
+    expect(probe.getSnapshot()).toEqual({ verdict: null, inFlight: true });
     release(BLANK());
-    expect(await Promise.all([first, second, forced])).toEqual([
-      "busy",
-      "busy",
-      "busy",
-    ]);
+    expect(await Promise.all([first, second])).toEqual(["busy", "busy"]);
+    expect(await tapped).toMatchObject({ verdict: "busy", asked: false });
     expect(calls).toHaveLength(1);
   });
 
-  it("asks once per layer, not once for all four", async () => {
-    const { probe, calls } = harness(REAL);
-    for (const layer of [
-      "precipitationIntensity",
-      "temperature",
-      "windSpeed",
-    ]) {
-      await probe.check({ layer, ...place });
-      await probe.check({ layer, ...place });
-    }
-    expect(calls).toHaveLength(3);
-  });
-
-  it("forgets the verdict after a minute, so a layer works again with no code change", async () => {
-    let busy = true;
-    const { probe, calls, advance } = harness(() => (busy ? BLANK() : REAL()));
-    expect(await probe.check({ layer: "cloudCover", ...place })).toBe("busy");
-    busy = false; // the provider is back
-    advance(CAPACITY_VERDICT_TTL_MS - 1);
-    expect(await probe.check({ layer: "cloudCover", ...place })).toBe("busy");
-    advance(1);
-    expect(await probe.check({ layer: "cloudCover", ...place })).toBe("live");
-    expect(calls).toHaveLength(2);
-  });
-
-  it("'Try again' skips the minute but not the floor between real requests", async () => {
+  it("asks the browser's cache normally, but never takes 'Try again' from it (the placeholder is kept 30 s)", async () => {
     const { probe, calls, advance } = harness(BLANK);
     await probe.check({ layer: "temperature", ...place });
-    advance(CAPACITY_RECHECK_FLOOR_MS - 1);
-    // Tapped again straight away: answered from memory, not another request.
-    expect(
-      await probe.check({ layer: "temperature", ...place, force: true }),
-    ).toBe("busy");
-    expect(calls).toHaveLength(1);
-    advance(1);
-    await probe.check({ layer: "temperature", ...place, force: true });
-    expect(calls).toHaveLength(2);
-    // Without the tap, the minute still applies.
     advance(CAPACITY_RECHECK_FLOOR_MS);
+    await probe.recheck({ layer: "temperature", ...place });
+    expect(calls.map((c) => c.cache)).toEqual(["default", "no-cache"]);
+  });
+
+  it("'Try again' skips the minute but not the floor, and says whether it asked", async () => {
+    const { probe, calls, advance } = harness(BLANK);
     await probe.check({ layer: "temperature", ...place });
+    advance(CAPACITY_RECHECK_FLOOR_MS - 1_000);
+    // Tapped inside the floor: answered from memory, with the wait that is left.
+    expect(await probe.recheck({ layer: "temperature", ...place })).toEqual({
+      verdict: "busy",
+      asked: false,
+      retryAfterMs: 1_000,
+    });
+    expect(calls).toHaveLength(1);
+    advance(1_000);
+    expect(await probe.recheck({ layer: "temperature", ...place })).toEqual({
+      verdict: "busy",
+      asked: true,
+      retryAfterMs: CAPACITY_RECHECK_FLOOR_MS,
+    });
+    expect(calls).toHaveLength(2);
+  });
+
+  it("'Try again' updates the one verdict for every layer, and is not remembered as a forced ask", async () => {
+    let busy = true;
+    const { probe, calls, advance } = harness(() => (busy ? BLANK() : REAL()));
+    await probe.check({ layer: "precipitationIntensity", ...place });
+    busy = false;
+    advance(CAPACITY_RECHECK_FLOOR_MS);
+    await probe.recheck({ layer: "precipitationIntensity", ...place });
+    expect(calls).toHaveLength(2);
+    // Every layer now reads live, from memory; a later plain check is not forced.
+    advance(20_000);
+    for (const layer of FOUR)
+      expect(await probe.check({ layer, ...place })).toBe("live");
     expect(calls).toHaveLength(2);
   });
 
@@ -436,9 +462,7 @@ describe("createCapacityProbe", () => {
     expect(await probe.check({ layer: "temperature", ...place })).toBe(
       "unknown",
     );
-    expect(await probe.check({ layer: "temperature", ...place })).toBe(
-      "unknown",
-    );
+    expect(await probe.check({ layer: "windSpeed", ...place })).toBe("unknown");
     t += CAPACITY_VERDICT_TTL_MS - 1;
     await probe.check({ layer: "temperature", ...place });
     expect(calls).toHaveLength(1);
@@ -457,6 +481,64 @@ describe("createCapacityProbe", () => {
     const verdict = probe.check({ layer: "temperature", ...place });
     await vi.advanceTimersByTimeAsync(CAPACITY_PROBE_TIMEOUT_MS);
     expect(await verdict).toBe("unknown");
+    expect(probe.getSnapshot()).toEqual({
+      verdict: "unknown",
+      inFlight: false,
+    });
+  });
+
+  it("drops a late answer to a request that was given up on", async () => {
+    vi.useFakeTimers();
+    let late: (r: ProbeResponse) => void = () => {};
+    // This fetch ignores the abort, like a stuck connection.
+    const probe = createCapacityProbe({
+      fetch: () => new Promise((resolve) => (late = resolve)),
+    });
+    const verdict = probe.check({ layer: "temperature", ...place });
+    await vi.advanceTimersByTimeAsync(CAPACITY_PROBE_TIMEOUT_MS);
+    expect(await verdict).toBe("unknown");
+    late(BLANK());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(probe.getSnapshot()).toEqual({
+      verdict: "unknown",
+      inFlight: false,
+    });
+  });
+
+  it("never asks about a layer that is not a Tomorrow.io one", async () => {
+    const { probe, calls } = harness(BLANK);
+    expect(await probe.check({ layer: "satellite", ...place })).toBe("unknown");
+    expect(await probe.recheck({ layer: "airQuality", ...place })).toEqual({
+      verdict: "unknown",
+      asked: false,
+      retryAfterMs: 0,
+    });
+    expect(calls).toHaveLength(0);
+    expect(probe.getSnapshot()).toEqual({ verdict: null, inFlight: false });
+  });
+
+  it("tells subscribers when a request goes out and when it is answered, and stops when they leave", async () => {
+    const { probe } = harness(BLANK);
+    const seen: unknown[] = [];
+    const stop = probe.subscribe(() => seen.push(probe.getSnapshot()));
+    await probe.check({ layer: "temperature", ...place });
+    expect(seen).toEqual([
+      { verdict: null, inFlight: true },
+      { verdict: "busy", inFlight: false },
+    ]);
+    stop();
+    await probe.recheck({ layer: "temperature", ...place });
+    expect(seen).toHaveLength(2);
+  });
+
+  it("the view is the same object until something changes (what useSyncExternalStore needs)", async () => {
+    const { probe } = harness(BLANK);
+    expect(probe.getSnapshot()).toBe(probe.getSnapshot());
+    expect(probe.getServerSnapshot()).toBe(probe.getServerSnapshot());
+    await probe.check({ layer: "temperature", ...place });
+    const settled = probe.getSnapshot();
+    await probe.check({ layer: "windSpeed", ...place }); // from memory
+    expect(probe.getSnapshot()).toBe(settled);
   });
 
   it("each probe has its own memory", async () => {

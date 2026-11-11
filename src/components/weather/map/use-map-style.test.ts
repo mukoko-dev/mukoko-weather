@@ -15,7 +15,7 @@ vi.mock("@/lib/map-layers", () => ({
   MAPTILER_STYLE_DARK:
     "https://api.maptiler.com/maps/streets-v2-dark/style.json?key=test",
   MAP_LAYERS: [],
-  DEFAULT_LAYER: "precipitationIntensity",
+  DEFAULT_LAYER: "satellite",
   getMapLayerById: vi.fn(),
 }));
 
