@@ -123,6 +123,16 @@ describe("createCanvasScene", () => {
     expect(f, "a frame was scheduled").toBeDefined();
     f?.(now);
   };
+  it("says it is live for a real canvas, which the page reads to drop its still texture", async () => {
+    const handle = await createCanvasScene(
+      fakeContainer() as unknown as HTMLElement,
+      config,
+      deps(),
+    );
+    expect(handle.live).toBe(true);
+    handle.dispose();
+  });
+
   it("returns a no-op handle when there is no 2D context", async () => {
     const noCtx = fakeCanvas(false);
     const handle = await createCanvasScene(
@@ -133,6 +143,8 @@ describe("createCanvasScene", () => {
         createCanvas: () => noCtx.canvas,
       },
     );
+    // Not live: the page keeps its still rain and stars rather than a bare sky.
+    expect(handle.live).toBe(false);
     handle.pause();
     handle.resume();
     handle.dispose();

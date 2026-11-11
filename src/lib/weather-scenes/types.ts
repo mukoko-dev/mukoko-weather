@@ -49,6 +49,12 @@ export interface SceneElements {
  * scrolls off-screen.
  */
 export interface WeatherSceneHandle {
+  /**
+   * True when the layer is really drawing. The no-op handle returned when
+   * WebGL or the canvas is unavailable says false, so the page keeps its still
+   * sky texture (`stillTexture`) instead of showing a bare gradient.
+   */
+  readonly live: boolean;
   dispose(): void;
   pause(): void;
   resume(): void;
