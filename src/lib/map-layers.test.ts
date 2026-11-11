@@ -35,6 +35,7 @@ import {
   attributionForLayer,
   satelliteFrames,
   getGibsLayer,
+  isGibsLayer,
 } from "./map-sources";
 import { FIRE_SCALE } from "./weather-scales";
 
@@ -91,12 +92,27 @@ describe("MAP_LAYERS", () => {
 });
 
 describe("DEFAULT_LAYER", () => {
-  it("is a valid layer ID", () => {
-    expect(MAP_LAYERS.some((l) => l.id === DEFAULT_LAYER)).toBe(true);
+  it("is a chip the map offers", () => {
+    expect(MAP_CHIPS.some((c) => c.id === DEFAULT_LAYER)).toBe(true);
   });
 
-  it("defaults to rain (the design brief: the map opens on precipitation)", () => {
-    expect(DEFAULT_LAYER).toBe("precipitationIntensity");
+  it("is true-colour satellite (NASA GIBS), which needs no key and no quota (#542)", () => {
+    expect(DEFAULT_LAYER).toBe("satellite");
+    expect(isGibsLayer(DEFAULT_LAYER)).toBe(true);
+  });
+
+  it("is not a Tomorrow.io layer: the owner has no paid plan and those tiles are blank when the free quota is spent", () => {
+    expect(MAP_LAYERS.some((l) => l.id === DEFAULT_LAYER)).toBe(false);
+    const source = buildWeatherOverlaySource(DEFAULT_LAYER);
+    expect(source.tiles[0]).toMatch(/^https:\/\/gibs\.earthdata\.nasa\.gov\//);
+    expect(source.tiles[0]).not.toContain("weather-tiles.mukoko.com");
+    expect(attributionForLayer(DEFAULT_LAYER).map((p) => p.id)).not.toContain(
+      "tomorrow",
+    );
+  });
+
+  it("is not the IMERG rain layer: its 0.1 degree (about 11 km) cells draw as hard squares", () => {
+    expect(DEFAULT_LAYER).not.toBe("satelliteRain");
   });
 });
 

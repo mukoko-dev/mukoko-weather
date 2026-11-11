@@ -56,8 +56,13 @@ describe("MapDashboard — top-right controls", () => {
 });
 
 describe("MapDashboard — layer state", () => {
-  it("defaults to rain", () => {
+  it("opens on the keyless default layer (satellite), not on a Tomorrow.io one", () => {
     expect(source).toContain("DEFAULT_LAYER");
+    expect(source).toContain(
+      "readStoredMapLayer(getStorage(), chips) ?? DEFAULT_LAYER",
+    );
+    expect(source).toContain("() => DEFAULT_LAYER,");
+    expect(source).not.toContain('"precipitationIntensity"');
   });
 
   it("reads the remembered layer without a hydration mismatch", () => {
@@ -69,6 +74,56 @@ describe("MapDashboard — layer state", () => {
   it("guards localStorage access with try/catch (blocked storage throws)", () => {
     expect(source).toMatch(
       /function getStorage\(\)[\s\S]*?try \{[\s\S]*?catch/,
+    );
+  });
+});
+
+describe("MapDashboard — a Tomorrow.io layer that is at capacity (#542)", () => {
+  it("shows the layer the capacity check allows, and keeps the person's choice", () => {
+    // The asked-for layer is what is stored and what the hook is asked about;
+    // only what is drawn changes while it is busy.
+    expect(source).toContain(
+      "const requestedLayer = chosenLayer ?? storedLayer;",
+    );
+    expect(source).toContain("layer: requestedLayer,");
+    expect(source).toContain("const activeLayer = capacity.layer;");
+    expect(source).toContain("writeStoredMapLayer(getStorage(), id)");
+    expect(source).not.toMatch(
+      /writeStoredMapLayer\([^)]*(activeLayer|capacity)/,
+    );
+  });
+
+  it("holds the overlay back until the one-tile check has answered", () => {
+    expect(source).toMatch(
+      /weatherLayer=\{aqOn \|\| modelOn \|\| capacity\.held \? null : activeLayer\}/,
+    );
+  });
+
+  it("asks for the first tile at the zoom the map opens at", () => {
+    expect(source).toContain("mapZoom: MAP_ZOOM,");
+    expect(source).toContain("zoom={MAP_ZOOM}");
+    expect(source).not.toContain("zoom={8}");
+  });
+
+  it("says so in the always-visible header, outside the collapsible body", () => {
+    const note = source.indexOf("<LayerCapacityNote");
+    expect(note).toBeGreaterThan(-1);
+    expect(note).toBeLessThan(source.indexOf("hidden={!sheetOpen}"));
+    expect(source).toContain("{capacity.busy && (");
+    expect(source).toContain("onRetry={capacity.recheck}");
+    expect(source).toContain("layerId={requestedLayer}");
+  });
+
+  it("treats a tap on the busy layer's own chip as 'look again', not a switch", () => {
+    expect(source).toMatch(
+      /if \(id === requestedLayer\) \{\s*recheckCapacity\(\);\s*return;/,
+    );
+  });
+
+  it("drops the old frame and playback when the layer on screen changes", () => {
+    expect(source).toContain("if (shownLayer !== activeLayer) {");
+    expect(source).toMatch(
+      /setShownLayer\(activeLayer\);\s*setStepChoice\(null\);\s*setPlaying\(false\);/,
     );
   });
 });

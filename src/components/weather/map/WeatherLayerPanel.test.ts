@@ -12,7 +12,12 @@ import {
   AIR_QUALITY_LAYER_ID,
   WILDFIRE_LAYER_ID,
 } from "@/lib/map-layers";
-import { CHIP_ICONS, chipIcon, scrollChipIntoView } from "./WeatherLayerPanel";
+import {
+  CHIP_ICONS,
+  chipIcon,
+  chipScrollDelta,
+  scrollChipIntoView,
+} from "./WeatherLayerPanel";
 
 const panelSource = readFileSync(
   resolve(__dirname, "WeatherLayerPanel.tsx"),
@@ -56,6 +61,25 @@ describe("WeatherLayerPanel — labelled chips", () => {
     expect(calls).toEqual([
       { inline: "nearest", block: "nearest", behavior: "smooth" },
     ]);
+  });
+
+  it("brings the active chip into view, so the layer the map opens on (the sixth chip) is seen selected", () => {
+    // The row (padding 16 start, 24 end) shows x 16..369 of a 393 px phone.
+    const row = { left: 0, right: 393 };
+    const inset = { start: 16, end: 24 };
+    // Already inside: nothing to do.
+    expect(chipScrollDelta(row, { left: 100, right: 240 }, inset)).toBe(0);
+    // Past the end, or half under the fade: scroll forward just enough.
+    expect(chipScrollDelta(row, { left: 420, right: 530 }, inset)).toBe(161);
+    expect(chipScrollDelta(row, { left: 300, right: 380 }, inset)).toBe(11);
+    // Before the start: scroll back just enough.
+    expect(chipScrollDelta(row, { left: -50, right: 60 }, inset)).toBe(-66);
+    // Moves the chip row only, and not with an animation the first time.
+    expect(panelSource).toContain("row.scrollBy({");
+    expect(panelSource).toContain(
+      'placed.current ? getScrollBehavior() : "instant"',
+    );
+    expect(panelSource).toContain("ref={layerRow}");
   });
 
   it("keeps a chip clear of the edge fade, scrolled to the end or reached by keyboard focus", () => {

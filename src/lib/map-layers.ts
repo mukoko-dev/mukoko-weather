@@ -157,11 +157,16 @@ export const MAP_LAYERS: MapLayer[] = [
 ];
 
 /**
- * Rain is the default map layer (design brief: the map opens on precipitation).
- * The proxy accepts the `now` timestamp for every tile layer, so the default
- * opens without a timestamp error. Matches DISPLAY_DEFAULT_LAYER.
+ * The layer the map opens on, and the one it falls back to when a Tomorrow.io
+ * layer is at capacity (map-capacity.ts): true-colour satellite, NASA GIBS.
+ * It must be a layer that needs no paid key and no quota, so the map is never
+ * blank. Rain (Tomorrow.io) was the default until 2026-11-11, when the owner
+ * has no paid plan and the tiles Worker answered every rain tile with its blank
+ * placeholder (#542). Not `satelliteRain`: IMERG is a 0.1 degree (about 11 km)
+ * grid and draws as hard squares. `/display` keeps its own default
+ * (DISPLAY_DEFAULT_LAYER in display.ts).
  */
-export const DEFAULT_LAYER = "precipitationIntensity";
+export const DEFAULT_LAYER = "satellite";
 
 export function getMapLayerById(id: string): MapLayer | undefined {
   return MAP_LAYERS.find((l) => l.id === id);
