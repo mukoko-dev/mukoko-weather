@@ -2,7 +2,8 @@
  * The phone bottom bar rendered for real (react-dom/server): what a visitor's
  * HTML contains for no places, a few and many, on each kind of page, with the
  * account control (the avatar, the Mzizi account menu through PhoneMenu) as the
- * lane's first slot. Effects do not run on the server, so the scroll-into-view
+ * lane's last slot, at the far right of the bar, and My Location as the lane's
+ * first chip, second from the left after Map. Effects do not run on the server, so the scroll-into-view
  * and fade are covered by the pure maths in src/lib/location-pager.test.ts
  * and, in a real browser, by the PR's runtime check.
  */
@@ -45,7 +46,7 @@ vi.mock("@/lib/location-presets", () => ({
   visiblePresetSlugs: () => [],
 }));
 
-import { MobileNav, mobileNavActiveId } from "./MobileNav";
+import { MobileNav } from "./MobileNav";
 
 function render(
   pathname: string,
@@ -84,11 +85,11 @@ beforeEach(() => {
 const withoutMenu = (html: string) =>
   html.replace(/<details[\s\S]*?<\/details>/, "");
 
-/** The lane's places: from their group to the Locations item. */
+/** The lane's chips: from their group to the account control. */
 const placesOf = (html: string) =>
   html.slice(
     html.indexOf('aria-label="Places"'),
-    html.indexOf('aria-label="All locations"'),
+    html.indexOf('data-slot="account-menu"'),
   );
 
 /**
@@ -130,18 +131,21 @@ describe("MobileNav render — one bar, one landmark", () => {
     expect(html).toContain("h-[var(--mobile-nav-bar-height)]");
   });
 
-  it("has Map first, then the account control, the places lane and Locations last", () => {
+  it("has Map first, then My Location and the places lane, and the account control last", () => {
     const html = render("/", ["harare"]);
     const map = html.indexOf('aria-label="Weather map"');
     const lane = html.indexOf('data-slot="mzizi-bottom-nav-lane"');
-    const account = html.indexOf('data-slot="account-menu"');
     const group = html.indexOf('aria-label="Places"');
-    const locations = html.indexOf('aria-label="All locations"');
+    const home = html.indexOf('aria-label="My Location"');
+    const account = html.indexOf('data-slot="account-menu"');
     expect(map).toBeGreaterThan(0);
     expect(lane).toBeGreaterThan(map);
-    expect(account).toBeGreaterThan(lane);
-    expect(group).toBeGreaterThan(account);
-    expect(locations).toBeGreaterThan(group);
+    expect(group).toBeGreaterThan(lane);
+    expect(home).toBeGreaterThan(group);
+    expect(account).toBeGreaterThan(home);
+    // Locations left the bar: it is the list link at the top right of the page.
+    expect(html).not.toContain('aria-label="All locations"');
+    expect(html).not.toContain('href="/locations"');
   });
 
   it("points Map at the map route of the location on screen, or at Explore with none", () => {
@@ -156,17 +160,17 @@ describe("MobileNav render — one bar, one landmark", () => {
     );
   });
 
-  it("keeps Map and Locations as 48px targets with the 16px label token", () => {
+  it("keeps Map a 48px target with the 16px label token", () => {
     const html = render("/");
     expect(
       html.match(/min-h-\[var\(--touch-target-min\)\]/g)!.length,
-    ).toBeGreaterThanOrEqual(2);
+    ).toBeGreaterThanOrEqual(1);
     expect(html).toContain("text-[length:var(--text-nav-label)]");
   });
 });
 
-describe("MobileNav render — the account control, first in the lane", () => {
-  it("is the Mzizi account menu: a <details> whose summary is a round 49px target, before any place", () => {
+describe("MobileNav render — the account control, last in the lane", () => {
+  it("is the Mzizi account menu: a <details> whose summary is a round 49px target, after every place", () => {
     const html = render("/", ["harare"]);
     expect(html.match(/<details\b/g)).toHaveLength(1);
     const summary = html.match(/<summary[^>]*>/)![0];
@@ -174,9 +178,9 @@ describe("MobileNav render — the account control, first in the lane", () => {
     expect(summary).toContain("size-[var(--touch-target-min)]");
     expect(summary).toContain("rounded-full");
     expect(summary).toContain('aria-controls="');
-    // Nothing of the places comes before it in the lane.
-    expect(html.indexOf("<summary")).toBeLessThan(
-      html.indexOf('aria-label="Places"'),
+    // Nothing of the places comes after it in the lane: it is the far right.
+    expect(html.indexOf("<summary")).toBeGreaterThan(
+      html.indexOf('aria-label="Saved places and suggestions"'),
     );
   });
 
@@ -233,7 +237,7 @@ describe("MobileNav render — the account control, first in the lane", () => {
     }
   });
 
-  it("opens its panel UPWARD from the bar, against the bar: absolute, bottom-full, left-0, no fixed and no right gutter", () => {
+  it("opens its panel UPWARD from the bar, against the bar: absolute, bottom-full, right-0, no fixed and no right gutter", () => {
     const html = render("/", ["harare"]);
     const panel = html.match(
       /<div[^>]*class="([^"]*)"[^>]*data-slot="account-menu-panel"/,
@@ -241,9 +245,10 @@ describe("MobileNav render — the account control, first in the lane", () => {
     const tokens = panel.split(/\s+/);
     expect(tokens).toContain("absolute");
     expect(tokens).toContain("bottom-full");
-    expect(tokens).toContain("left-0");
+    expect(tokens).toContain("right-0");
     expect(tokens).toContain("mb-[var(--float-gap)]");
     expect(tokens).not.toContain("fixed");
+    expect(tokens).not.toContain("left-0");
     expect(tokens).not.toContain("right-2");
     expect(tokens.some((t) => t.startsWith("sm:"))).toBe(false);
     // The width stays inside the bar's span; the height inside the room above the bar.
@@ -274,41 +279,56 @@ describe("MobileNav render — the account control, first in the lane", () => {
 });
 
 describe("MobileNav render — the places lane", () => {
-  it("lists the places in order, each a real link, and no link to `/` (My Location is not a chip)", () => {
+  it("puts My Location first, then the places in order, each a real link", () => {
     const html = render("/", ["harare", "nairobi-ke", "lagos-ng"]);
     const hrefs = anchors(placesOf(html)).map(
       (a) => a.match(/href="([^"]*)"/)?.[1],
     );
     // Saved places are canonical URLs (#317).
     expect(hrefs).toEqual([
+      "/",
       `/${c("harare")}`,
       `/${c("nairobi-ke")}`,
       `/${c("lagos-ng")}`,
     ]);
   });
 
-  it("names the chips by their visible name; nothing in the bar is named My Location", () => {
+  it("names the chips: My Location by label, places by their visible name", () => {
     const html = render("/", ["harare", "nairobi-ke"]);
-    expect(html).not.toContain('aria-label="My Location"');
+    expect(html).toContain('aria-label="My Location"');
     expect(html).toContain(">Harare</span>");
     expect(html).toContain(">Nairobi</span>");
   });
 
-  it("with no places the lane draws nothing, the account control stays and sits centred", () => {
+  it("is never empty: with no places it is My Location alone, spelled out, and the account control stays", () => {
     const html = render("/");
-    expect(html).not.toContain('aria-label="Places"');
-    expect(html).not.toMatch(/class="lark/);
+    const chips = html.match(/class="lark[^"]*"/g) ?? [];
+    expect(chips).toHaveLength(1);
+    expect(html).toContain(">My Location</span>");
     expect(html).toContain('data-slot="account-menu"');
-    // The empty lane's boundary is hidden so the control is centred in the
-    // space between Map and Locations.
-    expect(html).toContain("empty:hidden");
-    expect(html).toContain("justify-center");
   });
 
-  it("puts the account control outside the scroller, before it, and lets the places scroll beside it", () => {
+  it("shows My Location as the glyph alone once places sit beside it", () => {
+    const html = render("/explore", ["harare"]);
+    expect(html).not.toContain(">My Location</span>");
+    expect(html).toContain('aria-label="My Location"');
+    // The glyph chip is one touch target wide through `min-w` alone; it keeps
+    // `.lark`'s own 14px inline inset (no `px-0`, which `mzizi check` refuses).
+    expect(html).toContain(
+      'class="lark press-scale shrink-0 min-w-[var(--touch-target-min)]"',
+    );
+    // mzizi-spacing-exempt: names the class this asserts is gone
+    expect(html).not.toContain("px-0");
+  });
+
+  it("pins My Location outside the scroller and lets the places scroll beside it", () => {
     const html = render("/", ["harare", "nairobi-ke"]);
-    expect(html.indexOf('data-slot="account-menu"')).toBeLessThan(
+    expect(html.indexOf('aria-label="My Location"')).toBeLessThan(
       html.indexOf("sanderling"),
+    );
+    // The account control follows the scroller: the far right of the bar.
+    expect(html.indexOf("sanderling")).toBeLessThan(
+      html.indexOf('data-slot="account-menu"'),
     );
     expect(html).not.toContain("sticky");
     expect(html).toContain("overflow-x-auto");
@@ -319,7 +339,7 @@ describe("MobileNav render — the places lane", () => {
   it("gives every chip a 48px target through the .lark class, not a smaller hit area", () => {
     const html = render("/", ["harare", "a-b", "c-d"]);
     const chips = (html.match(/class="lark[^"]*"/g) ?? []).length;
-    expect(chips).toBe(3);
+    expect(chips).toBe(4);
     expect(html).not.toContain("h-8");
     expect(html).not.toContain("h-10");
   });
@@ -327,14 +347,17 @@ describe("MobileNav render — the places lane", () => {
   it("renders up to MAX_PAGER_PLACES places, all reachable", () => {
     const many = Array.from({ length: 10 }, (_, i) => `place-${i}`);
     const html = render("/", many);
-    expect((html.match(/class="lark[^"]*"/g) ?? []).length).toBe(10);
+    expect((html.match(/class="lark[^"]*"/g) ?? []).length).toBe(11);
   });
 });
 
 describe("MobileNav render — aria-current is on exactly the current item", () => {
-  it("is no item of the bar on / (My Location is a link at the top of the page, not in the bar)", () => {
+  it("is My Location on /", () => {
     const html = withoutMenu(render("/", ["harare", "nairobi-ke"]));
-    expect(current(html)).toBe(0);
+    expect(current(html)).toBe(1);
+    const tag = anchors(html).find((a) => a.includes('aria-current="page"'))!;
+    expect(tag).toContain('href="/"');
+    expect(tag).toContain('aria-label="My Location"');
   });
 
   it("is the place's chip on its page", () => {
@@ -358,12 +381,9 @@ describe("MobileNav render — aria-current is on exactly the current item", () 
     expect(current(html)).toBe(1);
   });
 
-  it("is Locations on /locations, and no chip", () => {
+  it("is nothing on /locations: the list link is at the top of the page, not in the bar", () => {
     const html = withoutMenu(render("/locations", ["harare"]));
-    expect(current(html)).toBe(1);
-    expect(anchors(html).find((a) => a.includes("aria-current"))).toContain(
-      'href="/locations"',
-    );
+    expect(current(html)).toBe(0);
   });
 
   it("is nothing on /explore (Map never lights up there, even though it links to Explore)", () => {
@@ -419,25 +439,12 @@ describe("MobileNav render — what a chip says", () => {
     expect(text.some((t) => /62e|35n/.test(t))).toBe(false);
   });
 
-  it("names the places list so My Location is not counted as one of its items", () => {
+  it("names the places list so My Location (the link before it) is not counted as one of its items", () => {
     const html = render("/", ["harare"]);
     expect(html).toContain('aria-label="Saved places and suggestions"');
   });
 
   it("gives the chips the press feedback class", () => {
     expect(render("/", ["harare"])).toContain("lark press-scale");
-  });
-});
-
-describe("mobileNavActiveId — the pinned item that is current", () => {
-  it("is Locations on /locations", () => {
-    expect(mobileNavActiveId("/locations")).toBe("locations");
-  });
-
-  it("is none everywhere else: the lane marks My Location and the places itself", () => {
-    expect(mobileNavActiveId("/")).toBe("none");
-    expect(mobileNavActiveId("/harare")).toBe("none");
-    expect(mobileNavActiveId("/harare/map")).toBe("none");
-    expect(mobileNavActiveId("/explore")).toBe("none");
   });
 });

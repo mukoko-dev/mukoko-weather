@@ -98,13 +98,15 @@
  *
  * 13. `panelPlacement="above"` (the phone bottom bar's account control). The
  *    panel opens UPWARD and INTO the screen. It is `absolute` with
- *    `bottom-full left-0`, and the `<details>` is `static`, so the panel is
+ *    `bottom-full right-0`, and the `<details>` is `static`, so the panel is
  *    placed against the nearest positioned ancestor and not against the 49px
  *    trigger. In the bottom bar that ancestor is the bar: its `<nav>` is
  *    `fixed`, so the panel's bottom edge is `--float-gap` above the bar's top
- *    edge and its left edge is the bar's own, `--float-left` from the screen
- *    (the trigger is the bar's second slot, about 129px in, so a panel
- *    anchored to it ran off the right edge). It is not `fixed` like the
+ *    edge and its right edge is the bar's own, `--float-right` from the screen
+ *    (the trigger is the bar's last slot, at the far right since 2026-11-11;
+ *    before that it was the second slot, about 129px in, and the panel hung
+ *    from the bar's left edge. Either way a panel anchored to the 49px trigger
+ *    itself would run off a screen edge). It is not `fixed` like the
  *    below-the-trigger panel (change 11): the bar has a `backdrop-filter`,
  *    which makes it the containing block of any `fixed` descendant, so a
  *    `fixed` panel inside it would not be anchored to the viewport. The width
@@ -186,7 +188,7 @@ const PANEL_BELOW =
  * gap, so the panel scrolls rather than reaching past the top of the screen.
  */
 const PANEL_ABOVE =
-  "absolute bottom-full left-0 mb-[var(--float-gap)] max-h-[calc(100dvh-var(--float-top)-var(--float-bottom)-var(--mobile-nav-bar-height)-var(--float-gap))] w-[min(18rem,calc(100vw-var(--float-left)-var(--float-right)))]";
+  "absolute bottom-full right-0 mb-[var(--float-gap)] max-h-[calc(100dvh-var(--float-top)-var(--float-bottom)-var(--mobile-nav-bar-height)-var(--float-gap))] w-[min(18rem,calc(100vw-var(--float-left)-var(--float-right)))]";
 
 function AccountMenu({
   name = null,

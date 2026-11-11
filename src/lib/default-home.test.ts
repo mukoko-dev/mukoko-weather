@@ -87,7 +87,10 @@ describe("the home page falls back to Harare (source)", () => {
       "openMyWeather",
     );
     expect(read("../lib/nav-destinations.ts")).toContain("/explore");
-    expect(read("../components/layout/MobileNav.tsx")).toContain("/locations");
+    // The Locations list link (top right of the screen since 2026-11-11).
+    expect(read("../components/layout/LocationsLink.tsx")).toContain(
+      '"/locations"',
+    );
   });
 
   it("with nothing seeded the client shows Harare (or the remembered shipped place) through the place stage", () => {
