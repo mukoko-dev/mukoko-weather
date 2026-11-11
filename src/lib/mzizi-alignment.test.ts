@@ -343,7 +343,7 @@ describe("Mzizi alignment guard — every button", () => {
 
   it("the hero's Share is a Mzizi control: kestrel-round on the sky, duiker in the phone icon group", () => {
     // The hero itself holds no button of its own; its Share is ShareControl's
-    // one button, and My Location is MyLocationLink's link.
+    // one button, and Locations is LocationsLink's link.
     expect(
       FOUND.filter((f) => f.file.endsWith("CurrentConditions.tsx")),
     ).toHaveLength(0);

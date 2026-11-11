@@ -64,7 +64,7 @@
  *    first chip pinned and its current chip in view). With a lane the pinned
  *    items all take ONE preset width (`--mobile-nav-item-width`, globals.css:
  *    the longest label plus the Bundu floor's 14px inline inset), whatever
- *    their label says, so Map and Locations are the same size (they were as
+ *    their label says, so pinned items are the same size (Map and Locations were, as
  *    wide as their text, 53pt and 85pt, owner 2026-11-05); a label longer than
  *    the preset is cut with an ellipsis, never widens the button. Their
  *    labels collapse to screen-reader-only below 360px, where the items are

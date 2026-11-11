@@ -191,26 +191,26 @@
      and the bottom alike), max-w-md, pill
      (rounded-full), 0.5px token border, shadow-lg, backdrop-blur-xl, 4.5rem
      tall (72px; 64px before 2026-11-04, when the content filled it edge to
-     edge). Map and Locations are pinned at its ends and the places lane
-     (My Location first, then the saved places) scrolls between them; there is
-     no second pill above it. --mobile-nav-clearance is the space page content
+     edge). Map is pinned at its start and the places lane (My Location first,
+     then the saved places, then the account avatar at the far right, owner
+     2026-11-11) fills the rest; there is no second pill above it. --mobile-nav-clearance is the space page content
      must leave at the bottom so nothing sits under the nav (bar, lift and safe
      area, plus a 0.5rem breath). Floating controls above the nav (e.g.
      reorder "Done") use it too. Header.test.ts keeps these in step with the
      component. */
   --mobile-nav-bar-height: 4.5rem;
-  /* The width of every PINNED item in the bar (Map, Locations), one preset
-     for all of them (owner, 2026-11-05, from a screen recording: Map was 53pt
-     wide and Locations 85pt because each button took its label's width).
-     "Locations" is the longest label and measures 64px in Noto Sans at
-     --text-nav-label (scripts/browser-check/bottom-bar.mjs); with
-     --inset-floor on each side and the hairline that is 93px, so the preset is
-     6rem (96px) and the label fits whole. In rem so it grows with the label's
-     text size. A longer label is cut with an ellipsis and never widens its
+  /* The width of every PINNED item in the bar, one preset for all of them
+     (owner, 2026-11-05, from a screen recording: pinned items took their
+     label's width, 53pt and 85pt). Since 2026-11-11 Map is the only pinned
+     item ("Locations" moved to the top right), so the preset fits "Map": its
+     label measures 29.5px in Noto Sans at --text-nav-label
+     (scripts/browser-check/bottom-bar.mjs); with --inset-floor on each side
+     and the hairline that is about 59px, so the preset is 4rem (64px) and the
+     label fits whole. In rem so it grows with the label's text size. A longer label is cut with an ellipsis and never widens its
      button. Below 360px the labels are screen-reader-only and the items are
      one touch target wide (mzizi-bottom-nav.tsx). Header.test.ts keeps it in
      step with the component. */
-  --mobile-nav-item-width: 6rem;
+  --mobile-nav-item-width: 4rem;
   --mobile-nav-clearance: calc(
     var(--float-bottom) + var(--mobile-nav-bar-height) + 0.5rem
   );
