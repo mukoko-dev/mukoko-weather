@@ -43,10 +43,16 @@ describe("MapDashboard — close and legend", () => {
 });
 
 describe("MapDashboard — top-right controls", () => {
-  it("has a layers toggle, a centre-on-my-location button and a list link", () => {
+  it("has a layers toggle and a centre-on-my-location button, and no Locations link of its own", () => {
     expect(source).toContain("Hide map layers");
     expect(source).toContain("Centre the map on my location");
-    expect(source).toContain('href="/locations"');
+    // Locations is the Quick actions group's third control, the same on every
+    // page; the layout floats the group at the top right of the map, so the
+    // map's stack starts under it and carries no second list link.
+    expect(source).not.toContain('href="/locations"');
+    expect(source).not.toContain("Browse all locations");
+    expect(source).not.toContain("LayoutList");
+    expect(source).toContain("top-[var(--hadeda-below)]");
   });
 
   it("uses the shared geolocation helper with auto-create", () => {

@@ -10,8 +10,9 @@ import {
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Layers, LayoutList, LocateFixed, X } from "lucide-react";
+import { ChevronDown, Layers, LocateFixed, X } from "lucide-react";
 import { Breadcrumb } from "@/components/layout/Breadcrumb";
+import { QuickActions } from "@/components/layout/QuickActions";
 import { MapSkeleton } from "@/components/weather/map/MapSkeleton";
 import {
   WeatherLayerPanel,
@@ -497,6 +498,14 @@ export function MapDashboard({ location }: MapDashboardProps) {
     >
       <h1 className="sr-only">{location.name} weather map</h1>
 
+      {/* The Quick actions group (Share, Notifications, Locations), solid on
+          the map and fixed at the top right of the screen like everywhere
+          else. The map has no site header to draw it, so it draws its own:
+          this page and its loader are the only places that do, and a page
+          that shows a header (the not-found of an unknown place) draws the
+          group with the header instead, never both. */}
+      <QuickActions tone="solid" placement="float" />
+
       <MapLibreMap
         lat={location.lat}
         lon={location.lon}
@@ -515,10 +524,12 @@ export function MapDashboard({ location }: MapDashboardProps) {
       />
 
       {/* Top-left: close (back to the location) and the shared breadcrumb
-          trail as a compact overlay pill. The column's width is the screen
-          minus the float grid's side insets, one control and one gap, so
-          neither can run under the control stack. */}
-      <div className="pointer-events-none absolute left-[var(--float-left)] top-[var(--float-top)] z-10 flex w-[min(20rem,calc(100%-var(--float-left)-var(--float-right)-var(--touch-target-min)-var(--float-gap)))] min-w-0 items-center gap-[var(--float-gap)]">
+          trail as a compact overlay pill. The Quick actions group (Share,
+          Notifications, Locations) is fixed at the top right by the layout and
+          is three controls wide, so on a phone the trail drops under the
+          close button, in the column that stops short of the control stack;
+          from `sm` they share a row and the column leaves room for the group. */}
+      <div className="pointer-events-none absolute left-[var(--float-left)] top-[var(--float-top)] z-10 flex w-[min(20rem,calc(100%-var(--float-left)-var(--float-right)-var(--touch-target-min)-var(--float-gap)))] min-w-0 flex-col items-start gap-[var(--float-gap)] sm:w-[min(20rem,calc(100%-var(--float-left)-var(--float-right)-var(--hadeda-width)-var(--float-gap)))] sm:flex-row sm:items-center">
         <Link
           href={`/${location.slug}`}
           aria-label={`Close map and return to ${location.name}`}
@@ -536,8 +547,11 @@ export function MapDashboard({ location }: MapDashboardProps) {
         />
       </div>
 
-      {/* Top-right: stacked controls (layer sheet, my location) and the list. */}
-      <div className="pointer-events-none absolute right-[var(--float-right)] top-[var(--float-top)] z-10 flex flex-col items-end gap-[var(--float-gap)]">
+      {/* Top-right, under the Quick actions group (Share, Notifications,
+          Locations: fixed at the top right by the layout, the same on every
+          page, so the map has no Locations link of its own): stacked controls
+          (layer sheet, my location). */}
+      <div className="pointer-events-none absolute right-[var(--float-right)] top-[var(--hadeda-below)] z-10 flex flex-col items-end gap-[var(--float-gap)]">
         <div className="serval pointer-events-auto relative flex flex-col gap-[var(--float-gap)] rounded-full">
           <button
             type="button"
@@ -564,13 +578,6 @@ export function MapDashboard({ location }: MapDashboardProps) {
             <LocateFixed className={ICON_CLASS} aria-hidden="true" />
           </button>
         </div>
-        <Link
-          href="/locations"
-          aria-label="Browse all locations"
-          className="serval duiker pointer-events-auto rounded-full text-text-primary"
-        >
-          <LayoutList className={ICON_CLASS} aria-hidden="true" />
-        </Link>
         {locateMessage && (
           <p
             role="status"
@@ -586,12 +593,14 @@ export function MapDashboard({ location }: MapDashboardProps) {
           credits for every provider on screen are always shown; the layer
           chips, model picker and timeline collapse, so the sheet never has
           to hide the map entirely and the licence credit never disappears.
-          On a short (landscape phone) viewport it anchors left and narrows,
-          so the map stays visible. */}
+          Its height stops under the layers and locate controls that hang
+          beneath the Quick actions group (it scrolls inside, as it always
+          did). On a short (landscape phone) viewport it anchors left and
+          narrows, so the map stays visible, and only the top row is clear. */}
       <section
         aria-labelledby="map-legend-title"
         data-slot="map-sheet"
-        className="serval absolute left-[var(--float-left)] right-[var(--float-right)] bottom-[var(--float-bottom)] z-10 mx-auto flex max-h-[calc(100dvh-var(--float-top)-var(--touch-target-min)-var(--float-gap)-var(--float-bottom))] max-w-xl flex-col overflow-y-auto p-[var(--space-card)] [@media(max-height:500px)]:mr-auto [@media(max-height:500px)]:max-w-md"
+        className="serval absolute left-[var(--float-left)] right-[var(--float-right)] bottom-[var(--float-bottom)] z-10 mx-auto flex max-h-[calc(100dvh-var(--hadeda-stack-bottom)-var(--float-gap)-var(--float-bottom))] max-w-xl flex-col overflow-y-auto p-[var(--space-card)] [@media(max-height:500px)]:mr-auto [@media(max-height:500px)]:max-h-[calc(100dvh-var(--float-top)-var(--touch-target-min)-var(--float-gap)-var(--float-bottom))] [@media(max-height:500px)]:max-w-md"
       >
         <div className="flex items-start gap-3">
           <span aria-hidden="true" className="hoopoe-lg mt-0.5 text-primary">

@@ -11,13 +11,33 @@ const read = (file: string) =>
   readFileSync(resolve(__dirname, "../..", file), "utf-8");
 
 describe("entry points", () => {
-  it("the header's bell and the phone menu's row open the same centre", () => {
-    expect(read("components/layout/Header.tsx")).toContain(
+  it("the group's bell and the phone menu's row open the same centre", () => {
+    expect(read("components/layout/NotificationsButton.tsx")).toContain(
       'openNotifications("list")',
     );
     expect(read("components/layout/PhoneMenu.tsx")).toContain(
       "openNotifications()",
     );
+  });
+
+  it("every way in opens the one centre the group's bell mounts: nothing else mounts it", () => {
+    // The open state is the store's, so a second mount would open two centres
+    // (or anchor one to an element that is not drawn). Only the bell mounts it.
+    const mounts = [
+      "components/layout/Header.tsx",
+      "components/layout/AppChrome.tsx",
+      "components/layout/QuickActions.tsx",
+      "components/layout/PhoneMenu.tsx",
+      "components/layout/MobileNav.tsx",
+      "components/weather/MyWeatherModal.tsx",
+      "app/profile/ProfileClient.tsx",
+    ].filter((file) => /<NotificationsCentre\b/.test(read(file)));
+    expect(mounts).toEqual([]);
+    expect(
+      read("components/layout/NotificationsButton.tsx").match(
+        /<NotificationsCentre\b/g,
+      ),
+    ).toHaveLength(1);
   });
 
   it("the My Weather Settings tab closes itself, then opens the settings (one dialog at a time)", () => {

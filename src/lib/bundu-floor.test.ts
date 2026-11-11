@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
  * /foundations/spacing-floor; issue #479): a 49px hit region on every control,
  * 14px between text and its container edge (the inline axis for a control),
  * 7px between adjacent controls, and a 3:1 contrast for a UI part. This guard
- * holds the bottom bar, the map's controls and the hero's icon group to it
+ * holds the bottom bar, the map's controls and the Quick actions group to it
  * (stage 1 of #479), every font size in the app to the 14px text floor
  * (stage 2) and body text to the 17px body floor (stage 3); the rest of the
  * app follows in the stages that issue lists.
@@ -119,7 +119,7 @@ describe("text in a control keeps the inline inset", () => {
 });
 
 describe("every floating surface has a visible edge", () => {
-  it("defines the edge once and uses it on the bar, its targets, the hero group and the map's controls", () => {
+  it("defines the edge once and uses it on the bar, its targets and the map's controls", () => {
     expect(css.match(/--float-border:/g)).toHaveLength(1);
     expect(token("--float-border")).toBe(
       "color-mix(in srgb, var(--foreground) 50%, transparent)",
@@ -127,9 +127,6 @@ describe("every floating surface has a visible edge", () => {
     expect(bottomNav).toContain("border-[color:var(--float-border)]");
     expect(rule(".plover")).toContain("border-color: var(--float-border)");
     expect(rule(".lark")).toContain("border-[color:var(--float-border)]");
-    expect(rule(".hadeda")).toContain(
-      "border: var(--border-width-rest) solid var(--float-border)",
-    );
     expect(rule(".serval")).toContain("ring-[color:var(--float-border)]");
     // The hairline between the map's two controls is the same edge.
     expect(map).toContain("bg-[color:var(--float-border)]");
@@ -159,6 +156,45 @@ describe("every floating surface has a visible edge", () => {
     expect(contrast(luminance("#e7e5e0"), luminance("#ffffff"))).toBeLessThan(
       1.5,
     );
+  });
+});
+
+describe("the Quick actions group (.hadeda) is a UI part with a 3:1 edge", () => {
+  it("is the brand fill with its own foreground when solid, with no hairline to draw", () => {
+    const body = rule(".hadeda");
+    expect(body).toContain("--hadeda-fill: var(--color-primary)");
+    expect(body).toContain("--hadeda-ink: var(--color-primary-foreground)");
+    expect(body).not.toContain("--float-border");
+    expect(body).not.toMatch(/(^|\s)border:/);
+  });
+
+  it("the solid pill is 3:1 or better against the page in both themes, and its icons 3:1 against the pill", () => {
+    // Light: the storm primary on the pages' surfaces, white icons on it.
+    // Dark: the lighter storm primary on the dark pages, near-black icons.
+    const solid = [
+      {
+        fill: "#284ca6",
+        ink: "#ffffff",
+        pages: ["#ffffff", "#faf9f5", "#f3f2ee"],
+      },
+      { fill: "#7e9be0", ink: "#0a0a0a", pages: ["#100f0e", "#1e1e1e"] },
+    ];
+    for (const { fill, ink, pages } of solid) {
+      for (const page of pages) {
+        expect(
+          contrast(luminance(fill), luminance(page)),
+          `${fill} on ${page}`,
+        ).toBeGreaterThanOrEqual(3);
+      }
+      expect(
+        contrast(luminance(fill), luminance(ink)),
+        `${ink} on ${fill}`,
+      ).toBeGreaterThanOrEqual(3);
+    }
+    // The tokens those colours come from (the storm mineral, light and dark).
+    const tokens = readFileSync(join(root, "app/mzizi-tokens.css"), "utf8");
+    expect(tokens).toContain("--exp-storm: #284ca6;");
+    expect(tokens).toContain("--exp-storm: #7e9be0;");
   });
 });
 

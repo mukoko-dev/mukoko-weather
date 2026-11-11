@@ -1,4 +1,8 @@
+"use client";
+
+import { useRef } from "react";
 import { Shimmer } from "@/components/ui/shimmer";
+import { useRegisterSkyHero } from "@/lib/sky-hero";
 
 /**
  * The hero's placeholder: the ONE place the skeleton's hero geometry lives.
@@ -6,9 +10,9 @@ import { Shimmer } from "@/components/ui/shimmer";
  * only; LocationSkeleton just renders `<HeroSkeleton />`.
  *
  * It is the open-sky hero's box, row for row: the 49px top row (breadcrumb
- * bar at the left; at the right the round Share from `sm` up, and on phones
- * the fixed icon group `.hadeda` holding two round controls, which the real
- * group replaces in the same place), then the centred stack (`pt-4 pb-[26px]`): eyebrow line (Caption), the name
+ * bar at the left; the Quick actions group is the layout's, already on screen
+ * and live while the place loads, so there is nothing to stand in for), then
+ * the centred stack (`pt-4 pb-[26px]`): eyebrow line (Caption), the name
  * (H2), the numeral (Display), the condition with its 20px glyph (H5) and the
  * H/L line (Body Large). Every row carries the REAL `--text-*` size and
  * leading around an `em`-sized bar, so each row is exactly as tall as the
@@ -16,9 +20,14 @@ import { Shimmer } from "@/components/ui/shimmer";
  * arrives. No card, no plate: calm bars straight on the page sky (the same
  * `.kestrel` gradient the page paints). It carries `data-sky-hero`, so the
  * phone header is hidden exactly as the real hero hides it and loading does
- * not jump to loaded. Quiet bars only: no wordmark, no sentence, no spinner.
+ * not jump to loaded. It also registers itself as the sky hero (without a
+ * place), so the Quick actions group is already clear over it and does not
+ * change look when the real hero replaces it. Quiet bars only: no wordmark, no
+ * sentence, no spinner.
  */
 export function HeroSkeleton() {
+  const contentRef = useRef<HTMLParagraphElement>(null);
+  useRegisterSkyHero(contentRef, null);
   return (
     <section
       aria-hidden="true"
@@ -42,14 +51,12 @@ export function HeroSkeleton() {
           </ol>
           <Shimmer className="absolute top-1/2 left-0 h-[0.8em] w-40 max-w-full -translate-y-1/2" />
         </div>
-        <Shimmer className="hidden size-[var(--touch-target-min)] shrink-0 rounded-full sm:block" />
-        <div className="hadeda sm:hidden">
-          <Shimmer className="size-[var(--touch-target-min)] rounded-full" />
-          <Shimmer className="size-[var(--touch-target-min)] rounded-full" />
-        </div>
       </div>
       <div className="flex flex-col items-center pt-4 pb-[26px] text-center">
-        <p className="min-h-[calc(var(--text-caption)*var(--text-caption-leading))] text-[length:var(--text-caption)] leading-[var(--text-caption-leading)]">
+        <p
+          ref={contentRef}
+          className="min-h-[calc(var(--text-caption)*var(--text-caption-leading))] text-[length:var(--text-caption)] leading-[var(--text-caption-leading)]"
+        >
           <Shimmer className="h-[0.7em] w-24" />
         </p>
         <p className="font-heading text-[length:var(--text-h2)] leading-[var(--text-h2-leading)] font-semibold">

@@ -156,8 +156,8 @@
      inside a capsule around its controls. --float-top, -bottom, -left and
      -right add the safe area, so nothing floats under a notch, a status bar,
      the home indicator or a landscape notch (today the app does not set
-     viewport-fit=cover, where the insets are 0). The bottom bar, the phone
-     hero's icon group (.hadeda) and the map's controls and sheet all read
+     viewport-fit=cover, where the insets are 0). The bottom bar, the Quick
+     actions group (.hadeda) and the map's controls and sheet all read
      these; none of them keeps an edge distance or a safe-area expression of
      its own. */
   --float-inset: 1rem;
@@ -167,7 +167,7 @@
      --gap-floor), never under it; bundu-floor.test.ts compares them.
 
      --float-border is the hairline round everything that floats: the bar, its
-     targets, the hero's icon group and the map's controls (owner, 2026-11-04:
+     targets and the map's controls (owner, 2026-11-04:
      "the surface blends and boundaries disappear"). --mzizi-border is about
      1.2:1 against a card, so a 0.5px edge in it vanished; the foreground at 50%
      is 3:1 or better on the card, the page and the muted fill in both themes,
@@ -215,32 +215,56 @@
     var(--float-bottom) + var(--mobile-nav-bar-height) + 0.5rem
   );
 
-  /* The phone hero's icon group (.hadeda): Share and Locations (the round
-     list link to `/locations`; the account avatar is the bottom bar's last
-     slot) in ONE round pill fixed to the top of the screen, inset
-     1rem from the top and right edges (the hero's own gutter). Its size comes
-     from these tokens and from nothing else: --hadeda-width is the controls
-     (49px each) plus the gaps between them plus the padding around them, and
-     --hadeda-reserve is what the breadcrumb at the left of the hero's top row
-     leaves free for it (the pill plus a 0.75rem gap), so the trail wraps before
-     it reaches the group. Change a gap, a padding or the number of controls
-     here and the reserve follows. Header.test.ts and viewport-layout.test.ts
-     keep them in step with the component.
+  /* The Quick actions group (.hadeda): Share, Notifications, Locations (the
+     same three on every page, owner 2026-11-11) in ONE round pill, FIXED to
+     the top right of the screen and mounted once for the whole app. Its size
+     comes from these tokens and from nothing else: --hadeda-width is the
+     controls (49px each) plus the gaps between them plus the padding around
+     them, --hadeda-height one control plus that padding, and --hadeda-reserve
+     is what the breadcrumb at the left of the phone hero's top row leaves free
+     for it (the pill plus a 0.75rem gap), so the trail wraps before it reaches
+     the group. The site header leaves the same width in its row (its slot).
+     Change a gap, a padding or the number of controls here and the reserve and
+     the slot follow. Header.test.ts and viewport-layout.test.ts keep them in
+     step with the components.
 
-     The inset is the float grid's 1rem, the same as the hero's own top
-     margin, so the group is level with the top row at the top of the page. Its
-     top and right are --float-top and --float-right, which add the safe area
-     so the pill is never under a notch or status bar; today the app does not
-     set viewport-fit=cover, where those insets are 0. If it ever does, the
-     hero's top row needs the same inset. */
-  --hadeda-controls: 2;
+     On a phone the group sits in the float grid's corner (--float-top and
+     --float-right add the safe area, so it is never under a notch or status
+     bar; today the app does not set viewport-fit=cover, where those insets are
+     0), level with the hero's top row; the header row (on a page with the
+     header) puts its top padding there too, so the brand sits on the group's
+     line. From `sm` the group takes the header row's right edge instead:
+     --hadeda-top is the row's padding (--chrome-pad-y) and --hadeda-right the
+     row's gutter plus the room outside the header's 80rem column (and the
+     layout's 0.5rem left padding), so it lines up with the header's content at
+     every width. Three controls up to 767px, four from `md` (the account
+     icon), five from `lg` (Map): see the media blocks after this one. */
+  --hadeda-controls: 3;
   --hadeda-gap: var(--float-gap);
   --hadeda-pad: var(--float-pad);
   --hadeda-width: calc(
     var(--hadeda-controls) * var(--touch-target-min) +
       (var(--hadeda-controls) - 1) * var(--hadeda-gap) + 2 * var(--hadeda-pad)
   );
+  --hadeda-height: calc(var(--touch-target-min) + 2 * var(--hadeda-pad));
   --hadeda-reserve: calc(var(--hadeda-width) + 0.75rem);
+  /* Where a page that takes the whole screen starts its own top-right
+     controls: one gap under the group (the map's layer and locate stack). */
+  --hadeda-below: calc(
+    var(--float-top) + var(--hadeda-height) + var(--float-gap)
+  );
+  /* The bottom edge of that stack: the map hangs two controls (layers, my
+     location) in one capsule under the group, so a bottom sheet as wide as the
+     screen must stop under it (a capacity note makes the sheet tall enough to
+     cover them on a 360x640 phone). */
+  --hadeda-stack-bottom: calc(
+    var(--hadeda-below) + 2 * var(--touch-target-min) + var(--float-gap)
+  );
+  --chrome-max: 80rem;
+  --chrome-gutter: 1rem;
+  --chrome-pad-y: 0.625rem;
+  --hadeda-top: var(--float-top);
+  --hadeda-right: var(--float-right);
 
   /* Mzizi border rule: a solid border on ALL four sides, 0.5px at rest and
      1px on hover, active/selected (aria-current, aria-pressed, aria-selected,
@@ -506,6 +530,45 @@
   --color-moon-shadow: #d6d1c4;
   /* Modal scrim behind Dialog / Sheet overlays */
   --color-overlay: rgba(0, 0, 0, 0.5);
+}
+
+/* The Quick actions group on the header row's grid from `sm`. The row holds
+   the brand, four text links and the group, and the group's width is what
+   decides what fits (measured with the group fixed beside the row, at 640px
+   and up; the nav is 327px at gap-6, 303px at gap-4, the wordmark 76px):
+
+     640 to 767px   three controls, the brand as its mark alone, links at gap-4
+                    (the row needs 577px of its 592px)
+     768 to 1023px  four controls (the account icon joins), the wordmark back
+                    (it needs 726px of 768)
+     1024px up      five controls (Map joins), links at gap-6 (808px of 1024)
+
+   With the group's old five-control width the brand slid under the links up to
+   815px, and at 640px "My Weather" sat under the group. A phone has the
+   account and Map in its bottom bar, and Map is also a card on every place
+   page. The row's own gutter and padding read these tokens too, so the group
+   and the row can never drift apart. 0.5rem is the layout's left padding from
+   480px (src/app/layout.tsx); the percentage is the width of the screen
+   without its scrollbar, which is what the header row centres in. */
+@media (min-width: 640px) {
+  :root {
+    --chrome-gutter: 1.5rem;
+    --hadeda-top: var(--chrome-pad-y);
+    --hadeda-right: calc(
+      max(0px, (100% - 0.5rem - var(--chrome-max)) / 2) + var(--chrome-gutter)
+    );
+  }
+}
+@media (min-width: 768px) {
+  :root {
+    --hadeda-controls: 4;
+    --chrome-gutter: 2rem;
+  }
+}
+@media (min-width: 1024px) {
+  :root {
+    --hadeda-controls: 5;
+  }
 }
 
 [data-theme="dark"] {
@@ -1442,7 +1505,8 @@ body {
            bg-severity-moderate/5 p-4;
   }
 
-  /* .bee — small round icon button (a swarm forms the action pill) */
+  /* .bee — small round icon button: the three controls of the Quick actions
+     group (a swarm forms the pill) */
   .bee {
     @apply flex items-center justify-center
            w-[var(--touch-target-min)] h-[var(--touch-target-min)]
@@ -1466,39 +1530,107 @@ body {
            disabled:cursor-not-allowed disabled:opacity-50;
   }
 
-  /* .hadeda — the phone hero's icon group (the hadeda ibis: always on the high
-     perch). Share and My Location, two .duiker controls in one round pill
-     FIXED to the top of the screen, so they stay in reach while the page
-     scrolls. A card surface like the bottom bar's island, so it reads over the
-     dark sky and over the cards that scroll under it: 0.5px token border,
-     shadow-lg, a 90% card fill. The blur is on a pseudo-element, never on the
-     group itself: a backdrop-filter makes its element the containing block of
-     fixed descendants (the group held the profile menu's fixed panel until the
-     account avatar moved to the bottom bar), so nothing fixed inside it can be
-     captured. Phones only (the caller adds sm:hidden); from `sm` the site
-     header is the top chrome. */
+  /* .hadeda — the Quick actions group (the hadeda ibis: always on the high
+     perch). Share, Notifications and Locations (and, from `sm`, Map and the
+     account icon), the same on every page (owner, 2026-11-11), in one round
+     pill FIXED to the top right, so they stay in reach while the page
+     scrolls. It has two looks, chosen by the background it sits on:
+
+       solid  the brand pill: the primary fill and its foreground (the header's
+              action pill, unchanged). The default, so any page, the map and a
+              place page scrolled past its sky read the same way.
+       clear  no fill, no border, no shadow; the icons take the sky hero's own
+              foreground (--sky-fg, white, 4.5:1 or better on every sky stop:
+              hero.test.ts). Only over the sky hero.
+
+     data-tone says which the page asked for: "solid", "clear", or "auto".
+     "auto" is clear while a sky hero is on the page ([data-sky-hero], known in
+     the first paint, so a place page never flashes the pill) and only bare sky
+     is behind the group: the hero's first line of content (above the place
+     name and the temperature) has not been moved up to it (data-past-sky is set from an
+     IntersectionObserver in QuickActions.tsx once it has, because white icons
+     over white numerals read as neither); otherwise solid. The header asks for
+     "solid" itself once its own surface is behind the group (scrolled, from
+     `sm`). The look is a handful of custom properties, set
+     once for each, so every part of the group follows. The fill and the icon
+     colour cross-fade over 200ms, and not at all under reduced motion.
+
+     No backdrop-filter, transform or filter on the group itself (any of them
+     would make it the containing block of fixed descendants). */
   .hadeda {
+    --hadeda-fill: var(--color-primary);
+    --hadeda-ink: var(--color-primary-foreground);
+    --hadeda-control: color-mix(
+      in srgb,
+      var(--color-background) 10%,
+      transparent
+    );
+    --hadeda-control-hover: color-mix(
+      in srgb,
+      var(--color-background) 20%,
+      transparent
+    );
+    --hadeda-control-active: color-mix(
+      in srgb,
+      var(--color-background) 30%,
+      transparent
+    );
+    --hadeda-ring: var(--color-primary-foreground);
+    --hadeda-dot-edge: var(--color-primary);
     position: fixed;
-    top: var(--float-top);
-    right: var(--float-right);
+    top: var(--hadeda-top);
+    right: var(--hadeda-right);
     z-index: 40;
     display: flex;
     align-items: center;
     gap: var(--hadeda-gap);
     padding: var(--hadeda-pad);
     border-radius: var(--radius-full);
-    border: var(--border-width-rest) solid var(--float-border);
-    background-color: color-mix(in srgb, var(--card) 90%, transparent);
-    box-shadow: var(--shadow-lg);
+    background-color: var(--hadeda-fill);
+    color: var(--hadeda-ink);
+    transition-property: background-color, color;
+    transition-duration: 200ms;
+    transition-timing-function: ease;
   }
-  .hadeda::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    border-radius: inherit;
-    -webkit-backdrop-filter: blur(24px);
-    backdrop-filter: blur(24px);
+  /* The pages that take the whole screen and have no header (the map): the
+     float grid's corner at every width. */
+  .hadeda[data-placement="float"] {
+    top: var(--float-top);
+    right: var(--float-right);
+  }
+  /* The clear look: "clear" asked for, or "auto" with a sky hero on the page
+     whose sky has not been scrolled past the group. Nothing is drawn but the
+     icons, in the hero's own foreground. */
+  .hadeda[data-tone="clear"],
+  body:has([data-sky-hero]) .hadeda[data-tone="auto"]:not([data-past-sky]) {
+    --hadeda-fill: transparent;
+    --hadeda-ink: var(--sky-fg);
+    --hadeda-control: transparent;
+    --hadeda-control-hover: color-mix(in srgb, var(--sky-fg) 16%, transparent);
+    --hadeda-control-active: color-mix(in srgb, var(--sky-fg) 24%, transparent);
+    --hadeda-ring: var(--sky-fg);
+    --hadeda-dot-edge: transparent;
+  }
+  .hadeda .bee {
+    background-color: var(--hadeda-control);
+  }
+  .hadeda [data-alert-dot] {
+    background-color: currentColor;
+    box-shadow: 0 0 0 2px var(--hadeda-dot-edge);
+  }
+  @media (hover: hover) {
+    .hadeda .bee:hover {
+      background-color: var(--hadeda-control-hover);
+    }
+  }
+  .hadeda .bee:active {
+    background-color: var(--hadeda-control-active);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hadeda,
+    .hadeda .bee {
+      transition: none;
+    }
   }
 
   /* .duiker-solid — the one primary round control in a group (map timeline
@@ -2138,12 +2270,14 @@ body {
   border-radius: var(--radius-full);
 }
 
-/* .bee sits on the bg-primary header action pill. The cobalt ring is the same
+/* .bee sits on the bg-primary Quick actions pill. The cobalt ring is the same
    colour as that pill, so it would vanish into it; use the on-primary
    foreground (white on light, near-black on dark — both >= 3:1 against the
-   primary, see globals.a11y.test.ts) instead. */
+   primary, see globals.a11y.test.ts) instead, or the sky foreground while the
+   group is clear (--hadeda-ring). */
 .bee:focus-visible {
-  outline: var(--focus-ring-width, 3px) solid var(--color-primary-foreground);
+  outline: var(--focus-ring-width, 3px) solid
+    var(--hadeda-ring, var(--color-primary-foreground));
   /* No offset: the pill only pads its buttons by 2px, so a zero-offset ring
      stays on the cobalt pill instead of spilling onto the light header. */
   outline-offset: 0px;
@@ -2161,24 +2295,13 @@ body {
    are unlayered rules and not utilities.) The unscrolled header's brand mark
    and desktop links are the same scope, set in their own block below.
 
-   The phone icon group (.hadeda) is a light card pill inside the hero, so it
-   takes the page ring back. */
+   The Quick actions group (.hadeda) is not inside the hero: its controls are
+   .bee, whose ring is --hadeda-ring (the sky foreground while the group is
+   clear over the sky, the on-primary foreground on the brand pill). */
 [data-sky-hero],
 .kestrel-ink,
 .kestrel-card {
   --focus-ring: var(--sky-fg);
-}
-[data-sky-hero] .hadeda {
-  --focus-ring: var(--exp-storm);
-}
-
-/* .kestrel-round (Share on the sky) — unlayered like the fauna rules above:
-   the global :focus-visible rule would otherwise square the round control to a
-   --radius-sm radius on keyboard focus. */
-.kestrel-round:focus-visible {
-  outline: var(--focus-ring-width, 3px) solid var(--sky-fg);
-  outline-offset: var(--focus-ring-offset, 2px);
-  border-radius: var(--radius-full);
 }
 
 /* Loading-skeleton shimmer (.okapi). Only when motion is welcome; otherwise
@@ -2585,33 +2708,17 @@ body {
     border-radius: var(--radius-sky-card);
     padding: var(--space-card);
   }
-
-  /* .kestrel-round — round 48px icon control on the sky (Share).
-     A hairline border and a faint fill, no shadow: Mzizi separates with
-     borders. */
-  .kestrel-round {
-    @apply flex shrink-0 items-center justify-center rounded-full border
-           transition-colors active:scale-95
-           w-[var(--touch-target-min)] h-[var(--touch-target-min)];
-    color: var(--sky-fg);
-    background-color: color-mix(in srgb, var(--sky-fg) 8%, transparent);
-    border-color: color-mix(in srgb, var(--sky-fg) 22%, transparent);
-  }
-  .kestrel-round:hover {
-    background-color: color-mix(in srgb, var(--sky-fg) 16%, transparent);
-  }
-  /* Its :focus-visible ring is an unlayered rule next to .bee's (a rule in this
-     layer loses to the global :focus-visible one). */
 }
 
 /* The sky runs to the top of the screen. While a page shows the sky hero
    ([data-sky-hero]) the phone header is not drawn: the hero's own top row holds
-   the breadcrumb, Share and My Location (the bottom controls stay, the account
-   menu among them). From `sm` the one app header stays, transparent over the
-   sky with its text pointed at the sky foreground, and only gains its blurred
-   surface after scroll ([data-scrolled]). Pure CSS on the body, so there is no
-   flash and a page without the hero (the chooser, every other route) is
-   untouched. */
+   the breadcrumb, and the Quick actions group (a sibling of the header, so it
+   is not hidden with it) floats over the sky at the top right, clear (the
+   bottom controls stay, the account menu among them). From `sm` the one app
+   header stays, transparent over the sky with its text pointed at the sky
+   foreground, and only gains its blurred surface after scroll
+   ([data-scrolled]). Pure CSS on the body, so there is no flash and a page
+   without the hero (the chooser, every other route) is untouched. */
 @media (max-width: 639.98px) {
   body:has([data-sky-hero]) [data-site-header] {
     display: none;

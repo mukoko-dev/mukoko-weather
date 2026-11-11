@@ -1,7 +1,7 @@
 /**
  * Tests for CurrentConditions — the open-sky hero (no card, centred stack over
- * the page sky): structure, top row, share control and accessibility, by
- * reading the source file. Rendered output is covered in
+ * the page sky): structure, top row, the registration the Quick actions group
+ * reads and accessibility, by reading the source file. Rendered output is covered in
  * CurrentConditions.render.test.ts.
  */
 import { describe, it, expect } from "vitest";
@@ -134,7 +134,7 @@ describe("CurrentConditions — hero stack (matches the owner's mockup)", () => 
   });
 });
 
-describe("CurrentConditions — top row (breadcrumb, Share, Locations)", () => {
+describe("CurrentConditions — top row (the breadcrumb; the Quick actions group is the layout's)", () => {
   it("takes the breadcrumb as a slot at the left of the top row, Body Small 14px, dim sky white", () => {
     expect(source).toContain("breadcrumb?: ReactNode");
     expect(source).toContain("{breadcrumb}");
@@ -143,55 +143,53 @@ describe("CurrentConditions — top row (breadcrumb, Share, Locations)", () => {
     );
   });
 
-  it("holds Share at the right of the top row from `sm` up, as a round sky control", () => {
-    expect(source).toContain(
-      '<ShareControl slug={slug} locationName={locationName} variant="sky" />',
-    );
-    expect(source).toContain('<div className="hidden shrink-0 sm:block">');
-  });
-
-  it("puts Share and Locations in ONE fixed icon group on phones (sticky at the top of the screen)", () => {
-    expect(source).toContain('<div className="hadeda sm:hidden">');
-    const group = source.slice(source.indexOf('className="hadeda sm:hidden"'));
-    expect(group.indexOf('variant="card"')).toBeGreaterThan(-1);
-    expect(group.indexOf('variant="card"')).toBeLessThan(
-      group.indexOf("<LocationsLink"),
-    );
-    expect(group).toContain('<LocationsLink className="duiker" />');
-    // The group is not drawn from `sm` up, where the site header is the top chrome.
-    expect(source.match(/<LocationsLink/g)).toHaveLength(1);
-  });
-
-  it("holds no account menu: the avatar is the bottom bar's last slot (owner, 2026-11-11)", () => {
+  it("draws no group of its own: Share, Notifications and Locations are the layout's, one mount for every page", () => {
+    expect(source).not.toContain('className="hadeda');
+    expect(source).not.toContain("<ShareControl");
+    expect(source).not.toContain("<LocationsLink");
+    expect(source).not.toContain("<NotificationsButton");
+    expect(source).not.toContain("kestrel-round");
     expect(source).not.toContain("PhoneMenu");
     expect(source).not.toContain("<AccountMenu");
-    expect(source).toContain(
-      'import { LocationsLink } from "@/components/layout/LocationsLink"',
-    );
   });
 
-  it("keeps the top row 48px tall and leaves the breadcrumb room for the group on phones", () => {
+  it("keeps the top row 49px tall and leaves the breadcrumb room for the group (three controls wide) on phones", () => {
     expect(source).toContain(
       "min-h-[var(--touch-target-min)] min-w-0 pr-[var(--hadeda-reserve)]",
     );
     expect(source).toContain("sm:pr-0");
   });
 
+  it("registers its first line of content (the eyebrow) and its place as the sky hero, for the group's tone and its Share", () => {
+    expect(source).toContain(
+      'import { useRegisterSkyHero } from "@/lib/sky-hero"',
+    );
+    expect(source).toContain(
+      "useRegisterSkyHero(contentRef, { name: locationName, slug })",
+    );
+    expect(source).toContain("ref={contentRef}");
+    // The eyebrow is the first line of the stack after the top row; the
+    // block's own padding above it is bare sky, so the block is not the target
+    // (on a one-line breadcrumb the block's edge is above the group at rest).
+    expect(source.indexOf("ref={contentRef}")).toBeGreaterThan(
+      source.indexOf("{breadcrumb}"),
+    );
+    expect(source).toContain("useRef<HTMLParagraphElement>(null)");
+    expect(source).not.toMatch(/<div\s+ref=\{contentRef\}/);
+  });
+
   it("sits before the identity stack", () => {
-    expect(source.indexOf("kestrel-round")).toBeLessThan(
+    expect(source.indexOf("{breadcrumb}")).toBeLessThan(
       source.indexOf("{temperature}"),
     );
   });
 });
 
-describe("CurrentConditions — share button (the logic lives in ShareControl)", () => {
-  it("renders the shared ShareControl, passing the slug and the place name", () => {
-    expect(source).toContain(
-      'import { ShareControl } from "@/components/weather/ShareControl"',
-    );
-    expect(source).toContain("slug?:");
+describe("CurrentConditions — share (the logic lives in ShareControl, in the group)", () => {
+  it("holds no share code of its own", () => {
     expect(source).not.toContain("navigator.share");
     expect(source).not.toContain("ShareIcon");
+    expect(source).toContain("slug?:");
   });
 });
 

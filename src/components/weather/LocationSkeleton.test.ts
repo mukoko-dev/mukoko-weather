@@ -151,18 +151,23 @@ describe("LocationSkeleton — accessibility", () => {
 });
 
 describe("LocationSkeleton — the hero's top row matches the loaded hero", () => {
-  it("draws the phone icon group where the real one will be: fixed, two round placeholders", () => {
-    const group = html.match(/<div class="hadeda sm:hidden">([\s\S]*?)<\/div>/);
-    expect(group).not.toBeNull();
-    expect(
-      group![1].match(/size-\[var\(--touch-target-min\)\] rounded-full/g),
-    ).toHaveLength(2);
+  it("draws no group of its own: the Quick actions group is the layout's, already on screen and live while the place loads", () => {
+    // (The breadcrumb keeps the group's reserve token, --hadeda-reserve.)
+    expect(html).not.toMatch(/class="[^"]*(?<![-\w])hadeda(?![-\w])/);
+    expect(html).not.toContain("data-quick-actions");
+    expect(heroSrc).not.toMatch(/className="[^"]*(?<![-\w])hadeda(?![-\w])/);
+    // No round placeholder stands in for Share or the group's controls.
+    expect(html).not.toMatch(
+      /class="[^"]*size-\[var\(--touch-target-min\)\][^"]*rounded-full/,
+    );
   });
 
-  it("draws one round placeholder for Share from `sm` up, none on phones", () => {
-    expect(html).toMatch(
-      /class="[^"]*hidden size-\[var\(--touch-target-min\)\][^"]* sm:block"/,
-    );
+  it("registers itself as the sky hero (without a place), so the group is already clear over it and keeps its look when the hero arrives", () => {
+    expect(heroSrc).toContain('"use client"');
+    expect(heroSrc).toContain("useRegisterSkyHero(contentRef, null)");
+    expect(heroSrc).toContain("ref={contentRef}");
+    expect(heroSrc).toContain("useRef<HTMLParagraphElement>(null)");
+    expect(heroSrc).toContain("data-sky-hero");
   });
 
   it("leaves the breadcrumb the same room for the group, and the row the same 48px", () => {
@@ -190,7 +195,7 @@ describe("LocationSkeleton — tokens only", () => {
       "--text-h5",
       "--text-body-lg",
       "pt-4 pb-[26px]",
-      "size-[var(--touch-target-min)]",
+      "min-h-[var(--touch-target-min)]",
     ]) {
       expect(heroSrc).toContain(cls);
     }

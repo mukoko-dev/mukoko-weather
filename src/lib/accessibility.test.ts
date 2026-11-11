@@ -133,18 +133,15 @@ describe("Screen reader text — sr-only", () => {
 });
 
 describe("Touch targets — 56px minimum", () => {
-  it("the hero's share button meets the touch target requirement", () => {
-    // Share is a round .kestrel-round (on the sky) or .duiker (in the phone
-    // icon group) control; each carries both minimums.
-    expect(shareControl).toContain('"duiker"');
-    expect(shareControl).toContain('"kestrel-round"');
+  it("Share, in the Quick actions group, meets the touch target requirement", () => {
+    // Share is a round .bee control in the group (the same on every page);
+    // the class carries both minimums.
+    expect(shareControl).toContain('className="bee"');
     const css = readFileSync(resolve(__dirname, "../app/globals.css"), "utf-8");
-    for (const cls of [".kestrel-round {", ".duiker {"]) {
-      const rule = css.slice(css.indexOf(cls));
-      const body = rule.slice(0, rule.indexOf("}"));
-      expect(body, cls).toContain("w-[var(--touch-target-min)]");
-      expect(body, cls).toContain("h-[var(--touch-target-min)]");
-    }
+    const rule = css.slice(css.indexOf("  .bee {"));
+    const body = rule.slice(0, rule.indexOf("}"));
+    expect(body).toContain("w-[var(--touch-target-min)]");
+    expect(body).toContain("h-[var(--touch-target-min)]");
   });
 });
 

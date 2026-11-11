@@ -176,9 +176,12 @@ describe("the header and the bottom nav are not inside a containing-block ancest
     expect(open![1]).not.toMatch(CONTAINING_BLOCK);
   });
 
-  it("the bottom nav is rendered outside <header> (the scrolled header has backdrop-blur)", () => {
+  it("the bottom nav and the Quick actions group are rendered outside <header> (the scrolled header has backdrop-blur)", () => {
     expect(header).toContain("backdrop-blur-xl");
     expect(header.indexOf("<MobileNav")).toBeGreaterThan(
+      header.indexOf("</header>"),
+    );
+    expect(header.indexOf("<QuickActions")).toBeGreaterThan(
       header.indexOf("</header>"),
     );
   });
@@ -190,38 +193,60 @@ describe("the header and the bottom nav are not inside a containing-block ancest
   });
 });
 
-describe("the hero's phone icon group (.hadeda) stays fixed to the viewport", () => {
+describe("the Quick actions group (.hadeda) stays fixed to the viewport", () => {
   const body = (selector: string) => {
     const at = css.indexOf(`${selector} {`);
     expect(at, `no ${selector} rule`).toBeGreaterThan(-1);
     return css.slice(at, css.indexOf("}", at));
   };
 
-  it("is position: fixed at the top right, from the inset tokens and the safe area", () => {
+  it("is position: fixed at the top right, from the group's position tokens", () => {
     const rule = body("  .hadeda");
     expect(rule).toContain("position: fixed");
-    // The safe-area maths lives once, in the float grid.
-    expect(rule).toContain("top: var(--float-top)");
-    expect(rule).toContain("right: var(--float-right)");
+    expect(rule).toContain("top: var(--hadeda-top)");
+    expect(rule).toContain("right: var(--hadeda-right)");
     expect(rule).not.toContain("env(");
     expect(rule).toMatch(/z-index:\s*40/);
   });
 
-  it("never blurs, transforms or filters itself: its blur is on a pseudo-element", () => {
+  it("takes the float grid's corner on a phone, and the header row's grid from `sm`", () => {
+    // The safe-area maths lives once, in the float grid.
+    expect(css).toContain("--hadeda-top: var(--float-top);");
+    expect(css).toContain("--hadeda-right: var(--float-right);");
+    const sm = css.slice(css.indexOf("@media (min-width: 640px) {\n  :root {"));
+    const smBody = sm.slice(0, sm.indexOf("\n}\n"));
+    // The header row's own padding and gutter, which the row reads too.
+    expect(smBody).toContain("--hadeda-top: var(--chrome-pad-y);");
+    expect(css).toContain("--chrome-pad-y: 0.625rem;");
+    expect(smBody.replace(/\s+/g, " ")).toContain(
+      "--hadeda-right: calc( max(0px, (100% - 0.5rem - var(--chrome-max)) / 2) + var(--chrome-gutter) );",
+    );
+    expect(header).toContain("pt-[var(--hadeda-top)] pb-[var(--chrome-pad-y)]");
+    expect(header).toContain("px-[var(--chrome-gutter)]");
+    expect(header).toContain("max-w-[var(--chrome-max)]");
+    // The layout's left padding that offsets the header row (0.5rem).
+    expect(layout).toContain("min-[480px]:pl-2");
+  });
+
+  it("the map's group is the float grid's corner at every width", () => {
+    const rule = body('  .hadeda[data-placement="float"]');
+    expect(rule).toContain("top: var(--float-top)");
+    expect(rule).toContain("right: var(--float-right)");
+  });
+
+  it("never blurs, transforms or filters itself (a fixed descendant would be captured)", () => {
     // A backdrop-filter (or transform, filter, contain, will-change) would make
     // the group the containing block of any fixed descendant.
     expect(body("  .hadeda")).not.toMatch(
       /(backdrop-filter|transform|filter|perspective|contain|will-change)\s*:/,
     );
-    const before = body("  .hadeda::before");
-    expect(before).toContain("backdrop-filter: blur(");
-    expect(before).toMatch(/z-index:\s*-1/);
+    expect(css).not.toContain(".hadeda::before");
   });
 
-  it("sits in no containing-block ancestor in the hero or its section wrapper", () => {
+  it("sits in no containing-block ancestor: a sibling of <header>, in the layout's plain wrapper", () => {
     for (const file of [
-      "components/weather/CurrentConditions.tsx",
-      "components/weather/DraggableSection.tsx",
+      "components/layout/QuickActions.tsx",
+      "components/layout/AppChrome.tsx",
     ]) {
       for (const c of classNames(read(file))) {
         expect(c, file).not.toMatch(CONTAINING_BLOCK);
@@ -229,14 +254,17 @@ describe("the hero's phone icon group (.hadeda) stays fixed to the viewport", ()
     }
   });
 
-  it("sizes itself from its tokens, and the breadcrumb's reserve is derived from the same ones", () => {
+  it("sizes itself from its tokens, and the breadcrumb's reserve and the header's slot are derived from the same ones", () => {
     expect(css).not.toContain("--hadeda-inset");
-    expect(css).toContain("--hadeda-controls: 2;");
+    expect(css).toContain("--hadeda-controls: 3;");
     expect(css).toContain("--hadeda-gap: var(--float-gap);");
     expect(css).toContain("--hadeda-pad: var(--float-pad);");
     // The width is the controls, the gaps between them and the padding around.
     expect(css.replace(/\s+/g, " ")).toContain(
       "--hadeda-width: calc( var(--hadeda-controls) * var(--touch-target-min) + (var(--hadeda-controls) - 1) * var(--hadeda-gap) + 2 * var(--hadeda-pad) );",
+    );
+    expect(css).toContain(
+      "--hadeda-height: calc(var(--touch-target-min) + 2 * var(--hadeda-pad));",
     );
     expect(css).toContain(
       "--hadeda-reserve: calc(var(--hadeda-width) + 0.75rem);",
@@ -246,29 +274,78 @@ describe("the hero's phone icon group (.hadeda) stays fixed to the viewport", ()
     expect(rule).toContain("gap: var(--hadeda-gap)");
     expect(rule).toContain("padding: var(--hadeda-pad)");
     expect(rule).not.toMatch(/(?<!-)\b(gap|padding):\s*[\d.]+rem/);
-  });
-
-  it("holds exactly as many controls as the token says", () => {
-    const hero = read("components/weather/CurrentConditions.tsx");
-    const group = hero.slice(hero.indexOf('className="hadeda sm:hidden"'));
-    const end = group.indexOf("</div>\n      </div>");
-    const inner = group.slice(0, end);
-    // Share (ShareControl) and Locations (LocationsLink).
-    const controls =
-      (inner.match(/<ShareControl/g) ?? []).length +
-      (inner.match(/<LocationsLink/g) ?? []).length;
-    const token = css.match(/--hadeda-controls:\s*(\d+);/);
-    expect(token).not.toBeNull();
-    expect(controls).toBe(Number(token![1]));
-  });
-
-  it("is a card surface with the Mzizi border: 0.5px token border, shadow, 90% card fill", () => {
-    const rule = body("  .hadeda");
-    expect(rule).toContain(
-      "border: var(--border-width-rest) solid var(--float-border)",
+    // The header's slot is the group's own width and height.
+    expect(header).toContain(
+      "h-[var(--hadeda-height)] w-[var(--hadeda-width)]",
     );
-    expect(rule).toContain("var(--card) 90%");
-    expect(rule).toContain("box-shadow: var(--shadow-lg)");
+  });
+
+  it("holds exactly as many controls as the tokens say: three up to 767px, four from `md`, five from `lg`", () => {
+    const group = read("components/layout/QuickActions.tsx");
+    // Share (ShareControl), Notifications (NotificationsButton) and Locations
+    // (LocationsLink): the same three on every page.
+    const shared =
+      (group.match(/<ShareControl/g) ?? []).length +
+      (group.match(/<NotificationsButton/g) ?? []).length +
+      (group.match(/<LocationsLink/g) ?? []).length;
+    const base = css.match(/--hadeda-controls:\s*(\d+);/);
+    expect(base).not.toBeNull();
+    expect(shared).toBe(Number(base![1]));
+    // The header adds the account icon from `md` and Map from `lg` (a phone has
+    // them in its bottom bar), because that is what its row can hold beside
+    // the brand and the nav (measured: scripts/browser-check/quick-actions.mjs).
+    const from = (query: string) => {
+      const at = css.indexOf(`@media (min-width: ${query}) {\n  :root {`);
+      expect(at, query).toBeGreaterThan(-1);
+      const block = css.slice(at, css.indexOf("\n}\n", at));
+      return block.match(/--hadeda-controls:\s*(\d+);/)?.[1];
+    };
+    expect(from("640px")).toBeUndefined();
+    const extra = header.slice(header.indexOf("extra={"));
+    const mapLink = extra.slice(
+      extra.indexOf("href={mapHref}"),
+      extra.indexOf("{authedUser ? ("),
+    );
+    expect(mapLink).toContain('className="bee hidden lg:flex"');
+    expect(from("1024px")).toBe(String(shared + 2));
+    const account = extra.slice(extra.indexOf("{authedUser ? ("));
+    // Both account variants (the profile link and the sign-in link) are `md`.
+    expect(account).toContain('className="bee hidden overflow-hidden md:flex"');
+    expect(account).toContain('aria-label="Sign in"');
+    expect(
+      account.slice(account.indexOf('aria-label="Sign in"')).slice(0, 80),
+    ).toContain('className="bee hidden md:flex"');
+    expect(from("768px")).toBe(String(shared + 1));
+    // Every extra is drawn from its breakpoint up only; on a phone the bottom bar holds them.
+    for (const link of extra.match(/className="bee [^"]*"/g) ?? []) {
+      expect(link).toContain("hidden");
+      expect(link).toMatch(/(md|lg):flex/);
+    }
+    // The brand gives up its wordmark below `md`, and the nav its width below `lg`.
+    expect(header).toContain('wordmarkClassName="hidden md:inline"');
+    expect(header).toContain('"hidden sm:flex items-center gap-4 lg:gap-6"');
+  });
+
+  it("has two looks and no other fill: solid is the brand pill, clear is nothing but the icons", () => {
+    const rule = body("  .hadeda");
+    expect(rule).toContain("--hadeda-fill: var(--color-primary)");
+    expect(rule).toContain("background-color: var(--hadeda-fill)");
     expect(rule).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(/);
+    const clear = css.slice(css.indexOf('.hadeda[data-tone="clear"],'));
+    expect(clear.slice(0, clear.indexOf("}"))).toContain(
+      "--hadeda-fill: transparent",
+    );
+  });
+
+  it("cross-fades the fill and the icons over 200ms, and not at all under reduced motion", () => {
+    const rule = body("  .hadeda");
+    expect(rule).toContain("transition-property: background-color, color");
+    expect(rule).toContain("transition-duration: 200ms");
+    const reduced = css.slice(
+      css.indexOf("@media (prefers-reduced-motion: reduce) {\n    .hadeda,"),
+    );
+    expect(reduced.slice(0, reduced.indexOf("\n  }\n"))).toContain(
+      "transition: none",
+    );
   });
 });

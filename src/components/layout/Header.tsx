@@ -1,22 +1,23 @@
 "use client";
 
-import { lazy, Suspense, useState, useEffect, useRef } from "react";
+import { lazy, Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
 import { MukokoLogo } from "@/components/brand/MukokoLogo";
-import { LayersIcon, BellIcon, UserIcon } from "@/lib/weather-icons";
-import { LocationsLink } from "@/components/layout/LocationsLink";
-import { NotificationsBoundary } from "@/components/notifications/NotificationsBoundary";
+import { LayersIcon, UserIcon } from "@/lib/weather-icons";
 import { MobileNav } from "@/components/layout/MobileNav";
-import { useChromeClaimed } from "@/components/layout/chrome-context";
+import { QuickActions } from "@/components/layout/QuickActions";
+import {
+  showsQuickActions,
+  useChromeClaimed,
+} from "@/components/layout/chrome-context";
 import { useAppStore } from "@/lib/store";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { initialsFor, type PublicUser } from "@/lib/user-display";
 import { currentLocationSlug } from "@/lib/current-slug";
-import { useAlertBadge } from "@/lib/use-alerts";
+import { PHONE_QUERY, useMediaQuery } from "@/lib/use-media-query";
 import {
-  NOTIFICATIONS_LABEL,
   isDestinationActive,
   visibleHeaderDestinations,
   weatherMapHref,
@@ -28,14 +29,6 @@ import {
 const MyWeatherModal = lazy(() =>
   import("@/components/weather/MyWeatherModal").then((m) => ({
     default: m.MyWeatherModal,
-  })),
-);
-
-// The notifications centre (the alerts list and its settings) loads when it
-// is first opened, so none of it is in a page's first-load JavaScript.
-const NotificationsCentre = lazy(() =>
-  import("@/components/notifications/NotificationsCentre").then((m) => ({
-    default: m.NotificationsCentre,
   })),
 );
 
@@ -59,14 +52,12 @@ export function SiteHeader() {
   const selectedLocation = useAppStore((s) => s.selectedLocation);
   const savedLocations = useAppStore((s) => s.savedLocations);
   const reportModalOpen = useAppStore((s) => s.reportModalOpen);
-  const notificationsOpen = useAppStore((s) => s.notificationsOpen);
-  const openNotifications = useAppStore((s) => s.openNotifications);
-  const closeNotifications = useAppStore((s) => s.closeNotifications);
-  const alertCount = useAlertBadge();
   const pathname = usePathname();
+  const phone = useMediaQuery(PHONE_QUERY);
+  // The group is drawn with the header, except under /embed/ and on the wall
+  // display (see showsQuickActions); without a group the row reserves no room.
+  const quickActions = showsQuickActions(pathname ?? "");
   const [isScrolled, setIsScrolled] = useState(false);
-  // The bell's wrapper: the centre's popover hangs under it.
-  const notificationsRef = useRef<HTMLDivElement>(null);
   // AuthKit's `useAuth()` is hydrated via `<AuthKitProvider initialAuth={…}>`
   // in the root layout, so this renders with the right state on first paint.
   const { user } = useAuth();
@@ -106,9 +97,9 @@ export function SiteHeader() {
         {/* A plain wrapper, not a nav: the desktop links below are the one
             navigation landmark in the header. A nav around a nav is nested
             landmarks, which screen readers announce twice. */}
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6 md:px-8">
-          {/* Brand mark — left-aligned at every breakpoint (the parent nav's
-              justify-between keeps the action pill on the right) */}
+        <div className="mx-auto flex max-w-[var(--chrome-max)] items-center justify-between gap-3 px-[var(--chrome-gutter)] pt-[var(--hadeda-top)] pb-[var(--chrome-pad-y)]">
+          {/* Brand mark — left-aligned at every breakpoint (the parent's
+              justify-between keeps the Quick actions slot on the right) */}
           <div data-header-ink className="flex min-w-0 items-center">
             {/* No viewport prefetch: "/" is a full server-rendered dashboard,
                 and every page load was fetching it in the background. */}
@@ -118,14 +109,14 @@ export function SiteHeader() {
               aria-label="mukoko weather — return to home page"
               className="flex items-center"
             >
-              <MukokoLogo />
+              <MukokoLogo wordmarkClassName="hidden md:inline" />
             </Link>
           </div>
 
           {/* Desktop nav — plain text links, underline on active/hover */}
           <nav
             data-header-ink
-            className="hidden sm:flex items-center gap-6"
+            className="hidden sm:flex items-center gap-4 lg:gap-6"
             aria-label="Main navigation"
           >
             {destinations.map(({ href, label }) => {
@@ -144,10 +135,11 @@ export function SiteHeader() {
             })}
             {/* My Weather opens a modal (not a route), so it's a button rather
                 than a Link, but styled identically to the other nav items. It
-                lives outside the icon group below — that group is reserved
-                for map / notifications / account, and My Weather must stay
-                reachable for anonymous desktop users too (mobile keeps its
-                own separate bottom-nav entry, unaffected). */}
+                lives outside the Quick actions group — that group is Share,
+                Notifications and Locations (plus Map and the account icon on
+                desktop), and My Weather must stay reachable for anonymous
+                desktop users too (mobile keeps its own separate bottom-nav
+                entry, unaffected). */}
             <button
               type="button"
               onClick={() => openMyWeather()}
@@ -157,18 +149,40 @@ export function SiteHeader() {
             </button>
           </nav>
 
-          {/* Action pill — map, notifications, account. Sign-in/avatar lives
-              inside the group (not floating separately) and routes straight
-              to sign-in or the profile page — no dropdown menu. */}
-          {/* 44px buttons, 18px icons — compact desktop pill */}
-          <div className="flex shrink-0 items-center gap-2">
+          {/* The Quick actions group is NOT in the header: it floats at the
+              top right (below), one mount for every page. This slot is only
+              the room it leaves in the row, sized from the group's own
+              tokens so the brand and the nav never run under it. */}
+          {quickActions && (
             <div
-              className="flex items-center gap-0.5 rounded-full bg-primary p-0.5"
-              role="toolbar"
-              aria-label="Quick actions"
-            >
+              aria-hidden="true"
+              data-quick-actions-slot
+              className="h-[var(--hadeda-height)] w-[var(--hadeda-width)] shrink-0"
+            />
+          )}
+        </div>
+      </header>
+
+      {/* Quick actions: Share, Notifications, Locations, the same on every
+          page (owner, 2026-11-11). A sibling of <header>, never inside it (a
+          header with a backdrop-filter would capture the fixed group). It is
+          drawn wherever a header is, and only there (the weather map, which
+          has no header, draws its own): never by a second owner reading the
+          path differently, so there is one group and one notifications centre.
+          Desktop has no bottom bar, so Map and the account icon follow the
+          three in the same pill. `auto` is clear over the sky hero at the top
+          of a place page; once the header has its own surface behind the
+          group (scrolled, from `sm`) the group is solid. */}
+      {quickActions && (
+        <QuickActions
+          tone={isScrolled && !phone ? "solid" : "auto"}
+          extra={
+            <>
               {/* Map for the location on screen; with no real location yet,
-                  send the user to Explore to pick one rather than guessing. */}
+                  send the user to Explore to pick one rather than guessing.
+                  From `lg` only: the header row cannot hold five controls
+                  beside the brand and the nav below 1024px (see globals.css),
+                  and Map is also a card on every place page. */}
               <Link
                 href={mapHref}
                 prefetch={false}
@@ -177,70 +191,20 @@ export function SiteHeader() {
                     ? "Weather map"
                     : "Choose a location for the weather map"
                 }
-                className="bee hidden sm:flex"
+                className="bee hidden lg:flex"
               >
-                <LayersIcon size={20} className="text-primary-foreground" />
+                <LayersIcon size={20} />
               </Link>
 
-              {/* Mobile only — Locations, the round list link to
-                  `/locations` (owner, 2026-11-11: the Locations icon moves to
-                  the top right of the screen). On a place page it is in the
-                  hero's top group instead (the phone header is not drawn
-                  there), so it is reachable on every phone page. The account
-                  avatar is the last slot of the bottom bar. Desktop keeps its
-                  text nav and has no Locations icon. */}
-              <LocationsLink
-                className="bee sm:hidden"
-                iconClassName="text-primary-foreground"
-              />
-
-              <div className="relative" ref={notificationsRef}>
-                {/* The bell opens the notifications centre (alerts for your
-                    places and their settings). The dot says there is
-                    something to read; the count is in the name. */}
-                <button
-                  onClick={() =>
-                    notificationsOpen
-                      ? closeNotifications()
-                      : openNotifications("list")
-                  }
-                  data-notifications-trigger
-                  aria-label={
-                    alertCount > 0
-                      ? `${NOTIFICATIONS_LABEL}, ${alertCount} ${alertCount === 1 ? "alert" : "alerts"}`
-                      : NOTIFICATIONS_LABEL
-                  }
-                  aria-haspopup="dialog"
-                  aria-expanded={notificationsOpen}
-                  className="bee relative"
-                  type="button"
-                >
-                  <BellIcon size={20} className="text-primary-foreground" />
-                  {alertCount > 0 && (
-                    <span
-                      aria-hidden="true"
-                      data-alert-dot
-                      className="absolute right-3 top-3 h-2.5 w-2.5 rounded-full bg-primary-foreground ring-2 ring-primary"
-                    />
-                  )}
-                </button>
-                {notificationsOpen && (
-                  <NotificationsBoundary onClose={closeNotifications}>
-                    <Suspense>
-                      <NotificationsCentre anchorRef={notificationsRef} />
-                    </Suspense>
-                  </NotificationsBoundary>
-                )}
-              </div>
-
-              {/* The account icon is desktop's (`sm` up). On a phone the
-                  avatar is the bottom bar's last slot (its far right), with
-                  the account menu behind it. */}
+              {/* The account icon is for `md` up (768px and wider). On a phone
+                  the avatar is the bottom bar's last slot, with the account
+                  menu behind it. Sign-in/avatar routes straight to sign-in or
+                  the profile page — no dropdown menu. */}
               {authedUser ? (
                 <Link
                   href="/profile"
                   aria-label={`Profile${authedUser.email ? ` (${authedUser.email})` : ""}`}
-                  className="bee hidden overflow-hidden sm:flex"
+                  className="bee hidden overflow-hidden md:flex"
                 >
                   {authedUser.profilePictureUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -251,10 +215,7 @@ export function SiteHeader() {
                       referrerPolicy="no-referrer"
                     />
                   ) : (
-                    <span
-                      className="text-sm font-medium text-primary-foreground"
-                      aria-hidden="true"
-                    >
+                    <span className="text-sm font-medium" aria-hidden="true">
                       {initialsFor(authedUser)}
                     </span>
                   )}
@@ -264,15 +225,15 @@ export function SiteHeader() {
                   href="/auth/signin"
                   prefetch={false}
                   aria-label="Sign in"
-                  className="bee hidden sm:flex"
+                  className="bee hidden md:flex"
                 >
-                  <UserIcon size={20} className="text-primary-foreground" />
+                  <UserIcon size={20} />
                 </Link>
               )}
-            </div>
-          </div>
-        </div>
-      </header>
+            </>
+          }
+        />
+      )}
 
       {/* Mobile navigation — the floating island (see MobileNav). */}
       <MobileNav
