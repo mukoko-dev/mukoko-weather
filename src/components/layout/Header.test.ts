@@ -1,10 +1,11 @@
 /**
  * Tests for Header — the mobile navigation island (a floating, centred pill:
- * map / the account control and the places lane / list, matching the
- * mukoko-news island), the account menu behind the bar's first slot that holds
- * the destinations the island does not show, and My Location, the round arrow
- * link in the header's pill (owner, 2026-11-05: the avatar and My Location
- * swapped places). Desktop header stays as it was. Reads source directly (no
+ * map / My Location and the places lane / the account control, matching the
+ * mukoko-news island), the account menu behind the bar's last slot that holds
+ * the destinations the island does not show, and Locations, the round list
+ * link in the header's pill (owner, 2026-11-11: the avatar is the far right of
+ * the bar, My Location is second from the left, Locations is at the top right).
+ * Desktop header stays as it was. Reads source directly (no
  * DOM renderer needed for structural checks).
  */
 import { describe, it, expect } from "vitest";
@@ -113,11 +114,11 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
     );
   });
 
-  it("gives the pinned items one preset width, wide enough for the longest label (owner, 2026-11-05)", () => {
-    expect(css).toContain("--mobile-nav-item-width: 6rem;");
+  it("gives the pinned items one preset width, wide enough for the longest label (owner, 2026-11-05; Map alone since 2026-11-11)", () => {
+    expect(css).toContain("--mobile-nav-item-width: 4rem;");
     expect(bottomNav).toContain("w-[var(--mobile-nav-item-width)]");
     // Rem, so it follows the label's text size; the real browser check
-    // (scripts/browser-check/bottom-bar.mjs) measures that "Locations" fits.
+    // (scripts/browser-check/bottom-bar.mjs) measures that "Map" fits.
     expect(css).toMatch(/--mobile-nav-item-width:\s*[\d.]+rem;/);
   });
 
@@ -213,26 +214,24 @@ describe("MobileNav — the Mzizi registry bottom nav", () => {
 });
 
 describe("MobileNav — pinned items and the places lane", () => {
-  it("pins Map at the start and Locations at the end, with the lane between them", () => {
-    const order = ['id: "map"', 'id: "locations"'].map((k) => nav.indexOf(k));
-    expect(order.every((i) => i > 0)).toBe(true);
-    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  it("pins Map at the start and nothing at the end, with the lane after it", () => {
+    expect(nav.indexOf('id: "map"')).toBeGreaterThan(0);
     expect(nav).toContain("leading={leading}");
-    expect(nav).toContain("trailing={trailing}");
+    expect(nav).not.toContain("trailing");
     expect(nav).toContain("lane={");
-    // My Location and the account control are not bar items: the first is a
-    // round link at the top of the page, the second the lane's first slot.
+    // My Location is the lane's first chip, the account control the lane's last
+    // slot and Locations a link at the top of the page: none is a bar item.
     expect(nav).not.toContain('id: "my-location"');
     expect(nav).not.toContain('id: "account"');
+    expect(nav).not.toContain('id: "locations"');
     expect(nav).toContain("href: mapHref");
-    expect(nav).toContain('href: "/locations"');
+    expect(nav).not.toContain('href: "/locations"');
     expect(nav).toContain('? "Weather map"');
-    expect(nav).toContain('ariaLabel: "All locations"');
   });
 
-  it("marks the current page explicitly (Map never lights up on /explore)", () => {
-    expect(nav).toContain("activeId={mobileNavActiveId(pathname)}");
-    expect(nav).toContain('pathname === "/locations" ? "locations" : "none"');
+  it("marks no pinned item as current (Map never lights up on /explore)", () => {
+    expect(nav).toContain('activeId="none"');
+    expect(nav).not.toContain("mobileNavActiveId");
   });
 
   it("shows the place sequence as tappable chips in the lane, behind a harness boundary that keeps a My Location link", () => {
@@ -247,15 +246,15 @@ describe("MobileNav — pinned items and the places lane", () => {
     expect(rule("lark")).toContain("min-h-[var(--touch-target-min)]");
   });
 
-  it("starts the lane with the account control (the avatar), behind its own harness boundary that keeps a profile link", () => {
+  it("ends the lane with the account control (the avatar), behind its own harness boundary that keeps a profile link", () => {
     expect(nav).toContain(
       'import { PhoneMenu } from "@/components/layout/PhoneMenu"',
     );
     expect(nav).toMatch(/<MziziHarness\s+name="account-menu"/);
     expect(nav).toContain("fallback={<AccountFallback />}");
     expect(nav).toContain("<PhoneMenu buttonClassName={ACCOUNT_SLOT_CLASS} />");
-    // The account control comes first, then the places lane.
-    expect(nav.indexOf("<PhoneMenu")).toBeLessThan(nav.indexOf("<PlaceLane"));
+    // The places lane comes first, then the account control at the far right.
+    expect(nav.indexOf("<PlaceLane")).toBeLessThan(nav.indexOf("<PhoneMenu"));
     // A round pinned target in the bar's own look (.plover), one touch target.
     const slot = nav.match(/ACCOUNT_SLOT_CLASS =\s*"([^"]*)"/);
     expect(slot).not.toBeNull();
@@ -347,13 +346,13 @@ describe("Header — the phone menu is the Mzizi account menu, filled with the h
     expect(acct).toContain('querySelector<HTMLElement>("summary")?.focus()');
   });
 
-  it("is no longer in the header: its ⋯ slot in the pill is My Location, and the menu opens from the bar", () => {
+  it("is no longer in the header: its ⋯ slot in the pill is Locations, and the menu opens from the bar", () => {
     // The ⋯ trigger and its "More options" name are gone with the move.
     expect(source).not.toContain("PhoneMenu");
     expect(source).not.toContain('trigger="ellipsis"');
     expect(menu).not.toContain("More options");
     expect(menu).not.toContain("Ellipsis");
-    expect(source).toContain("<MyLocationLink");
+    expect(source).toContain("<LocationsLink");
   });
 
   it("lists the header's destinations from the shared list (Shamwari behind its flag)", () => {
@@ -488,23 +487,23 @@ describe("Header — header pill on phones", () => {
     expect(source).toContain('className="bee hidden sm:flex"');
   });
 
-  it("holds My Location (the round arrow link, phones only) where the ⋯ account menu was", () => {
+  it("holds Locations (the round list link, phones only) where the ⋯ account menu was", () => {
     expect(source).toContain(
-      'import { MyLocationLink } from "@/components/layout/MyLocationLink"',
+      'import { LocationsLink } from "@/components/layout/LocationsLink"',
     );
     expect(source).toContain('className="bee sm:hidden"');
     expect(source).toContain('iconClassName="text-primary-foreground"');
-    // Before the bell, where the ⋯ was: map (desktop), My Location (phone), bell.
-    expect(source.indexOf("<MyLocationLink")).toBeGreaterThan(
+    // Before the bell, where the ⋯ was: map (desktop), Locations (phone), bell.
+    expect(source.indexOf("<LocationsLink")).toBeGreaterThan(
       source.indexOf("href={mapHref}"),
     );
-    expect(source.indexOf("<MyLocationLink")).toBeLessThan(
+    expect(source.indexOf("<LocationsLink")).toBeLessThan(
       source.indexOf("data-notifications-trigger"),
     );
-    expect(source.match(/<MyLocationLink/g)).toHaveLength(1);
+    expect(source.match(/<LocationsLink/g)).toHaveLength(1);
   });
 
-  it("keeps the account icon for `sm` up only: on a phone the avatar is the bottom bar's first slot", () => {
+  it("keeps the account icon for `sm` up only: on a phone the avatar is the bottom bar's last slot", () => {
     expect(source).toContain('className="bee hidden overflow-hidden sm:flex"');
     const signIn = source.slice(source.indexOf('aria-label="Sign in"'));
     expect(signIn.slice(0, 120)).toContain('className="bee hidden sm:flex"');
@@ -649,38 +648,41 @@ describe("Header — My Location button", () => {
   });
 });
 
-describe("PhoneMenu and MyLocationLink — the avatar and My Location swapped places", () => {
+describe("PhoneMenu and LocationsLink — the avatar is the bar's far right, Locations the top right", () => {
   const hero = readFileSync(
     resolve(__dirname, "../weather/CurrentConditions.tsx"),
     "utf-8",
   );
-  const link = readFileSync(resolve(__dirname, "MyLocationLink.tsx"), "utf-8");
+  const link = readFileSync(resolve(__dirname, "LocationsLink.tsx"), "utf-8");
 
-  it("the account menu has one home, the bar's first slot: neither the header nor the hero mounts it", () => {
+  it("the account menu has one home, the bar's last slot: neither the header nor the hero mounts it", () => {
     expect(nav).toContain("<PhoneMenu");
     expect(source).not.toContain("<PhoneMenu");
     expect(hero).not.toContain("PhoneMenu");
   });
 
-  it("My Location is one component with two homes: the hero's phone icon group and the header's pill", () => {
-    expect(source.match(/<MyLocationLink/g)).toHaveLength(1);
-    expect(hero.match(/<MyLocationLink/g)).toHaveLength(1);
+  it("Locations is one component with two homes: the hero's phone icon group and the header's pill", () => {
+    expect(source.match(/<LocationsLink/g)).toHaveLength(1);
+    expect(hero.match(/<LocationsLink/g)).toHaveLength(1);
     // In the hero it is a round card-surface control in the fixed phone icon
     // group (.hadeda) beside Share.
-    expect(hero).toContain('<MyLocationLink className="duiker" />');
-    // Neither home hand-rolls the arrow link.
-    expect(source).not.toContain("NavigationIcon");
-    expect(hero).not.toMatch(/<Link\b[^>]*href="\/"/);
+    expect(hero).toContain('<LocationsLink className="duiker" />');
+    // Neither home hand-rolls the list link, and My Location is not up there.
+    expect(source).not.toContain("ListIcon");
+    expect(hero).not.toMatch(/<Link\b[^>]*href="\/locations"/);
+    expect(source).not.toContain("MyLocationLink");
+    expect(hero).not.toContain("MyLocationLink");
   });
 
-  it("is a real link to `/` named My Location, current on `/`, turned into an in-place switch by a plain click", () => {
+  it("is a plain real link to /locations named All locations, current on the list", () => {
     expect(link).toContain("<Link");
-    expect(link).toContain("href={MY_LOCATION_HREF}");
-    expect(link).toContain("aria-label={MY_LOCATION_NAME}");
+    expect(link).toContain("href={LOCATIONS_HREF}");
+    expect(link).toContain('export const LOCATIONS_HREF = "/locations"');
+    expect(link).toContain("aria-label={LOCATIONS_LABEL}");
     expect(link).toContain('aria-current={current ? "page" : undefined}');
-    expect(link).toContain("const current = pathname === MY_LOCATION_HREF;");
-    expect(link).toContain("handlePlaceLinkClick(event, MY_LOCATION_HREF");
-    expect(link).toContain("router.push(href)");
+    expect(link).toContain("const current = pathname === LOCATIONS_HREF;");
+    // /locations is not a place: no place-stage hand-over.
+    expect(link).not.toContain("handlePlaceLinkClick");
   });
 
   it("lists the account (Account when signed in, Sign in otherwise)", () => {

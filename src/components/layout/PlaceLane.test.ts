@@ -1,7 +1,6 @@
 /**
- * Tests for PlaceLane — the places lane in the phone bottom bar (after the
- * account control; My Location is no longer a chip, owner 2026-11-05). The
- * lane's view renders for real (react-dom/server); the effects (centre the
+ * Tests for PlaceLane — the places lane in the middle of the phone bottom bar.
+ * The lane's view renders for real (react-dom/server); the effects (centre the
  * current chip, fade the end edge) are source-checked here, their maths is in
  * src/lib/location-pager.test.ts and MobileNav.render.test.ts covers the whole
  * bar. The sequence itself is shared with the swipe: see
@@ -45,25 +44,24 @@ describe("PlaceLane — accessible lane", () => {
     expect(source).not.toMatch(/<nav[\s>]/);
   });
 
-  it("names the places list", () => {
+  it("names the places list, so My Location (the link before it) is not an item of it", () => {
     const html = view(["harare"], 0);
     expect(html).toContain('aria-label="Saved places and suggestions"');
+    expect(html.indexOf('aria-label="My Location"')).toBeLessThan(
+      html.indexOf("<ul"),
+    );
   });
 
-  it("is a list of links, the places by their text; My Location is not drawn here", () => {
+  it("is a list of links: My Location named by aria-label, places by their text", () => {
     const html = view(["harare", "nairobi-ke"], 1);
-    // The list holds the places only: one item per place.
+    // My Location is the pinned link before the list; the list holds the places.
     expect(html.match(/<li\b/g)).toHaveLength(2);
+    expect(html).toContain('aria-label="My Location"');
+    expect(html).toContain('href="/"');
     // The lane links to the canonical URL of a shipped place (#317).
     expect(html).toContain(`href="/${c("harare")}"`);
     expect(html).toContain(">Harare</span>");
     expect(html).toContain('title="Nairobi"');
-    // My Location (`/`) is the round arrow link at the top of the page
-    // (MyLocationLink), and the account control is the bar's slot before the
-    // lane: neither is a chip.
-    expect(html).not.toContain('href="/"');
-    expect(html).not.toContain("My Location");
-    expect(html).not.toContain("<svg");
   });
 
   it("marks exactly the current chip with aria-current='page'", () => {
@@ -77,26 +75,24 @@ describe("PlaceLane — accessible lane", () => {
     expect(view(["harare"], -1)).not.toContain("aria-current");
   });
 
-  it("marks no chip on My Location (`/`, index 0): that page has no chip in the lane", () => {
-    const html = view(["harare", "nairobi-ke"], 0);
-    expect(html).not.toContain("aria-current");
-    expect(html.match(/<li\b/g)).toHaveLength(2);
-  });
-
-  it("scrolls only the places: the scroller is the whole lane, with nothing pinned or sticky inside it", () => {
+  it("pins My Location by keeping it OUTSIDE the scroller, before the places", () => {
     const html = view(["harare", "nairobi-ke"], 1);
-    expect(html.indexOf('role="group"')).toBeLessThan(
-      html.indexOf("sanderling"),
-    );
+    const home = html.indexOf('aria-label="My Location"');
+    const scroller = html.indexOf("sanderling");
+    expect(home).toBeGreaterThan(0);
+    expect(home).toBeLessThan(scroller);
+    // Not in the list: the list holds the places only.
+    expect(html.match(/<li\b/g)).toHaveLength(2);
     expect(html).not.toContain("sticky");
     expect(source.replace(/\/\*[\s\S]*?\*\//g, "")).not.toContain("sticky");
   });
 
-  it("with no places the lane draws nothing (the bar keeps its account control)", () => {
+  it("with no places the lane is My Location alone, at the start (second from the left), and renders no scroller", () => {
     const html = view([], 0);
-    expect(html).toBe("");
-    // An empty labelled group would be announced as a group with nothing in it.
-    expect(source).toContain("if (places.length === 0) return null;");
+    expect(html).not.toContain("justify-center");
+    expect(html).not.toContain("sanderling");
+    expect(html).not.toContain("<ul");
+    expect(html).toContain(">My Location</span>");
   });
 
   it("keeps real links so a new tab, a middle click and no-JS still work", () => {
@@ -128,11 +124,9 @@ describe("PlaceLane — accessible lane", () => {
     );
   });
 
-  it("does not trust the chip order: the places are found by kind, so a home chip is never drawn", () => {
-    expect(source).not.toContain('chip.kind === "home"');
+  it("does not trust the chip order: My Location and the places are found by kind", () => {
+    expect(source).toContain('chips.find((chip) => chip.kind === "home")');
     expect(source).toContain('chips.filter((chip) => chip.kind === "place")');
-    // A view handed My Location among its chips draws the places only.
-    expect(view(["harare"], 0).match(/<li\b/g)).toHaveLength(1);
     // A view given no chips renders an empty lane instead of throwing.
     expect(() =>
       renderToStaticMarkup(
@@ -154,7 +148,7 @@ describe("PlaceLane — scrolling", () => {
     expect(source).toContain("[activeIndex, chips.length]");
   });
 
-  it("returns the lane to its start when My Location is current (no chip is: `/` is index 0)", () => {
+  it("returns the lane to its start when My Location is current", () => {
     expect(source).toContain("active ? activeIndex : 0");
   });
 

@@ -257,7 +257,10 @@ describe("AccountMenu — panelPlacement", () => {
       expect(detailsOf({ panelPlacement: "above" })).not.toContain("relative");
       expect(tokens).toContain("absolute");
       expect(tokens).toContain("bottom-full");
-      expect(tokens).toContain("left-0");
+      // The bar's last slot is the far right, so the panel hangs from the
+      // bar's right edge (2026-11-11), not its left.
+      expect(tokens).toContain("right-0");
+      expect(tokens).not.toContain("left-0");
       // A gap from the float grid between the panel and the bar.
       expect(tokens).toContain("mb-[var(--float-gap)]");
     });
@@ -294,14 +297,15 @@ describe("AccountMenu — panelPlacement", () => {
         const edge = Math.max(16, inset);
         for (let viewport = 280; viewport < 640; viewport++) {
           const width = Math.min(maxPx, viewport - edge - edge);
-          // The panel's left edge is the bar's (left-0 of the fixed bar).
-          const left = edge;
+          // The panel's right edge is the bar's (right-0 of the fixed bar).
+          const right = viewport - edge;
+          const left = right - width;
           expect(
             left,
             `left edge at ${viewport}px, inset ${inset}`,
-          ).toBeGreaterThanOrEqual(16);
+          ).toBeGreaterThanOrEqual(edge);
           expect(
-            left + width,
+            right,
             `right edge at ${viewport}px, inset ${inset}`,
           ).toBeLessThanOrEqual(viewport - edge);
         }

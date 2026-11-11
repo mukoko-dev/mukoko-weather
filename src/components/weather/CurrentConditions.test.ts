@@ -134,7 +134,7 @@ describe("CurrentConditions — hero stack (matches the owner's mockup)", () => 
   });
 });
 
-describe("CurrentConditions — top row (breadcrumb, Share, My Location)", () => {
+describe("CurrentConditions — top row (breadcrumb, Share, Locations)", () => {
   it("takes the breadcrumb as a slot at the left of the top row, Body Small 14px, dim sky white", () => {
     expect(source).toContain("breadcrumb?: ReactNode");
     expect(source).toContain("{breadcrumb}");
@@ -150,23 +150,23 @@ describe("CurrentConditions — top row (breadcrumb, Share, My Location)", () =>
     expect(source).toContain('<div className="hidden shrink-0 sm:block">');
   });
 
-  it("puts Share and My Location in ONE fixed icon group on phones (sticky at the top of the screen)", () => {
+  it("puts Share and Locations in ONE fixed icon group on phones (sticky at the top of the screen)", () => {
     expect(source).toContain('<div className="hadeda sm:hidden">');
     const group = source.slice(source.indexOf('className="hadeda sm:hidden"'));
     expect(group.indexOf('variant="card"')).toBeGreaterThan(-1);
     expect(group.indexOf('variant="card"')).toBeLessThan(
-      group.indexOf("<MyLocationLink"),
+      group.indexOf("<LocationsLink"),
     );
-    expect(group).toContain('<MyLocationLink className="duiker" />');
+    expect(group).toContain('<LocationsLink className="duiker" />');
     // The group is not drawn from `sm` up, where the site header is the top chrome.
-    expect(source.match(/<MyLocationLink/g)).toHaveLength(1);
+    expect(source.match(/<LocationsLink/g)).toHaveLength(1);
   });
 
-  it("holds no account menu: the avatar and My Location swapped places (owner, 2026-11-05)", () => {
+  it("holds no account menu: the avatar is the bottom bar's last slot (owner, 2026-11-11)", () => {
     expect(source).not.toContain("PhoneMenu");
     expect(source).not.toContain("<AccountMenu");
     expect(source).toContain(
-      'import { MyLocationLink } from "@/components/layout/MyLocationLink"',
+      'import { LocationsLink } from "@/components/layout/LocationsLink"',
     );
   });
 

@@ -1,24 +1,28 @@
-// The account avatar and My Location swapped places (owner, 2026-11-05, #525):
-// the avatar is the first slot of the phone bottom bar and its menu opens
-// UPWARD; My Location is the round arrow link in the hero's top group and in
-// the header's pill.
+// The phone bar's order (owner, 2026-11-11): Map, My Location (the lane's first
+// chip, second from the left), the places, and the account avatar at the far
+// right, whose menu opens UPWARD. Locations is the round list link in the
+// hero's top group (beside Share) and in the header's pill; it is not in the
+// bar. (2026-11-05, #525 had swapped the avatar and My Location.)
 //
 //   BASE=http://localhost:3100 SHOTS=/tmp/shots node scripts/browser-check/account-menu-bar.mjs
 //
 // What only a browser can show: the menu's panel hangs from the bar (the bar
 // has a backdrop-filter, so a `fixed` panel would not be viewport-anchored),
-// so at 393x852 and 360x740 it is fully on screen, its left edge is the bar's,
+// so at 393x852 and 360x740 it is fully on screen, its right edge is the bar's,
 // its bottom edge is a gap above the bar and it is the top layer; Escape and a
-// tap outside close it and Escape gives focus back; My Location sits in the
+// tap outside close it and Escape gives focus back; Locations sits in the
 // hero group on a place page and in the header pill on a page with no hero
-// (/locations), as a 49px link that goes to `/` and is current there; and the
+// (/locations), as a 49px link that goes to /locations and is current there;
+// My Location is a bar chip that goes to `/` and is current there; and the
 // header's account icon is not drawn on a phone. Desktop at 1280px is
-// unchanged: no phone group, no bar, no My Location icon.
+// unchanged: no phone group, no bar, no Locations icon.
 import { BASE, SHOTS, chromium, proxyApi, reporter, run } from "./harness.mjs";
 
 const { note, finish } = reporter();
 const TOUCH = 49; // --touch-target-min
 const ACCOUNT = '[data-slot="mzizi-bottom-nav"] [data-slot="account-menu"]';
+const LOCATIONS = 'a[aria-label="All locations"]';
+const HOME_CHIP = '[data-slot="mzizi-bottom-nav"] a[aria-label="My Location"]';
 const SIZES = [
   { name: "393x852", width: 393, height: 852 },
   { name: "360x740", width: 360, height: 740 },
@@ -56,9 +60,7 @@ run(async () => {
 
     // A place page: the hero group and the bar.
     await page.goto(`${BASE}/harare`, { waitUntil: "domcontentloaded" });
-    await page.waitForSelector('.hadeda a[aria-label="My Location"]', {
-      timeout: 60000,
-    });
+    await page.waitForSelector(`.hadeda ${LOCATIONS}`, { timeout: 60000 });
     await page.waitForSelector(`${ACCOUNT} summary`, { timeout: 20000 });
     await page.waitForTimeout(1500);
 
@@ -70,13 +72,13 @@ run(async () => {
       };
     });
     note(
-      `[${tag}] the hero group holds Share and My Location, no account menu`,
+      `[${tag}] the hero group holds Share and Locations, no account menu`,
       group.controls === 2 && group.menu === 0,
       JSON.stringify(group),
     );
-    const here = await rect(page, '.hadeda a[aria-label="My Location"]');
+    const here = await rect(page, `.hadeda ${LOCATIONS}`);
     note(
-      `[${tag}] My Location is a ${TOUCH}px round link`,
+      `[${tag}] Locations is a ${TOUCH}px round link`,
       Math.abs(here.w - TOUCH) < 0.6 && Math.abs(here.h - TOUCH) < 0.6,
       `${here.w}x${here.h}`,
     );
@@ -99,11 +101,18 @@ run(async () => {
       ),
     );
     note(
-      `[${tag}] the bar reads Map, the account control, the places, Locations`,
+      `[${tag}] the bar reads Map, My Location, the places, the account control`,
       /map/i.test(order[0]) &&
-        order[1] === "ACCOUNT" &&
-        /locations/i.test(order.at(-1)),
+        order[1] === "My Location" &&
+        order.at(-1) === "ACCOUNT" &&
+        !order.some((o) => /locations/i.test(o) && o !== "My Location"),
       order.join(" | "),
+    );
+    const barBox = await rect(page, '[data-slot="mzizi-bottom-nav"]');
+    note(
+      `[${tag}] the account trigger is the far right of the bar (inside its padding)`,
+      barBox.right - trigger.right >= 0 && barBox.right - trigger.right < 24,
+      `trigger right ${trigger.right.toFixed(1)}, bar right ${barBox.right.toFixed(1)}`,
     );
 
     // Open it: upward, on screen, against the bar.
@@ -126,9 +135,9 @@ run(async () => {
       `panel bottom ${panel.bottom.toFixed(1)}, bar top ${bar.y.toFixed(1)}`,
     );
     note(
-      `[${tag}] the panel's left edge is the bar's, and it is not wider than the bar`,
-      Math.abs(panel.x - bar.x) <= 1.5 && panel.w <= bar.w + 0.5,
-      `${panel.x.toFixed(1)} vs ${bar.x.toFixed(1)}, ${panel.w} in ${bar.w}`,
+      `[${tag}] the panel's right edge is the bar's, and it is not wider than the bar`,
+      Math.abs(panel.right - bar.right) <= 1.5 && panel.w <= bar.w + 0.5,
+      `${panel.right.toFixed(1)} vs ${bar.right.toFixed(1)}, ${panel.w} in ${bar.w}`,
     );
     const onTop = await page.evaluate(
       ([x, y]) =>
@@ -161,16 +170,34 @@ run(async () => {
     await page.waitForTimeout(300);
     note(`[${tag}] a tap outside closes the menu`, !(await isOpen(page)));
 
-    // My Location: a tap goes to `/`, where it is the current page.
-    await page.tap('.hadeda a[aria-label="My Location"]');
+    // Locations: a tap goes to /locations, where it is the current page.
+    await page.tap(`.hadeda ${LOCATIONS}`);
+    await page.waitForURL((url) => new URL(url).pathname === "/locations", {
+      timeout: 60000,
+    });
+    await page
+      .waitForSelector(`${LOCATIONS}[aria-current="page"]`, { timeout: 30000 })
+      .then(
+        () =>
+          note(
+            `[${tag}] a tap on Locations goes to /locations and marks it current`,
+            true,
+          ),
+        () =>
+          note(
+            `[${tag}] a tap on Locations goes to /locations and marks it current`,
+            false,
+          ),
+      );
+
+    // My Location (the bar's second control): a tap goes to `/`, where it is
+    // the current page.
+    await page.tap(HOME_CHIP);
     await page.waitForURL((url) => new URL(url).pathname === "/", {
       timeout: 60000,
     });
     await page
-      .waitForSelector(
-        '.hadeda a[aria-label="My Location"][aria-current="page"]',
-        { timeout: 30000 },
-      )
+      .waitForSelector(`${HOME_CHIP}[aria-current="page"]`, { timeout: 30000 })
       .then(
         () =>
           note(
@@ -184,7 +211,7 @@ run(async () => {
           ),
       );
 
-    // A page with no hero: My Location is in the header's pill, the account
+    // A page with no hero: Locations is in the header's pill, the account
     // icon is not drawn on a phone, the bar still has the account control.
     await page.goto(`${BASE}/locations`, { waitUntil: "domcontentloaded" });
     await page.waitForSelector("[data-site-header]", { timeout: 30000 });
@@ -204,9 +231,9 @@ run(async () => {
         }));
     });
     note(
-      `[${tag}] /locations: the header pill is My Location and Notifications, ${TOUCH}px each`,
+      `[${tag}] /locations: the header pill is Locations and Notifications, ${TOUCH}px each`,
       pill.length === 2 &&
-        pill[0].label === "My Location" &&
+        pill[0].label === "All locations" &&
         /Notifications/.test(pill[1].label ?? "") &&
         pill.every((p) => p.w === TOUCH && p.h === TOUCH),
       JSON.stringify(pill),
@@ -235,8 +262,8 @@ run(async () => {
     return {
       group: visible(document.querySelector(".hadeda")),
       bar: visible(document.querySelector('[data-slot="mzizi-bottom-nav"]')),
-      myLocation: [
-        ...document.querySelectorAll('a[aria-label="My Location"]'),
+      locations: [
+        ...document.querySelectorAll('a[aria-label="All locations"]'),
       ].some(visible),
       account: [
         ...document.querySelectorAll(
@@ -246,8 +273,8 @@ run(async () => {
     };
   });
   note(
-    "[1280] desktop: no phone group, no bar, no My Location icon; the header's account icon is shown",
-    !d.group && !d.bar && !d.myLocation && d.account,
+    "[1280] desktop: no phone group, no bar, no Locations icon; the header's account icon is shown",
+    !d.group && !d.bar && !d.locations && d.account,
     JSON.stringify(d),
   );
   await desktop.close();

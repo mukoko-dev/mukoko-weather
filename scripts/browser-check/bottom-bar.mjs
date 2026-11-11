@@ -1,23 +1,26 @@
-// The phone bottom bar's pinned items (owner, 2026-11-05, from a screen
-// recording): Map and Locations must be ONE width, a preset, not the width of
-// their own labels (Map was 53pt and Locations 85pt).
+// The phone bottom bar (owner, 2026-11-11): Map is the one pinned item at the
+// start, My Location is the lane's first chip (the second control from the
+// left), the places scroll after it, and the account avatar is the far right.
+// Locations is not in the bar (it is the list link at the top right).
+// (2026-11-05, from a screen recording: pinned items are ONE width, a preset,
+// not the width of their own labels.)
 //
 //   BASE=http://localhost:3100 SHOTS=/tmp/shots node scripts/browser-check/bottom-bar.mjs
 //
-// What only a browser can show: the two pinned items measure the same at
-// several phone widths, the longest label ("Locations") fits whole inside its
-// item (not cut, not overflowing), the lane keeps a usable width, the items
-// stay inside the bar, and below 360px (labels screen-reader-only) both are
-// still equal and one touch target wide, and the places lane moves sideways
-// only (owner, 2026-11-05: "movable up and down as well, it should only move
-// left and right"). Screenshots go to SHOTS.
+// What only a browser can show: Map's label fits whole inside its item (not
+// cut, not overflowing) at several phone widths, the lane keeps a usable
+// width, the items stay inside the bar, My Location comes right after Map and
+// the account trigger is the last control at the bar's right edge, below 360px
+// (label screen-reader-only) Map is one touch target wide, and the places lane
+// moves sideways only (owner, 2026-11-05: "movable up and down as well, it
+// should only move left and right"). Screenshots go to SHOTS.
 import { join } from "node:path";
 import { BASE, SHOTS, chromium, proxyApi, reporter, run } from "./harness.mjs";
 
 const { note, finish } = reporter();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const TOUCH_TARGET_PX = 49; // --touch-target-min
-const LANE_MIN_PX = 110; // the account control and part of one more chip
+const LANE_MIN_PX = 110; // My Location, the account control and part of a chip
 
 const WIDTHS = [
   { name: "iphone-se", width: 375, height: 667 },
@@ -54,6 +57,10 @@ const measure = (page) =>
     const pinned = [...nav.querySelectorAll(":scope > a")];
     const lane = nav.querySelector('[data-slot="mzizi-bottom-nav-lane"]');
     const navBox = nav.getBoundingClientRect();
+    const home = nav.querySelector('a[aria-label="My Location"]');
+    const account = nav.querySelector('[data-slot="account-menu"] summary');
+    const homeBox = home?.getBoundingClientRect();
+    const accountBox = account?.getBoundingClientRect();
     const items = pinned.map((a) => {
       const box = a.getBoundingClientRect();
       const label = a.querySelector("span");
@@ -76,6 +83,9 @@ const measure = (page) =>
     return {
       items,
       lane: lane ? lane.getBoundingClientRect().width : 0,
+      homeLeft: homeBox ? homeBox.left : null,
+      accountRight: accountBox ? accountBox.right : null,
+      hasLocationsLink: !!nav.querySelector('a[href="/locations"]'),
       nav: { left: navBox.left, right: navBox.right, width: navBox.width },
       viewport: window.innerWidth,
     };
@@ -100,42 +110,40 @@ run(async () => {
       await sleep(1500); // fonts, the lane's first layout
       const m = await measure(page);
       const tag = `${size.name} ${size.width}px`;
-      if (!m || m.items.length !== 2) {
-        note(`${tag}: the bar has two pinned items`, false, JSON.stringify(m));
+      if (!m || m.items.length !== 1) {
+        note(`${tag}: the bar has one pinned item`, false, JSON.stringify(m));
         await context.close();
         continue;
       }
-      const [map, locations] = m.items;
-      note(
-        `${tag}: Map and Locations are the same width`,
-        Math.abs(map.width - locations.width) < 0.5,
-        `Map ${map.width.toFixed(1)}px, Locations ${locations.width.toFixed(1)}px`,
-      );
+      const [map] = m.items;
       const compact = size.width < 360;
       if (compact) {
         note(
-          `${tag}: labels are screen-reader-only and the items are one touch target wide`,
-          !map.labelVisible &&
-            !locations.labelVisible &&
-            Math.abs(map.width - TOUCH_TARGET_PX) < 0.5,
+          `${tag}: Map's label is screen-reader-only and the item is one touch target wide`,
+          !map.labelVisible && Math.abs(map.width - TOUCH_TARGET_PX) < 0.5,
           `width ${map.width.toFixed(1)}px`,
         );
       } else {
         note(
-          `${tag}: both labels are shown whole (not cut)`,
-          map.labelVisible &&
-            locations.labelVisible &&
-            !map.cut &&
-            !locations.cut,
-          `Locations label ${locations.labelWidth.toFixed(1)}px in ${locations.width.toFixed(1)}px`,
+          `${tag}: Map's label is shown whole (not cut)`,
+          map.labelVisible && !map.cut,
+          `Map label ${map.labelWidth.toFixed(1)}px in ${map.width.toFixed(1)}px`,
         );
       }
       note(
-        `${tag}: the items sit inside the bar and the lane is at least ${LANE_MIN_PX}px`,
-        map.left >= m.nav.left &&
-          locations.right <= m.nav.right &&
-          m.lane >= (compact ? LANE_MIN_PX + 30 : LANE_MIN_PX),
+        `${tag}: Map sits inside the bar and the lane is at least ${LANE_MIN_PX}px`,
+        map.left >= m.nav.left && m.lane >= LANE_MIN_PX,
         `lane ${m.lane.toFixed(1)}px`,
+      );
+      note(
+        `${tag}: My Location follows Map, the account trigger ends the bar, no Locations link in it`,
+        m.homeLeft !== null &&
+          m.homeLeft >= map.right &&
+          m.accountRight !== null &&
+          m.nav.right - m.accountRight >= 0 &&
+          m.nav.right - m.accountRight < 24 &&
+          !m.hasLocationsLink,
+        `Map right ${map.right.toFixed(1)}, My Location left ${m.homeLeft?.toFixed(1)}, account right ${m.accountRight?.toFixed(1)} of bar ${m.nav.right.toFixed(1)}`,
       );
       const v = await probeVertical(page);
       note(

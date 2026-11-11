@@ -343,7 +343,7 @@ describe("Mzizi alignment guard — every button", () => {
 
   it("the hero's Share is a Mzizi control: kestrel-round on the sky, duiker in the phone icon group", () => {
     // The hero itself holds no button of its own; its Share is ShareControl's
-    // one button, and My Location is MyLocationLink's link.
+    // one button, and Locations is LocationsLink's link.
     expect(
       FOUND.filter((f) => f.file.endsWith("CurrentConditions.tsx")),
     ).toHaveLength(0);
@@ -388,8 +388,8 @@ describe("Mzizi alignment guard — menus", () => {
   });
 
   it("the phone menu is reached only through PhoneMenu, and only from the bottom bar", () => {
-    // The avatar and My Location swapped places (owner, 2026-11-05): the
-    // account menu is the bar's first slot, and neither the header nor the hero
+    // The account menu is the bar's last slot, at the far right (owner,
+    // 2026-11-11), and neither the header nor the hero
     // mounts it any more.
     const bar = read("src/components/layout/MobileNav.tsx");
     expect(bar).toContain("<PhoneMenu");
@@ -401,7 +401,7 @@ describe("Mzizi alignment guard — menus", () => {
       const src = read(file);
       expect(src, file).not.toContain("PhoneMenu");
       expect(src, file).not.toContain("<AccountMenu");
-      expect(src, file).toContain("<MyLocationLink");
+      expect(src, file).toContain("<LocationsLink");
     }
     const homes = sources.filter((f) =>
       /<(PhoneMenu|AccountMenu)\b/.test(readFileSync(f, "utf-8")),

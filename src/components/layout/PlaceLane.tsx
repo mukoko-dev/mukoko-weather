@@ -9,10 +9,13 @@ import {
 } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { NavigationIcon } from "@/lib/weather-icons";
 import { useAppStore } from "@/lib/store";
 import { currentLocationSlug } from "@/lib/current-slug";
 import { getScrollBehavior } from "@/lib/utils";
 import {
+  MY_LOCATION_NAME,
+  homeChipShowsLabel,
   laneActiveIndex,
   laneChipName,
   laneChips,
@@ -23,18 +26,20 @@ import { trackPlaceChange, usePagerSequence } from "@/lib/use-location-pager";
 import { handlePlaceLinkClick, isPlainLeftClick } from "@/lib/place-bus";
 
 /**
- * The places lane in the phone bottom bar (option B, owner 2026-11-02): one
- * chip per saved or suggested place, scrolling sideways. It is the second part
- * of the `lane` slot of the vendored Mzizi bottom nav
- * (src/components/ui/mzizi-bottom-nav.tsx); Map and Locations are that bar's
- * pinned items, and the account control (PhoneMenu) is the slot before the
- * lane. My Location is no longer a chip here (owner, 2026-11-05: it swapped
- * places with the avatar and is now the round link in the hero's top group and
- * the header's pill, see MyLocationLink). It is still page 0 of the pager
- * sequence, so a swipe and the chips' current marker count it: on `/` no chip
- * is current and the lane returns to its start. The start and end edges of the
- * scroller fade while more chips lie that way. With no places the lane draws
- * nothing, and the bar keeps its account control.
+ * The places lane in the middle of the phone bottom bar (option B, owner
+ * 2026-11-02): My Location first and pinned, then one chip per saved or
+ * suggested place, scrolling sideways beside it. It is the first part of the
+ * `lane` slot of the vendored Mzizi bottom nav
+ * (src/components/ui/mzizi-bottom-nav.tsx); Map is that bar's pinned item and
+ * the account control (PhoneMenu) is the lane's last slot, after this
+ * component (owner, 2026-11-11). Locations is the round list link at the top
+ * of the page (LocationsLink).
+ *
+ * My Location sits OUTSIDE the scroller, so it can never scroll away and the
+ * places are simply clipped at its edge (a sticky chip would have to hide
+ * what slides behind it with an opaque patch, which shows as a seam on the
+ * translucent bar). The start and end edges of the scroller fade while more
+ * chips lie that way.
  *
  * The lane moves sideways only (owner, 2026-11-05). Two things keep it so:
  * `overflow-x: auto` alone makes the other axis `auto` too, so the scroller
@@ -114,6 +119,8 @@ export function PlaceLaneView({
   const activeRef = useRef<HTMLLIElement>(null);
   // More chips lie before / past the scroller's edges: it fades there.
   const [more, setMore] = useState({ before: false, after: false });
+  const showHomeLabel = homeChipShowsLabel(chips.length);
+  const home = chips.find((chip) => chip.kind === "home");
   const places = chips.filter((chip) => chip.kind === "place");
 
   const measureFade = useCallback(() => {
@@ -127,9 +134,9 @@ export function PlaceLaneView({
   }, []);
 
   // Keep the current chip in view, centred in the scroller (on a route change
-  // and on a swipe alike). On `/` (My Location, no chip here) the lane returns
-  // to its start. With NO current chip (/locations, /explore) the lane is left
-  // exactly where the person scrolled it. Re-run once the fonts are
+  // and on a swipe alike). My Location is outside the scroller: the lane then
+  // returns to its start. With NO current chip (/locations, /explore) the lane
+  // is left exactly where the person scrolled it. Re-run once the fonts are
   // in, since a chip's width changes with them.
   useEffect(() => {
     if (activeIndex < 0) return;
@@ -172,50 +179,75 @@ export function PlaceLaneView({
     return () => observer.disconnect();
   }, [measureFade, chips.length]);
 
-  if (places.length === 0) return null;
-
   return (
     <div
       role="group"
       aria-label="Places"
-      className="relative flex h-full min-w-0 flex-1 items-center"
+      className="relative flex h-full min-w-0 flex-1 items-center gap-2"
     >
-      <div
-        ref={scrollerRef}
-        onScroll={measureFade}
-        data-fade-start={more.before ? "true" : undefined}
-        data-fade-end={more.after ? "true" : undefined}
-        className="sanderling scrollbar-hide h-full min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
-      >
-        <ul
-          ref={listRef}
-          aria-label="Saved places and suggestions"
-          // mzizi-spacing-exempt: a 4px side gutter that keeps a chip's border and focus ring off the clip edge, not a text inset (each .lark chip has the 14px floor); p-0 only resets the list
-          className="relative m-0 flex h-full w-max list-none items-center gap-2 overflow-clip p-0 px-1"
+      {home && (
+        <Link
+          href={home.href}
+          prefetch={false}
+          aria-label={MY_LOCATION_NAME}
+          aria-current={
+            chips.indexOf(home) === activeIndex ? "page" : undefined
+          }
+          title={MY_LOCATION_NAME}
+          onClick={(event) => onChipClick(event, home)}
+          className={`lark press-scale shrink-0 ${
+            showHomeLabel ? "" : "min-w-[var(--touch-target-min)]"
+          }`}
         >
-          {places.map((chip) => {
-            const isActive = chips.indexOf(chip) === activeIndex;
-            return (
-              <li
-                key={chip.href}
-                ref={isActive ? activeRef : undefined}
-                className="shrink-0"
-              >
-                <Link
-                  href={chip.href}
-                  prefetch={false}
-                  aria-current={isActive ? "page" : undefined}
-                  title={chip.name}
-                  onClick={(event) => onChipClick(event, chip)}
-                  className="lark press-scale"
+          <NavigationIcon
+            size={18}
+            className={
+              chips.indexOf(home) === activeIndex ? "fill-current" : ""
+            }
+          />
+          {showHomeLabel && <span className="truncate">{home.name}</span>}
+        </Link>
+      )}
+      {places.length > 0 && (
+        <div
+          ref={scrollerRef}
+          onScroll={measureFade}
+          data-fade-start={more.before ? "true" : undefined}
+          data-fade-end={more.after ? "true" : undefined}
+          className="sanderling scrollbar-hide h-full min-w-0 flex-1 overflow-x-auto overflow-y-hidden"
+        >
+          {/* Named, so a screen reader does not count My Location (the link
+              before it) as an item of this list. */}
+          <ul
+            ref={listRef}
+            aria-label="Saved places and suggestions"
+            // mzizi-spacing-exempt: a 4px side gutter that keeps a chip's border and focus ring off the clip edge, not a text inset (each .lark chip has the 14px floor); p-0 only resets the list
+            className="relative m-0 flex h-full w-max list-none items-center gap-2 overflow-clip p-0 px-1"
+          >
+            {places.map((chip) => {
+              const isActive = chips.indexOf(chip) === activeIndex;
+              return (
+                <li
+                  key={chip.href}
+                  ref={isActive ? activeRef : undefined}
+                  className="shrink-0"
                 >
-                  <span className="truncate">{chip.name}</span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
+                  <Link
+                    href={chip.href}
+                    prefetch={false}
+                    aria-current={isActive ? "page" : undefined}
+                    title={chip.name}
+                    onClick={(event) => onChipClick(event, chip)}
+                    className="lark press-scale"
+                  >
+                    <span className="truncate">{chip.name}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
