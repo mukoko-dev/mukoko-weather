@@ -254,6 +254,14 @@ const GLOBALS = [
   "IS_REACT_ACT_ENVIRONMENT",
 ] as const;
 
+/**
+ * `navigator` is set apart from GLOBALS: Node 21+ defines it as an accessor on
+ * globalThis and Node 20 (CI) has none, so it is saved and put back by its
+ * descriptor. React DOM's client build reads `navigator.userAgent` as soon as
+ * `window` exists, so without this the import throws on Node 20.
+ */
+const NAVIGATOR = { userAgent: "node (test-render stand-in)" };
+
 /** Installs the stand-in as `window` and `document`; returns the document and a restore function. */
 function installDom(options: { localStorage?: unknown } = {}): {
   doc: FakeDocument;
@@ -263,6 +271,12 @@ function installDom(options: { localStorage?: unknown } = {}): {
   const saved = new Map<string, { had: boolean; value: unknown }>(
     GLOBALS.map((k) => [k, { had: k in g, value: g[k] }]),
   );
+  const navigatorBefore = Object.getOwnPropertyDescriptor(g, "navigator");
+  Object.defineProperty(g, "navigator", {
+    value: NAVIGATOR,
+    configurable: true,
+    writable: true,
+  });
   const doc = new FakeDocument();
   const win = {
     document: doc,
@@ -300,6 +314,9 @@ function installDom(options: { localStorage?: unknown } = {}): {
         if (had) g[k] = value;
         else delete g[k];
       }
+      if (navigatorBefore)
+        Object.defineProperty(g, "navigator", navigatorBefore);
+      else delete g.navigator;
     },
   };
 }
