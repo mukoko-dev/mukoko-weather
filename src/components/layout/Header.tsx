@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@workos-inc/authkit-nextjs/components";
 import { MukokoLogo } from "@/components/brand/MukokoLogo";
 import { LayersIcon, BellIcon, UserIcon } from "@/lib/weather-icons";
-import { MyLocationLink } from "@/components/layout/MyLocationLink";
+import { LocationsLink } from "@/components/layout/LocationsLink";
 import { NotificationsBoundary } from "@/components/notifications/NotificationsBoundary";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { useChromeClaimed } from "@/components/layout/chrome-context";
@@ -182,14 +182,14 @@ export function SiteHeader() {
                 <LayersIcon size={20} className="text-primary-foreground" />
               </Link>
 
-              {/* Mobile only — My Location, the round arrow link to `/`. It
-                  swapped places with the avatar (owner, 2026-11-05): this slot
-                  held the ⋯ account menu, which now opens from the first slot
-                  of the bottom bar, and on a place page My Location is in the
-                  hero's top group (the phone header is not drawn there), so it
-                  is reachable on every phone page. Desktop keeps its text
-                  nav and has no My Location icon. */}
-              <MyLocationLink
+              {/* Mobile only — Locations, the round list link to
+                  `/locations` (owner, 2026-11-11: the Locations icon moves to
+                  the top right of the screen). On a place page it is in the
+                  hero's top group instead (the phone header is not drawn
+                  there), so it is reachable on every phone page. The account
+                  avatar is the last slot of the bottom bar. Desktop keeps its
+                  text nav and has no Locations icon. */}
+              <LocationsLink
                 className="bee sm:hidden"
                 iconClassName="text-primary-foreground"
               />

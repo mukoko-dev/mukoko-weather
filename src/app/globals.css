@@ -215,9 +215,9 @@
     var(--float-bottom) + var(--mobile-nav-bar-height) + 0.5rem
   );
 
-  /* The phone hero's icon group (.hadeda): Share and My Location (the round
-     arrow link to `/`; the account avatar it swapped places with is the bottom
-     bar's first slot) in ONE round pill fixed to the top of the screen, inset
+  /* The phone hero's icon group (.hadeda): Share and Locations (the round
+     list link to `/locations`; the account avatar is the bottom bar's last
+     slot) in ONE round pill fixed to the top of the screen, inset
      1rem from the top and right edges (the hero's own gutter). Its size comes
      from these tokens and from nothing else: --hadeda-width is the controls
      (49px each) plus the gaps between them plus the padding around them, and

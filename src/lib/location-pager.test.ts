@@ -3,6 +3,7 @@ import {
   MAX_PAGER_PLACES,
   MY_LOCATION_HREF,
   MY_LOCATION_NAME,
+  homeChipShowsLabel,
   laneActiveIndex,
   laneChipName,
   laneChips,
@@ -211,7 +212,7 @@ describe("laneChips — the places lane", () => {
     ]);
   });
 
-  it("is never empty: with no places the sequence is My Location alone", () => {
+  it("is never empty: with no places the lane is My Location alone", () => {
     expect(laneChips(pagerSequence([]))).toEqual([
       { href: "/", kind: "home", slug: null, name: MY_LOCATION_NAME },
     ]);
@@ -314,8 +315,20 @@ describe("laneActiveIndex — which chip is the current page", () => {
   });
 });
 
+describe("homeChipShowsLabel — My Location spells its name only when alone", () => {
+  it("shows the label when the lane is the single chip", () => {
+    expect(homeChipShowsLabel(1)).toBe(true);
+    expect(homeChipShowsLabel(0)).toBe(true);
+  });
+
+  it("is the glyph alone once there are places beside it", () => {
+    expect(homeChipShowsLabel(2)).toBe(false);
+    expect(homeChipShowsLabel(11)).toBe(false);
+  });
+});
+
 describe("laneScrollLeft — centre the active chip in the places scroller", () => {
-  // A 190px lane over 600px of chips (My Location is not in the scroller).
+  // A 190px lane over 600px of chips (My Location is pinned outside it).
   const lane = { viewport: 190, content: 600 };
 
   it("never scrolls for My Location or when nothing is current: back to the start", () => {

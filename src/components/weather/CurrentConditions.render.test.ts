@@ -9,8 +9,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-// My Location (the round arrow link in the phone icon group) reads the route
-// and the router; its own structure is covered in MyLocationLink.test.ts.
+// Locations (the round list link in the phone icon group) reads the route; its
+// own structure is covered in Header.test.ts.
 const nav = vi.hoisted(() => ({ pathname: "/harare" }));
 vi.mock("next/navigation", () => ({
   usePathname: () => nav.pathname,
@@ -124,7 +124,7 @@ describe("CurrentConditions render — the sky hero", () => {
     expect(html).not.toContain("kudu");
   });
 
-  it("puts the breadcrumb, Share and My Location in the top row, before the stack", () => {
+  it("puts the breadcrumb, Share and Locations in the top row, before the stack", () => {
     const html = render(
       {},
       {
@@ -145,11 +145,11 @@ describe("CurrentConditions render — the sky hero", () => {
     expect(html).toMatch(
       /<div class="hidden shrink-0 sm:block"><div class="relative"><button[^>]*kestrel-round/,
     );
-    // On phones, Share and My Location are ONE fixed group, both round
+    // On phones, Share and Locations are ONE fixed group, both round
     // `duiker` controls on its card surface, Share first.
     const inGroup = html.slice(group, name);
     const share = inGroup.indexOf('aria-label="Share weather for Harare"');
-    const here = inGroup.indexOf('aria-label="My Location"');
+    const here = inGroup.indexOf('aria-label="All locations"');
     expect(share).toBeGreaterThan(-1);
     expect(share).toBeLessThan(here);
     expect(inGroup.match(/class="duiker"/g)).toHaveLength(2);
@@ -159,17 +159,19 @@ describe("CurrentConditions render — the sky hero", () => {
     expect(html).toContain("sm:pr-0");
   });
 
-  it("holds My Location (a link to `/`) in the phone group and no account menu: the avatar moved to the bottom bar", () => {
+  it("holds Locations (a link to `/locations`) in the phone group, no My Location and no account menu: the avatar is the bottom bar's last slot", () => {
     const html = render();
     const group = html.slice(
       html.indexOf('class="hadeda sm:hidden"'),
       html.indexOf('id="current-conditions-heading"'),
     );
-    const link = group.match(/<a[^>]*aria-label="My Location"[^>]*>/)![0];
-    expect(link).toContain('href="/"');
+    const link = group.match(/<a[^>]*aria-label="All locations"[^>]*>/)![0];
+    expect(link).toContain('href="/locations"');
     expect(link).toContain('class="duiker"');
     // Not the current page on a place's own page.
     expect(link).not.toContain("aria-current");
+    // My Location is in the bottom bar now, not up here.
+    expect(group).not.toContain('aria-label="My Location"');
     // The account menu (its <details>, its summary, its panel) is not in the hero.
     expect(html).not.toContain("<details");
     expect(html).not.toContain("account-menu");
@@ -177,12 +179,12 @@ describe("CurrentConditions render — the sky hero", () => {
     expect(html).not.toContain("More options");
   });
 
-  it("marks My Location as the current page on `/`", () => {
-    nav.pathname = "/";
+  it("marks Locations as the current page on `/locations`", () => {
+    nav.pathname = "/locations";
     try {
       const html = render();
       expect(html).toMatch(
-        /<a[^>]*aria-label="My Location"[^>]*aria-current="page"|<a[^>]*aria-current="page"[^>]*aria-label="My Location"/,
+        /<a[^>]*aria-label="All locations"[^>]*aria-current="page"|<a[^>]*aria-current="page"[^>]*aria-label="All locations"/,
       );
     } finally {
       nav.pathname = "/harare";

@@ -1,11 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import {
-  List as ListIcon,
-  Map as MapIcon,
-  User as UserIcon,
-} from "lucide-react";
+import { Map as MapIcon, User as UserIcon } from "lucide-react";
 import { PhoneMenu } from "@/components/layout/PhoneMenu";
 import { PlaceLane } from "@/components/layout/PlaceLane";
 import {
@@ -27,14 +23,14 @@ interface MobileNavProps {
 }
 
 /**
- * The two pinned phone destinations: Map at the start edge, Locations at the
- * end. The account control is the lane's first slot; My Location is a round
- * link at the top of the page, neither is an item.
+ * The one pinned phone destination: Map at the start edge. My Location is the
+ * lane's first chip, the account control is the lane's last slot, and
+ * Locations is a round link at the top of the page; none of them is an item.
  */
 export function mobileNavItems(
   mapHref: string,
   hasMapLocation: boolean,
-): { leading: BottomNavItem[]; trailing: BottomNavItem[] } {
+): { leading: BottomNavItem[] } {
   return {
     leading: [
       {
@@ -47,26 +43,7 @@ export function mobileNavItems(
           : "Choose a location for the weather map",
       },
     ],
-    trailing: [
-      {
-        id: "locations",
-        label: "Locations",
-        href: "/locations",
-        icon: ListIcon,
-        ariaLabel: "All locations",
-      },
-    ],
   };
-}
-
-/**
- * Which pinned bar item is the current page. Explicit, so the Map item (which
- * points at /explore while no location is on screen) never lights up on
- * Explore; "none" matches no item. The lane marks its own current chip (a
- * place on its page), so no pinned item is current there.
- */
-export function mobileNavActiveId(pathname: string): string {
-  return pathname === "/locations" ? "locations" : "none";
 }
 
 /**
@@ -117,58 +94,47 @@ function LaneFallback() {
 /**
  * Phone navigation: ONE floating bar (option B, owner 2026-11-02). The Mzizi
  * registry bottom nav (`MziziBottomNav`, vendored in
- * src/components/ui/mzizi-bottom-nav.tsx) with Map pinned at the start, the
- * lane in the middle and Locations pinned at the end. The lane starts with the
- * ACCOUNT control (owner, 2026-11-05: the avatar and My Location swapped
- * places): the Mzizi account menu's round trigger, pinned, which opens its
- * menu upward from the bar (PhoneMenu). Then the places lane (PlaceLane): one
- * chip per saved place, scrolling sideways; each chip is a real link (49px
+ * src/components/ui/mzizi-bottom-nav.tsx) with Map pinned at the start and the
+ * lane filling the rest. The lane is the places lane (PlaceLane): My Location
+ * first and pinned (the second control from the left, owner 2026-11-11), then
+ * one chip per saved place, scrolling sideways; each chip is a real link (49px
  * target, the place's name as its label, `aria-current` on the current one,
  * `location_changed` method "saved" on tap) that switches place in place.
- * My Location, formerly the lane's first chip, is the round arrow link in the
- * hero's top group and the header's pill (MyLocationLink). Swiping left/right
- * on the dashboard (useLocationSwipe) moves between the same places, My
- * Location first. There is no second pill above the bar.
+ * The lane ends with the ACCOUNT control, at the far right (owner, 2026-11-11):
+ * the Mzizi account menu's round trigger, which opens its menu upward from the
+ * bar (PhoneMenu). Locations is not in the bar: it is the round list link at the
+ * top right of the page (LocationsLink). Swiping left/right on the dashboard
+ * (useLocationSwipe) moves between the same places, My Location first. There is
+ * no second pill above the bar.
  *
  * Page content leaves `--mobile-nav-clearance` at the bottom so nothing sits
  * under the bar; that token is the bar (4.5rem) plus the lift, the safe area
  * and a breath.
  */
 export function MobileNav({
-  pathname,
   savedLocations,
   selectedLocation,
+  pathname,
   mapHref,
   hasMapLocation,
 }: MobileNavProps) {
-  const { leading, trailing } = mobileNavItems(mapHref, hasMapLocation);
+  const { leading } = mobileNavItems(mapHref, hasMapLocation);
   return (
     <MziziBottomNav
       label="Mobile navigation"
       className="sm:hidden"
-      activeId={mobileNavActiveId(pathname)}
+      // No pinned item is ever "current": the lane marks its own chip, and the
+      // Map item must not light up on Explore, where it points at /explore.
+      activeId="none"
       leading={leading}
-      trailing={trailing}
       lane={
         <div className="flex h-full min-w-0 flex-1 items-center justify-center gap-[var(--float-gap)]">
-          {/* The account menu's panel hangs from the bar (`<nav>` is the
-              positioned ancestor, see app-account-menu.tsx change 13), so
-              nothing between it and the bar may be positioned or clipped. Each
-              part has its own boundary: a crash in one leaves the other. */}
-          <MziziHarness
-            name="account-menu"
-            className="flex shrink-0 items-center"
-            fallback={<AccountFallback />}
-          >
-            <PhoneMenu buttonClassName={ACCOUNT_SLOT_CLASS} />
-          </MziziHarness>
           {/* The lane is the only part with real logic; if it ever throws, the
-              bar keeps Map, Locations, the account control and a plain My
-              Location link. With no places it renders nothing and `empty:hidden`
-              lets the account control sit centred. */}
+              bar keeps Map, the account control and a plain My Location link.
+              Each part has its own boundary: a crash in one leaves the other. */}
           <MziziHarness
             name="place-lane"
-            className="flex h-full min-w-0 flex-1 items-center empty:hidden"
+            className="flex h-full min-w-0 flex-1 items-center"
             fallback={<LaneFallback />}
           >
             <PlaceLane
@@ -176,6 +142,16 @@ export function MobileNav({
               savedLocations={savedLocations}
               selectedLocation={selectedLocation}
             />
+          </MziziHarness>
+          {/* The account menu's panel hangs from the bar (`<nav>` is the
+              positioned ancestor, see app-account-menu.tsx change 13), so
+              nothing between it and the bar may be positioned or clipped. */}
+          <MziziHarness
+            name="account-menu"
+            className="flex shrink-0 items-center"
+            fallback={<AccountFallback />}
+          >
+            <PhoneMenu buttonClassName={ACCOUNT_SLOT_CLASS} />
           </MziziHarness>
         </div>
       }

@@ -1,13 +1,14 @@
-// The hero's phone icon group (`.hadeda`): Share and My Location (the round
-// arrow link to `/`) in ONE round pill fixed to the top of the screen.
+// The hero's phone icon group (`.hadeda`): Share and Locations (the round list
+// link to `/locations`, owner 2026-11-11) in ONE round pill fixed to the top of
+// the screen.
 //
 //   BASE=http://localhost:3100 node scripts/browser-check/hero-icon-group.mjs
 //
 // What only a browser can show: that the group really stays where it is while
 // the page scrolls (an ancestor with a transform, filter or backdrop-filter
 // would make it scroll away), that it lines up with the hero's top row at the
-// top of the page, that My Location is a 49px link to `/` in it (the account
-// avatar it swapped places with is the bottom bar's: see account-menu-bar.mjs),
+// top of the page, that Locations is a 49px link to /locations in it (the
+// account avatar is the bottom bar's last slot: see account-menu-bar.mjs),
 // and that from `sm` up there is no fixed group and Share is back in the top
 // row.
 import {
@@ -95,18 +96,18 @@ run(async () => {
 
   // The loading skeleton draws the same group with two bars; wait for the
   // real controls.
-  await page.waitForSelector('.hadeda a[aria-label="My Location"]', {
+  await page.waitForSelector('.hadeda a[aria-label="All locations"]', {
     timeout: 60000,
   });
-  const here = await rect(page, '.hadeda a[aria-label="My Location"]');
+  const here = await rect(page, '.hadeda a[aria-label="All locations"]');
   const href = await page.getAttribute(
-    '.hadeda a[aria-label="My Location"]',
+    '.hadeda a[aria-label="All locations"]',
     "href",
   );
   note(
-    "My Location is a 49px round link to / inside the group",
+    "Locations is a 49px round link to /locations inside the group",
     here &&
-      href === "/" &&
+      href === "/locations" &&
       Math.abs(here.w - 49) < 0.6 &&
       Math.abs(here.h - 49) < 0.6 &&
       here.x >= top.x &&
@@ -114,7 +115,7 @@ run(async () => {
     here ? `${here.w}x${here.h}` : "no link",
   );
   note(
-    "the group holds no account menu (it is the bottom bar's first slot)",
+    "the group holds no account menu (it is the bottom bar's last slot)",
     (await page.locator(".hadeda details").count()) === 0,
   );
   await page.screenshot({ path: `${SHOTS}/hero-icon-group.png` });

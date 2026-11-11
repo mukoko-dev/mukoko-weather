@@ -253,10 +253,10 @@ describe("the hero's phone icon group (.hadeda) stays fixed to the viewport", ()
     const group = hero.slice(hero.indexOf('className="hadeda sm:hidden"'));
     const end = group.indexOf("</div>\n      </div>");
     const inner = group.slice(0, end);
-    // Share (ShareControl) and My Location (MyLocationLink).
+    // Share (ShareControl) and Locations (LocationsLink).
     const controls =
       (inner.match(/<ShareControl/g) ?? []).length +
-      (inner.match(/<MyLocationLink/g) ?? []).length;
+      (inner.match(/<LocationsLink/g) ?? []).length;
     const token = css.match(/--hadeda-controls:\s*(\d+);/);
     expect(token).not.toBeNull();
     expect(controls).toBe(Number(token![1]));
