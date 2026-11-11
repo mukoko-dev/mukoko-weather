@@ -16,6 +16,7 @@ import {
   readBackdropHints,
   SCROLL_IDLE_MS,
   shouldRunBackdrop,
+  stillTexture,
   type BackdropMode,
 } from "@/lib/weather-scenes/backdrop-policy";
 
@@ -64,10 +65,12 @@ interface Props {
  * Colour: the static gradient is the page sky (`.kestrel-*`, `--sky-*` tokens
  * in globals.css, family from src/lib/hero.ts): the owner's night and rain
  * skies, day skies for light theme, deep dusk for dark. It carries faint
- * static texture (stars at night, diagonal streaks in rain). The Three.js
- * particle layer paints over it (opacity-30, 20 in dark theme) and is the only
- * thing that moves; the reduced-motion / WebGL-failure fallback is the same
- * sky without it.
+ * static texture (stars at night, diagonal streaks in rain) for a sky that does
+ * not move: the texture goes as soon as a live animated layer draws the same
+ * thing, so the rain and the stars are never shown twice (stillTexture). The
+ * Three.js particle layer paints over the sky (opacity-30, 20 in dark theme)
+ * and is the only thing that moves; the reduced-motion / WebGL-failure fallback
+ * is the same sky with its still texture.
  *
  * Purely decorative — marked `aria-hidden`. A WebGL/import failure degrades to
  * the static gradient (createWeatherScene returns a no-op handle on failure),
@@ -125,6 +128,8 @@ export function WeatherBackdrop({
   // Client-only media queries. Default to SSR-safe values, resolve on mount.
   const [mode, setMode] = useState<BackdropMode>("static");
   const animate = mode === "webgl";
+  // True once the animated layer is really drawing (see stillTexture).
+  const [live, setLive] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
     let reduced: MediaQueryList | null = null;
@@ -220,6 +225,7 @@ export function WeatherBackdrop({
           return;
         }
         handle = result;
+        setLive(result.live);
         // Apply the current visibility state immediately (may start paused).
         syncPlayback();
       })
@@ -233,6 +239,8 @@ export function WeatherBackdrop({
       window.removeEventListener("scroll", handleScroll);
       window.clearTimeout(scrollTimer);
       handle?.dispose();
+      // Nothing is drawing between one scene and the next: the still sky shows.
+      setLive(false);
     };
   }, [mode, isMobile, isDay, phase, sceneType, windSpeed]);
 
@@ -240,9 +248,9 @@ export function WeatherBackdrop({
     <WeatherSky
       ref={skyRef}
       family={family}
-      // The 2D effects draw their own rain and stars, so the still streaks and
-      // stars would show twice under them.
-      texture={mode === "canvas" ? null : texture}
+      // The still streaks and stars go once a live layer draws the same thing
+      // (stillTexture), so the rain and the stars are never shown twice.
+      texture={stillTexture(texture, mode, sceneType, live)}
     >
       {/* Three.js particle layer (transparent) — only when motion is allowed. */}
       {animate && (

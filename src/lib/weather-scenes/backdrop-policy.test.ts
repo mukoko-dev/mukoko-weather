@@ -6,6 +6,7 @@ import {
   shouldAnimateBackdrop,
   shouldRunBackdrop,
   SKY_VISIBLE_VIEWPORTS,
+  stillTexture,
 } from "./backdrop-policy";
 
 describe("shouldAnimateBackdrop", () => {
@@ -172,5 +173,54 @@ describe("backdropMode", () => {
         }
       }
     }
+  });
+});
+
+describe("stillTexture: the rain and the stars are never drawn twice", () => {
+  it("has no texture to drop for a sky that has none", () => {
+    for (const mode of ["webgl", "canvas", "static"] as const) {
+      for (const live of [true, false]) {
+        expect(stillTexture(null, mode, "clear", live)).toBeNull();
+      }
+    }
+  });
+
+  it("keeps the still sky while nothing is drawing: static, not started yet, or failed", () => {
+    for (const scene of ["rain", "thunderstorm", "clear"] as const) {
+      expect(stillTexture("streaks", "static", scene, true)).toBe("streaks");
+      expect(stillTexture("streaks", "webgl", scene, false)).toBe("streaks");
+      expect(stillTexture("stars", "canvas", scene, false)).toBe("stars");
+    }
+  });
+
+  it("drops the still rain streaks under a live rain or thunderstorm, in both layers", () => {
+    for (const mode of ["webgl", "canvas"] as const) {
+      expect(stillTexture("streaks", mode, "rain", true)).toBeNull();
+      expect(stillTexture("streaks", mode, "thunderstorm", true)).toBeNull();
+    }
+  });
+
+  it("drops the still stars under the 3D clear night, which draws its own", () => {
+    expect(stillTexture("stars", "webgl", "clear", true)).toBeNull();
+  });
+
+  it("drops the still stars under the 2D clear and partly-cloudy nights, which draw their own", () => {
+    expect(stillTexture("stars", "canvas", "clear", true)).toBeNull();
+    expect(stillTexture("stars", "canvas", "partly-cloudy", true)).toBeNull();
+  });
+
+  it("keeps the still stars where the live layer draws none", () => {
+    // 3D: partly-cloudy and cloudy draw clouds only. 2D: cloudy draws clouds only.
+    expect(stillTexture("stars", "webgl", "partly-cloudy", true)).toBe("stars");
+    expect(stillTexture("stars", "webgl", "cloudy", true)).toBe("stars");
+    expect(stillTexture("stars", "canvas", "cloudy", true)).toBe("stars");
+    // A strong wind turns a calm clear night into the windy scene, which has no stars.
+    expect(stillTexture("stars", "webgl", "windy", true)).toBe("stars");
+    expect(stillTexture("stars", "canvas", "windy", true)).toBe("stars");
+  });
+
+  it("never shows streaks under a scene that draws no rain, and never mixes the two kinds", () => {
+    expect(stillTexture("streaks", "webgl", "windy", true)).toBe("streaks");
+    expect(stillTexture("stars", "webgl", "rain", true)).toBe("stars");
   });
 });

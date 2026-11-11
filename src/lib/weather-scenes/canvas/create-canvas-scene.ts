@@ -116,7 +116,12 @@ export async function createCanvasScene(
   config: WeatherSceneConfig,
   deps: CanvasSceneDeps = browserDeps,
 ): Promise<WeatherSceneHandle> {
-  const noop: WeatherSceneHandle = { dispose() {}, pause() {}, resume() {} };
+  const noop: WeatherSceneHandle = {
+    live: false,
+    dispose() {},
+    pause() {},
+    resume() {},
+  };
 
   let canvas: HTMLCanvasElement;
   let ctx: CanvasRenderingContext2D | null;
@@ -232,6 +237,7 @@ export async function createCanvasScene(
   handleSize();
 
   return {
+    live: true,
     dispose,
     pause() {
       if (disposed || paused) return;

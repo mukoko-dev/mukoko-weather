@@ -14,6 +14,9 @@
  *   the GPU is not competing with scrolling on mid-range phones.
  */
 
+import type { SkyTexture } from "@/lib/hero";
+import type { WeatherSceneType } from "./types";
+
 export interface BackdropDeviceHints {
   reducedMotion: boolean;
   saveData?: boolean;
@@ -120,4 +123,34 @@ export function readBackdropHints(): BackdropDeviceHints {
     deviceMemory: nav.deviceMemory,
     ios: isIosWebKit(nav.userAgent, nav.platform, nav.maxTouchPoints ?? 0),
   };
+}
+
+/**
+ * The still texture of a sky (`skyTexture`: faint rain streaks, stars) exists
+ * for a sky that does not move: reduced motion, Save-Data, a low-memory device,
+ * or the moment before the animated layer has started. Once a layer is really
+ * drawing the same thing, the still marks would be a second rain or a second
+ * set of stars under it (two rains on a desktop hero), so they go. What each
+ * layer draws:
+ * - Rain streaks: the rain and thunderstorm scenes draw rain, in both layers.
+ * - Stars: the 3D `clear` scene draws them at night; the 2D effects draw them
+ *   for `clear` and `partly-cloudy`. The 3D `partly-cloudy` and `cloudy`
+ *   scenes and the 2D `cloudy` scene draw none, and the wind override
+ *   (`windy`) draws none, so those skies keep the still stars.
+ * A layer that is not live (`WeatherSceneHandle.live`, false when WebGL or the
+ * canvas failed) leaves the still texture in place.
+ */
+export function stillTexture(
+  texture: SkyTexture | null,
+  mode: BackdropMode,
+  scene: WeatherSceneType,
+  live: boolean,
+): SkyTexture | null {
+  if (texture === null || !live || mode === "static") return texture;
+  if (texture === "streaks") {
+    return scene === "rain" || scene === "thunderstorm" ? null : texture;
+  }
+  const drawsStars =
+    scene === "clear" || (mode === "canvas" && scene === "partly-cloudy");
+  return drawsStars ? null : texture;
 }

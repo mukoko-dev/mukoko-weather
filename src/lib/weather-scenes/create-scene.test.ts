@@ -183,3 +183,16 @@ describe("loadSceneBuilder — scene type coverage", () => {
     expect(source).toMatch(/default:\s*\{[\s\S]*?partly-cloudy/);
   });
 });
+
+describe("createWeatherScene reports whether it is drawing", () => {
+  it("says live only for the real handle, never for the no-op one", () => {
+    const factory = readFileSync(
+      resolve(__dirname, "create-scene.ts"),
+      "utf-8",
+    );
+    expect(factory).toMatch(
+      /const noop: WeatherSceneHandle = \{\s*live: false,/,
+    );
+    expect(factory).toMatch(/return \{\s*live: true,/);
+  });
+});
