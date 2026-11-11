@@ -1,6 +1,12 @@
 "use client";
 
-import { createElement, useCallback, type FocusEvent } from "react";
+import {
+  createElement,
+  useCallback,
+  useEffect,
+  useRef,
+  type FocusEvent,
+} from "react";
 import {
   Cloud,
   CloudRain,
@@ -77,6 +83,23 @@ export function scrollChipIntoView(event: FocusEvent<HTMLButtonElement>) {
   });
 }
 
+/**
+ * How far to scroll a chip row sideways (CSS px, forward positive) so a chip
+ * sits wholly inside it, clear of the row's own padding at both ends (the edge
+ * fade at the end). 0 when it already does. Pure: boxes are `getBoundingClientRect`
+ * edges, the insets the row's padding.
+ */
+export function chipScrollDelta(
+  row: { left: number; right: number },
+  chip: { left: number; right: number },
+  inset: { start: number; end: number },
+): number {
+  const past = chip.right - (row.right - inset.end);
+  if (past > 0) return past;
+  const before = row.left + inset.start - chip.left;
+  return before > 0 ? -before : 0;
+}
+
 interface WeatherLayerPanelProps {
   /** Selected chip id (always one: the map shows exactly one layer at a time). */
   activeLayer: string;
@@ -116,8 +139,37 @@ export function WeatherLayerPanel({
     [activeLayer, onLayerChange, locationSlug],
   );
 
+  // Brings the active chip into view when the layer changes and when the panel
+  // first shows: the layer the map opens on (Satellite) is the sixth chip,
+  // off screen on a phone, so the visitor would see no chip selected. Only the
+  // row moves (never the sheet), without animation the first time.
+  const layerRow = useRef<HTMLDivElement>(null);
+  const placed = useRef(false);
+  useEffect(() => {
+    const row = layerRow.current;
+    const chip = row?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (!row || !chip) return;
+    const pad = getComputedStyle(row);
+    const delta = chipScrollDelta(
+      row.getBoundingClientRect(),
+      chip.getBoundingClientRect(),
+      {
+        start: parseFloat(pad.paddingInlineStart) || 0,
+        end: parseFloat(pad.paddingInlineEnd) || 0,
+      },
+    );
+    if (delta !== 0) {
+      row.scrollBy({
+        left: delta,
+        behavior: placed.current ? getScrollBehavior() : "instant",
+      });
+    }
+    placed.current = true;
+  }, [activeLayer]);
+
   const chipRow = (
     <div
+      ref={layerRow}
       role="group"
       aria-label="Map layers"
       // mzizi-spacing-exempt: full-bleed sideways scroller; -mx-4 reaches into the sheet's own padding (ps-4 puts it back at the start, pe-6 clears the 1.5rem edge fade at the end) so chips scroll to the card's edge and overlap no target
