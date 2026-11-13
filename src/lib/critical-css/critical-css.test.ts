@@ -45,10 +45,21 @@ describe("the critical subset is the stylesheet as it is now", () => {
       resolve(__dirname, "critical.generated.json"),
       "utf-8",
     );
-    // When this fails: `node scripts/critical-css/generate.mjs` and commit the
-    // result. If the first screen's markup changed (a new class on it), record
-    // the vocabulary again first: `scripts/critical-css/record.mjs`.
-    expect(committed).toBe(made.source);
+    // When this fails: `npm run critical-css` and commit the result, with the
+    // dependencies the LOCKFILE names (`npm ci`), not whatever is installed: the
+    // stylesheet is made by tailwindcss, lightningcss and postcss, and a newer
+    // or older one writes different (equivalent, but different) text. If the
+    // first screen's markup changed (a new class on it), record the vocabulary
+    // again first: `scripts/critical-css/record.mjs`.
+    expect(
+      committed,
+      "critical.generated.json is out of date. A change to globals.css, to the " +
+        "first screen's markup, or a bump of tailwindcss, @tailwindcss/postcss, " +
+        "lightningcss, postcss or next changes the stylesheet it is made from. " +
+        "Run `npm ci && npm run critical-css` (with the lockfile's versions, " +
+        "never an older node_modules) and commit critical.generated.json. " +
+        "If the first screen's markup changed, run scripts/critical-css/record.mjs first.",
+    ).toBe(made.source);
     // and the module says the same CSS the generator made
     expect(CRITICAL_CSS).toBe(made.css);
   }, 60_000);
