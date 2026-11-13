@@ -1,7 +1,7 @@
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { updatePreferences } from "./rxdb/bridge";
+import { initRxDBBridge, updatePreferences } from "./rxdb/bridge";
 import {
   resolveTheme,
   useAppStore,
@@ -16,6 +16,7 @@ import {
   type ShamwariContext,
 } from "./store";
 import { canonicalSlug as c } from "./slug-migration";
+import { THEME_STORAGE_KEY } from "./theme";
 
 // Mock RxDB bridge to prevent IndexedDB access in tests
 vi.mock("./rxdb/bridge", () => ({
@@ -621,6 +622,96 @@ describe("theme actions", () => {
 
     useAppStore.getState().toggleTheme();
     expect(useAppStore.getState().theme).toBe("light");
+  });
+});
+
+describe("the theme is recorded on this device whenever it is applied", () => {
+  // The record is what the script in the document head reads before first
+  // paint (src/lib/theme.ts): every way the theme changes must keep it true.
+  const data = new Map<string, string>();
+  const root = { setAttribute: vi.fn() };
+
+  beforeEach(() => {
+    data.clear();
+    root.setAttribute.mockClear();
+    vi.stubGlobal("window", { matchMedia: () => ({ matches: false }) });
+    vi.stubGlobal("document", { documentElement: root });
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => data.get(k) ?? null,
+      setItem: (k: string, v: string) => void data.set(k, String(v)),
+      removeItem: (k: string) => void data.delete(k),
+    });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("when the visitor picks a theme, and when they go back to the system's", () => {
+    useAppStore.getState().setTheme("dark");
+    expect(data.get(THEME_STORAGE_KEY)).toBe("dark");
+    useAppStore.getState().setTheme("light");
+    expect(data.get(THEME_STORAGE_KEY)).toBe("light");
+    useAppStore.getState().setTheme("system");
+    expect(data.has(THEME_STORAGE_KEY)).toBe(false);
+  });
+
+  it("when the toggle cycles light, dark, system", () => {
+    useAppStore.getState().setTheme("light");
+    useAppStore.getState().toggleTheme();
+    expect(data.get(THEME_STORAGE_KEY)).toBe("dark");
+    useAppStore.getState().toggleTheme();
+    expect(data.has(THEME_STORAGE_KEY)).toBe(false);
+    useAppStore.getState().toggleTheme();
+    expect(data.get(THEME_STORAGE_KEY)).toBe("light");
+  });
+
+  it("when the preferences are read from IndexedDB at start-up, which is how a device that chose dark before this record existed gets it", async () => {
+    const { initializeDeviceSync } = await import("./store");
+    initializeDeviceSync();
+    const callbacks = vi.mocked(initRxDBBridge).mock.calls.at(-1)?.[0];
+    expect(callbacks).toBeDefined();
+    callbacks!.applyToStore({ theme: "dark" });
+    expect(data.get(THEME_STORAGE_KEY)).toBe("dark");
+    expect(useAppStore.getState().theme).toBe("dark");
+    // Another device's sync (or another tab) moving it on is followed too.
+    callbacks!.applyToStore({ theme: "system" });
+    expect(data.has(THEME_STORAGE_KEY)).toBe(false);
+  });
+
+  it("adopts the recorded theme while the preferences load, and seeds a fresh preferences document with it", async () => {
+    const { initializeDeviceSync } = await import("./store");
+    data.set(THEME_STORAGE_KEY, "dark");
+    useAppStore.setState({ theme: "system" });
+    initializeDeviceSync();
+    expect(useAppStore.getState().theme).toBe("dark");
+    const callbacks = vi.mocked(initRxDBBridge).mock.calls.at(-1)?.[0];
+    // IndexedDB cleared, localStorage kept: the new document is seeded from
+    // the store, so it must not start as "system" and erase the choice.
+    expect(callbacks!.getCurrentPrefs().theme).toBe("dark");
+    // The preferences, once read, decide.
+    callbacks!.applyToStore({ theme: "light" });
+    expect(useAppStore.getState().theme).toBe("light");
+    expect(data.get(THEME_STORAGE_KEY)).toBe("light");
+  });
+
+  it("leaves the default alone when the device recorded nothing, and a theme the store already holds", async () => {
+    const { initializeDeviceSync } = await import("./store");
+    useAppStore.setState({ theme: "system" });
+    initializeDeviceSync();
+    expect(useAppStore.getState().theme).toBe("system");
+    data.set(THEME_STORAGE_KEY, "dark");
+    useAppStore.setState({ theme: "light" });
+    initializeDeviceSync();
+    expect(useAppStore.getState().theme).toBe("light");
+  });
+
+  it("without writing to the preferences database for what it only read (no echo)", async () => {
+    const { initializeDeviceSync } = await import("./store");
+    initializeDeviceSync();
+    const callbacks = vi.mocked(initRxDBBridge).mock.calls.at(-1)?.[0];
+    vi.mocked(updatePreferences).mockClear();
+    callbacks!.applyToStore({ theme: "dark" });
+    expect(updatePreferences).not.toHaveBeenCalled();
   });
 });
 

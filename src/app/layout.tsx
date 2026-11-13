@@ -15,6 +15,7 @@ import "./globals.css";
 import { SITE_URL } from "@/lib/site";
 import { breadcrumbJsonLd } from "@/lib/json-ld";
 import { JsonLd } from "@/components/layout/JsonLd";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
 // Brand typography, self-hosted through next/font (served from /_next/static,
 // no request to Google at runtime). Never put a fonts.googleapis.com
@@ -331,13 +332,10 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        {/* Detect stored or system theme before first paint to prevent FOUC.
-            Reads persisted Zustand state from localStorage, falls back to system preference. */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var s=JSON.parse(localStorage.getItem("mukoko-weather-prefs")||"{}");var p=s&&s.state&&s.state.theme;if(p==="light"||p==="dark"){document.documentElement.setAttribute("data-theme",p);return}}catch(e){}try{var t=window.matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light";document.documentElement.setAttribute("data-theme",t)}catch(e){document.documentElement.setAttribute("data-theme","light")}})();`,
-          }}
-        />
+        {/* Settle the theme before first paint (THEME_INIT_SCRIPT, src/lib/theme.ts):
+            this device's recorded choice, else the system's, so a person who chose
+            dark on a light phone never sees the pale page flip. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <meta name="color-scheme" content="light dark" />
         <meta
           name="theme-color"

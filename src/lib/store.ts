@@ -14,7 +14,12 @@ import {
   slugPrefsChanged,
 } from "./slug-migration";
 import { isPresetAnchor, type PresetAnchor } from "./location-presets";
-import { resolveTheme, type ThemePreference } from "./theme";
+import {
+  readStoredTheme,
+  rememberTheme,
+  resolveTheme,
+  type ThemePreference,
+} from "./theme";
 import {
   DEFAULT_NOTIFICATION_PREFS,
   mergeNotificationPrefs,
@@ -92,8 +97,15 @@ export function isShamwariContextValid(
   return Date.now() - ctx.timestamp < SHAMWARI_CONTEXT_TTL_MS;
 }
 
-/** Apply the resolved theme to the DOM */
+/**
+ * Apply the resolved theme to the DOM, and record the choice on this device
+ * (`rememberTheme`) so the next first paint can settle it before the
+ * preferences load from IndexedDB. Every path that changes the theme (the
+ * visitor's tap, the preferences read at start-up, another tab, another
+ * device's sync) goes through here, so the record cannot drift from them.
+ */
 function applyTheme(pref: ThemePreference) {
+  rememberTheme(pref);
   if (typeof document === "undefined") return;
   document.documentElement.setAttribute("data-theme", resolveTheme(pref));
   document.documentElement.setAttribute("data-brand", "mukoko-weather");
@@ -529,6 +541,16 @@ export const useAppStore = create<AppState>()((set) => ({
  */
 export function initializeDeviceSync(): void {
   if (typeof window === "undefined") return;
+
+  // Until the preferences have been read from IndexedDB, the store holds its
+  // default theme ("system"). The theme this device recorded stands in for
+  // them (src/lib/theme.ts): the page was already painted in it by the script
+  // in the document head, and it is what a fresh preferences document is seeded
+  // with if IndexedDB was cleared. The preferences, once read, decide.
+  const recorded = readStoredTheme();
+  if (recorded && useAppStore.getState().theme === "system") {
+    useAppStore.setState({ theme: recorded });
+  }
 
   initRxDBBridge({
     applyToStore: (incoming: Partial<PreferencesDocType>) => {
