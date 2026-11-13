@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 
 import { SiteFooter } from "@/components/layout/Footer";
@@ -28,6 +29,17 @@ import {
 export function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const claimed = !isImmersivePath(pathname ?? "");
+  // The root not-found page (an unmatched URL, a place the proxy knows is
+  // unknown) has no stylesheet of its own: a root boundary file cannot import
+  // the sheet without announcing it to every route as a preload of all 213 KB,
+  // which is what the first screen avoids (issue 551). It asks for it here, from
+  // script, where every route already loads this component, so no route loads
+  // anything new. A dynamic import of a stylesheet is a link that nothing waits
+  // for; on a page that already links the sheet it finds it there.
+  useEffect(() => {
+    if (document.getElementById("not-found-heading"))
+      void import("@/app/globals.css").catch(() => {});
+  }, [pathname]);
   return (
     <ChromeContext.Provider value={claimed}>
       {claimed && <SiteHeader />}

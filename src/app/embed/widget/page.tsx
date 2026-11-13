@@ -1,3 +1,4 @@
+import "@/app/globals.css";
 import type { Metadata } from "next";
 import { MukokoWeatherEmbed, type EmbedType } from "@/components/embed";
 import "./widget.css";

@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "check": "vp check",
-    "fmt": "vp fmt"
+    "fmt": "vp fmt",
+    "critical-css": "node scripts/critical-css/generate.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

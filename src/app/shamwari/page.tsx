@@ -1,3 +1,4 @@
+import "@/app/globals.css";
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Header } from "@/components/layout/Header";

@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { CriticalStyles } from "@/components/layout/FirstScreenStyles";
 import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
 import { CurrentLocationHome } from "./CurrentLocationHome";
@@ -71,9 +72,12 @@ export default function Home() {
   // boundary to `/` keeps the home loading skeleton and lets every other route
   // send its real status.
   return (
-    <Suspense fallback={<LocationSkeleton />}>
-      <HomeContent />
-    </Suspense>
+    <>
+      <CriticalStyles />
+      <Suspense fallback={<LocationSkeleton />}>
+        <HomeContent />
+      </Suspense>
+    </>
   );
 }
 

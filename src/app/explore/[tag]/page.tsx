@@ -1,3 +1,4 @@
+import "@/app/globals.css";
 import { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
