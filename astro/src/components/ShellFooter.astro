@@ -1,0 +1,133 @@
+---
+/**
+ * The site footer, as static HTML (no script, no island). Same columns,
+ * links, wording and data-source credits as the Next.js footer
+ * (src/components/layout/Footer.tsx); the destinations come from the same
+ * list, `lib/nav-destinations`. The credits are a licence condition (CC BY
+ * 4.0 for ECMWF, DWD and Open-Meteo data), so they are not trimmed here.
+ */
+import logoLight from "../../../public/logo-light.svg?raw";
+import logoDark from "../../../public/logo-dark.svg?raw";
+import { isFeatureEnabled } from "@/lib/feature-flags";
+import { navDestination, type NavDestinationId } from "@/lib/nav-destinations";
+import { ForecastCredit } from "@/components/ui/forecast-credit";
+import { APPLE_WEATHERKIT_MODEL } from "@/lib/forecast-sources";
+import { isAstroRoute } from "~/lib/routes";
+
+const year = new Date().getFullYear();
+const shamwariEnabled = isFeatureEnabled("shamwari_chat");
+const appleWeatherEnabled = isFeatureEnabled("apple_weatherkit");
+
+const col = "flex flex-col gap-1";
+const heading = "mb-2 text-sm font-semibold uppercase tracking-widest text-text-tertiary";
+const link = "text-base text-text-secondary transition-colors hover:text-text-primary";
+const reload = (href: string) => (isAstroRoute(href) ? {} : { "data-astro-reload": "" });
+const dest = (id: NavDestinationId) => {
+  const d = navDestination(id);
+  return { href: d.href, label: d.footerLabel ?? d.label };
+};
+const weather = (["explore", "history", ...(shamwariEnabled ? ["shamwari"] : []), "aviation", "embed", "developers", "status"] as NavDestinationId[]).map(dest);
+const company = (["about", "help", "releases"] as NavDestinationId[]).map(dest);
+const legal = (["privacy", "terms"] as NavDestinationId[]).map(dest);
+const ecosystem = [
+  ["https://nyuchi.com", "Nyuchi Africa"],
+  ["https://www.bundu.org", "Bundu Foundation"],
+  ["https://standards.bundu.org", "Bundu standards"],
+  ["https://mukoko.com", "Mukoko.com"],
+  ["https://news.mukoko.com", "Mukoko News"],
+  ["https://events.mukoko.com", "Mukoko Events"],
+  ["https://kweli.mukoko.com", "Kweli"],
+  ["https://lingo.mukoko.com", "Mukoko Lingo"],
+  ["https://www.bushtrade.co.zw", "BushTrade"],
+] as const;
+const credit = "dik-dik transition-colors hover:text-text-secondary";
+---
+
+<footer
+  class="border-t border-text-tertiary/10 bg-surface-base pb-[var(--mobile-nav-clearance)] sm:pb-0"
+  role="contentinfo"
+>
+  <div class="mx-auto max-w-7xl px-4 py-10 sm:px-6 md:px-8">
+    <div class="grid grid-cols-2 gap-x-8 gap-y-12 sm:grid-cols-4">
+      <div class={`${col} col-span-2 sm:col-span-1`}>
+        <a href="/" {...reload("/")} class="flex items-center gap-2" aria-label="mukoko weather home">
+          <span class="footer-logo-light h-7 w-7 shrink-0" set:html={logoLight} />
+          <span class="footer-logo-dark h-7 w-7 shrink-0" set:html={logoDark} />
+          <span class="font-heading font-bold text-text-primary">weather</span>
+        </a>
+        <p class="max-w-[220px] text-base leading-relaxed text-text-secondary">
+          Weather intelligence for Africa and beyond. Weather as a public good.
+        </p>
+        <div class="flex items-center gap-3 pt-1">
+          <a href="https://twitter.com/mukokoafrica" target="_blank" rel="noopener noreferrer" aria-label="Twitter" class="dik-dik text-text-tertiary transition-colors hover:text-text-primary">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.745l7.73-8.835L1.254 2.25H8.08l4.259 5.632zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path></svg>
+          </a>
+          <a href="https://github.com/nyuchi/mukoko-weather" target="_blank" rel="noopener noreferrer" aria-label="GitHub" class="dik-dik text-text-tertiary transition-colors hover:text-text-primary">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"></path></svg>
+          </a>
+        </div>
+      </div>
+
+      <div class={col}>
+        <p class={heading}>Weather</p>
+        {weather.map((d) => <a href={d.href} {...reload(d.href)} class={link}>{d.label}</a>)}
+      </div>
+
+      <div class={col}>
+        <p class={heading}>Company</p>
+        {company.map((d) => <a href={d.href} {...reload(d.href)} class={link}>{d.label}</a>)}
+        <a href="https://docs.nyuchi.com/mukoko-weather/user-guide/" target="_blank" rel="noopener noreferrer" class={link}>Docs</a>
+        {legal.map((d) => <a href={d.href} {...reload(d.href)} class={link}>{d.label}</a>)}
+        <a href="mailto:support@mukoko.com" class={link}>Contact</a>
+        <a href="https://github.com/nyuchi/mukoko-weather/issues/new/choose" target="_blank" rel="noopener noreferrer" class={link}>Report an issue</a>
+      </div>
+
+      <div class={col}>
+        <p class={heading}>Ecosystem</p>
+        {ecosystem.map(([href, label]) => <a href={href} target="_blank" rel="noopener noreferrer" class={link}>{label}</a>)}
+      </div>
+    </div>
+
+    <div class="mt-14 flex flex-col gap-4 border-t border-text-tertiary/10 pt-8 sm:flex-row sm:items-center sm:justify-between">
+      <p class="text-base text-text-tertiary">
+        &copy; {year} Mukoko Africa — a division of{" "}
+        <a href="https://nyuchi.com" target="_blank" rel="noopener noreferrer" class="dik-dik transition-colors hover:text-text-secondary">Nyuchi Africa (PVT) Ltd</a>.
+        {" "}<span class="italic">Ndiri nekuti tiri.</span>
+      </p>
+      <!-- Model attribution (issue #246): required by the CC BY 4.0 licences
+           of ECMWF open data, DWD and Open-Meteo. Same words as the Next.js
+           footer. -->
+      <p class="text-sm text-text-tertiary">
+        Weather data: ECMWF, NOAA, DWD, ECCC, Météo-France, UK Met Office, CMA, JMA via{" "}
+        <a href="https://open-meteo.com" target="_blank" rel="noopener noreferrer" class={credit}>Open-Meteo.com</a>{" "}
+        (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer license" class={credit}>CC BY 4.0</a>);
+        insights enrichment by{" "}
+        <a href="https://www.tomorrow.io" target="_blank" rel="noopener noreferrer" class={credit}>Tomorrow.io</a>;
+        when Open-Meteo is unavailable, forecast data from{" "}
+        <a href="https://www.met.no/en" target="_blank" rel="noopener noreferrer" class={credit}>MET Norway</a>{" "}
+        (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer license" class={credit}>CC BY 4.0</a>),
+        converted to our format; climate history:{" "}
+        <a href="https://power.larc.nasa.gov" target="_blank" rel="noopener noreferrer" class={credit}>NASA POWER</a>{" "}
+        (NASA LaRC POWER Project) and Open-Meteo ERA5
+      </p>
+      {appleWeatherEnabled && <ForecastCredit models={[APPLE_WEATHERKIT_MODEL]} use="baseline" />}
+    </div>
+  </div>
+</footer>
+
+<style is:global>
+  footer .footer-logo-light > svg,
+  footer .footer-logo-dark > svg {
+    width: 100%;
+    height: 100%;
+  }
+  footer .footer-logo-dark {
+    display: none;
+  }
+  [data-theme="dark"] footer .footer-logo-light {
+    display: none;
+  }
+  [data-theme="dark"] footer .footer-logo-dark {
+    display: inline-block;
+  }
+</style>

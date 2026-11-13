@@ -1,0 +1,15 @@
+{
+  "note": "Budgets for the prerendered pages, from the first build of phase 0 (#475) plus about 8% room. Raise one only in a pull request that says why.",
+  "routes": {
+    "/about": {
+      "jsGzipBytes": 115000,
+      "inlineScriptBytes": 7000,
+      "cssGzipBytes": 25000
+    },
+    "/shell-preview": {
+      "jsGzipBytes": 115000,
+      "inlineScriptBytes": 7000,
+      "cssGzipBytes": 25000
+    }
+  }
+}

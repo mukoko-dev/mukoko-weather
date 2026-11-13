@@ -1,0 +1,21 @@
+{
+  "extends": "astro/tsconfigs/strict",
+  "include": [".astro/types.d.ts", "**/*"],
+  "exclude": ["dist", "node_modules", ".wrangler"],
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    // The type checker must see what the bundler sees: the five modules that
+    // astro.config.mjs replaces (src/shims) are mapped here too, and listed
+    // before the `@/*` wildcard because the most specific pattern wins.
+    "paths": {
+      "next/link": ["./src/shims/next-link.tsx"],
+      "next/navigation": ["./src/shims/next-navigation.tsx"],
+      "@/lib/store": ["./src/shims/store.ts"],
+      "@/lib/analytics": ["./src/shims/analytics.ts"],
+      "@/components/layout/PhoneMenu": ["./src/shims/PhoneMenu.tsx"],
+      "@/*": ["../src/*"],
+      "~/*": ["./src/*"]
+    }
+  }
+}
