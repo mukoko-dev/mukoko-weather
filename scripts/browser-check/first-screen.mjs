@@ -14,6 +14,18 @@
 // plus the gzipped body. The page's own files come from the server under test,
 // through the throttled link.
 //
+// The Google tag is part of the page, so it is part of the measurement. The
+// lab answers every host that is not the app's own, and used to refuse this
+// one, which left out the largest third-party cost: gtag.js for the app's GA4
+// property is 181 KB gzipped and 542 KB to parse. `gtag-standin.mjs` generates
+// a stand-in of that size at run time (nothing large is committed), serves it
+// from this machine through the throttled link, and the request for the real
+// host is redirected to it. It stands in for the tag's bytes and its parse, not
+// for what the real tag does once it runs, and not for the DNS and TLS set-up
+// to Google's host: read its header. `GTAG=none` restores the old refusal (to
+// compare with numbers taken before this existed), `GTAG_FILE=<path>` serves a
+// copy of the real tag that you saved yourself.
+//
 // Serve the production build on the machine's own address, not on loopback:
 // Chromium does not throttle everything a loopback server answers (what
 // JavaScript asks for, such as a dynamic import, arrives at once). That
@@ -30,9 +42,11 @@
 // setting), SEED_THEME (light or dark: the theme the person chose in the app,
 // written where the app keeps it, in IndexedDB, after the first visit, then one
 // more visit so the app can record it, before the WARM one: a person who chose
-// dark on a light phone), FILM=1 (record the screen and print its brightness over time: a pale frame
-// followed by a dark one is a flash), FILM_SAVE=1 (also keep every frame as a
-// JPEG under OUT/film), OUT (where <LABEL>.json goes; the full runs are there).
+// dark on a light phone), FILM=1 (record the screen and print its brightness
+// over time: a pale frame followed by a dark one is a flash), FILM_SAVE=1 (also
+// keep every frame as a JPEG under OUT/film), GTAG (standin, the default, or
+// none: see above), GTAG_FILE, OUT (where <LABEL>.json goes; the full runs are
+// there).
 //
 // Reports, per scenario (milliseconds from the start of the navigation):
 //   fcp, lcp           first and largest paint
@@ -43,8 +57,12 @@
 //   threeAfterWeather  how long after the weather the first of them was asked for
 //   blocked*           sum of long tasks: in the whole window, before the real
 //                      weather is on screen, and in the 1.5 s after it
-//   jsTransferKB ...   JavaScript on the wire and decoded, the JS heap after a
-//                      forced garbage collection, DOM nodes, script time
+//   gtagStart/End      when the Google tag was requested / finished arriving
+//   jsTransferKB ...   the app's JavaScript on the wire and decoded (the Google
+//                      tag is counted apart: gtagTransferKB), the JS heap
+//                      after a forced garbage collection, DOM nodes, script time
+// The full runs in OUT/<LABEL>.json also hold every long task as [start,
+// duration] (longTaskList).
 // Numbers are a lab measurement on one machine: compare two runs made on the
 // same machine, minutes apart, never against another machine's numbers.
 import { createRequire } from "node:module";
@@ -53,6 +71,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { BASE } from "./harness.mjs";
 import { mockNetwork, weatherPayload } from "./memory-harness.mjs";
+import { GTAG_HOST, routeGtag, serveGtag } from "./gtag-standin.mjs";
 
 const require = createRequire(import.meta.url);
 const { chromium, devices } = require("playwright");
@@ -70,6 +89,7 @@ const SEED_THEME = process.env.SEED_THEME ?? "";
 const IDB_OPEN_DELAY_MS = Number(process.env.IDB_OPEN_DELAY ?? 0);
 const SERVICE_WORKERS =
   process.env.SERVICE_WORKERS === "block" ? "block" : "allow";
+const GTAG = process.env.GTAG === "none" ? "none" : "standin";
 
 const LINK = {
   latency: 150,
@@ -328,12 +348,22 @@ async function seedTheme(page, theme) {
 
 async function snapshot(page, cdp) {
   await page.waitForTimeout(SETTLE_MS);
-  const inPage = await page.evaluate(async () => {
+  const inPage = await page.evaluate(async (gtagHost) => {
     const nav = performance.getEntriesByType("navigation")[0];
     const res = performance.getEntriesByType("resource");
     let js = [0, 0, 0];
     let css = [0, 0, 0];
+    let tag = [0, 0, 0, null, null];
     for (const e of res) {
+      // The Google tag is another party's file: counted apart.
+      if (new URL(e.name).hostname === gtagHost) {
+        tag[0]++;
+        tag[1] += e.transferSize || 0;
+        tag[2] += e.decodedBodySize || 0;
+        tag[3] = Math.round(e.startTime);
+        tag[4] = Math.round(e.responseEnd);
+        continue;
+      }
       const isJs = /\.m?js(\?|$)/.test(e.name) || e.initiatorType === "script";
       const isCss = /\.css(\?|$)/.test(e.name);
       const bucket = isJs ? js : isCss ? css : null;
@@ -375,6 +405,7 @@ async function snapshot(page, cdp) {
       weather: weatherAt,
       chunks,
       longTasks: long.length,
+      longTaskList: long,
       blockedMs: sum(0, Infinity),
       blockedBeforeWeatherMs: weatherAt === null ? null : sum(0, weatherAt),
       blockedAfterWeatherMs:
@@ -383,12 +414,17 @@ async function snapshot(page, cdp) {
       jsTransferKB: Math.round(js[1] / 1024),
       jsDecodedKB: Math.round(js[2] / 1024),
       cssTransferKB: Math.round(css[1] / 1024),
+      gtagFiles: tag[0],
+      gtagTransferKB: Math.round(tag[1] / 1024),
+      gtagDecodedKB: Math.round(tag[2] / 1024),
+      gtagStart: tag[3],
+      gtagEnd: tag[4],
       theme: window.__perf.theme,
       htmlBg: bg(document.documentElement),
       bodyBg: bg(document.body),
       hasCanvas: document.querySelectorAll("canvas").length,
     };
-  });
+  }, GTAG_HOST);
   const { chunks, ...rest } = inPage;
   const three = await threeChunks(chunks);
   const first = three.length ? Math.min(...three.map((c) => c.start)) : null;
@@ -438,6 +474,18 @@ const browser = await chromium.launch({
     ? []
     : [`--unsafely-treat-insecure-origin-as-secure=${new URL(BASE).origin}`],
 });
+// The Google tag's stand-in, served from this machine (see the header).
+const gtag =
+  GTAG === "none"
+    ? null
+    : await serveGtag({
+        host: new URL(BASE).hostname,
+        file: process.env.GTAG_FILE,
+      });
+if (gtag)
+  console.error(
+    `Google tag: ${gtag.fromFile ? "file " + process.env.GTAG_FILE : "generated stand-in"}, ${gtag.decodedKB} KB decoded, ${gtag.gzipKB} KB gzipped, served at ${gtag.origin}`,
+  );
 const helperCtx = await browser.newContext();
 const helper = await helperCtx.newPage();
 await helper.goto("about:blank");
@@ -452,6 +500,7 @@ try {
     });
     await mockNetwork(context);
     await slowForecast(context);
+    if (gtag) await routeGtag(context, gtag);
     for (const scenario of ["cold", "warm"]) {
       const { page, cdp } = await openPage(context);
       const stop = FILM ? await startFilm(cdp) : null;
@@ -497,6 +546,7 @@ try {
   }
 } finally {
   await browser.close();
+  await gtag?.close();
 }
 
 const summary = { label: LABEL, base: BASE, route: PATH_, runs: RUNS };
@@ -533,6 +583,14 @@ for (const scenario of ["cold", "warm"])
     if (missing)
       summary.warnings.push(
         `${scenario} ${key}: not read in ${missing} of ${RUNS} runs`,
+      );
+  }
+if (gtag)
+  for (const scenario of ["cold", "warm"]) {
+    const missing = all[scenario].filter((r) => r.gtagFiles === 0).length;
+    if (missing)
+      summary.warnings.push(
+        `${scenario}: the page did not ask for the Google tag in ${missing} of ${RUNS} runs, so this number leaves it out (does the app still load it from ${GTAG_HOST}?)`,
       );
   }
 const themeLog = {
