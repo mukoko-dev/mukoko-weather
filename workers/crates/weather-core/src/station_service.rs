@@ -717,6 +717,13 @@ pub enum Proxied<T> {
 /// `invalid_credentials` is the station's `401`; any other refusal (a gateway
 /// that wants a different credential, a route that is not there) is not the
 /// station's fault, so it is a [`Failure`], never "your key is wrong".
+///
+/// What the API does for a key that opens nothing: `_owned_or_by_key` in
+/// nyuchi-api `gateway/routers/stations.py` raises `401` with the code
+/// `invalid_credentials` for a wrong key, an unknown or inactive station and a
+/// malformed id alike (the Worker checks the id's shape first, so a path
+/// pattern `422` cannot come from a station's mistake). A `404` there is for a
+/// person's token, which this Worker never sends.
 fn key_route_failure<T>(
     what: &'static str,
     status: u16,

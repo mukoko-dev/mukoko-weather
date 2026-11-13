@@ -16,7 +16,7 @@ weather-core.workspace = true
 weather-edge.workspace = true
 worker = { workspace = true, features = ["queue"] }
 futures.workspace = true
-serde-wasm-bindgen = "0.6"
+serde-wasm-bindgen.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true

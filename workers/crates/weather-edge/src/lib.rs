@@ -16,10 +16,11 @@ use futures::future::{select, Either};
 use serde::Serialize;
 use serde_json::json;
 use weather_core::secrets::{self, SecretCache, StoreRead};
+use weather_core::station_service::LogThrottle;
 use worker::wasm_bindgen::JsValue;
 use worker::{
-    console_warn, AbortController, Delay, Env, Fetch, Headers, Request, Response, Result,
-    SecretStore, Url,
+    console_error, console_warn, AbortController, Delay, Env, Fetch, Headers, Request, Response,
+    Result, SecretStore, Url,
 };
 
 /// Milliseconds since the epoch, from the Worker clock.
@@ -80,6 +81,23 @@ pub fn config(env: &Env, name: &str) -> Option<String> {
 thread_local! {
     /// Secrets read in this isolate (`weather_core::secrets`).
     static SECRETS: std::rc::Rc<SecretCache> = std::rc::Rc::new(SecretCache::new());
+    /// Which tags have logged lately in this isolate ([`log_throttled`]).
+    static LOG_THROTTLE: std::cell::RefCell<LogThrottle> = std::cell::RefCell::new(LogThrottle::new());
+}
+
+/// Log a line at most once per `tag` per half minute per isolate, so a fault
+/// on a hot path is loud (an alert rule can watch the tag) without a line for
+/// every request. `alert` lines go to `console.error`, the rest to
+/// `console.warn`. The line must carry no key, header or body.
+pub fn log_throttled(tag: &'static str, alert: bool, line: &str) {
+    if !LOG_THROTTLE.with(|t| t.borrow_mut().allow(tag, now_ms())) {
+        return;
+    }
+    if alert {
+        console_error!("{}", line);
+    } else {
+        console_warn!("{}", line);
+    }
 }
 
 /// A secret by its plain name (`weather_core::secrets::TOMORROW_API_KEY`

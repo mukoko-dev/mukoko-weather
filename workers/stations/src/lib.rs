@@ -147,34 +147,21 @@ async fn health(
     env: &Env,
     mode: &std::result::Result<Backend, UnknownBackend>,
 ) -> Result<Response> {
-    // Always 200 (the deploy's smoke check reads it); `status` and `configured`
-    // say whether the chosen backend can work. Names and presence only.
-    let body = match mode {
-        Ok(Backend::D1) => {
-            json!({"service": "mukoko-weather-stations", "status": "ok", "backend": "d1"})
-        }
+    // Always 200 (the deploy's smoke check reads it). `status` says whether the
+    // chosen backend can work; what is missing is in the `ALERT` log line, not
+    // in this public body.
+    let (backend, status) = match mode {
+        Ok(Backend::D1) => (json!("d1"), "ok"),
         Ok(Backend::Nyuchi) => {
-            let present = nyuchi::Present::of(env).await;
-            json!({
-                "service": "mukoko-weather-stations",
-                "status": if present.missing().is_empty() { "ok" } else { "misconfigured" },
-                "backend": "nyuchi",
-                "configured": {
-                    "api_url": present.api_url,
-                    "api_key": present.api_key,
-                    "latest_kv": present.latest_kv,
-                },
-                "missing": present.missing(),
-            })
+            let ready = nyuchi::Present::of(env).await.missing().is_empty();
+            (json!("nyuchi"), if ready { "ok" } else { "misconfigured" })
         }
-        Err(_) => json!({
-            "service": "mukoko-weather-stations",
-            "status": "misconfigured",
-            "backend": null,
-            "error": "STATIONS_BACKEND is neither d1 nor nyuchi",
-        }),
+        Err(_) => (json!(null), "misconfigured"),
     };
-    json(200, &body)
+    json(
+        200,
+        &json!({"service": "mukoko-weather-stations", "status": status, "backend": backend}),
+    )
 }
 
 /// Put one accepted upload on the queue.

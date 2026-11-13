@@ -24,15 +24,12 @@ use weather_core::secrets::NYUCHI_STATIONS_API_KEY;
 use weather_core::station::Metrics;
 use weather_core::station_service::{
     api_base, manual_readings_body, no_answer, observations_body, parse_manual, parse_observations,
-    parse_status, parse_verify, verify_body, Cached, Failure, ItemOutcome, LogThrottle,
-    ManualResult, ObservationItem, Proxied, UnknownBackend, VerifyAnswer, VerifyCache, API_URL_VAR,
+    parse_status, parse_verify, verify_body, Cached, Failure, ItemOutcome, ManualResult,
+    ObservationItem, Proxied, UnknownBackend, VerifyAnswer, VerifyCache, API_URL_VAR,
 };
-use weather_edge::{config, now_ms, secret};
+use weather_edge::{config, log_throttled, now_ms, secret};
 use worker::wasm_bindgen::JsValue;
-use worker::{
-    console_error, console_warn, AbortController, Delay, Env, Fetch, Headers, Method, Request,
-    RequestInit,
-};
+use worker::{AbortController, Delay, Env, Fetch, Headers, Method, Request, RequestInit};
 
 use crate::auth::Outcome;
 
@@ -50,21 +47,6 @@ const PROXY_TIMEOUT: Duration = Duration::from_secs(8);
 
 thread_local! {
     static VERIFIED: RefCell<VerifyCache> = RefCell::new(VerifyCache::new());
-    static THROTTLE: RefCell<LogThrottle> = RefCell::new(LogThrottle::new());
-}
-
-/// Log a line, at most once per `tag` per half minute per isolate, so an
-/// outage is loud but not a line per upload. `alert` lines go to
-/// `console.error` (what an alert rule watches), the rest to `console.warn`.
-pub fn log_throttled(tag: &'static str, alert: bool, line: &str) {
-    if !THROTTLE.with(|t| t.borrow_mut().allow(tag, now_ms())) {
-        return;
-    }
-    if alert {
-        console_error!("{}", line);
-    } else {
-        console_warn!("{}", line);
-    }
 }
 
 /// Log a failure of the API or of this mode's configuration.
