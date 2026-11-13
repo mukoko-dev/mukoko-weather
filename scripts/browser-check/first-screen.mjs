@@ -20,9 +20,10 @@
 // property is 181 KB gzipped and 542 KB to parse. `gtag-standin.mjs` generates
 // a stand-in of that size at run time (nothing large is committed), serves it
 // from this machine through the throttled link, and the request for the real
-// host is redirected to it. It stands in for the tag's bytes and its parse, not
-// for what the real tag does once it runs, and not for the DNS and TLS set-up
-// to Google's host: read its header. `GTAG=none` restores the old refusal (to
+// host is redirected to it. It stands in for the tag's bytes, its parse and,
+// roughly, the two long tasks it runs when it arrives; not for the rest of what
+// the real tag does, and not for the DNS and TLS set-up to Google's host: read
+// its header. `GTAG=none` restores the old refusal (to
 // compare with numbers taken before this existed), `GTAG_FILE=<path>` serves a
 // copy of the real tag that you saved yourself.
 //
