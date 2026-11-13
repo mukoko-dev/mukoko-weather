@@ -424,6 +424,122 @@ describe("start: the server's place, then the device, then the visitor's own req
   });
 });
 
+describe("start: a copy that is read in one step (recallQuick) does not wait for the database", () => {
+  it("paints it at once, without asking the database", async () => {
+    const h = harness("/");
+    const quick = storedView(HARARE, 21, 5 * 60_000);
+    h.deps.recallQuick = (slug) => (slug === "harare" ? quick : null);
+    // The database never answers: nothing may wait on it.
+    h.deps.recall = () => new Promise(() => {});
+    const c = createPlaceController(h.deps, {
+      seed: HARARE,
+      isHome: true,
+      path: "/",
+    });
+    const done = c.start();
+    await done;
+    expect(temp(c.getState())).toBe(21);
+    expect(c.getState().device?.freshness).toBe("current");
+    expect(h.calls.recall).toEqual([]);
+  });
+
+  it("is on screen before the first await settles: the first state change already holds it", async () => {
+    const h = harness("/");
+    h.deps.recallQuick = () => storedView(HARARE, 21, 5 * 60_000);
+    const c = createPlaceController(h.deps, {
+      seed: HARARE,
+      isHome: true,
+      path: "/",
+    });
+    const states: PlaceState[] = [];
+    c.subscribe(() => states.push(c.getState()));
+    await c.start();
+    // No skeleton state with a request in flight: it never needed one.
+    expect(states.some((s) => s.fetching && s.view === null)).toBe(false);
+    expect(states[0].view).not.toBeNull();
+  });
+
+  it("makes NO request for a copy that is fresh enough", async () => {
+    const h = harness("/");
+    h.deps.recallQuick = () => storedView(HARARE, 21, 5 * 60_000);
+    const c = createPlaceController(h.deps, {
+      seed: HARARE,
+      isHome: true,
+      path: "/",
+    });
+    await c.start();
+    expect(h.calls.fetch).toEqual([]);
+  });
+
+  it("paints an old copy at once and replaces it with the live forecast", async () => {
+    const h = harness("/");
+    h.deps.recallQuick = () =>
+      storedView(HARARE, 21, REFRESH_AFTER_MS + 60_000);
+    const release = h.hold("harare");
+    const c = createPlaceController(h.deps, {
+      seed: HARARE,
+      isHome: true,
+      path: "/",
+    });
+    const done = c.start();
+    await new Promise((r) => setTimeout(r, 5));
+    expect(temp(c.getState())).toBe(21);
+    expect(c.getState().fetching).toBe(true);
+    release();
+    await done;
+    expect(temp(c.getState())).toBe(-18);
+    expect(h.calls.recall).toEqual([]);
+  });
+
+  it("falls through to the database when there is no quick copy, or it throws", async () => {
+    const h = harness("/");
+    h.stored.set("harare", storedView(HARARE, 33, 5 * 60_000));
+    h.deps.recallQuick = () => null;
+    let c = createPlaceController(h.deps, {
+      seed: HARARE,
+      isHome: true,
+      path: "/",
+    });
+    await c.start();
+    expect(temp(c.getState())).toBe(33);
+    expect(h.calls.recall).toEqual(["harare"]);
+
+    clearPlaceMemory();
+    h.calls.recall.length = 0;
+    h.deps.recallQuick = () => {
+      throw new Error("storage blocked");
+    };
+    c = createPlaceController(h.deps, {
+      seed: HARARE,
+      isHome: true,
+      path: "/",
+    });
+    await c.start();
+    expect(temp(c.getState())).toBe(33);
+    expect(h.calls.recall).toEqual(["harare"]);
+  });
+
+  it("memory still comes first: a place already held is not read from the quick copy again", async () => {
+    const h = harness("/");
+    const asked: string[] = [];
+    h.deps.recallQuick = (slug) => {
+      asked.push(slug);
+      return null;
+    };
+    const c = createPlaceController(h.deps, {
+      seed: HARARE,
+      isHome: true,
+      path: "/",
+    });
+    await c.start(); // nothing quick, nothing stored: live forecast, kept in memory
+    expect(asked).toEqual(["harare"]);
+    await c.showSlug("nairobi-ke");
+    await c.showTarget({ kind: "home" }, "none"); // back to My Location
+    expect(asked).toEqual(["harare"]);
+    expect(h.calls.fetch).toEqual(["harare", "nairobi-ke"]);
+  });
+});
+
 describe("switching places is a state change", () => {
   it("A -> B -> A: B costs one request, going back costs none", async () => {
     const h = harness("/harare");

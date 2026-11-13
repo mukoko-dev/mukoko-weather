@@ -30,6 +30,8 @@ import {
   seedFor,
 } from "@/lib/place-resolve";
 import { recallPlace } from "@/lib/rxdb/weather-places";
+import { recallHomeSnapshot } from "@/lib/home-snapshot";
+import { useRememberHomeSnapshot } from "@/lib/use-home-snapshot";
 import { readStorage, writeStorage } from "@/lib/safe-storage";
 import {
   LAST_HOME_PLACE_KEY,
@@ -124,6 +126,11 @@ export function CurrentLocationHome({ initial }: Props) {
     if (shownHomeSlug) writeStorage(LAST_HOME_PLACE_KEY, shownHomeSlug);
   }, [shownHomeSlug]);
 
+  // And its forecast, for the next open to paint before IndexedDB has started
+  // (src/lib/home-snapshot.ts). A forecast read back from the device keeps the
+  // age it had.
+  useRememberHomeSnapshot(view, stage.state.device?.fetchedAt, onHomePlace);
+
   // Nothing seeded by the server (it ran past its deadline, or failed): paint
   // the last place shown here from the device. The stage refreshes it in the
   // background and swaps the fresh forecast in. With nothing on the device
@@ -135,7 +142,9 @@ export function CurrentLocationHome({ initial }: Props) {
     let cancelled = false;
     void (async () => {
       const slug = readStorage(LAST_HOME_PLACE_KEY);
-      const stored = slug ? await recallPlace(slug) : null;
+      const stored = slug
+        ? (recallHomeSnapshot(slug) ?? (await recallPlace(slug)))
+        : null;
       if (cancelled) return;
       if (stored) {
         await controller.showHome(seedOfPayload(stored.payload));
