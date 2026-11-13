@@ -74,8 +74,10 @@ export function isStorageHeld(): boolean {
 }
 
 /**
- * Resolves when background storage work may start: at once unless the home
- * page is holding it back.
+ * Resolves when background work that the first screen does not need may start:
+ * at once unless the home page is holding it back, else when its weather has
+ * painted and the browser is idle (or after the time limit). Storage waits
+ * here, and so does analytics (`GoogleAnalytics.tsx`).
  */
 export function storageMayStart(): Promise<void> {
   if (!held) return Promise.resolve();
