@@ -136,7 +136,9 @@ describe("no Python backend", () => {
 
   it("vercel.json routes no /api/py/(.*) catch-all and builds no function", () => {
     const vercel = JSON.parse(read("vercel.json")) as Record<string, unknown>;
-    expect(Object.keys(vercel)).toEqual(["rewrites"]);
+    // `regions` pins where functions run (vercel-config.test.ts); it builds
+    // nothing. Any other key (builds, functions, routes) would.
+    expect(Object.keys(vercel).sort()).toEqual(["regions", "rewrites"]);
     expect(JSON.stringify(vercel)).not.toMatch(/\/api\/py\/\(|\/api\/py"/);
   });
 });
