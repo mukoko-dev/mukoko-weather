@@ -60,6 +60,8 @@ pub mod slug;
 pub mod slug_migration;
 pub mod station;
 pub mod station_alert;
+pub mod station_latest;
+pub mod station_service;
 pub mod status;
 pub mod tiles;
 pub mod weatherkit;

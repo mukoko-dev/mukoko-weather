@@ -9,7 +9,8 @@
 //            shared with the other Workers that need it); OPEN_METEO_API_KEY
 //            (optional: the paid Open-Meteo plan), the store secret
 //            OPEN_METEO_API_KEY bound as MUKOKO_WEATHER_OPEN_METEO_API_KEY
-//   vars:    NYUCHI_API_URL, OPEN_METEO_ARCHIVE_LICENSED (="0": the owner's
+//   vars:    NYUCHI_API_URL, STATIONS_BACKEND (="d1" or "nyuchi", below),
+//            OPEN_METEO_ARCHIVE_LICENSED (="0": the owner's
 //            plan is the lowest tier and has no historical weather API
 //            (owner, 2026-11-05), so the archive calls (climate normals, the
 //            place profile) stay on the free archive host. Set to "0", not
@@ -66,6 +67,14 @@
   "vars": {
     "NYUCHI_API_URL": "https://api.nyuchi.com",
     "OPEN_METEO_ARCHIVE_LICENSED": "0",
+    // Where the StationKit `current` overlay is read from
+    // (mukoko-dev/mukoko-weather#556): "d1" (the default, as it has always
+    // been) or "nyuchi" (the KV key stations:latest, written by
+    // mukoko-weather-stations). Flip it AFTER the same var on the stations
+    // Worker, so the snapshot is filling first (workers/README.md, "Station
+    // backend cutover"). Set to "d1", not removed: keep_vars would keep a
+    // "nyuchi" already deployed.
+    "STATIONS_BACKEND": "d1",
   },
   "kv_namespaces": [
     // Forecasts (15 min), air quality (1 h) and place lookups (1 day / 1 hour

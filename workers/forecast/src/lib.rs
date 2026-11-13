@@ -127,6 +127,9 @@ async fn health(req: &Request, env: &Env) -> Result<Response> {
             "configured": {
                 "cache": env.kv(chain::CACHE_BINDING).is_ok(),
                 "stations_db": env.d1(stations::DB_BINDING).is_ok(),
+                // Where the StationKit overlay is read from: `d1` (default)
+                // or `nyuchi` (the stations:latest KV snapshot).
+                "stations_backend": stations::backend_name(env),
                 "tomorrow": tomorrow,
                 // Whether a paid Open-Meteo plan is in use (never the key):
                 // `open_meteo_commercial` = a key is held (forecast and air

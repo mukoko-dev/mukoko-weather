@@ -1,6 +1,6 @@
 [package]
 name = "mukoko-weather-stations"
-description = "mukoko-weather-stations: weather-station registration and ingest (Wunderground, Ecowitt, manual), queued into D1 and R2"
+description = "mukoko-weather-stations: weather-station registration and ingest (Wunderground, Ecowitt, manual), queued into D1 (default) or the Nyuchi API, and R2"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -15,6 +15,8 @@ crate-type = ["cdylib"]
 weather-core.workspace = true
 weather-edge.workspace = true
 worker = { workspace = true, features = ["queue"] }
+futures.workspace = true
+serde-wasm-bindgen = "0.6"
 serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true

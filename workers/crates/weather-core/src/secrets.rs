@@ -47,6 +47,17 @@ pub const STORE_ID: &str = "56f84bfa8a564c54a95dbf4f4b4281b4";
 pub const TOMORROW_API_KEY: &str = "TOMORROW_API_KEY";
 /// Internal Nyuchi API key (places read, AI guardrails).
 pub const NYUCHI_API_KEY: &str = "NYUCHI_API_KEY";
+/// The stations Worker's own internal Nyuchi API key, scoped `stations` and
+/// `stations:service` (verify a station's key, write its observations). A
+/// separate key from [`NYUCHI_API_KEY`] on purpose: the service scope must not
+/// sit on a key the forecast, places and ai Workers hold. Used only when
+/// `STATIONS_BACKEND=nyuchi`. Not bound by any Worker yet: a binding to a
+/// store secret that does not exist fails the deploy, so until the owner
+/// creates `MUKOKO_WEATHER_NYUCHI_STATIONS_API_KEY` the Worker reads the plain
+/// wrangler secret `NYUCHI_STATIONS_API_KEY`; then the binding is added to
+/// `stations/wrangler.jsonc` and `stations` is listed in `workers` below (the
+/// test `each_worker_binds_exactly_the_secrets_it_reads` holds the two together).
+pub const NYUCHI_STATIONS_API_KEY: &str = "NYUCHI_STATIONS_API_KEY";
 /// The bearer key first-party services present to mukoko-weather-internal.
 pub const WEATHER_SERVICE_API_KEY: &str = "WEATHER_SERVICE_API_KEY";
 /// CheckWX API key: the METAR fallback when the Aviation Weather Center fails.
@@ -79,7 +90,7 @@ pub struct SecretSpec {
 }
 
 /// Every secret the Workers read.
-pub const ALL: [SecretSpec; 6] = [
+pub const ALL: [SecretSpec; 7] = [
     SecretSpec {
         name: TOMORROW_API_KEY,
         store: "MUKOKO_WEATHER_TOMORROW_API_KEY",
@@ -93,6 +104,15 @@ pub const ALL: [SecretSpec; 6] = [
         secret_name: "MUKOKO_WEATHER_NYUCHI_API_KEY",
         required: true,
         workers: &["ai", "forecast", "places"],
+    },
+    // Not bound yet: see [`NYUCHI_STATIONS_API_KEY`]. Optional because nothing
+    // reads it until the owner flips `STATIONS_BACKEND` to `nyuchi`.
+    SecretSpec {
+        name: NYUCHI_STATIONS_API_KEY,
+        store: "MUKOKO_WEATHER_NYUCHI_STATIONS_API_KEY",
+        secret_name: "MUKOKO_WEATHER_NYUCHI_STATIONS_API_KEY",
+        required: false,
+        workers: &[],
     },
     SecretSpec {
         name: WEATHER_SERVICE_API_KEY,
@@ -411,6 +431,28 @@ mod tests {
                 spec.name
             );
         }
+    }
+
+    #[test]
+    fn the_stations_key_is_its_own_secret_and_not_the_shared_nyuchi_key() {
+        assert_eq!(
+            store_name(NYUCHI_STATIONS_API_KEY),
+            Some("MUKOKO_WEATHER_NYUCHI_STATIONS_API_KEY")
+        );
+        let stations = ALL
+            .iter()
+            .find(|s| s.name == NYUCHI_STATIONS_API_KEY)
+            .expect("registered");
+        let shared = ALL
+            .iter()
+            .find(|s| s.name == NYUCHI_API_KEY)
+            .expect("registered");
+        assert_ne!(stations.store, shared.store);
+        assert!(!shared.workers.contains(&"stations"));
+        assert!(
+            !stations.required,
+            "nothing reads it until the flag is flipped"
+        );
     }
 
     fn wrangler(worker: &str) -> &'static str {
