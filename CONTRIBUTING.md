@@ -101,7 +101,7 @@ BASE=http://localhost:3100 node scripts/browser-check/memory-budget.mjs
 
 ### Frontend / backend split
 
-Next.js serves as the **presentation layer only**. All data handling, AI operations, database access, and rule evaluation run in the **Rust Cloudflare Workers** (`workers/`, `weather-api.mukoko.com`); the Python FastAPI backend (`api/py`) was deleted in #333. `vercel.json` has one rewrite left, the old weather-station upload URL `/api/py/stations/ingest` to the stations Worker.
+Next.js serves as the **presentation layer only**. All data handling, AI operations, database access, and rule evaluation run in the **Rust Cloudflare Workers** (`workers/`, `weather-api.mukoko.com`); the Python FastAPI backend (`api/py`) was deleted in #333. `vercel.json` has one rewrite left, the old weather-station upload URL `/api/py/stations/ingest` to the stations Worker, and pins the functions to Vercel's Cape Town region (`regions: ["cpt1"]`), next to the MongoDB cluster in af-south-1 and near the visitors.
 
 Only two TypeScript API routes remain:
 
