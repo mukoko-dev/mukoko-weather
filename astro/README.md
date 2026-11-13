@@ -80,6 +80,16 @@ repo root with dummy sign-in settings, and run the same command against it. Use
 Cloudflare's edge does. Compare two runs made on the same machine, minutes
 apart; the numbers say nothing across machines.
 
+## Known gaps in what is built
+
+- The footer's year is the year of the build (the pages are prerendered); the
+  Next.js footer reads it on each request. A deploy after New Year fixes it,
+  or the year moves to a line of script.
+- Feature flags are read at build time (`isFeatureEnabled` sees no
+  `localStorage` here), so a flag a visitor turns on in their own browser does
+  not change a prerendered page the way it does in the Next.js app. Both flags
+  the shell reads (`shamwari_chat`, `apple_weatherkit`) are off by default.
+
 ## Not here yet
 
 The place page (phase 1), the other static pages (phase 2), sign-in, the API
