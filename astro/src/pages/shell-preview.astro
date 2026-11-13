@@ -1,0 +1,45 @@
+---
+/**
+ * A page that exists to exercise the shell, not to be visited: it is long
+ * enough to scroll (so a persisted header and bar can be seen to keep their
+ * state), links to /about (a client-side navigation between two Astro pages)
+ * and to a page the Next.js app owns (a full page load). Not linked, not
+ * indexed, not in SERVED_ROUTES.
+ */
+import Shell from "../layouts/Shell.astro";
+import PageMain from "../components/PageMain.astro";
+import { PageHeader } from "@/components/layout/PageHeader";
+
+const paragraphs = Array.from({ length: 24 }, (_, i) => i + 1);
+---
+
+<Shell
+  title="Shell preview"
+  description="Phase 0 of the move to Astro: a page that exercises the shared header, bottom bar and place lane."
+  noindex
+>
+  <PageMain>
+    <PageHeader
+      title="Shell preview"
+      intro="This page is not part of mukoko weather. It lets the Astro shell be tested."
+    />
+    <p class="mt-6">
+      <a href="/about" class="sunbird" data-testid="to-about">About (an Astro page: the shell stays mounted)</a>
+    </p>
+    <p class="mt-2">
+      <a href="/explore" data-astro-reload class="sunbird" data-testid="to-next">Explore (a Next.js page: a full load)</a>
+    </p>
+    {
+      paragraphs.map((n) => (
+        <p class="mt-6 leading-relaxed text-text-secondary">
+          Paragraph {n}. The header, the bottom bar and the places lane are mounted once and stay mounted while the
+          client router swaps this column for the next page's, so their scroll position, their open state and the
+          lane's place in its row survive a tap.
+        </p>
+      ))
+    }
+    <p class="mt-6">
+      <a href="/about" class="sunbird" data-testid="to-about-bottom">About, from the bottom of a long page</a>
+    </p>
+  </PageMain>
+</Shell>

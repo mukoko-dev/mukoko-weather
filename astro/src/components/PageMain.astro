@@ -1,0 +1,15 @@
+---
+import { MAIN_CLASS, WIDTH_CLASS, type PageWidth } from "~/lib/page-width";
+
+interface Props {
+  width?: PageWidth;
+  /** Names the main landmark when the h1 alone does not. */
+  label?: string;
+}
+
+const { width = "prose", label } = Astro.props;
+---
+
+<main id="main-content" aria-label={label} class={`${MAIN_CLASS} ${WIDTH_CLASS[width]}`}>
+  <slot />
+</main>
