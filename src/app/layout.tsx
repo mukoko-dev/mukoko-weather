@@ -11,7 +11,6 @@ import { ServiceWorkerUpdater } from "@/components/pwa/ServiceWorkerUpdater";
 import { WebVitals } from "@/components/analytics/WebVitals";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { Noto_Sans, Noto_Serif, JetBrains_Mono } from "next/font/google";
-import "./globals.css";
 import { SITE_URL } from "@/lib/site";
 import { breadcrumbJsonLd } from "@/lib/json-ld";
 import { JsonLd } from "@/components/layout/JsonLd";

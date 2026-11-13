@@ -1,3 +1,4 @@
+import "@/app/globals.css";
 import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
 import { DisplayDashboard, type DisplayLocation } from "./DisplayDashboard";

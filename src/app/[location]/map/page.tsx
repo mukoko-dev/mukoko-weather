@@ -1,3 +1,4 @@
+import "@/app/globals.css";
 import type { Metadata } from "next";
 import { preconnect } from "react-dom";
 import { notFound } from "next/navigation";

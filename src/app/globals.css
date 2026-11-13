@@ -3,6 +3,12 @@
 @import "tw-animate-css";
 @import "./shadcn-tailwind.css";
 
+/* The first screen's critical subset and the vocabulary it was picked from
+   (src/lib/critical-css) hold class and tag names as data, not as markup.
+   Scanning them would add a utility for every tag name in the list (`table`,
+   `contents`), and the subset would grow with its own output. */
+@source not "../lib/critical-css";
+
 @custom-variant dark (&:is([data-theme="dark"] *));
 
 /* Tailwind v4: declare press-scale as a utility so .kudu / .kudu-sm can @apply it. */

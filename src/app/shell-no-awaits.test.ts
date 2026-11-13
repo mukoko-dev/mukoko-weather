@@ -26,7 +26,7 @@
  */
 import { readdirSync, readFileSync } from "fs";
 import { resolve } from "path";
-import { createElement } from "react";
+import { Suspense, createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildSmartSlug } from "@/lib/smart-slug";
@@ -79,6 +79,18 @@ vi.mock("next/headers", () => ({
 }));
 
 type Element = { props: Record<string, unknown>; type?: unknown };
+/**
+ * `/` is the first-screen styles and a Suspense around HomeContent (issue 551):
+ * the Suspense, whose child is the content to run.
+ */
+function homeSuspense(root: unknown): {
+  props: { children: { type: (p: object) => Promise<unknown> } };
+} {
+  const children = (root as { props: { children: unknown } }).props
+    .children as Array<{ type: unknown }>;
+  return children.find((c) => c.type === Suspense) as never;
+}
+
 const stageOf = (tree: unknown): Element | undefined =>
   (tree as { props: { children: Element[] } }).props.children.find(
     (c) => c?.props && "seed" in c.props,
@@ -149,8 +161,11 @@ describe("/[location]: the render waits for nothing", () => {
     const tree = (await render("sembawang-sg")) as Element;
     const { PlaceResolver } =
       await import("@/components/weather/PlaceResolver");
-    expect(tree.type).toBe(PlaceResolver);
-    expect(tree.props).toEqual({ slug: "sembawang-sg" });
+    // the first-screen styles, then the resolver (issue 551)
+    const resolver = (tree.props.children as Element[]).find(
+      (c) => c.type === PlaceResolver,
+    );
+    expect(resolver?.props).toEqual({ slug: "sembawang-sg" });
     expect(getLocationFromDb).not.toHaveBeenCalled();
   });
 
@@ -175,9 +190,7 @@ describe("/[location]: the render waits for nothing", () => {
 describe("/: the render waits for nothing it can name itself", () => {
   async function renderHome(): Promise<Record<string, unknown> | null> {
     const { default: Home } = await import("./page");
-    const suspense = Home() as unknown as {
-      props: { children: { type: (p: object) => Promise<unknown> } };
-    };
+    const suspense = homeSuspense(Home());
     const content = (await suspense.props.children.type({})) as {
       props: { initial: Record<string, unknown> | null };
     };
@@ -220,9 +233,7 @@ describe("/: the render waits for nothing it can name itself", () => {
   it("hands the client a place, never the signed-in person", async () => {
     requestCookie = "harare";
     const { default: Home } = await import("./page");
-    const suspense = Home() as unknown as {
-      props: { children: { type: (p: object) => Promise<unknown> } };
-    };
+    const suspense = homeSuspense(Home());
     const content = (await suspense.props.children.type({})) as {
       props: Record<string, unknown>;
     };
