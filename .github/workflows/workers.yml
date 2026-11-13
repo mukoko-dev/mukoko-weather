@@ -86,6 +86,10 @@ jobs:
         working-directory: .
         run: node --experimental-strip-types workers/scripts/gen-seasons.mjs --check
 
+      - name: Station import transform tests
+        working-directory: .
+        run: node --test workers/scripts/stations-to-devices.test.mjs
+
       - name: Format
         run: cargo fmt --all -- --check
 
