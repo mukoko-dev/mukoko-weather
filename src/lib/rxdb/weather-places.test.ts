@@ -17,6 +17,11 @@ import {
 import { weatherPlaceSchema } from "./schemas";
 import { canonicalSlug } from "../slug-migration";
 import { HOME_SNAPSHOT_KEY, rememberHomeSnapshot } from "../home-snapshot";
+import {
+  _resetStartGate,
+  holdStorageForFirstScreen,
+  releaseStorage,
+} from "./start-gate";
 
 const HOUR = 3_600_000;
 const OFFSET = 7200;
@@ -501,5 +506,36 @@ describe("the quick copy of My Location (home-snapshot.ts) follows the stored pl
     expect(data.has(HOME_SNAPSHOT_KEY)).toBe(true);
     await clearPlaces();
     expect(data.has(HOME_SNAPSHOT_KEY)).toBe(false);
+  });
+});
+
+describe("on the home page, while the first screen is held (start-gate.ts)", () => {
+  afterEach(() => {
+    _resetStartGate();
+    vi.unstubAllGlobals();
+  });
+
+  it("writing a place back waits for the gate; reading one for the screen does not", async () => {
+    vi.stubGlobal("window", {});
+    holdStorageForFirstScreen("/");
+    const t = harare(11, 9);
+    const stored = rememberPlace(payload("harare"), { now: t });
+    // Let every microtask the write could take run: nothing has been written.
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    expect(col.docs.size).toBe(0);
+    // A reader that wants a place to paint is not held.
+    col.docs.set("bulawayo", {
+      slug: "bulawayo",
+      payload: "{}",
+      fetchedAt: t,
+      lastAccessedAt: t,
+      expiresAt: harare(13, 0),
+      bytes: 2,
+    });
+    await expect(recallPlace("bulawayo", t)).resolves.toBeNull();
+    expect(col.docs.has("harare")).toBe(false);
+    releaseStorage();
+    expect(await stored).toBe(true);
+    expect(col.docs.has("harare")).toBe(true);
   });
 });

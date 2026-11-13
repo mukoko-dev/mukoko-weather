@@ -6,6 +6,7 @@
  */
 
 import { getDatabase } from "./database";
+import { storageMayStart } from "./start-gate";
 import type { MukokoDatabase } from "./database";
 
 // ---------------------------------------------------------------------------
@@ -133,6 +134,9 @@ export async function cacheHint(
   hint: { sceneType: string; weatherCode: number; isDay: boolean },
 ): Promise<void> {
   try {
+    // A hint write is not needed to paint: on the home page it waits for the
+    // weather to be on screen (start-gate.ts).
+    await storageMayStart();
     const col = await weatherHintsCollection();
     if (!col) return;
 
