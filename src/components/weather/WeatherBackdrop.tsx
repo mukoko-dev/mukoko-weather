@@ -11,6 +11,7 @@ import {
 import { skyFamily, skyReachCss, skyTexture } from "@/lib/hero";
 import { WeatherSky } from "@/components/weather/WeatherSky";
 import { createCanvasScene } from "@/lib/weather-scenes/canvas/create-canvas-scene";
+import { afterPaintWhenIdle } from "@/lib/weather-scenes/start-gate";
 import {
   backdropMode,
   readBackdropHints,
@@ -47,6 +48,10 @@ interface Props {
  * surface.
  *
  * Performance discipline (the backdrop stays mounted for the whole page life):
+ * - The animated layer is not loaded until the weather has painted and the
+ *   browser is idle (start-gate.ts). The static sky below shows meanwhile, so
+ *   nothing moves or shifts when it arrives: the layer is absolutely
+ *   positioned inside the sky box, which is already its final size.
  * - Three.js renderer pixel ratio is capped at 1 (`maxPixelRatio`).
  * - The animation loop is PAUSED when the tab is hidden (`visibilitychange`),
  *   while the reader is scrolling, and once the page is scrolled more than a
@@ -157,13 +162,24 @@ export function WeatherBackdrop({
     };
   }, []);
 
+  // The animated layer's first start waits for the weather to paint and the
+  // browser to idle (start-gate.ts). Armed once for this backdrop, not once per
+  // run of the scene effect: a change of scene or phase while it waits cannot
+  // push it back, so its upper bound holds. After it opens, a restart (another
+  // scene, a new phase) has nothing left to wait for.
+  const [startOpen, setStartOpen] = useState(false);
+  useEffect(() => {
+    if (mode === "static" || startOpen) return;
+    return afterPaintWhenIdle(() => setStartOpen(true));
+  }, [mode, startOpen]);
+
   const sceneType = resolveScene(weatherCode, windSpeed);
   const family = skyFamily(weatherCode, isDay);
   const texture = skyTexture(family);
   const phase = skyPhase(isDay, currentTime, sunrise, sunset);
 
   useEffect(() => {
-    if (mode === "static") return;
+    if (mode === "static" || !startOpen) return;
     // The 3D scene fills the sky box; the 2D effects fill the bounded hero region.
     const el = (mode === "webgl" ? containerRef : effectsRef).current;
     if (!el) return;
@@ -242,7 +258,7 @@ export function WeatherBackdrop({
       // Nothing is drawing between one scene and the next: the still sky shows.
       setLive(false);
     };
-  }, [mode, isMobile, isDay, phase, sceneType, windSpeed]);
+  }, [mode, startOpen, isMobile, isDay, phase, sceneType, windSpeed]);
 
   return (
     <WeatherSky

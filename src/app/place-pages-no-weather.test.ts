@@ -19,9 +19,22 @@
  *      browser, in effects).
  */
 import { existsSync, readFileSync } from "fs";
+import { Suspense } from "react";
 import { dirname, resolve } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { canonicalSlug } from "@/lib/slug-migration";
+
+/**
+ * `/` is the first-screen styles and a Suspense around HomeContent (issue 551):
+ * the Suspense, whose child is the content to run.
+ */
+function homeSuspense(root: unknown): {
+  props: { children: { type: (p: object) => Promise<unknown> } };
+} {
+  const children = (root as { props: { children: unknown } }).props
+    .children as Array<{ type: unknown }>;
+  return children.find((c) => c.type === Suspense) as never;
+}
 
 const SRC = resolve(__dirname, "..");
 
@@ -122,9 +135,7 @@ describe("/ server render", () => {
   it("renders the cookie's place and calls no weather loader and no weather URL", async () => {
     const { default: Home } = await import("./page");
     // Home is a Suspense around HomeContent; run the content to completion.
-    const suspense = Home() as unknown as {
-      props: { children: { type: (p: object) => Promise<unknown> } };
-    };
+    const suspense = homeSuspense(Home());
     const content = (await suspense.props.children.type({})) as {
       props: { initial: Record<string, unknown> | null };
     };
@@ -141,9 +152,7 @@ describe("/ server render", () => {
   /** Run `/` to completion and return what it hands the client home. */
   async function renderHome(): Promise<Record<string, unknown> | null> {
     const { default: Home } = await import("./page");
-    const suspense = Home() as unknown as {
-      props: { children: { type: (p: object) => Promise<unknown> } };
-    };
+    const suspense = homeSuspense(Home());
     const content = (await suspense.props.children.type({})) as {
       props: { initial: Record<string, unknown> | null };
     };

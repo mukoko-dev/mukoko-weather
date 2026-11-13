@@ -543,7 +543,7 @@ export const MAP_CHIPS: readonly MapChip[] = [
       unit: "mm/h",
       segments: [],
       // \u2060 (word joiner) keeps "4–6" from breaking after the dash on a narrow sheet.
-      note: "NASA IMERG, about 10 km grid, 4–\u20606 hours behind",
+      note: "NASA IMERG, about 10 km grid, smoothed, 4–\u20606 hours behind",
     },
   },
   {

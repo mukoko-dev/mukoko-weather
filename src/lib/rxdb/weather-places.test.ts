@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import type { WeatherData } from "../weather";
 import type { DashboardPayload } from "../device-weather";
 import type { WeatherPlaceDocType } from "./schemas";
@@ -16,6 +16,12 @@ import {
 } from "./weather-places";
 import { weatherPlaceSchema } from "./schemas";
 import { canonicalSlug } from "../slug-migration";
+import { HOME_SNAPSHOT_KEY, rememberHomeSnapshot } from "../home-snapshot";
+import {
+  _resetStartGate,
+  holdStorageForFirstScreen,
+  releaseStorage,
+} from "./start-gate";
 
 const HOUR = 3_600_000;
 const OFFSET = 7200;
@@ -453,5 +459,83 @@ describe("subscribePlaces (the bell looks again when a place is stored)", () => 
     expect(calls).toBe(1);
     off();
     off2();
+  });
+});
+
+describe("the quick copy of My Location (home-snapshot.ts) follows the stored places", () => {
+  const data = new Map<string, string>();
+  beforeEach(() => {
+    data.clear();
+    vi.stubGlobal("window", {});
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => data.get(k) ?? null,
+      setItem: (k: string, v: string) => void data.set(k, String(v)),
+      removeItem: (k: string) => void data.delete(k),
+    });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+  const fetchedAtOfHeld = () =>
+    data.has(HOME_SNAPSHOT_KEY)
+      ? JSON.parse(data.get(HOME_SNAPSHOT_KEY)!).fetchedAt
+      : null;
+
+  it("is refreshed when the same place is stored again (a place page was opened), so it is never older than the stored copy", async () => {
+    const t = harare(11, 9);
+    rememberHomeSnapshot(payload("harare"), t, t);
+    await rememberPlace(payload("harare"), { now: t + 10 * 60_000 });
+    expect(fetchedAtOfHeld()).toBe(t + 10 * 60_000);
+  });
+
+  it("is never made by storing a place, and another place's copy is left alone", async () => {
+    const t = harare(11, 9);
+    await rememberPlace(payload("harare"), { now: t });
+    expect(data.has(HOME_SNAPSHOT_KEY)).toBe(false);
+    rememberHomeSnapshot(payload("harare"), t, t);
+    await rememberPlace(payload("bulawayo"), { now: t + 60_000 });
+    expect(JSON.parse(data.get(HOME_SNAPSHOT_KEY)!).slug).toBe(
+      canonicalSlug("harare"),
+    );
+  });
+
+  it("goes when the stored places are cleared", async () => {
+    const t = harare(11, 9);
+    await rememberPlace(payload("harare"), { now: t });
+    rememberHomeSnapshot(payload("harare"), t, t);
+    expect(data.has(HOME_SNAPSHOT_KEY)).toBe(true);
+    await clearPlaces();
+    expect(data.has(HOME_SNAPSHOT_KEY)).toBe(false);
+  });
+});
+
+describe("on the home page, while the first screen is held (start-gate.ts)", () => {
+  afterEach(() => {
+    _resetStartGate();
+    vi.unstubAllGlobals();
+  });
+
+  it("writing a place back waits for the gate; reading one for the screen does not", async () => {
+    vi.stubGlobal("window", {});
+    holdStorageForFirstScreen("/");
+    const t = harare(11, 9);
+    const stored = rememberPlace(payload("harare"), { now: t });
+    // Let every microtask the write could take run: nothing has been written.
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    expect(col.docs.size).toBe(0);
+    // A reader that wants a place to paint is not held.
+    col.docs.set("bulawayo", {
+      slug: "bulawayo",
+      payload: "{}",
+      fetchedAt: t,
+      lastAccessedAt: t,
+      expiresAt: harare(13, 0),
+      bytes: 2,
+    });
+    await expect(recallPlace("bulawayo", t)).resolves.toBeNull();
+    expect(col.docs.has("harare")).toBe(false);
+    releaseStorage();
+    expect(await stored).toBe(true);
+    expect(col.docs.has("harare")).toBe(true);
   });
 });

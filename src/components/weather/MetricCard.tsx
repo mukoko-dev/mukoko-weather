@@ -2,7 +2,10 @@
 
 import * as React from "react";
 import { WEATHER_SCALES } from "@/lib/weather-scales";
-import { resolveColor, resolveFallbackColor } from "@/components/ui/chart";
+import {
+  resolveColor,
+  resolveFallbackColor,
+} from "@/components/ui/chart-colors";
 
 // ---------------------------------------------------------------------------
 // ArcGauge — radial arc gauge (270° sweep, open at bottom)

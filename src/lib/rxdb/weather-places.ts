@@ -22,7 +22,14 @@ import {
   servedStaleAgeMs,
 } from "../device-weather";
 import { canonicalSlug, storageKeySlug } from "../slug-migration";
+import { forgetHomeSnapshot, rememberHomeSnapshot } from "../home-snapshot";
 import type { WeatherPlaceDocType } from "./schemas";
+import {
+  markNoPlacesStored,
+  markPlacesStored,
+  placesMayExist,
+} from "./places-marker";
+import { storageMayStart } from "./start-gate";
 
 /** The slice of an RxDB collection this module uses (so tests can fake it). */
 export interface PlaceCollection {
@@ -92,6 +99,18 @@ async function collection(): Promise<PlaceCollection | null> {
   }
 }
 
+/**
+ * The collection for a READ of stored places. A device that holds none has
+ * nothing to read, and opening the database to find that out (about 350 KB of
+ * JavaScript, then IndexedDB) is the work a first visit skips (places-marker.ts,
+ * issue 551). Only the real database is skipped this way; a test's own source
+ * is always asked. Writers use `collection()`: they must open it.
+ */
+async function readCollection(): Promise<PlaceCollection | null> {
+  if (source === defaultCollection && !(await placesMayExist())) return null;
+  return collection();
+}
+
 function metaOf(doc: PlaceDoc): StoredPlaceMeta {
   return {
     slug: doc.slug,
@@ -147,8 +166,13 @@ export async function rememberPlace(
     bytes: serialised.bytes,
   };
 
+  // Writing the copy back is not needed to paint: on the home page it waits
+  // for the weather to be on screen (start-gate.ts).
+  await storageMayStart();
   const col = await collection();
   if (!col) return false;
+  // Before the write, so the marker is never behind what is stored.
+  markPlacesStored();
   try {
     await col.upsert(doc);
   } catch (err) {
@@ -166,6 +190,10 @@ export async function rememberPlace(
   } catch {
     // Eviction is housekeeping — the write itself succeeded.
   }
+  // The quick copy of My Location (src/lib/home-snapshot.ts) must not fall
+  // behind the stored copy of the same place: it is read first. Only a copy
+  // that exists is refreshed; this never makes one.
+  rememberHomeSnapshot(payload, doc.fetchedAt, now, { onlyIfHeld: true });
   notifyPlaces();
   return true;
 }
@@ -179,7 +207,7 @@ export async function recallPlace(
   now: number = Date.now(),
 ): Promise<DeviceView | null> {
   if (!slug) return null;
-  const col = await collection();
+  const col = await readCollection();
   if (!col) return null;
   try {
     // A shipped place has two spellings (#317). A copy stored before the move
@@ -224,7 +252,7 @@ export interface ListedPlace extends DeviceView {
 export async function listPlaces(
   now: number = Date.now(),
 ): Promise<ListedPlace[]> {
-  const col = await collection();
+  const col = await readCollection();
   if (!col) return [];
   try {
     const docs = await col.find().exec();
@@ -266,7 +294,7 @@ export async function readPlaces(
 ): Promise<ReadPlace[]> {
   const wanted = [...new Set(slugs.filter(Boolean).map(canonicalSlug))];
   if (wanted.length === 0) return [];
-  const col = await collection();
+  const col = await readCollection();
   if (!col) return [];
   const out: ReadPlace[] = [];
   for (const canonical of wanted) {
@@ -298,7 +326,7 @@ export async function readPlaces(
 
 /** Count and bytes of what is stored (for the Settings storage row). */
 export async function placesUsage(): Promise<{ count: number; bytes: number }> {
-  const col = await collection();
+  const col = await readCollection();
   if (!col) return { count: 0, bytes: 0 };
   try {
     const docs = await col.find().exec();
@@ -313,11 +341,16 @@ export async function placesUsage(): Promise<{ count: number; bytes: number }> {
 
 /** Delete every stored place. Returns how many were removed. */
 export async function clearPlaces(): Promise<number> {
-  const col = await collection();
+  // The quick copy of My Location goes with the stored places.
+  forgetHomeSnapshot();
+  const col = await readCollection();
   if (!col) return 0;
   try {
     const docs = await col.find().exec();
     if (docs.length) await col.bulkRemove(docs.map((d) => d.slug));
+    // Nothing is stored now: the next visit need not open the database to
+    // find out (places-marker.ts).
+    markNoPlacesStored();
     if (docs.length) notifyPlaces();
     return docs.length;
   } catch {

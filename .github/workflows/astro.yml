@@ -1,0 +1,93 @@
+name: Astro
+
+# The Astro app in astro/ (phase 0 of the move to Astro,
+# mukoko-dev/mukoko-weather#475): type check, unit tests, build for the
+# Cloudflare adapter, the JavaScript budget of the built pages, and the shell
+# checks in a real browser. Nothing here deploys anything; the Next.js app
+# still serves every route.
+#
+# The paths are wide on purpose. astro/ reuses components and pure modules from
+# src/ unchanged (that is the point of a strangler), so a change there can
+# break this build, and this job is how that is found before the cutover.
+# It is path-filtered and is not a required check.
+on:
+  push:
+    branches: [main, staging]
+    paths:
+      - "astro/**"
+      - "src/components/**"
+      - "src/lib/**"
+      - "src/app/globals.css"
+      - "src/app/mzizi-tokens.css"
+      - "public/logo-light.svg"
+      - "public/logo-dark.svg"
+      - "package-lock.json"
+      - ".github/workflows/astro.yml"
+  pull_request:
+    branches: [main, staging]
+    paths:
+      - "astro/**"
+      - "src/components/**"
+      - "src/lib/**"
+      - "src/app/globals.css"
+      - "src/app/mzizi-tokens.css"
+      - "public/logo-light.svg"
+      - "public/logo-dark.svg"
+      - "package-lock.json"
+      - ".github/workflows/astro.yml"
+
+concurrency:
+  group: astro-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  astro:
+    name: Astro — check, test, build, shell
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Astro 7 refuses to run below Node 22.23.4 ("not supported by Astro").
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            astro/package-lock.json
+
+      # The shared source in src/ resolves its packages (lucide-react, clsx,
+      # tailwind-merge, ...) from the root install, and its types from there.
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install Astro dependencies
+        working-directory: astro
+        run: npm ci
+
+      - name: Type check
+        working-directory: astro
+        run: npm run check
+
+      - name: Unit tests
+        working-directory: astro
+        run: npm test
+
+      - name: Build (Cloudflare adapter)
+        working-directory: astro
+        run: npm run build
+
+      - name: JavaScript budget
+        working-directory: astro
+        run: npm run budget
+
+      # The runner's own Chrome (scripts/browser.mjs, channel "chrome").
+      - name: Shell checks in a browser
+        working-directory: astro
+        run: npm run check:shell

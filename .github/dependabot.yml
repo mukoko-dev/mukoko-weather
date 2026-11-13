@@ -22,6 +22,7 @@ updates:
     directories:
       - "/"
       - "/station-console"
+      - "/astro"
       - "/workers/mongo-bridge"
     target-branch: "staging"
     schedule:

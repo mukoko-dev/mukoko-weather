@@ -56,3 +56,9 @@ next-env.d.ts
 # station-console sub-app (own Vercel project)
 station-console/node_modules
 station-console/.next
+
+# Station import (workers/README.md, "Station import"): the export and the batch
+# files hold key hashes. Keep them outside the repo; this is the net under that.
+/stations.json
+/stations.sql
+/stations-import/

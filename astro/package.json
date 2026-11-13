@@ -1,0 +1,41 @@
+{
+  "name": "mukoko-weather-astro",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Phase 0 of the move to Astro (mukoko-dev/mukoko-weather#475): the strangler app. Not deployed; the Next.js app in ../src still serves every route.",
+  "engines": {
+    "node": ">=22.23.4"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check && tsc --noEmit -p .",
+    "test": "vitest run",
+    "budget": "node scripts/js-budget.mjs",
+    "check:shell": "node scripts/check-shell.mjs",
+    "serve": "node scripts/serve-dist.mjs",
+    "measure": "node scripts/measure.mjs"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^14.4.7",
+    "@astrojs/react": "^7.1.8",
+    "astro": "^7.4.11",
+    "lucide-react": "^1.72.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.12",
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "playwright-core": "^1.65.0",
+    "tailwindcss": "^4.3.1",
+    "typescript": "6.0.3",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.125.0"
+  }
+}

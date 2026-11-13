@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CriticalStyles } from "@/components/layout/FirstScreenStyles";
 import { breadcrumbJsonLd } from "@/lib/json-ld";
 import { buildPageMetadata } from "@/lib/metadata";
 import { resolveLocationParam } from "@/lib/load-location";
@@ -123,7 +124,13 @@ export default async function LocationPage({
 }) {
   const { location: slug } = await params;
   const location = localPlaceForSlug(slug);
-  if (!location) return <PlaceResolver slug={slug} />;
+  if (!location)
+    return (
+      <>
+        <CriticalStyles />
+        <PlaceResolver slug={slug} />
+      </>
+    );
 
   const countryCode = (location.country ?? "").toUpperCase();
   const season = localSeason(new Date(), countryCode, location.lat ?? 0);
@@ -213,6 +220,7 @@ export default async function LocationPage({
 
   return (
     <>
+      <CriticalStyles />
       {/* SEO schemas — server rendered only */}
       <JsonLd data={[pageSchema, breadcrumbSchema, faqSchema]} />
 

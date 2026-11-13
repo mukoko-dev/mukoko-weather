@@ -21,6 +21,7 @@ const sheet = read("src/components/weather/ActivitiesDetailSheet.tsx");
 const detailSheet = read("src/components/ui/detail-sheet.tsx");
 const lane = read("src/components/weather/CommunityLane.tsx");
 const insights = read("src/components/weather/ActivityInsights.tsx");
+const invite = read("src/components/weather/ActivityInvite.tsx");
 const metricModal = read("src/components/weather/MetricDetailModal.tsx");
 
 describe("ActivitiesDetailSheet structure", () => {
@@ -82,9 +83,24 @@ describe("DetailSheet (one scaffold for both sheets)", () => {
 
 describe("ActivityInsights split", () => {
   it("exports the small invitation separately for the page", () => {
-    expect(insights).toContain("export function ActivityInvite()");
-    expect(insights).toContain("Advice for what you do");
-    expect(insights).toContain('openMyWeather("activities")');
+    expect(invite).toContain("export function ActivityInvite()");
+    expect(invite).toContain("Advice for what you do");
+    expect(invite).toContain('openMyWeather("activities")');
+  });
+
+  // The page imports the invitation on first load. Anything it imports comes
+  // with it, so it must not reach the activity cards (and with them the
+  // feasibility chart's Chart.js and the whole icon library: about 650 KB the
+  // first screen does not need, issue #551).
+  it("keeps the invitation's file free of the cards, charts and icon library", () => {
+    expect(invite).not.toContain("ActivityCard");
+    expect(invite).not.toContain("ActivityInsights");
+    expect(invite).not.toMatch(
+      /from "(chart\.js|react-chartjs-2|lucide-react)"/,
+    );
+    expect(read("src/app/[location]/WeatherDashboard.tsx")).toContain(
+      'from "@/components/weather/ActivityInvite"',
+    );
   });
 
   it("lets the host replace the Edit action", () => {

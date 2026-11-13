@@ -1,5 +1,10 @@
 import { create } from "zustand";
 import { updatePreferences, initRxDBBridge, getDeviceId } from "./rxdb/bridge";
+import {
+  holdStorageForFirstScreen,
+  isStorageHeld,
+  storageMayStart,
+} from "./rxdb/start-gate";
 import type { PreferencesDocType } from "./rxdb/schemas";
 import { getFeatureFlag } from "./feature-flags";
 // Types only: the sync code itself is imported dynamically, behind the flag.
@@ -14,7 +19,12 @@ import {
   slugPrefsChanged,
 } from "./slug-migration";
 import { isPresetAnchor, type PresetAnchor } from "./location-presets";
-import { resolveTheme, type ThemePreference } from "./theme";
+import {
+  readStoredTheme,
+  rememberTheme,
+  resolveTheme,
+  type ThemePreference,
+} from "./theme";
 import {
   DEFAULT_NOTIFICATION_PREFS,
   mergeNotificationPrefs,
@@ -92,8 +102,15 @@ export function isShamwariContextValid(
   return Date.now() - ctx.timestamp < SHAMWARI_CONTEXT_TTL_MS;
 }
 
-/** Apply the resolved theme to the DOM */
+/**
+ * Apply the resolved theme to the DOM, and record the choice on this device
+ * (`rememberTheme`) so the next first paint can settle it before the
+ * preferences load from IndexedDB. Every path that changes the theme (the
+ * visitor's tap, the preferences read at start-up, another tab, another
+ * device's sync) goes through here, so the record cannot drift from them.
+ */
 function applyTheme(pref: ThemePreference) {
+  rememberTheme(pref);
   if (typeof document === "undefined") return;
   document.documentElement.setAttribute("data-theme", resolveTheme(pref));
   document.documentElement.setAttribute("data-brand", "mukoko-weather");
@@ -530,6 +547,27 @@ export const useAppStore = create<AppState>()((set) => ({
 export function initializeDeviceSync(): void {
   if (typeof window === "undefined") return;
 
+  // Until the preferences have been read from IndexedDB, the store holds its
+  // default theme ("system"). The theme this device recorded stands in for
+  // them (src/lib/theme.ts): the page was already painted in it by the script
+  // in the document head, and it is what a fresh preferences document is seeded
+  // with if IndexedDB was cleared. The preferences, once read, decide.
+  const recorded = readStoredTheme();
+  if (recorded && useAppStore.getState().theme === "system") {
+    useAppStore.setState({ theme: recorded });
+  }
+
+  // On the home page the database waits for the weather to be on screen and
+  // the browser to be idle (src/lib/rxdb/start-gate.ts, issue 551): the theme
+  // is already settled above, and the place and its forecast come from
+  // localStorage. Everywhere else the wait is over at once.
+  holdStorageForFirstScreen(window.location?.pathname ?? "");
+  if (isStorageHeld()) void storageMayStart().then(startDeviceSync);
+  else startDeviceSync();
+}
+
+/** Opens the preferences database and starts replication. */
+function startDeviceSync(): void {
   initRxDBBridge({
     applyToStore: (incoming: Partial<PreferencesDocType>) => {
       // Canonical-slug migration (#317), once and idempotent: every path that

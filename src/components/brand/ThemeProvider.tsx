@@ -14,10 +14,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     initializeDeviceSync();
   }, []);
 
-  // Apply resolved theme to DOM whenever preference changes
+  // Apply resolved theme to DOM whenever preference changes. Read from the
+  // store, not from this render's `theme`: the effect above has just adopted
+  // the choice this device recorded (initializeDeviceSync, src/lib/theme.ts)
+  // and this render still holds the default, which would flip a person who
+  // chose dark on a light phone back to light until the preferences load.
   useEffect(() => {
     try {
-      document.documentElement.setAttribute("data-theme", resolveTheme(theme));
+      document.documentElement.setAttribute(
+        "data-theme",
+        resolveTheme(useAppStore.getState().theme),
+      );
       document.documentElement.setAttribute("data-brand", "mukoko-weather");
     } catch {
       // DOM attribute access failed (shouldn't happen, but be safe)

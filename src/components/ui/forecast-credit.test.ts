@@ -163,7 +163,7 @@ describe("layering", () => {
 
 describe("Apple Weather's chart colour", () => {
   const css = read("src/app/globals.css");
-  const chart = read("src/components/ui/chart.tsx");
+  const chart = read("src/components/ui/chart-colors.ts");
 
   it("is a token in both themes, registered for Tailwind, with a render-time fallback", () => {
     expect(css.match(/--chart-7:/g)).toHaveLength(2);

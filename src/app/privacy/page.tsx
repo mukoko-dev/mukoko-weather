@@ -1,3 +1,4 @@
+import "@/app/globals.css";
 import type { Metadata } from "next";
 import { SITE_URL } from "@/lib/site";
 import Link from "next/link";
@@ -101,6 +102,14 @@ export default function PrivacyPage() {
               preferences sync&quot; below). No personal data is stored in local
               storage.
             </p>
+            <p className="mt-2">
+              So that the app can show your weather straight away when you open
+              it again, it also keeps a copy of the last forecast it showed on
+              your home screen: one place, in your browser&apos;s local storage
+              on this device. It is a copy of a public forecast, it is never
+              sent to us, and the next forecast replaces it. Clearing your
+              browser&apos;s local storage removes it; signing out does not.
+            </p>
 
             <h3 className="mt-4 font-semibold text-text-primary">
               Device preferences sync
@@ -160,16 +169,8 @@ export default function PrivacyPage() {
               .
             </p>
             <p className="mt-2">
-              We also use{" "}
-              <strong className="text-text-primary">
-                Vercel Web Analytics
-              </strong>{" "}
-              to monitor website performance. Vercel Analytics does not use
-              cookies and collects no personally identifiable information.
-            </p>
-            <p className="mt-2">
               We do not use advertising pixels, fingerprinting technologies, or
-              any tracking beyond Google Analytics and Vercel Analytics.
+              any tracking beyond Google Analytics.
             </p>
           </ProseSection>
 
@@ -371,6 +372,11 @@ export default function PrivacyPage() {
               <li>
                 Device preference profiles: retained until you clear your
                 browser local storage or request deletion
+              </li>
+              <li>
+                The last forecast shown on your home screen: kept on your device
+                until the next forecast replaces it or you clear your browser
+                local storage; we never receive it
               </li>
               <li>
                 Rate limiting records: auto-deleted after expiry window

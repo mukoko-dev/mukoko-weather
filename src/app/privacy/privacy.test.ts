@@ -40,3 +40,34 @@ describe("privacy page: MET Norway", () => {
     expect(entry).toContain('href="https://api.met.no/doc/TermsOfService"');
   });
 });
+
+/**
+ * The app keeps the last forecast shown on the home screen in localStorage so
+ * the next open can paint it at once (mukoko-dev/mukoko-weather#551,
+ * src/lib/home-snapshot.ts). The page says so, in the storage section and in
+ * the retention list, and says it stays on the device.
+ */
+describe("privacy page: the stored forecast", () => {
+  // JSX text is wrapped by the formatter: compare it as one line.
+  const text = source.replace(/\s+/g, " ");
+
+  it("says the app keeps a copy of the last forecast, on this device", () => {
+    expect(text).toContain("keeps a copy of the last forecast it showed");
+    expect(text).toContain("one place");
+    expect(text).toContain("on this device");
+  });
+
+  it("says it is never sent to us and how to remove it", () => {
+    expect(text).toContain("it is never sent to us");
+    expect(text).toContain(
+      "Clearing your browser&apos;s local storage removes it",
+    );
+    expect(text).toContain("signing out does not");
+  });
+
+  it("lists it in the data retention section", () => {
+    const retention = text.slice(text.indexOf('heading="Data retention"'));
+    expect(retention).toContain("The last forecast shown on your home screen");
+    expect(retention).toContain("we never receive it");
+  });
+});

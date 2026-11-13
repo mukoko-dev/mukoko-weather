@@ -1,3 +1,4 @@
+import "@/app/globals.css";
 import { cache } from "react";
 import type { Metadata } from "next";
 import { trail } from "@/components/layout/Breadcrumb";

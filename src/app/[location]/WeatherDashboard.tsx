@@ -41,7 +41,7 @@ import { LazySection } from "@/components/weather/LazySection";
 import { PlaceKnowledgeRows } from "@/components/weather/PlaceKnowledgeRows";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { CommunityLane } from "@/components/weather/CommunityLane";
-import { ActivityInvite } from "@/components/weather/ActivityInsights";
+import { ActivityInvite } from "@/components/weather/ActivityInvite";
 import { CommunityLaneSkeleton } from "@/components/weather/CommunityLaneSkeleton";
 import {
   SectionSkeleton,
@@ -94,6 +94,7 @@ import { EnsoOutlook } from "@/components/weather/EnsoOutlook";
 import { DraggableSection } from "@/components/weather/DraggableSection";
 import { cacheWeatherHint } from "@/lib/weather-scenes";
 import { rememberPlace } from "@/lib/rxdb/weather-places";
+import { releaseStorageAfterPaint } from "@/lib/rxdb/start-gate";
 import { servedStaleAgeMs, type DeviceView } from "@/lib/device-weather";
 import { UpdatedAgo } from "@/components/weather/UpdatedAgo";
 import {
@@ -411,6 +412,11 @@ export function WeatherDashboard({
   useEffect(() => {
     setSelectedLocation(location.slug);
   }, [location.slug, setSelectedLocation]);
+
+  // The dashboard is only mounted with a forecast on hand: once it has been
+  // presented and the browser is idle, the database may start (on the home page
+  // it has been held back for this, src/lib/rxdb/start-gate.ts).
+  useEffect(() => releaseStorageAfterPaint(), []);
 
   // Cache weather hint for the loading skeleton — enables weather-aware
   // Three.js animation on subsequent visits to this location. The hint is kept

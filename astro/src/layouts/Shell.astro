@@ -1,0 +1,116 @@
+---
+/**
+ * The one layout. Header, bottom bar (with the place lane) and footer are in
+ * it once; the client router swaps only <main>, so the header and the bar stay
+ * mounted between pages (scroll position, the lane's place in its row and the
+ * open state of anything inside them survive a tap).
+ *
+ * The HTML this sends is the same for everyone: nothing here reads who is
+ * signed in. The one thing that depends on the visitor is the theme, and the
+ * inline script below settles it from the device before the first paint.
+ */
+import { ClientRouter } from "astro:transitions";
+import { Font } from "astro:assets";
+import "../styles/global.css";
+import ShellHeader from "../components/ShellHeader.astro";
+import ShellFooter from "../components/ShellFooter.astro";
+import BottomBar from "../islands/BottomBar";
+
+interface Props {
+  title: string;
+  description: string;
+  /** Path of the page, for the canonical link. Omit on preview pages. */
+  canonicalPath?: string;
+  /** Keep the page out of search engines (preview pages). */
+  noindex?: boolean;
+}
+
+const { title, description, canonicalPath, noindex = false } = Astro.props;
+const pageTitle = title.includes("mukoko") ? title : `${title} | mukoko weather`;
+const canonical = canonicalPath ? new URL(canonicalPath, Astro.site).href : undefined;
+---
+
+<!doctype html>
+<html lang="en" dir="ltr" data-brand="mukoko-weather">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={description} />
+    {canonical && <link rel="canonical" href={canonical} />}
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
+    <meta property="og:site_name" content="mukoko weather" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={description} />
+    {canonical && <meta property="og:url" content={canonical} />}
+
+    <!-- Settle the theme from the device before the first paint (no pale
+         flash on a dark phone, nor for a person who chose dark in the app on a
+         light one). Same rule as the Next.js layout (THEME_INIT_SCRIPT in
+         src/lib/theme.ts; a test keeps the key equal): the choice this device
+         recorded, else the old Zustand key, else the system's. It also runs on
+         the incoming document of every client-side navigation, because the
+         router replaces the attributes of <html> with the new page's, which
+         has no theme. -->
+    <script is:inline>
+      (function () {
+        function theme() {
+          try {
+            var t = localStorage.getItem("mukoko-theme");
+            if (t === "light" || t === "dark") return t;
+          } catch (e) {}
+          try {
+            var s = JSON.parse(localStorage.getItem("mukoko-weather-prefs") || "{}");
+            var p = s && s.state && s.state.theme;
+            if (p === "light" || p === "dark") return p;
+          } catch (e) {}
+          try {
+            return matchMedia("(prefers-color-scheme:dark)").matches ? "dark" : "light";
+          } catch (e) {
+            return "light";
+          }
+        }
+        document.documentElement.setAttribute("data-theme", theme());
+        document.addEventListener("astro:before-swap", function (event) {
+          event.newDocument.documentElement.setAttribute("data-theme", theme());
+        });
+      })();
+    </script>
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#0047AB" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0A0A0A" media="(prefers-color-scheme: dark)" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <Font cssVariable="--font-noto-sans" preload />
+    <Font cssVariable="--font-noto-serif" />
+    <ClientRouter />
+  </head>
+  <body class="min-h-screen bg-background font-sans text-foreground antialiased">
+    <a
+      href="#main-content"
+      class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-[var(--radius-button)] focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground focus:shadow-lg focus:outline-none"
+    >
+      Skip to main content
+    </a>
+    <div class="minerals-stripe" role="presentation" aria-hidden="true"></div>
+    <div class="overflow-x-clip pl-0 min-[480px]:pl-2">
+      <ShellHeader />
+      <slot />
+      <ShellFooter />
+    </div>
+    <!-- The bottom bar and its place lane: a React island, kept mounted
+         across navigations. It is server-rendered, so it is on screen with the
+         page; the script only makes the lane scroll and the links route. -->
+    <BottomBar
+      client:idle
+      transition:persist="bottom-bar"
+      pathname={Astro.url.pathname}
+    />
+  </body>
+</html>

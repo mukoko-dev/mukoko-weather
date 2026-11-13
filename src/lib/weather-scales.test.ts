@@ -437,7 +437,7 @@ describe("no brand mineral in a weather data encoding (whole of src)", () => {
     "components/ui/alert.tsx": `${CHROME}: alert variants`,
     "components/ui/inline-error.tsx": `${CHROME}: error tone`,
     "components/ui/status-indicator.tsx": "service status, not weather",
-    "components/ui/chart.tsx":
+    "components/ui/chart-colors.ts":
       "resolveColor fallback tables name both token families",
     "components/weather/AISummary.tsx": CHROME,
     "components/weather/ActivityInsights.tsx":

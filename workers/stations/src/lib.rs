@@ -24,21 +24,52 @@
 //! The queue consumer, in this same Worker, then writes each batch: validated
 //! observations to D1, and the raw uploads, with credentials removed, to R2
 //! as NDJSON.
+//!
+//! # Two backends (`STATIONS_BACKEND`)
+//!
+//! `d1` (the default, and what the Worker has always done) keeps the station
+//! registry and the observations in this Worker's D1 database. `nyuchi` moves
+//! both to the Nyuchi API (mukoko-dev/mukoko-weather#556, B2 of #293): the API
+//! checks the key (`/v1/stations/service/verify`) and stores the observations
+//! (`/v1/stations/service/observations`); `register` answers `410` and points
+//! to the console; `manual` and `status` proxy to the API by the station's own
+//! key; and the consumer keeps the KV snapshot `stations:latest` for the
+//! forecast blend. The hot path is the same in both. In `nyuchi` mode an API
+//! that cannot answer is a `503`, never a `401`, and anything the mode needs
+//! that is missing fails closed and is logged as an `ALERT`. The rules are in
+//! `weather_core::station_service`; `nyuchi.rs` is the I/O.
 
 mod auth;
 mod consumer;
+mod latest;
 mod limits;
+mod nyuchi;
 
+use serde::Serialize;
 use serde_json::json;
 use weather_core::station::{
     ecowitt_metrics, hash_ingest_key, qc_filter, scrub_raw, split_passkey, wunderground_metrics,
     IngestMessage, ManualReading, Metrics, Registration,
 };
+use weather_core::station_service::{
+    self, Backend, Failure, ManualResult, Proxied, StationIdentity, UnknownBackend,
+};
 use weather_edge::{config, cors, error, json, now_ms};
-use worker::{event, Context, Env, MessageBatch, Method, Request, Response, Result, Url};
+use worker::{
+    event, Context, Env, MessageBatch, Method, QueueContentType, RawMessageBuilder, Request,
+    Response, Result, Url,
+};
 
 pub(crate) const DB: &str = "WEATHER_DB";
 const QUEUE: &str = "OBSERVATIONS";
+/// Where `register` points once the Nyuchi API is the backend (override with
+/// the var `CONSOLE_URL`).
+const CONSOLE_URL: &str = "https://weatherstations.nyuchi.com";
+
+/// The backend this Worker runs (`STATIONS_BACKEND`): unset is `d1`.
+pub(crate) fn backend(env: &Env) -> std::result::Result<Backend, UnknownBackend> {
+    Backend::parse(config(env, station_service::BACKEND_VAR).as_deref())
+}
 
 #[event(fetch)]
 pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
@@ -46,20 +77,22 @@ pub async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response
     let route = path.strip_prefix("/api/py").unwrap_or(&path).to_owned();
     let origin = req.headers().get("Origin")?.unwrap_or_default();
     let cors = cors::allowed_origin(&env, &origin);
+    let mode = backend(&env);
+    // Only read where the match below has checked it is `Ok`.
+    let b = mode.clone().unwrap_or(Backend::D1);
 
     let resp = match (req.method(), route.as_str()) {
         (Method::Options, _) => {
             cors::preflight(cors.is_some(), "GET, POST, OPTIONS", "Content-Type")
         }
-        (Method::Get, "/health") => json(
-            200,
-            &json!({"service": "mukoko-weather-stations", "status": "ok"}),
-        ),
-        (Method::Get, "/stations/ingest") => ingest_wunderground(&req, &env).await,
-        (Method::Post, "/stations/ingest") => ingest_ecowitt(&mut req, &env).await,
-        (Method::Post, "/stations/register") => register(&mut req, &env).await,
-        (Method::Post, "/stations/manual") => manual(&mut req, &env).await,
-        (Method::Get, "/stations/status") => status(&req, &env).await,
+        (Method::Get, "/health") => health(&env, &mode).await,
+        // An unknown STATIONS_BACKEND fails closed on every station route.
+        (_, r) if r.starts_with("/stations/") && mode.is_err() => unknown_backend(&mode),
+        (Method::Get, "/stations/ingest") => ingest_wunderground(&req, &env, b).await,
+        (Method::Post, "/stations/ingest") => ingest_ecowitt(&mut req, &env, b).await,
+        (Method::Post, "/stations/register") => register(&mut req, &env, b).await,
+        (Method::Post, "/stations/manual") => manual(&mut req, &env, b).await,
+        (Method::Get, "/stations/status") => status(&req, &env, b).await,
         _ => error(404, "not_found", "No such route."),
     }?;
     cors::apply(resp, cors.as_deref(), None)
@@ -76,11 +109,95 @@ fn text(status: u16, body: &str) -> Result<Response> {
     Ok(resp)
 }
 
+/// `Retry-After` on an answer that asks the caller to come back.
+fn retry_later(resp: Result<Response>) -> Result<Response> {
+    let resp = resp?;
+    resp.headers()
+        .set("Retry-After", &Failure::RETRY_AFTER_SECONDS.to_string())?;
+    Ok(resp)
+}
+
+/// The backend could not judge the upload (and has logged why): `503`, never
+/// `401`, so a good station keeps its key and tries again.
+fn unavailable_text() -> Result<Response> {
+    retry_later(text(Failure::STATION_STATUS, "service unavailable"))
+}
+
+fn unavailable_json() -> Result<Response> {
+    retry_later(error(
+        Failure::STATION_STATUS,
+        "unavailable",
+        "The station service is not available right now. Try again shortly.",
+    ))
+}
+
+/// `STATIONS_BACKEND` is neither `d1` nor `nyuchi`: fail closed, and say so.
+fn unknown_backend(mode: &std::result::Result<Backend, UnknownBackend>) -> Result<Response> {
+    if let Err(bad) = mode {
+        nyuchi::report_unknown(bad);
+    }
+    retry_later(error(
+        Failure::STATION_STATUS,
+        "misconfigured",
+        "The station service is misconfigured.",
+    ))
+}
+
+async fn health(
+    env: &Env,
+    mode: &std::result::Result<Backend, UnknownBackend>,
+) -> Result<Response> {
+    // Always 200 (the deploy's smoke check reads it). `status` says whether the
+    // chosen backend can work; what is missing is in the `ALERT` log line, not
+    // in this public body.
+    let (backend, status) = match mode {
+        Ok(Backend::D1) => (json!("d1"), "ok"),
+        Ok(Backend::Nyuchi) => {
+            let ready = nyuchi::Present::of(env).await.missing().is_empty();
+            (json!("nyuchi"), if ready { "ok" } else { "misconfigured" })
+        }
+        Err(_) => (json!(null), "misconfigured"),
+    };
+    json(
+        200,
+        &json!({"service": "mukoko-weather-stations", "status": status, "backend": backend}),
+    )
+}
+
+/// Put one accepted upload on the queue.
+///
+/// **`nyuchi` mode** sends the message with its maps (`validated`, `raw`) as
+/// plain JS objects. `Queue::send` serialises a Rust map to a JS `Map`, and the
+/// queue's JSON content type turns a `Map` into `{}`: the consumer then gets an
+/// upload with no metrics and no raw payload. Seen in a local workerd run with
+/// `STATIONS_BACKEND=d1` (mukoko-dev/mukoko-weather#558); the consumer reads
+/// the object form.
+///
+/// **`d1` mode** still sends it exactly as before B2, so that mode's behaviour
+/// does not change until the owner decides (#558 has the one-line fix and what
+/// it would change).
+async fn queue_message(env: &Env, backend: Backend, msg: &IngestMessage) -> Result<()> {
+    let queue = env.queue(QUEUE)?;
+    match backend {
+        Backend::D1 => queue.send(msg).await,
+        Backend::Nyuchi => {
+            let plain = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+            let body = msg.serialize(&plain)?;
+            queue
+                .send_raw(
+                    RawMessageBuilder::new(body).build_with_content_type(QueueContentType::Json),
+                )
+                .await
+        }
+    }
+}
+
 /// QC the metrics and queue the upload. The raw record is archived even when
 /// nothing passes QC.
 async fn enqueue(
     env: &Env,
-    station: &auth::Station,
+    backend: Backend,
+    station: &StationIdentity,
     metrics: &Metrics,
     raw: serde_json::Map<String, serde_json::Value>,
     source: &str,
@@ -100,11 +217,11 @@ async fn enqueue(
         validated,
         raw,
     };
-    env.queue(QUEUE)?.send(&msg).await?;
+    queue_message(env, backend, &msg).await?;
     Ok(accepted)
 }
 
-async fn ingest_wunderground(req: &Request, env: &Env) -> Result<Response> {
+async fn ingest_wunderground(req: &Request, env: &Env, backend: Backend) -> Result<Response> {
     let url = req.url()?;
     let pairs: Vec<(String, String)> = url
         .query_pairs()
@@ -113,17 +230,19 @@ async fn ingest_wunderground(req: &Request, env: &Env) -> Result<Response> {
     let get = |k: &str| pairs.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone());
     let id = get("ID").unwrap_or_default();
     let key = get("PASSWORD").unwrap_or_default();
-    let Some(station) = auth::find_station(env, &id, &key).await? else {
-        return text(401, "unauthorized");
+    let station = match auth::authenticate(env, backend, &id, &key).await? {
+        auth::Outcome::Station(station) => station,
+        auth::Outcome::Denied => return text(401, "unauthorized"),
+        auth::Outcome::Unavailable => return unavailable_text(),
     };
     let metrics = wunderground_metrics(get);
     let raw = scrub_raw(pairs.iter().map(|(k, v)| (k.as_str(), v.as_str())));
-    enqueue(env, &station, &metrics, raw, "wunderground").await?;
+    enqueue(env, backend, &station, &metrics, raw, "wunderground").await?;
     // The Wunderground protocol expects the literal body "success".
     text(200, "success")
 }
 
-async fn ingest_ecowitt(req: &mut Request, env: &Env) -> Result<Response> {
+async fn ingest_ecowitt(req: &mut Request, env: &Env, backend: Backend) -> Result<Response> {
     let Ok(body) = req.text().await else {
         return text(400, "bad request");
     };
@@ -136,16 +255,18 @@ async fn ingest_ecowitt(req: &mut Request, env: &Env) -> Result<Response> {
     let get = |k: &str| pairs.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone());
     let passkey = get("PASSKEY").unwrap_or_default();
     let (id, key) = split_passkey(&passkey);
-    let Some(station) = auth::find_station(env, id, key).await? else {
-        return text(401, "unauthorized");
+    let station = match auth::authenticate(env, backend, id, key).await? {
+        auth::Outcome::Station(station) => station,
+        auth::Outcome::Denied => return text(401, "unauthorized"),
+        auth::Outcome::Unavailable => return unavailable_text(),
     };
     let metrics = ecowitt_metrics(get);
     let raw = scrub_raw(pairs.iter().map(|(k, v)| (k.as_str(), v.as_str())));
-    enqueue(env, &station, &metrics, raw, "ecowitt").await?;
+    enqueue(env, backend, &station, &metrics, raw, "ecowitt").await?;
     text(200, "success")
 }
 
-async fn manual(req: &mut Request, env: &Env) -> Result<Response> {
+async fn manual(req: &mut Request, env: &Env, backend: Backend) -> Result<Response> {
     let Some(ip) = weather_edge::client_ip(req) else {
         return error(400, "invalid_request", "Could not determine client IP");
     };
@@ -160,7 +281,13 @@ async fn manual(req: &mut Request, env: &Env) -> Result<Response> {
     if !limits::allow(env, &ip, "station-manual", 12).await? {
         return error(429, "rate_limited", "Too many readings — try again later");
     }
-    let Some(station) = auth::find_station(env, &reading.station_id, &reading.key).await? else {
+    if backend == Backend::Nyuchi {
+        return manual_via_api(env, &reading, &metrics).await;
+    }
+    let Some(station) = auth::find_station(env, &reading.station_id, &reading.key)
+        .await?
+        .map(|s| s.identity())
+    else {
         return error(401, "unauthorized", "Unknown station or key");
     };
     let mut raw = serde_json::Map::new();
@@ -172,7 +299,7 @@ async fn manual(req: &mut Request, env: &Env) -> Result<Response> {
     if let Some(n) = &reading.notes {
         raw.insert("notes".into(), json!(n));
     }
-    let accepted = enqueue(env, &station, &metrics, raw, "manual").await?;
+    let accepted = enqueue(env, backend, &station, &metrics, raw, "manual").await?;
     let qc = if accepted > 0 {
         "validated"
     } else {
@@ -181,13 +308,60 @@ async fn manual(req: &mut Request, env: &Env) -> Result<Response> {
     json(200, &json!({"accepted": accepted, "qcStatus": qc}))
 }
 
+/// `nyuchi` mode: a thin proxy. The reading goes to the API's
+/// `POST /v1/stations/{id}/readings` with the station's own key as the bearer;
+/// the API judges the key and the reading. The answer keeps the shape legacy
+/// clients read (`accepted`: measurements, `qcStatus`), and an unknown station
+/// or key is the same `401` as before. The per-client limit above still
+/// applies, so one client cannot spend the API's shared allowance for this
+/// Worker's address.
+async fn manual_via_api(env: &Env, reading: &ManualReading, metrics: &Metrics) -> Result<Response> {
+    if !station_service::plausible_credentials(&reading.station_id, &reading.key) {
+        return error(401, "unauthorized", "Unknown station or key");
+    }
+    let base = match nyuchi::base_url(env) {
+        Ok(base) => base,
+        Err(f) => {
+            nyuchi::report(&f);
+            return unavailable_json();
+        }
+    };
+    match nyuchi::manual(&base, &reading.station_id, &reading.key, metrics).await {
+        Ok(Proxied::Done(ManualResult::Accepted)) => {
+            let accepted = metrics.values().flatten().count();
+            json(200, &json!({"accepted": accepted, "qcStatus": "validated"}))
+        }
+        Ok(Proxied::Done(ManualResult::Rejected { detail })) => {
+            error(422, "invalid_request", &detail)
+        }
+        Ok(Proxied::Denied) => error(401, "unauthorized", "Unknown station or key"),
+        Err(f) => {
+            nyuchi::report(&f);
+            unavailable_json()
+        }
+    }
+}
+
 fn random_bytes<const N: usize>() -> Result<[u8; N]> {
     let mut b = [0u8; N];
     getrandom::getrandom(&mut b).map_err(|e| worker::Error::RustError(e.to_string()))?;
     Ok(b)
 }
 
-async fn register(req: &mut Request, env: &Env) -> Result<Response> {
+async fn register(req: &mut Request, env: &Env, backend: Backend) -> Result<Response> {
+    if backend == Backend::Nyuchi {
+        // Anonymous registration ended (owner decision O-S3): a station has an
+        // owner, so it is registered in the console, signed in.
+        let console = config(env, "CONSOLE_URL").unwrap_or_else(|| CONSOLE_URL.to_owned());
+        return error(
+            410,
+            "gone",
+            &format!(
+                "Station registration moved to the StationKit console: {console}. \
+                 Sign in there to register a station."
+            ),
+        );
+    }
     let Some(ip) = weather_edge::client_ip(req) else {
         return error(400, "invalid_request", "Could not determine client IP");
     };
@@ -267,7 +441,7 @@ async fn register(req: &mut Request, env: &Env) -> Result<Response> {
     )
 }
 
-async fn status(req: &Request, env: &Env) -> Result<Response> {
+async fn status(req: &Request, env: &Env, backend: Backend) -> Result<Response> {
     let url: Url = req.url()?;
     let get = |k: &str| {
         url.query_pairs()
@@ -275,6 +449,9 @@ async fn status(req: &Request, env: &Env) -> Result<Response> {
             .map(|(_, v)| v.into_owned())
             .unwrap_or_default()
     };
+    if backend == Backend::Nyuchi {
+        return status_via_api(env, &get("id"), &get("key")).await;
+    }
     let Some(station) = auth::find_station(env, &get("id"), &get("key")).await? else {
         return error(401, "unauthorized", "Unknown station or key");
     };
@@ -305,4 +482,30 @@ async fn status(req: &Request, env: &Env) -> Result<Response> {
             "latestMetrics": latest_metrics,
         }),
     )
+}
+
+/// `nyuchi` mode: a thin proxy to `GET /v1/stations/{id}` with the station's
+/// own key as the bearer. The API's answer (the station and its latest
+/// metrics: a superset of the fields `status` has always had, and never a key,
+/// a digest or an owner id) is passed on; an unknown station or key is the
+/// same `401` as before.
+async fn status_via_api(env: &Env, id: &str, key: &str) -> Result<Response> {
+    if !station_service::plausible_credentials(id, key) {
+        return error(401, "unauthorized", "Unknown station or key");
+    }
+    let base = match nyuchi::base_url(env) {
+        Ok(base) => base,
+        Err(f) => {
+            nyuchi::report(&f);
+            return unavailable_json();
+        }
+    };
+    match nyuchi::status(&base, id, key).await {
+        Ok(Proxied::Done(body)) => json(200, &body),
+        Ok(Proxied::Denied) => error(401, "unauthorized", "Unknown station or key"),
+        Err(f) => {
+            nyuchi::report(&f);
+            unavailable_json()
+        }
+    }
 }

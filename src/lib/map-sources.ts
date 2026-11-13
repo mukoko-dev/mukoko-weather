@@ -18,6 +18,8 @@
  * (refs #238, #246).
  */
 
+import { smoothTileUrl } from "./smooth-tile";
+
 /* ------------------------------------------------------------------------ *
  * Providers + attribution
  * ------------------------------------------------------------------------ */
@@ -359,7 +361,8 @@ export interface GibsLayer {
    * z is native at map zoom z - 1 and every map zoom above that magnifies the
    * data's own cells. Capped where one data cell still reads honestly rather
    * than as a soft block: IMERG's 0.1 degree (about 11 km) cell is 4.5 px in a
-   * tile, so about 36 px at map zoom 8 and about 145 px at map zoom 10;
+   * tile, so about 36 px at map zoom 8 and about 145 px at map zoom 10 (it is
+   * drawn smoothed, see `smoothCellDegrees`, but smoothing adds no detail);
    * VIIRS true colour is 250 m data, 2x magnified at map zoom 9.
    */
   maxMapZoom: number;
@@ -385,6 +388,14 @@ export interface GibsLayer {
   todayFromHourUtc?: number | null;
   /** Accessible name of the timeline range input; default "Observation time". */
   timeLabel?: string;
+  /**
+   * Size, in degrees, of the data's own square cells, for a layer GIBS draws as
+   * hard boxes (IMERG: 0.1 degree, about 11 km). Set, the tiles are smoothed in
+   * the browser (smooth-tile.ts: a blur about one cell wide, read across tile
+   * edges so there is no seam). Smoother, not more detailed: the data is still
+   * one value per cell. Omitted for imagery, which has real detail.
+   */
+  smoothCellDegrees?: number;
 }
 
 /**
@@ -440,6 +451,7 @@ export const GIBS_LAYERS: Readonly<Record<string, GibsLayer>> = {
     frames: 13,
     fallbackLatencyHours: 8,
     opacity: 0.75,
+    smoothCellDegrees: 0.1,
   },
   wildfire: {
     chipId: "wildfire",
@@ -709,9 +721,14 @@ export function satelliteFrames(
 
 /** Raster source spec for a GIBS layer at one frame. */
 export function buildGibsSource(layer: GibsLayer, time: string) {
+  const url = gibsTileUrl(layer, time);
   return {
     type: "raster" as const,
-    tiles: [gibsTileUrl(layer, time)],
+    tiles: [
+      layer.smoothCellDegrees
+        ? smoothTileUrl(url, layer.smoothCellDegrees)
+        : url,
+    ],
     tileSize: layer.service === "wms" ? GIBS_WMS_TILE_SIZE : 256,
     minzoom: 0,
     maxzoom: layer.maxZoom,

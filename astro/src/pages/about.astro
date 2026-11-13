@@ -1,0 +1,131 @@
+---
+/**
+ * /about, ported from src/app/about/page.tsx (phase 0's proof page). The words
+ * are the Next.js page's; PageHeader and InfoRow are its React components,
+ * rendered here to plain HTML at build time, so the page sends no JavaScript
+ * of its own.
+ */
+import Shell from "../layouts/Shell.astro";
+import PageMain from "../components/PageMain.astro";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { isAstroRoute } from "~/lib/routes";
+
+const OFFERINGS = [
+  "Real-time weather conditions for 265+ locations worldwide",
+  "7-day daily forecasts and 24-hour hourly predictions",
+  "AI-powered weather summaries with contextual advice for farming, mining, travel, and tourism",
+  "Automated frost alerts for agricultural regions",
+  "Country-specific seasonal awareness with local season names and agricultural calendars",
+  "Embeddable weather widget for third-party websites",
+];
+
+const CONTACTS = [
+  { label: "General", href: "mailto:hi@mukoko.com", text: "hi@mukoko.com" },
+  { label: "Support", href: "mailto:support@mukoko.com", text: "support@mukoko.com" },
+  { label: "Legal", href: "mailto:legal@nyuchi.com", text: "legal@nyuchi.com" },
+  { label: "Twitter", href: "https://twitter.com/mukokoafrica", text: "@mukokoafrica", external: true },
+  { label: "Instagram", href: "https://instagram.com/mukoko.africa", text: "@mukoko.africa", external: true },
+];
+
+const reload = (href: string) => (isAstroRoute(href) ? {} : { "data-astro-reload": "" });
+---
+
+<Shell
+  title="About"
+  description="Learn about mukoko weather — a global weather intelligence platform providing forecasts for farming, mining, travel, and daily life worldwide. A Mukoko Africa product by Nyuchi Web Services."
+  canonicalPath="/about"
+>
+  <PageMain>
+    <PageHeader title="About mukoko weather" />
+
+    <section class="mt-8 space-y-4 leading-relaxed text-text-secondary">
+      <p>
+        <strong class="text-text-primary">mukoko weather</strong>{" "}is a global weather intelligence platform. We provide
+        accurate, real-time forecasts and actionable weather insights for farming, mining, travel, and daily life across
+        Africa, Asia, the Middle East, South &amp; Central America, Eastern Europe, and beyond.
+      </p>
+      <p>
+        Our mission is simple: <em>weather as a public good</em>. Everyone deserves access to reliable, contextual
+        weather information — whether you're a farmer watching for frost, a traveller planning a safari, or a family in
+        Manila planning the week ahead.
+      </p>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="eland">Who we are</h2>
+      <div class="mt-4 space-y-4 leading-relaxed text-text-secondary">
+        <p>
+          <strong class="text-text-primary">mukoko weather</strong>{" "}is a product of{" "}
+          <strong class="text-text-primary">Mukoko Africa</strong>, a division of{" "}
+          <a href="https://nyuchi.com" class="sunbird" rel="noopener">Nyuchi Africa (PVT) Ltd</a>.
+        </p>
+        <p>
+          The platform is developed and maintained by{" "}
+          <strong class="text-text-primary">Nyuchi Web Services</strong>, the technology arm of Nyuchi Africa, building
+          digital products that serve communities worldwide.
+        </p>
+        <p>
+          <strong class="text-text-primary">Proudly Zimbabwean</strong>{" "}— designed, built, and operated from Zimbabwe.
+          mukoko weather is African technology serving the world, proving that world-class software can come from
+          anywhere.
+        </p>
+      </div>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="eland">What we offer</h2>
+      <ul class="mt-4 space-y-2 text-text-secondary">
+        {
+          OFFERINGS.map((item) => (
+            <li class="flex items-start gap-2">
+              <span class="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary" aria-hidden="true" />
+              <span>{item}</span>
+            </li>
+          ))
+        }
+      </ul>
+      <p class="gazelle mt-4">
+        See what changed lately in our{" "}<a href="/releases" {...reload("/releases")} class="sunbird">release notes</a>.
+      </p>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="eland">Data sources</h2>
+      <div class="mt-4 space-y-4 leading-relaxed text-text-secondary">
+        <p>
+          Weather data is sourced from{" "}
+          <a href="https://www.tomorrow.io" class="sunbird" rel="noopener noreferrer">Tomorrow.io</a>{" "}
+          (primary) and{" "}
+          <a href="https://open-meteo.com" class="sunbird" rel="noopener noreferrer">Open-Meteo</a>{" "}
+          (fallback). AI-powered summaries are generated using{" "}
+          <a href="https://developers.cloudflare.com/workers-ai/" class="sunbird" rel="noopener noreferrer"
+            >GLM on Cloudflare Workers AI</a
+          >.
+        </p>
+      </div>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="eland">Contact us</h2>
+      <dl class="mt-4 space-y-3 text-base">
+        {
+          CONTACTS.map((c) => (
+            <div data-slot="info-row" class="flex justify-between gap-2">
+              <dt class="text-text-secondary">{c.label}</dt>
+              <dd class="text-right font-medium text-text-primary">
+                <a href={c.href} class="sunbird" {...(c.external ? { rel: "noopener noreferrer" } : {})}>
+                  {c.text}
+                </a>
+              </dd>
+            </div>
+          ))
+        }
+      </dl>
+    </section>
+
+    <nav class="mt-10 flex gap-4 text-base" aria-label="Legal pages">
+      <a href="/privacy" {...reload("/privacy")} class="sunbird">Privacy Policy</a>
+      <a href="/terms" {...reload("/terms")} class="sunbird">Terms of Service</a>
+    </nav>
+  </PageMain>
+</Shell>

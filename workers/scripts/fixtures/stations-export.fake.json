@@ -1,0 +1,115 @@
+[
+  {
+    "_id": "00000000-0000-4000-8000-000000000001",
+    "_schemaVersion": "v3.1",
+    "stationId": "mws-fa4e0001",
+    "name": "FAKE Station One (not real)",
+    "location": { "type": "Point", "coordinates": [20.0, -10.0] },
+    "lat": -10.0,
+    "lon": 20.0,
+    "elevation": 1000.0,
+    "stationType": "digital",
+    "hardware": "FAKE Hardware 1000",
+    "status": "active",
+    "ingestKeyHash": "fa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4e",
+    "ingestKeySalt": "FAKE-SALT-0001-not-a-real-salt",
+    "lastObservationAt": { "$date": "2026-11-12T17:40:00Z" },
+    "createdAt": { "$date": "2026-05-04T08:15:00Z" },
+    "updatedAt": { "$date": "2026-11-12T17:40:00Z" },
+    "bundu": { "countryCode": "ZW" }
+  },
+  {
+    "_id": "00000000-0000-4000-8000-000000000002",
+    "_schemaVersion": "v3.1",
+    "stationId": "mws-fa4e0002",
+    "name": "  FAKE Station Two (manual)  ",
+    "lat": -11.5,
+    "lon": 21.5,
+    "elevation": null,
+    "stationType": "manual",
+    "hardware": null,
+    "status": "active",
+    "ingestKeyHash": "fa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4e",
+    "ingestKeySalt": "FAKE-SALT-0002-not-a-real-salt",
+    "lastObservationAt": null,
+    "createdAt": { "$date": { "$numberLong": "1777882500000" } },
+    "bundu": { "countryCode": "zm" }
+  },
+  {
+    "_id": "00000000-0000-4000-8000-000000000003",
+    "stationId": "mws-fa4e0003",
+    "name": "FAKE Station Three (switched off)",
+    "location": {
+      "type": "Point",
+      "coordinates": [{ "$numberDouble": "22.5" }, { "$numberDouble": "-12.5" }]
+    },
+    "elevation": { "$numberDouble": "9001.0" },
+    "stationType": "digital",
+    "hardware": "FAKE",
+    "status": "inactive",
+    "ingestKeyHash": "fa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4e",
+    "ingestKeySalt": "FAKE-SALT-0003-not-a-real-salt",
+    "createdAt": { "$date": "2026-06-01T00:00:00Z" }
+  },
+  {
+    "_id": "fake-seed-document",
+    "_schemaVersion": "v3.1",
+    "slug": "fake-seed-station",
+    "stationName": "FAKE seed station with no key",
+    "ownerEntityId": "fake-entity",
+    "status": "active",
+    "location": { "type": "Point", "coordinates": [20.0, -10.0] }
+  },
+  {
+    "_id": "00000000-0000-4000-8000-000000000005",
+    "stationId": "mws-fa4e0005",
+    "name": "FAKE Station Five (no key hash)",
+    "lat": -13.0,
+    "lon": 23.0,
+    "stationType": "digital"
+  },
+  {
+    "_id": "00000000-0000-4000-8000-000000000006",
+    "stationId": "mws-fa4e0006",
+    "name": "FAKE Station Six (hash in the wrong form)",
+    "lat": -14.0,
+    "lon": 24.0,
+    "stationType": "digital",
+    "ingestKeyHash": "FA4EFA4EFA4EFA4EFA4EFA4EFA4EFA4EFA4EFA4EFA4EFA4EFA4EFA4EFA4EFA4E",
+    "ingestKeySalt": "FAKE-SALT-0006-not-a-real-salt"
+  },
+  {
+    "_id": "00000000-0000-4000-8000-000000000007",
+    "stationId": "mws-fa4e0007",
+    "name": "FAKE Station Seven (impossible position)",
+    "lat": 191.0,
+    "lon": 25.0,
+    "stationType": "digital",
+    "ingestKeyHash": "fa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4e",
+    "ingestKeySalt": "FAKE-SALT-0007-not-a-real-salt"
+  },
+  {
+    "_id": "00000000-0000-4000-8000-000000000008",
+    "stationId": "mws-fa4e0001",
+    "name": "FAKE Station One again (a duplicate id)",
+    "lat": -10.0,
+    "lon": 20.0,
+    "stationType": "digital",
+    "ingestKeyHash": "fa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4e",
+    "ingestKeySalt": "FAKE-SALT-0008-not-a-real-salt"
+  },
+  {
+    "_id": "00000000-0000-4000-8000-000000000009",
+    "stationId": "mws-fa4e0009",
+    "name": "x",
+    "lat": -15.0,
+    "lon": 26.0,
+    "elevation": 100000,
+    "hardware": "FAKE hardware whose description is far, far too long to be a make and model of anything at all, really",
+    "stationType": "digital",
+    "ingestKeyHash": "fa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4efa4e",
+    "ingestKeySalt": "FAKE-SALT-0009-not-a-real-salt",
+    "createdAt": { "$date": "2999-01-01T00:00:00Z" },
+    "lastObservationAt": "not a date"
+  }
+]

@@ -1,0 +1,81 @@
+---
+/**
+ * The site header, as static HTML: the brand, the text navigation and, from
+ * `sm` up, the room the Quick actions group will take (phase 1). No script of
+ * its own beyond header.ts, which marks the current page and the scrolled
+ * state. The destinations are the Next.js header's: one list, `lib/header-nav`.
+ */
+import logoLight from "../../../public/logo-light.svg?raw";
+import logoDark from "../../../public/logo-dark.svg?raw";
+import { isFeatureEnabled } from "@/lib/feature-flags";
+import { visibleHeaderDestinations } from "@/lib/header-nav";
+import { isAstroRoute } from "~/lib/routes";
+
+const destinations = visibleHeaderDestinations(isFeatureEnabled);
+const reload = (href: string) => (isAstroRoute(href) ? {} : { "data-astro-reload": "" });
+---
+
+<header
+  data-site-header
+  class="sticky top-0 z-30 border-b border-transparent transition-all duration-300 data-[scrolled]:border-text-tertiary/10 data-[scrolled]:bg-surface-base/70 data-[scrolled]:shadow-sm data-[scrolled]:backdrop-blur-xl"
+  role="banner"
+  transition:persist="site-header"
+>
+  <div
+    class="mx-auto flex max-w-[var(--chrome-max)] items-center justify-between gap-3 px-[var(--chrome-gutter)] pt-[var(--hadeda-top)] pb-[var(--chrome-pad-y)]"
+  >
+    <div data-header-ink class="flex min-w-0 items-center">
+      <a
+        href="/"
+        {...reload("/")}
+        aria-label="mukoko weather — return to home page"
+        class="flex items-center"
+      >
+        <span class="inline-flex items-center gap-2" aria-label="mukoko weather">
+          <span class="logo-light h-8 w-8 shrink-0" set:html={logoLight} />
+          <span class="logo-dark h-8 w-8 shrink-0" set:html={logoDark} />
+          <span
+            class="hidden font-heading font-bold leading-none tracking-tight text-text-primary md:inline"
+          >
+            weather
+          </span>
+        </span>
+      </a>
+    </div>
+    <nav data-header-ink class="hidden items-center gap-4 sm:flex lg:gap-6" aria-label="Main navigation">
+      {
+        destinations.map(({ href, label }) => (
+          <a href={href} {...reload(href)} data-nav-href={href} class="weaver">
+            {label}
+          </a>
+        ))
+      }
+    </nav>
+  </div>
+</header>
+
+<style is:global>
+  [data-site-header] .logo-light > svg,
+  [data-site-header] .logo-dark > svg {
+    width: 100%;
+    height: 100%;
+  }
+  [data-site-header] .logo-dark {
+    display: none;
+  }
+  [data-theme="dark"] [data-site-header] .logo-light {
+    display: none;
+  }
+  [data-theme="dark"] [data-site-header] .logo-dark {
+    display: inline-block;
+  }
+</style>
+
+<script>
+  import { markHeader } from "../lib/header";
+  // Runs once (a bundled script is a module); the header is persisted, so
+  // this is also what keeps it right after each swap.
+  markHeader();
+  document.addEventListener("astro:page-load", markHeader);
+  window.addEventListener("scroll", markHeader, { passive: true });
+</script>

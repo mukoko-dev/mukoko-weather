@@ -1,0 +1,15 @@
+/*
+ * The Next.js app's stylesheet, as it is: the Mzizi tokens, Tailwind 4 and the
+ * named component classes (`plover`, `lark`, `weaver`, ...). One copy, so a
+ * token change reaches both apps. Splitting the part the shell needs from the
+ * part the dashboard needs is phase 1 work (it is the 207 KB that blocks first
+ * paint, #551); the size of this build's CSS is reported in the PR.
+ *
+ * Tailwind finds the classes in this app on its own; the shared components
+ * live outside it, so they are named here.
+ */
+@import "../../../src/app/globals.css";
+
+@source "../../../src/components/layout";
+@source "../../../src/components/ui";
+@source "../../../src/lib/harness";
