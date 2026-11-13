@@ -11,12 +11,19 @@
 //!
 //! It is derived and disposable. The durable record is `weather.observations`
 //! at the API; this key can be deleted at any time and refills as stations
-//! upload (every 16 to 60 seconds). It is written by a read-modify-write that
-//! two consumers could race on; the loser's station is back with its next
-//! upload, so a lost update costs at most one upload interval. A reading the
-//! API stores without passing the queue (a manual reading entered at the
-//! console) is not in it: that needs a refresh from the API, which has no
-//! route for it yet (nyuchi/nyuchi-api#543).
+//! upload (every 16 to 60 seconds). It is written by a read-modify-write, and
+//! KV is eventually consistent across locations, so two consumers can overwrite
+//! each other: a station missing from the value comes back with its next
+//! upload, and repeated collisions can keep it out longer. That is not
+//! measured; the cure is a refresh from the API (below), not more cleverness
+//! here. A reading the API stores without passing the queue (a manual reading
+//! entered at the console) is not in it either; both need a refresh from the
+//! API, which has no route for it yet (nyuchi/nyuchi-api#543).
+//!
+//! Size: an entry is about 250 to 400 bytes of JSON, so 1,000 to 2,000 stations
+//! are a few hundred kilobytes and [`MAX_ENTRIES`] is about 2 MB. The forecast
+//! Worker therefore keeps the parsed value in the isolate for
+//! [`READER_MEMO_MS`] instead of parsing it on every request.
 
 use std::collections::BTreeMap;
 
@@ -36,11 +43,18 @@ pub const MAX_AGE_MS: u64 = 60 * 60_000;
 /// The key expires this long after its last write, so a stopped pipeline
 /// leaves nothing behind. (KV's minimum is 60.)
 pub const KV_TTL_SECONDS: u64 = 2 * 60 * 60;
-/// Bounds the value: tens of kilobytes at this size.
+/// Bounds the value: about 2 MB at this many (see the module docs).
 pub const MAX_ENTRIES: usize = 5_000;
 /// The KV edge cache the reader allows (KV's minimum is 60). Every entry is
 /// checked against its own age, so a minute of staleness changes nothing.
 pub const READ_CACHE_TTL_SECONDS: u64 = 60;
+/// How long the forecast Worker reuses the value it parsed in an isolate. Each
+/// entry is checked against its own age, so half a minute changes nothing.
+pub const READER_MEMO_MS: u64 = 30_000;
+
+/// The log line for a missing KV binding (the same words in every Worker).
+pub const UNAVAILABLE_ALERT: &str = "ALERT stations_latest_unavailable: the KV binding for \
+stations:latest is missing; the forecast blend gets no station observations.";
 
 /// One station's latest validated observation.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

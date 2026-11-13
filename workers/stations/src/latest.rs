@@ -8,11 +8,12 @@
 //! again. It reads the namespace the forecast Worker caches in, under its own
 //! key (`stations:latest`), so there is no new store to create.
 
+use weather_core::station_latest::UNAVAILABLE_ALERT;
 use weather_core::station_latest::{Entry, Snapshot, KV_KEY, KV_TTL_SECONDS};
-use weather_edge::now_ms;
+use weather_edge::{log_throttled, now_ms};
 use worker::Env;
 
-use crate::nyuchi::{log_throttled, LATEST_KV};
+use crate::nyuchi::LATEST_KV;
 
 /// Fold `entries` (each station's newest observation of the batch) into the
 /// snapshot and write it back.
@@ -23,12 +24,7 @@ pub async fn update(env: &Env, entries: Vec<(String, Entry)>) {
     let Ok(kv) = env.kv(LATEST_KV) else {
         // Checked when the mode's configuration is loaded, so this is a binding
         // that vanished mid-flight: say so loudly.
-        log_throttled(
-            "stations_latest_unavailable",
-            true,
-            "ALERT stations_latest_unavailable: the KV binding for stations:latest is missing; \
-             the forecast blend gets no station observations.",
-        );
+        log_throttled("stations_latest_unavailable", true, UNAVAILABLE_ALERT);
         return;
     };
 

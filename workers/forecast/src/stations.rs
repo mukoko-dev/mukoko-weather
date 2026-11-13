@@ -18,15 +18,18 @@
 //! then silently off.
 
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use serde::Deserialize;
 use serde_json::{Map, Value};
 use weather_core::geo::{bounding_box, haversine_km};
-use weather_core::station_latest::{Snapshot, KV_KEY, READ_CACHE_TTL_SECONDS};
-use weather_core::station_service::{Backend, LogThrottle, BACKEND_VAR};
+use weather_core::station_latest::{
+    Snapshot, KV_KEY, READER_MEMO_MS, READ_CACHE_TTL_SECONDS, UNAVAILABLE_ALERT,
+};
+use weather_core::station_service::{Backend, BACKEND_VAR};
 use weather_core::{normalize, station, Source};
-use weather_edge::{config, now_ms};
-use worker::{console_error, console_warn, Env};
+use weather_edge::{config, log_throttled, now_ms};
+use worker::Env;
 
 pub const DB_BINDING: &str = "WEATHER_DB";
 /// Within 50 km and 60 minutes, as in the Python backend.
@@ -42,20 +45,8 @@ struct Row {
 }
 
 thread_local! {
-    static THROTTLE: RefCell<LogThrottle> = RefCell::new(LogThrottle::new());
-}
-
-/// One log line per tag per half minute per isolate: this runs on every
-/// forecast request.
-fn log_throttled(tag: &'static str, alert: bool, line: &str) {
-    if !THROTTLE.with(|t| t.borrow_mut().allow(tag, now_ms())) {
-        return;
-    }
-    if alert {
-        console_error!("{}", line);
-    } else {
-        console_warn!("{}", line);
-    }
+    /// The snapshot as last parsed in this isolate, and when.
+    static MEMO: RefCell<Option<(u64, Rc<Snapshot>)>> = const { RefCell::new(None) };
 }
 
 /// The backend, as a short word for `/health`.
@@ -80,15 +71,18 @@ pub async fn overlay(env: &Env, data: &mut Value, lat: f64, lon: f64) -> Option<
     }
 }
 
-/// `nyuchi` mode: the snapshot the stations Worker keeps in KV.
-async fn overlay_snapshot(env: &Env, data: &mut Value, lat: f64, lon: f64) -> Option<Source> {
+/// The snapshot, from the isolate's memo while it is fresh, else from KV. An
+/// absent key is remembered too (an empty snapshot) so a quiet network does not
+/// read KV on every request; a failure is not remembered.
+async fn snapshot(env: &Env) -> Option<Rc<Snapshot>> {
+    let now = now_ms();
+    if let Some((at, s)) = MEMO.with(|m| m.borrow().clone()) {
+        if now.saturating_sub(at) < READER_MEMO_MS {
+            return Some(s);
+        }
+    }
     let Ok(kv) = env.kv(crate::chain::CACHE_BINDING) else {
-        log_throttled(
-            "stations_latest_unavailable",
-            true,
-            "ALERT stations_latest_unavailable: STATIONS_BACKEND=nyuchi but the KV binding for \
-             stations:latest is missing; the forecast has no station observations.",
-        );
+        log_throttled("stations_latest_unavailable", true, UNAVAILABLE_ALERT);
         return None;
     };
     let text = match kv
@@ -99,8 +93,8 @@ async fn overlay_snapshot(env: &Env, data: &mut Value, lat: f64, lon: f64) -> Op
     {
         // Nothing written yet (or it expired): the normal state before the
         // first station uploads.
-        Ok(None) => return None,
-        Ok(Some(text)) => text,
+        Ok(None) => None,
+        Ok(Some(text)) => Some(text),
         Err(_) => {
             log_throttled(
                 "stations_latest_read_failed",
@@ -110,15 +104,28 @@ async fn overlay_snapshot(env: &Env, data: &mut Value, lat: f64, lon: f64) -> Op
             return None;
         }
     };
-    let Ok(snapshot) = serde_json::from_str::<Snapshot>(&text) else {
-        log_throttled(
-            "stations_latest_unreadable",
-            true,
-            "ALERT stations_latest_unreadable: stations:latest is not a snapshot this Worker understands",
-        );
-        return None;
+    let parsed = match text {
+        None => Snapshot::default(),
+        Some(text) => match serde_json::from_str::<Snapshot>(&text) {
+            Ok(s) => s,
+            Err(_) => {
+                log_throttled(
+                    "stations_latest_unreadable",
+                    true,
+                    "ALERT stations_latest_unreadable: stations:latest is not a snapshot this Worker understands",
+                );
+                return None;
+            }
+        },
     };
-    let hit = snapshot.pick(lat, lon, now_ms())?;
+    let parsed = Rc::new(parsed);
+    MEMO.with(|m| *m.borrow_mut() = Some((now, parsed.clone())));
+    Some(parsed)
+}
+
+/// `nyuchi` mode: the snapshot the stations Worker keeps in KV.
+async fn overlay_snapshot(env: &Env, data: &mut Value, lat: f64, lon: f64) -> Option<Source> {
+    let hit = snapshot(env).await?.pick(lat, lon, now_ms())?;
     let observed_at = chrono::DateTime::from_timestamp_millis(hit.observed_at)?
         .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     normalize::blend_station_current(data, &station::station_current(&hit.metrics, &observed_at));
