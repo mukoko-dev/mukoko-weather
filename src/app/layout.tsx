@@ -9,6 +9,7 @@ import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { PWAInstallPrompt } from "@/components/weather/PWAInstallPrompt";
 import { ServiceWorkerUpdater } from "@/components/pwa/ServiceWorkerUpdater";
 import { VercelAnalytics } from "@/components/analytics/VercelAnalytics";
+import { WebVitals } from "@/components/analytics/WebVitals";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { Noto_Sans, Noto_Serif, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
@@ -368,6 +369,7 @@ export default async function RootLayout({
       </head>
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
         <GoogleAnalytics />
+        <WebVitals />
         {/* Skip navigation link for keyboard/screen reader users — WCAG 2.4.1 */}
         <a
           href="#main-content"
