@@ -2,10 +2,37 @@
 // (mukoko-dev/mukoko-weather#148). Same paths and protocols as
 // /api/py/stations/*, so consoles only change their upload host.
 //
-// No secrets. Vars: ENVIRONMENT, CORS_ORIGINS, INGEST_HOST.
+// Vars: ENVIRONMENT, CORS_ORIGINS, INGEST_HOST, STATIONS_BACKEND,
+// NYUCHI_API_URL, CONSOLE_URL.
 // OWNER: replace the placeholder D1 id (the same database as
 // forecast/wrangler.jsonc), and create the queues and the bucket
 // (workers/README.md, "Owner steps").
+//
+// STATIONS_BACKEND picks where stations and their readings live
+// (mukoko-dev/mukoko-weather#556):
+//   "d1"     (the default) this Worker's own D1 registry and tables: how it has
+//            always worked.
+//   "nyuchi" the Nyuchi API (/v1/stations/service/*). Flip it ONLY after the
+//            stations are imported there (B3, #293) and the secret below
+//            exists: the API rejects a key for a station it does not hold. The
+//            forecast Worker has the same var and is flipped after this one
+//            (workers/README.md, "Station backend cutover"). The value here wins
+//            on every deploy (keep_vars keeps only vars this file does not
+//            set), so the flip, and a rollback, is a change to this line.
+//
+// Secret (name only): NYUCHI_STATIONS_API_KEY, the Worker's own internal Nyuchi
+// API key, scoped `stations` and `stations:service`; the Secrets Store entry is
+// MUKOKO_WEATHER_NYUCHI_STATIONS_API_KEY (workers/README.md, "Owner steps").
+// It is NOT bound below: a binding to a store secret that does not exist fails
+// the deploy (error 10182) and, with the deploy order in workers-deploy.yml,
+// every Worker after this one. Until the owner has created it, set the plain
+// Worker secret of the plain name (`wrangler secret put NYUCHI_STATIONS_API_KEY`);
+// the Worker reads either. When the store secret exists, add to
+// secrets_store_secrets a binding named MUKOKO_WEATHER_NYUCHI_STATIONS_API_KEY
+// (store_id and secret_name as in forecast/wrangler.jsonc) and list "stations"
+// in that secret's `workers` in crates/weather-core/src/secrets.rs; a test holds
+// the two together. In nyuchi mode a missing key, URL or KV binding makes every
+// upload a 503 and logs an ALERT line (never a 401).
 //
 // Consoles already configured with the old upload URL
 // (https://weather.mukoko.com/api/py/stations/ingest) land here too: the route
@@ -42,7 +69,20 @@
     "ENVIRONMENT": "production",
     "CORS_ORIGINS": "https://weatherstations.nyuchi.com,https://weather.mukoko.com",
     "INGEST_HOST": "weather-ingest.nyuchi.com",
+    // "d1" or "nyuchi": see the header. "d1" is today's behaviour.
+    "STATIONS_BACKEND": "d1",
+    // Used only when STATIONS_BACKEND is "nyuchi".
+    "NYUCHI_API_URL": "https://api.nyuchi.com",
+    // Where `register` points in nyuchi mode (it answers 410).
+    "CONSOLE_URL": "https://weatherstations.nyuchi.com",
   },
+  "kv_namespaces": [
+    // The forecast Worker's namespace (the same id as forecast/wrangler.jsonc),
+    // for the key stations:latest: the latest validated observation per
+    // station, written by the queue consumer in nyuchi mode and read by the
+    // forecast Worker. Not used in d1 mode. Derived and disposable.
+    { "binding": "FORECAST_CACHE", "id": "c7b9c50b55cd43fcbf3e077a19226109" },
+  ],
   "d1_databases": [
     {
       "binding": "WEATHER_DB",
