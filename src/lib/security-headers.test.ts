@@ -66,7 +66,6 @@ describe("security headers (B05)", () => {
     const csp = buildCsp();
     for (const host of [
       "https://www.googletagmanager.com",
-      "https://va.vercel-scripts.com",
       "https://api.maptiler.com",
       "https://api.open-meteo.com",
       "https://weather-api.mukoko.com",

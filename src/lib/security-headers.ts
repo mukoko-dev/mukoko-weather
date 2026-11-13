@@ -29,12 +29,7 @@ export const CSP_DIRECTIVES: Record<string, string[]> = {
   "default-src": ["'self'"],
   // Next.js emits inline bootstrap scripts and the theme/JSON-LD scripts; a
   // nonce rollout is the enforce-phase work.
-  "script-src": [
-    "'self'",
-    "'unsafe-inline'",
-    "https://va.vercel-scripts.com",
-    GA[0],
-  ],
+  "script-src": ["'self'", "'unsafe-inline'", GA[0]],
   // Fonts are self-hosted through next/font (src/app/layout.tsx): no Google
   // Fonts origin is needed.
   "style-src": ["'self'", "'unsafe-inline'"],
@@ -69,8 +64,6 @@ export const CSP_DIRECTIVES: Record<string, string[]> = {
     "https://gibs.earthdata.nasa.gov",
     "https://api.workos.com",
     "https://*.authkit.app",
-    "https://va.vercel-scripts.com",
-    "https://vitals.vercel-insights.com",
     ...GA,
     ...GA_EXTRA,
   ],

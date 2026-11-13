@@ -3,7 +3,7 @@
  *
  * A smart slug (`west-paddock--ksy4dd7`) embeds a ~153 m geohash and its name
  * is often a street or POI, so it is a fine location. The URL itself stays the
- * shareable identity; only what is EXPORTED (GA4, Vercel Analytics, request
+ * shareable identity; only what is EXPORTED (GA4, request
  * URLs that reach platform logs) is coarsened here.
  *
  * - legacy catalog slugs (`harare`, `nairobi-ke`) carry no coordinate: kept,
