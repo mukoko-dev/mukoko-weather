@@ -98,6 +98,14 @@ export interface PlaceDeps {
   /** The stored copy of a place (memory misses fall through to the device). */
   recall(slug: string): Promise<DeviceView | null>;
   /**
+   * A copy of a place that can be read in one synchronous step, with no
+   * database to start: the last place `/` showed, kept in localStorage
+   * (src/lib/home-snapshot.ts). Tried after memory and before `recall`: when it
+   * answers, the place is on screen at once and the database is not waited
+   * for. Null when there is no copy for that place; a throw counts as null.
+   */
+  recallQuick?(slug: string): DeviceView | null;
+  /**
    * Live weather from the Worker (the visitor's own request, through the
    * shared Worker read: one call per place, a remembered failure replayed).
    * `force`: read again past a remembered failure (the visitor pressed
@@ -361,10 +369,10 @@ export function createPlaceController(
   };
 
   /**
-   * The stored view for a place: memory at once, else the device. A device
-   * that is slow (the database loads on first use) is not waited on past the
-   * timeout, but its answer is still kept in `late` and used if it arrives
-   * before the live forecast does.
+   * The stored view for a place: memory at once, then the quick copy (one
+   * synchronous read), else the device. A device that is slow (the database
+   * loads on first use) is not waited on past the timeout, but its answer is
+   * still kept in `late` and used if it arrives before the live forecast does.
    */
   const stored = async (
     slug: string,
@@ -374,6 +382,13 @@ export function createPlaceController(
   }> => {
     const mem = recallFromMemory(slug, deps.now());
     if (mem) return { found: mem, late: null };
+    let quick: DeviceView | null = null;
+    try {
+      quick = deps.recallQuick?.(slug) ?? null;
+    } catch {
+      quick = null;
+    }
+    if (quick) return { found: quick, late: null };
     const pending = Promise.resolve(deps.recall(slug)).catch(() => null);
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timedOut = new Promise<typeof TIMED_OUT>((resolve) => {

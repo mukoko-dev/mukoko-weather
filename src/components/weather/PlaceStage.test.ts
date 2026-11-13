@@ -21,6 +21,26 @@ describe("PlaceStage — what the page waits for and what it shows", () => {
     expect(stage).toContain('<ChartErrorBoundary name="weather dashboard">');
   });
 
+  it("asks for the dashboard's code as soon as the page's own code runs, not only after it hydrates", () => {
+    const early = stage.indexOf(
+      'if (typeof window !== "undefined") void loadDashboard().catch(() => {});',
+    );
+    const inEffect = stage.indexOf("// Fetch the dashboard's code now");
+    expect(early).toBeGreaterThan(-1);
+    expect(inEffect).toBeGreaterThan(-1);
+    expect(early).toBeLessThan(inEffect);
+    // The early request is at module scope: before `usePlaceStage` is defined.
+    expect(early).toBeLessThan(stage.indexOf("export function usePlaceStage"));
+  });
+
+  it("paints My Location's last forecast from localStorage in one step, before the database starts", () => {
+    expect(stage).toContain(
+      "recallQuick: (slug) => recallHomeSnapshot(slug, Date.now())",
+    );
+    // The database is still the fallback, and the store for every other place.
+    expect(stage).toContain("recall: (slug) => recallPlace(slug)");
+  });
+
   it("renders the skeleton, with a heading, until a view exists", () => {
     expect(stage).toContain("<LocationSkeleton slug={seed.location.slug} />");
     expect(stage).toContain('<h1 className="sr-only">');

@@ -22,6 +22,7 @@ import {
   servedStaleAgeMs,
 } from "../device-weather";
 import { canonicalSlug, storageKeySlug } from "../slug-migration";
+import { forgetHomeSnapshot, rememberHomeSnapshot } from "../home-snapshot";
 import type { WeatherPlaceDocType } from "./schemas";
 
 /** The slice of an RxDB collection this module uses (so tests can fake it). */
@@ -166,6 +167,10 @@ export async function rememberPlace(
   } catch {
     // Eviction is housekeeping — the write itself succeeded.
   }
+  // The quick copy of My Location (src/lib/home-snapshot.ts) must not fall
+  // behind the stored copy of the same place: it is read first. Only a copy
+  // that exists is refreshed; this never makes one.
+  rememberHomeSnapshot(payload, doc.fetchedAt, now, { onlyIfHeld: true });
   notifyPlaces();
   return true;
 }
@@ -313,6 +318,8 @@ export async function placesUsage(): Promise<{ count: number; bytes: number }> {
 
 /** Delete every stored place. Returns how many were removed. */
 export async function clearPlaces(): Promise<number> {
+  // The quick copy of My Location goes with the stored places.
+  forgetHomeSnapshot();
   const col = await collection();
   if (!col) return 0;
   try {

@@ -19,6 +19,24 @@ const middlewareSource = readFileSync(
   "utf-8",
 );
 
+describe("CurrentLocationHome — the last forecast, for the next open", () => {
+  it("keeps the forecast on screen for My Location, for the next open to paint before IndexedDB has started", () => {
+    // The rule is tested as a hook (src/lib/use-home-snapshot.test.ts); here, that it is wired to the place stage's view and to whether it is the home place.
+    expect(source).toContain(
+      'import { useRememberHomeSnapshot } from "@/lib/use-home-snapshot"',
+    );
+    expect(source).toContain(
+      "useRememberHomeSnapshot(view, stage.state.device?.fetchedAt, onHomePlace)",
+    );
+  });
+
+  it("reads the copy first when the server seeded nothing, then the database", () => {
+    expect(source).toContain(
+      "recallHomeSnapshot(slug) ?? (await recallPlace(slug))",
+    );
+  });
+});
+
 describe("CurrentLocationHome — silent-URL model", () => {
   it("is a client component that renders the place stage's dashboard inline", () => {
     expect(source).toContain('"use client"');

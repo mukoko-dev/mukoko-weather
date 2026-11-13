@@ -31,6 +31,7 @@ import { resolvePlaceSeed } from "@/lib/place-resolve";
 import { placeDocumentTitle } from "@/lib/place-target";
 import { writeLastLocationCookie } from "@/lib/current-slug";
 import { recallPlace } from "@/lib/rxdb/weather-places";
+import { recallHomeSnapshot } from "@/lib/home-snapshot";
 import { useAppStore } from "@/lib/store";
 import { readDeviceHints } from "@/lib/lazy-visibility";
 import { useIdleOnce } from "@/lib/use-idle-once";
@@ -53,6 +54,11 @@ const WARM_IDLE_TIMEOUT_MS = 1500;
  */
 const loadDashboard = () =>
   import("@/app/[location]/WeatherDashboard").then((m) => m.WeatherDashboard);
+// Asked for as soon as this module runs (the page's own code, before it
+// hydrates) rather than from an effect after hydration: the stored place is
+// ready the moment the page is, and what it waits for is this code. A page
+// that never shows a place does not import this module.
+if (typeof window !== "undefined") void loadDashboard().catch(() => {});
 const WeatherDashboard = dynamic(loadDashboard, {
   ssr: false,
   // The stored copy is ready before the dashboard's code is: keep the skeleton
@@ -86,6 +92,9 @@ function browserDeps(): PlaceDeps {
   return {
     now: () => Date.now(),
     recall: (slug) => recallPlace(slug),
+    // The last place `/` showed, read from localStorage in one step: it paints
+    // before the database below has started (src/lib/home-snapshot.ts).
+    recallQuick: (slug) => recallHomeSnapshot(slug, Date.now()),
     // Through the shared Worker read (src/lib/worker-data.ts) via
     // fetchHomeWeather: one call per place, never a raw Worker call. The
     // shared request outlives a place the visitor left, so its answer is
@@ -164,6 +173,8 @@ export function usePlaceStage(
 
   useEffect(() => {
     // Fetch the dashboard's code now; it renders as soon as a view exists.
+    // (Asked for once already when this module ran; this asks again if that
+    // request failed, and costs nothing if it did not.)
     void loadDashboard().catch(() => {});
     const unregister = registerPlaceStage({
       canShow: (target) => target.kind === "slug" || !!controller.homeSeed(),

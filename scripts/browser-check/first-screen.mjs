@@ -67,6 +67,9 @@ const OUT =
   process.env.OUT ?? join(process.env.TMPDIR ?? "/tmp", "first-screen");
 const COLOR_SCHEME = process.env.COLOR_SCHEME ?? "light";
 const SEED_THEME = process.env.SEED_THEME ?? "";
+const IDB_OPEN_DELAY_MS = Number(process.env.IDB_OPEN_DELAY ?? 0);
+const SERVICE_WORKERS =
+  process.env.SERVICE_WORKERS === "block" ? "block" : "allow";
 
 const LINK = {
   latency: 150,
@@ -182,6 +185,42 @@ async function slowForecast(context) {
 async function openPage(context) {
   const page = await context.newPage();
   await page.addInitScript(INIT);
+  if (IDB_OPEN_DELAY_MS > 0) {
+    // The success of an `indexedDB.open` reaches its handler late.
+    await page.addInitScript((ms) => {
+      // One late copy of each handler, so removeEventListener still finds it.
+      const late = new WeakMap();
+      const wrap = (fn) => {
+        if (typeof fn !== "function") return fn;
+        if (!late.has(fn))
+          late.set(fn, function (event) {
+            setTimeout(() => fn.call(this, event), ms);
+          });
+        return late.get(fn);
+      };
+      const own = Object.getOwnPropertyDescriptor(
+        IDBRequest.prototype,
+        "onsuccess",
+      );
+      Object.defineProperty(IDBRequest.prototype, "onsuccess", {
+        configurable: true,
+        get: own.get,
+        set(fn) {
+          own.set.call(this, this instanceof IDBOpenDBRequest ? wrap(fn) : fn);
+        },
+      });
+      const late_ = (self, type) =>
+        self instanceof IDBOpenDBRequest && type === "success";
+      const add = EventTarget.prototype.addEventListener;
+      const remove = EventTarget.prototype.removeEventListener;
+      EventTarget.prototype.addEventListener = function (type, fn, opts) {
+        return add.call(this, type, late_(this, type) ? wrap(fn) : fn, opts);
+      };
+      EventTarget.prototype.removeEventListener = function (type, fn, opts) {
+        return remove.call(this, type, late_(this, type) ? wrap(fn) : fn, opts);
+      };
+    }, IDB_OPEN_DELAY_MS);
+  }
   const cdp = await context.newCDPSession(page);
   await cdp.send("Performance.enable");
   await throttle(cdp);
@@ -409,7 +448,7 @@ try {
     const context = await browser.newContext({
       ...devices["Pixel 5"],
       colorScheme: COLOR_SCHEME,
-      serviceWorkers: "allow",
+      serviceWorkers: SERVICE_WORKERS,
     });
     await mockNetwork(context);
     await slowForecast(context);
