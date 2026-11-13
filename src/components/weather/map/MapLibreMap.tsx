@@ -10,7 +10,7 @@ import type {
 import { useAppStore } from "@/lib/store";
 import { resolveTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
-import { resolveColor } from "@/components/ui/chart";
+import { resolveColor } from "@/components/ui/chart-colors";
 import {
   MAPTILER_KEY,
   maptilerStyleId,

@@ -1,6 +1,13 @@
 "use client";
 
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  lazy,
+  Suspense,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { usePathname } from "next/navigation";
 import type {
   CurrentWeather,
@@ -41,8 +48,6 @@ import {
   type MetricKind,
 } from "@/lib/metric-details";
 import { nextMoonrise } from "@/lib/moon";
-import { MetricDetailModal } from "./MetricDetailModal";
-import { AirQualityDetail } from "./AirQualityDetail";
 import { aqiScalePct } from "@/lib/air-quality-details";
 import { cn } from "@/lib/utils";
 import {
@@ -294,6 +299,31 @@ function useNormalHigh(
   };
 }
 
+// The two detail sheets behind the Conditions tiles open on a tap, so their
+// code (the metric charts bring Chart.js with them, the air quality dialog the
+// map layer tables) is fetched on the first tap, not with the first screen
+// (mukoko-weather issue 551). Each is mounted from its first open on, so
+// closing it still plays the exit animation.
+const MetricDetailModal = lazy(() =>
+  import("./MetricDetailModal").then((m) => ({ default: m.MetricDetailModal })),
+);
+const AirQualityDetail = lazy(() =>
+  import("./AirQualityDetail").then((m) => ({ default: m.AirQualityDetail })),
+);
+
+/**
+ * Start fetching both sheets' code as soon as a finger is down on the section
+ * (a tap takes about a tenth of a second to land), so the sheet does not wait
+ * for a request that could already be running. Idempotent.
+ */
+let detailCodeRequested = false;
+function requestDetailCode(): void {
+  if (detailCodeRequested) return;
+  detailCodeRequested = true;
+  void import("./MetricDetailModal");
+  void import("./AirQualityDetail");
+}
+
 type AqPayload = AirQualityResponse & {
   trend?: "worse" | "better" | "similar" | null;
 };
@@ -330,6 +360,9 @@ function AirQualityWide({
 }) {
   const state = useAirQuality(lat, lon);
   const [open, setOpen] = useState(false);
+  // Mounted from the first open on (see the lazy declarations above).
+  const [detailLoaded, setDetailLoaded] = useState(false);
+  if (open && !detailLoaded) setDetailLoaded(true);
 
   if (state.status === "loading") return <AirQualityWideSkeleton />;
 
@@ -387,13 +420,17 @@ function AirQualityWide({
         />
         <p className="dove leading-snug">{sentenceParts.join(" ")}</p>
       </section>
-      <AirQualityDetail
-        open={open}
-        reading={data}
-        slug={slug}
-        now={now}
-        onClose={() => setOpen(false)}
-      />
+      {detailLoaded && (
+        <Suspense fallback={null}>
+          <AirQualityDetail
+            open={open}
+            reading={data}
+            slug={slug}
+            now={now}
+            onClose={() => setOpen(false)}
+          />
+        </Suspense>
+      )}
     </EdgeTile>
   );
 }
@@ -455,6 +492,9 @@ export function AtmosphericSummary({
       : null;
   const moonPct = Math.round(moon.illumination * 100);
   const [openMetric, setOpenMetric] = useState<MetricKind | null>(null);
+  // Mounted from the first open on (see the lazy declarations above).
+  const [modalLoaded, setModalLoaded] = useState(false);
+  if (openMetric !== null && !modalLoaded) setModalLoaded(true);
   // The next moonrise, as the place's own clock time. Recomputed at most every
   // ten minutes (the search is a few hundred altitude evaluations).
   const nowBucket = Math.floor(now.getTime() / 600_000);
@@ -480,7 +520,12 @@ export function AtmosphericSummary({
   );
 
   return (
-    <section ref={sectionRef} aria-labelledby="atmospheric-heading">
+    <section
+      ref={sectionRef}
+      aria-labelledby="atmospheric-heading"
+      onPointerDownCapture={requestDetailCode}
+      onFocusCapture={requestDetailCode}
+    >
       <SectionHeader
         headingId="atmospheric-heading"
         title="Conditions"
@@ -689,16 +734,20 @@ export function AtmosphericSummary({
         )}
       </InsightGrid>
 
-      <MetricDetailModal
-        kind={openMetric}
-        data={data}
-        now={now}
-        extras={extras}
-        lat={lat}
-        lon={lon}
-        slug={locationSlug || undefined}
-        onClose={() => setOpenMetric(null)}
-      />
+      {modalLoaded && (
+        <Suspense fallback={null}>
+          <MetricDetailModal
+            kind={openMetric}
+            data={data}
+            now={now}
+            extras={extras}
+            lat={lat}
+            lon={lon}
+            slug={locationSlug || undefined}
+            onClose={() => setOpenMetric(null)}
+          />
+        </Suspense>
+      )}
     </section>
   );
 }

@@ -41,7 +41,7 @@ import { LazySection } from "@/components/weather/LazySection";
 import { PlaceKnowledgeRows } from "@/components/weather/PlaceKnowledgeRows";
 import { ChartErrorBoundary } from "@/components/weather/ChartErrorBoundary";
 import { CommunityLane } from "@/components/weather/CommunityLane";
-import { ActivityInvite } from "@/components/weather/ActivityInsights";
+import { ActivityInvite } from "@/components/weather/ActivityInvite";
 import { CommunityLaneSkeleton } from "@/components/weather/CommunityLaneSkeleton";
 import {
   SectionSkeleton,
