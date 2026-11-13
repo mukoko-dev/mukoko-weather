@@ -46,13 +46,20 @@ const canonical = canonicalPath ? new URL(canonicalPath, Astro.site).href : unde
     {canonical && <meta property="og:url" content={canonical} />}
 
     <!-- Settle the theme from the device before the first paint (no pale
-         flash on a dark phone). Same rule as the Next.js layout: the stored
-         choice, else the system's. It also runs on the incoming document of
-         every client-side navigation, because the router replaces the
-         attributes of <html> with the new page's, which has no theme. -->
+         flash on a dark phone, nor for a person who chose dark in the app on a
+         light one). Same rule as the Next.js layout (THEME_INIT_SCRIPT in
+         src/lib/theme.ts; a test keeps the key equal): the choice this device
+         recorded, else the old Zustand key, else the system's. It also runs on
+         the incoming document of every client-side navigation, because the
+         router replaces the attributes of <html> with the new page's, which
+         has no theme. -->
     <script is:inline>
       (function () {
         function theme() {
+          try {
+            var t = localStorage.getItem("mukoko-theme");
+            if (t === "light" || t === "dark") return t;
+          } catch (e) {}
           try {
             var s = JSON.parse(localStorage.getItem("mukoko-weather-prefs") || "{}");
             var p = s && s.state && s.state.theme;
