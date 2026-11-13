@@ -111,17 +111,21 @@ describe("ActivityIcon component", () => {
   });
 
   it("falls back to Lucide icons for dynamic resolution", () => {
-    expect(activityIcon).toContain("lucideIcons");
     expect(activityIcon).toContain("toPascalCase");
+    // The whole library, fetched on first need (activity-icon.test.ts).
+    expect(activityIcon).toContain('import("lucide-react")');
   });
 
   it("falls back to SunIcon as final default", () => {
-    expect(activityIcon).toContain("return <SunIcon");
+    expect(activityIcon).toContain("return SunIcon");
   });
 
-  it("imports lucide-react icons for scalable icon resolution", () => {
-    expect(activityIcon).toContain(
-      'import { icons as lucideIcons } from "lucide-react"',
+  it("names the lucide icons the shipped activities use, and never imports the whole library statically", () => {
+    expect(activityIcon).toMatch(
+      /import \{[^}]*\bWheat\b[^}]*\} from "lucide-react"/,
+    );
+    expect(activityIcon).not.toMatch(
+      /import\s*\{[^}]*\bicons\b[^}]*\}\s*from\s*"lucide-react"/,
     );
   });
 

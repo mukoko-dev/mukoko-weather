@@ -1,4 +1,13 @@
-import { icons as lucideIcons } from "lucide-react";
+import { useEffect, useState, type ComponentType } from "react";
+import {
+  Church,
+  CookingPot,
+  Flower2,
+  Sprout,
+  Store,
+  Volleyball,
+  Wheat,
+} from "lucide-react";
 import { ICON_REGISTRY, SunIcon } from "@/lib/weather-icons";
 
 interface IconProps {
@@ -6,32 +15,116 @@ interface IconProps {
   size?: number;
 }
 
+type IconComponent = ComponentType<IconProps>;
+
 /*
- * Kept out of weather-icons.tsx on purpose: `icons` is the WHOLE lucide
- * library (1,600+ icons, about 130 KB gzipped), and weather-icons.tsx is
- * imported by the shell on every page. Only the activity cards and the My
- * Weather modal need a lookup by name, and both load lazily.
+ * The whole lucide library (`icons`: 1,600+ icons, about 130 KB gzipped) is
+ * never imported statically. A static import put it in front of whoever opened
+ * the My Weather modal or the activity advice (issue 551). The icons the
+ * shipped activities use are imported by name instead (each ships alone), and
+ * the library is fetched only for an icon name nothing here knows, which only
+ * an activity stored in the database with a new icon can ask for.
  */
 
-/**
- * Convert a kebab-case or lowercase icon name to PascalCase for Lucide lookup.
- * E.g. "tree-pine" → "TreePine", "factory" → "Factory"
- */
-function toPascalCase(str: string): string {
-  return str.replace(/(^|-)([a-z])/g, (_, __, c: string) => c.toUpperCase());
+/** The lucide icons the shipped activities use that ICON_REGISTRY lacks. */
+const KNOWN_LUCIDE: Record<string, IconComponent> = {
+  Church,
+  CookingPot,
+  Flower2,
+  Sprout,
+  Store,
+  Volleyball,
+  Wheat,
+};
+
+type LucideLibrary = Record<string, IconComponent>;
+
+const has = (table: object, key: string): boolean =>
+  Object.prototype.hasOwnProperty.call(table, key);
+
+let libraryRequest: Promise<LucideLibrary> | null = null;
+let library: LucideLibrary | null = null;
+
+/** The whole lucide library, requested once, on first need. */
+function loadLibrary(): Promise<LucideLibrary> {
+  libraryRequest ??= import("lucide-react").then((m) => {
+    library = m.icons as unknown as LucideLibrary;
+    return library;
+  });
+  return libraryRequest;
 }
 
 /**
- * Render an activity icon by identifier or activity ID.
- *
+ * Convert a kebab-case or lowercase icon name to PascalCase for Lucide lookup.
+ * E.g. "tree-pine" → "TreePine", "factory" → "Factory", "flower-2" → "Flower2"
+ */
+export function toPascalCase(str: string): string {
+  return str.replace(/(^|-)([a-z0-9])/g, (_, __, c: string) => c.toUpperCase());
+}
+
+/**
  * Resolution order (scalable — no code changes needed for new icons):
  * 1. Custom ICON_REGISTRY (app-specific SVG icons)
  * 2. Lucide icon library (1600+ icons, resolved by PascalCase name)
- * 3. Activity ID as Lucide lookup (kebab-case → PascalCase)
- * 4. Default SunIcon fallback
+ * 3. Activity ID in the custom registry
+ * 4. Activity ID as Lucide lookup (kebab-case → PascalCase)
+ * 5. Default SunIcon fallback
  *
- * Activities stored in the database can reference any Lucide icon name
- * (e.g. "TreePine", "Anchor", "Factory") without requiring code changes.
+ * `lookup` answers steps 2 and 4; `onMiss` is told each time it could not.
+ * Pure, so a test can check that the shipped activities need no library.
+ */
+export function resolveActivityIcon(
+  activity: string,
+  icon: string | undefined,
+  lookup: (pascalName: string) => IconComponent | undefined,
+  onMiss: () => void = () => {},
+): IconComponent {
+  if (icon) {
+    const custom = ICON_REGISTRY[icon];
+    if (custom) return custom;
+    const found = lookup(toPascalCase(icon));
+    if (found) return found;
+    onMiss();
+  }
+  const direct = ICON_REGISTRY[activity];
+  if (direct) return direct;
+  const fallback = lookup(toPascalCase(activity));
+  if (fallback) return fallback;
+  onMiss();
+  return SunIcon;
+}
+
+/** The icons steps 2 and 4 can answer without the library. */
+export function knownLucideIcon(pascalName: string): IconComponent | undefined {
+  return has(KNOWN_LUCIDE, pascalName) ? KNOWN_LUCIDE[pascalName] : undefined;
+}
+
+/** The whole library once `wanted` is true and it has arrived; else null. */
+function useLucideLibrary(wanted: boolean): LucideLibrary | null {
+  const [loaded, setLoaded] = useState<LucideLibrary | null>(library);
+  useEffect(() => {
+    if (!wanted || loaded) return;
+    let live = true;
+    loadLibrary()
+      .then((all) => {
+        if (live) setLoaded(all);
+      })
+      .catch(() => {
+        // The chunk did not arrive: the icon known now stays.
+      });
+    return () => {
+      live = false;
+    };
+  }, [wanted, loaded]);
+  return wanted ? loaded : null;
+}
+
+/**
+ * Render an activity icon by identifier or activity ID. Activities stored in
+ * the database can reference any Lucide icon name (e.g. "TreePine", "Anchor",
+ * "Factory") without requiring code changes: a name the shipped set does not
+ * cover shows the best icon known now and the right one once the library
+ * arrives.
  */
 export function ActivityIcon({
   activity,
@@ -39,23 +132,24 @@ export function ActivityIcon({
   className = "",
   size = 24,
 }: { activity: string; icon?: string } & IconProps) {
-  // 1. Try custom icon registry (app-specific SVGs)
-  if (icon) {
-    const CustomIcon = ICON_REGISTRY[icon];
-    if (CustomIcon) return <CustomIcon className={className} size={size} />;
-    // 2. Try Lucide icons by PascalCase name
-    const pascalName = toPascalCase(icon);
-    const LucideIcon = lucideIcons[pascalName as keyof typeof lucideIcons];
-    if (LucideIcon) return <LucideIcon className={className} size={size} />;
-  }
-  // 3. Fallback: try activity ID in custom registry, then Lucide
-  const DirectMatch = ICON_REGISTRY[activity];
-  if (DirectMatch) return <DirectMatch className={className} size={size} />;
-  const pascalActivity = toPascalCase(activity);
-  const LucideFallback =
-    lucideIcons[pascalActivity as keyof typeof lucideIcons];
-  if (LucideFallback)
-    return <LucideFallback className={className} size={size} />;
-  // 4. Default
-  return <SunIcon className={className} size={size} />;
+  let missed = false;
+  const known = resolveActivityIcon(activity, icon, knownLucideIcon, () => {
+    missed = true;
+  });
+  const all = useLucideLibrary(missed);
+  const Icon = all
+    ? resolveActivityIcon(activity, icon, (name) =>
+        has(all, name) ? all[name] : undefined,
+      )
+    : known;
+  return <Glyph as={Icon} className={className} size={size} />;
+}
+
+/** Draws the icon it is given (a prop, so no component is made while rendering). */
+function Glyph({
+  as: Icon,
+  className,
+  size,
+}: IconProps & { as: IconComponent }) {
+  return <Icon className={className} size={size} />;
 }
