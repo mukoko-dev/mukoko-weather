@@ -15,7 +15,8 @@
     "test": "vitest run",
     "budget": "node scripts/js-budget.mjs",
     "check:shell": "node scripts/check-shell.mjs",
-    "serve": "node scripts/serve-dist.mjs"
+    "serve": "node scripts/serve-dist.mjs",
+    "measure": "node scripts/measure.mjs"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.4.7",
