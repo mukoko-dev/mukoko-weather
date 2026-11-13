@@ -38,6 +38,16 @@ describe("WeatherBackdrop — component contract", () => {
 });
 
 describe("WeatherBackdrop — performance discipline", () => {
+  it("opens the start gate once, and loads the animated layer only after it has opened", () => {
+    expect(source).toContain(
+      'import { afterPaintWhenIdle } from "@/lib/weather-scenes/start-gate"',
+    );
+    expect(source).toContain("afterPaintWhenIdle(");
+    expect(source).toContain("!startOpen");
+    // The render test (WeatherBackdrop.render.test.ts) shows the order at run
+    // time: nothing is created before the gate opens.
+  });
+
   it("caps the pixel ratio at 1 for WebGL and 2 for the 2D effects, and hands the cap to the scene", () => {
     expect(source).toContain('maxPixelRatio: mode === "webgl" ? 1 : 2');
     const factory = readFileSync(
@@ -158,7 +168,7 @@ describe("WeatherBackdrop — scene mapping + twilight", () => {
 
   it("restarts the scene when the phase changes", () => {
     expect(source).toContain(
-      "[mode, isMobile, isDay, phase, sceneType, windSpeed]",
+      "[mode, startOpen, isMobile, isDay, phase, sceneType, windSpeed]",
     );
   });
 });
