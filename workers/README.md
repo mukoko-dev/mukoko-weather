@@ -246,7 +246,7 @@ Creating Cloudflare resources and deploying are owner actions. Run these from `w
    - set the build command to `cargo install worker-build@^0.8 && worker-build --release`;
    - set the deploy command to `npx wrangler deploy`.
 
-4. **Station cutover** (the D1 registry; once `STATIONS_BACKEND=nyuchi` the Nyuchi API holds the stations instead, see "Station backend cutover" below), done once and in this order (the Python registration route is deleted, so MongoDB gains no new stations; steps 1 to 4 matter only if `weather.stations` holds documents with a `stationId` and a key hash):
+4. **Station cutover** (the D1 registry; once `STATIONS_BACKEND=nyuchi` the Nyuchi API holds the stations instead: see "Station import" and "Station backend cutover" below, and use this only for a `d1` fallback), done once and in this order (the Python registration route is deleted, so MongoDB gains no new stations; steps 1 to 4 matter only if `weather.stations` holds documents with a `stationId` and a key hash):
    1. Copy the existing stations with their key hashes: `mongoexport --uri "$MONGODB_URI" --db weather --collection stations --jsonArray --out stations.json`.
    2. Turn the export into SQL: `node workers/scripts/stations-to-d1.mjs stations.json > stations.sql`.
    3. Load it: `(cd workers/stations && npx wrangler d1 execute mukoko-weather --remote --file ../../stations.sql)`.
@@ -261,6 +261,127 @@ Creating Cloudflare resources and deploying are owner actions. Run these from `w
    curl -s -H "Authorization: Bearer $WEATHER_SERVICE_API_KEY" \
      "https://weather-internal.mukoko.com/internal/forecast?location=harare&days=3"
    ```
+
+## Station import (B3, [#561](https://github.com/mukoko-dev/mukoko-weather/issues/561))
+
+Moves the stations in MongoDB `weather.stations`, with their key hashes unchanged, into the Nyuchi API (`device.devices` and `device.ingest_credentials`), so every console already in the field authenticates there. It has to be done before `STATIONS_BACKEND` is flipped to `nyuchi` ("Station backend cutover" below): the API rejects a key for a station it does not hold. The D1 path (`scripts/stations-to-d1.mjs`, `d1/migrations/0001_stations.sql`) is untouched and is what runs while `STATIONS_BACKEND=d1`.
+
+**Two tools, built and tested; no agent has run either against production. You run them.** The commands below were checked against the code and the API's tests, on fake data. The `wrangler dev` replay (step 9) and the `curl` calls have **not been run** against a live Worker or the live API: read each once before you paste it.
+
+- `workers/scripts/stations-to-devices.mjs` (this repo): reads an owner-run `mongoexport --jsonArray` of `weather.stations` and writes batch files for the route. A pure transform: it connects to nothing and prints only counts and masked ids (`mws-0a****3d`), never a hash, a salt or a name. Tests: `node --test workers/scripts/stations-to-devices.test.mjs`.
+- `POST /v1/stations/import` on the Nyuchi API ([nyuchi/nyuchi-api#544](https://github.com/nyuchi/nyuchi-api/pull/544); the text is `docs/architecture/stations.md` there).
+
+**What the import does.** Each station becomes a `device.devices` document owned by the community until a person claims it (owner decision O-S3), with its PBKDF2 hash and salt stored exactly as exported (`pbkdf2-sha256-60000`), so the key in the field keeps working, and one `registered` history event (`system_migration`). It is **safe to repeat**: a station already imported is `unchanged`, an existing credential is never replaced (a key an owner rotated since is not put back), a station a person has claimed is never touched, and `isActive` is only set on creation. **A request that does not say `dryRun` is a dry run**; send `"dryRun": false` to write. One bad station is a result (`rejected`, with the field names), never an error, so it cannot stop its batch. It does **not** create the `community` entity record `COMMUNITY_OWNER_ID` names (nothing reads it; see the API's docs).
+
+**Before you start:**
+
+- The Nyuchi API is deployed with the station routes (nyuchi/nyuchi-api#313) and #544, and its declared indexes are applied (`python -m gateway.lib.indexes --apply`). Until `device.ingest_credentials` exists the route answers `503`, even for a dry run.
+- You have `mongoexport`, `node` 22 or later, `jq` and `curl` (7.76 or later for `--fail-with-body`).
+- A person who manages the workspace that owns the Worker's key **and holds the WorkOS permission `console:api-keys-mint`** mints the import key. It is its own key: scopes `stations` and `stations:import`, nothing else, a one-day expiry. **Never give it to the Worker, and never add `stations:import` to the Worker's key** (the route refuses a key that holds both). The exact request is in nyuchi/nyuchi-api#544.
+
+**Steps, in order:**
+
+1. **Snapshot first.** In MongoDB Atlas take an on-demand snapshot of the cluster that holds the `weather` and `device` databases, and wait until it shows as completed. Do not go on without it.
+
+2. **Export, into a private directory outside the repo** (the export holds key hashes):
+
+   ```bash
+   umask 077
+   WORK="$(mktemp -d)"
+   mongoexport --uri "$MONGODB_URI" --db weather --collection stations --jsonArray --out "$WORK/stations.json"
+   jq length "$WORK/stations.json"                                   # documents
+   jq '[.[] | select(.stationId and .ingestKeyHash)] | length' "$WORK/stations.json"   # with an id and a key
+   ```
+
+3. **Transform** (from the repo root):
+
+   ```bash
+   node workers/scripts/stations-to-devices.mjs "$WORK/stations.json" --out "$WORK/batches"
+   ```
+
+   Read what it prints. `importable` should be the second count above; any difference is in `skipped`. `no_station_id` for the StationKit seed document (it has no key) is expected; any other `skipped` reason names the station (masked), so look that document up in Atlas and understand it before going on. The "set aside" line lists optional values (an impossible elevation, a future date) dropped so that a station keeps its key. The files are `stations-import-001.json`, ... of up to 50 stations, readable by you alone. Use a new directory for every run.
+
+4. **Set up the call.** Keep the key out of your shell history and out of `ps`:
+
+   ```bash
+   set -o pipefail                       # a failed call must stop a loop
+   API=https://api.nyuchi.com
+   read -r  -p "import key client id: " IMPORT_ID
+   read -rs -p "import key secret: "    IMPORT_SECRET; echo
+   printf 'X-Client-Id: %s\nX-Client-Secret: %s\n' "$IMPORT_ID" "$IMPORT_SECRET" > "$WORK/auth.hdr"
+   post() {   # $1 batch file, $2 true (dry run) or false (write)
+     jq --argjson dry "$2" '. + {dryRun: $dry}' "$1" |
+       curl -sS --fail-with-body -X POST "$API/v1/stations/import" \
+         -H @"$WORK/auth.hdr" -H "Content-Type: application/json" --data-binary @-
+   }
+   ```
+
+5. **Dry run every batch.** Nothing is written.
+
+   ```bash
+   for f in "$WORK"/batches/stations-import-*.json; do
+     post "$f" true | tee -a "$WORK/dry.log" | jq -c '{dryRun, created, updated, unchanged, rejected}' || break
+   done
+   ```
+
+   A line of `null`s means the call failed: its problem document is at the end of `$WORK/dry.log`. Expect `"dryRun":true`, `created` adding up to `importable`, and `rejected` 0. To see a rejection (index, station id, code and field names; never a value): `post "$f" true | jq '.results[] | select(.status=="rejected")'`. Fix the cause at the source, then export and transform again into a new directory. A `401` or `403` is the key (scopes, expiry); a `503` is the API not being ready (indexes, store).
+
+6. **Import**, stopping at the first failure:
+
+   ```bash
+   for f in "$WORK"/batches/stations-import-*.json; do
+     post "$f" false | tee -a "$WORK/import.log" | jq -c '{dryRun, created, updated, unchanged, rejected}' || break
+   done
+   ```
+
+   `"dryRun":false`, and again `null`s mean the call failed (see the end of `$WORK/import.log`). A `503` (or a dropped connection) is safe to answer by running **the same batch again**: the import completes whatever the first attempt left half done (`updated`).
+
+7. **Prove it is complete.** Run step 5 again. Every item is now `unchanged`: `created` 0, `updated` 0, `rejected` 0.
+
+8. **Verify one station with its existing key.** Pick a station whose key you can lay your hands on (its console's `PASSWORD`, or the part of `PASSKEY` after the colon):
+
+   ```bash
+   ID=mws-xxxxxxxx
+   read -rs -p "that station's key: " STATION_KEY; echo
+   curl -sS "$API/v1/stations/$ID" -H "Authorization: Bearer $STATION_KEY" | jq '{stationId, name, status, lastSeenAt}'
+   ```
+
+   Expect `"status": "active"`. A wrong key is `401 invalid_credentials`. This is the same check the Worker will make through `POST /v1/stations/service/verify`, which you can run too with the Worker's own key (`WORKER_KEY`, `nyk_….nys_…`): `jq -n --arg id "$ID" --arg key "$STATION_KEY" '{stationId: $id, key: $key}' | curl -sS -X POST "$API/v1/stations/service/verify" -H "X-API-Key: $WORKER_KEY" -H "Content-Type: application/json" --data-binary @- | jq '{valid, station: .station.stationId}'` answers `"valid": true`.
+
+9. **Shadow check: replay one legacy Wunderground and one Ecowitt payload** through the stations Worker in `nyuchi` mode **locally**, so production stays on `d1`. It needs Rust and `worker-build` (`cargo install worker-build@^0.8`; the `build` command in `wrangler.jsonc` runs it). It writes **one real observation per replay** for the station you pick, so use a station you own or accept the extra point.
+
+   ```bash
+   cd workers/stations
+   printf 'NYUCHI_STATIONS_API_KEY=%s\n' "$WORKER_KEY" > .dev.vars     # git-ignored; delete it afterwards
+   npx wrangler dev --var STATIONS_BACKEND:nyuchi --var NYUCHI_API_URL:https://api.nyuchi.com
+   ```
+
+   In a second terminal (the port is the one `wrangler dev` prints; 8787 is its default):
+
+   ```bash
+   # Wunderground: GET, imperial units
+   curl -i -G http://127.0.0.1:8787/stations/ingest \
+     --data-urlencode "ID=$ID" --data-urlencode "PASSWORD=$STATION_KEY" \
+     -d tempf=70.52 -d humidity=45 -d baromin=29.92 -d windspeedmph=5 -d winddir=90 -d UV=3 -d solarradiation=500
+   # Ecowitt: POST, form fields, PASSKEY=<stationId>:<key>
+   curl -i -X POST http://127.0.0.1:8787/stations/ingest \
+     --data-urlencode "PASSKEY=$ID:$STATION_KEY" \
+     -d tempf=70.52 -d humidity=45 -d baromrelin=29.92 -d windspeedmph=5 -d winddir=90 -d uv=3 -d solarradiation=500
+   ```
+
+   Both answer `200` with the literal body `success`, as the Python route did. A wrong key answers `401 unauthorized`. Then, within a minute (the queue batches every 10 seconds at most):
+
+   ```bash
+   curl -sS "$API/v1/stations/$ID" -H "Authorization: Bearer $STATION_KEY" | jq '{lastSeenAt, lastObservationAt, latestMetrics}'
+   ```
+
+   `latestMetrics` should read about `airTemperatureCelsius` 21.4, `relativeHumidityPercent` 45, `atmosphericPressureMillibar` 1013.21, `windSpeedKph` 8.05, `uvIndex` 3, `solarRadiationWm2` 500 (the Worker's own unit conversions of the payload above). Stop `wrangler dev` and `rm .dev.vars`. If the Wunderground or Ecowitt answer differs from the old behaviour, **stop here**: do not flip.
+
+10. **Clean up.** Revoke the import key (`DELETE /v1/api-keys/{key_id}`, or in the console), then `rm -rf "$WORK"`. The export and the batch files hold the key hashes.
+
+11. **Flip** `STATIONS_BACKEND` to `nyuchi`: "Owner-only steps, in order" under "Station backend cutover" below (the Worker's own key, the secret, the flip, the checks, the forecast Worker). Your own station's real upload answering `success` and moving `lastSeenAt` at the API is the check that matters.
+
+**Rolling back** is setting both vars back to `d1` and releasing (see the cutover section). The import is additive and idempotent, so nothing needs undoing: the imported stations are inert until the flip, and a later run changes nothing. **Be clear what `d1` means today:** production D1 holds 0 stations, so on `d1` no station authenticates, exactly as before this work. If you want a working fallback while you are on `d1`, also load D1 from the same export with the old path (steps 1 to 4 of "Station cutover" under "Owner steps"; `stations-to-d1.mjs` is kept for this). Do that before the flip, not after.
 
 ## Station backend cutover (B2, [#556](https://github.com/mukoko-dev/mukoko-weather/issues/556))
 
@@ -283,7 +404,7 @@ A Worker that verifies keys against an API that does not hold the stations yet r
 **Owner-only steps, in order** (an agent builds and tests; these are the owner's)
 
 1. In the Nyuchi API (nyuchi/nyuchi-api#313): apply the declared indexes, deploy the station routes, mint the Worker's internal key with the scopes `stations` and `stations:service`.
-2. Import the stations with their existing key hashes (B3), so every key already in the field verifies at the API.
+2. Import the stations with their existing key hashes (B3, ["Station import"](#station-import-b3-561) above, steps 1 to 10), so every key already in the field verifies at the API.
 3. Create the secret: the Secrets Store entry `MUKOKO_WEATHER_NYUCHI_STATIONS_API_KEY` (step 2 of "Owner steps"), or, until then, the plain Worker secret: `npx wrangler secret put NYUCHI_STATIONS_API_KEY -c stations/wrangler.jsonc`. The code reads either.
 4. Bind the store secret (once it exists): add a `secrets_store_secrets` entry to `stations/wrangler.jsonc` and list `"stations"` in that secret's `workers` in `crates/weather-core/src/secrets.rs` in the same change (a test holds the two together). Not before the secret exists: Cloudflare refuses the deploy, and `workers-deploy.yml` deploys every Worker after this one.
 5. Flip the stations Worker: set `STATIONS_BACKEND` to `"nyuchi"` in `stations/wrangler.jsonc` and release. The value in the file is what a deploy sets, so this line is the flip, and setting it back to `"d1"` is the rollback.
