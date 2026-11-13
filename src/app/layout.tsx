@@ -8,7 +8,6 @@ import { PersonPreferencesSync } from "@/components/profile/PersonPreferencesSyn
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
 import { PWAInstallPrompt } from "@/components/weather/PWAInstallPrompt";
 import { ServiceWorkerUpdater } from "@/components/pwa/ServiceWorkerUpdater";
-import { VercelAnalytics } from "@/components/analytics/VercelAnalytics";
 import { WebVitals } from "@/components/analytics/WebVitals";
 import { isFeatureEnabled } from "@/lib/feature-flags";
 import { Noto_Sans, Noto_Serif, JetBrains_Mono } from "next/font/google";
@@ -388,7 +387,6 @@ export default async function RootLayout({
           </ThemeProvider>
         </AuthKitProvider>
         <ServiceWorkerUpdater />
-        <VercelAnalytics />
       </body>
     </html>
   );

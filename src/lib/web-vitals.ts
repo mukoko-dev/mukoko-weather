@@ -4,8 +4,8 @@
  * The five numbers a visitor on a slow phone lives through, taken from the
  * browser's own timings: FCP (first paint), LCP (the main content), INP (how
  * fast a tap is answered), CLS (a layout that jumps) and TTFB (the wait for the
- * server). Each goes to GA4 as one `web_vitals` event. Vercel Analytics is left
- * out on purpose: it meters custom events, and these fire several times a visit.
+ * server). Each goes to GA4 as one `web_vitals` event; GA4 is the app's only
+ * analytics.
  *
  * Privacy: a number, its rating, how the page was opened, a coarse route
  * (`home`, `place` or `other`, never the place's name) and the connection class

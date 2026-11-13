@@ -1,9 +1,9 @@
 /**
- * Analytics — centralized event tracking for GA4 and Vercel Analytics.
+ * Analytics — centralized event tracking for Google Analytics 4.
  *
- * Fires every event to both Google Analytics 4 (via gtag) and Vercel Analytics
- * (via @vercel/analytics track()). No-ops silently on the server or if the
- * analytics scripts haven't loaded yet.
+ * Fires every event to GA4 (via gtag), the only analytics the app uses (the
+ * owner removed Vercel Analytics on 2026-11-13). No-ops silently on the server
+ * or if gtag hasn't loaded yet.
  *
  * Usage:
  *   import { trackEvent } from "@/lib/analytics";
@@ -13,7 +13,6 @@
  * theme preferences) are tracked. No personally identifiable information is collected.
  */
 
-import { track } from "@vercel/analytics";
 import { sanitizeEventProps } from "./location-privacy";
 
 // ── Type-safe event definitions ─────────────────────────────────────────────
@@ -76,12 +75,11 @@ export type AnalyticsEvents = {
 // ── Core tracking function ──────────────────────────────────────────────────
 
 /**
- * Track a user interaction event to both GA4 and Vercel Analytics.
+ * Track a user interaction event to GA4.
  *
  * - No-ops on the server (typeof window === "undefined")
  * - Silently swallows errors so tracking never breaks the app
  * - GA4: fires via window.gtag("event", name, properties)
- * - Vercel: fires via track(name, properties)
  */
 export function trackEvent<K extends keyof AnalyticsEvents>(
   name: K,
@@ -91,20 +89,15 @@ export function trackEvent<K extends keyof AnalyticsEvents>(
   // Fine locations (smart-slug spots) never leave the browser: see location-privacy.ts
   properties = sanitizeEventProps(properties);
 
-  // Vercel Analytics — track() is safe to call even if the script hasn't loaded
-  try {
-    track(name, properties as Record<string, string | number | boolean | null>);
-  } catch {
-    // Silent — tracking should never break the app
-  }
-
   // Google Analytics 4 — gtag may not be loaded yet (ad blockers, slow network)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const gtag = (window as any).gtag as
     | ((...args: unknown[]) => void)
     | undefined;
 
-  if (typeof gtag === "function") {
-    gtag("event", name, properties);
+  try {
+    if (typeof gtag === "function") gtag("event", name, properties);
+  } catch {
+    // Silent — tracking should never break the app
   }
 }

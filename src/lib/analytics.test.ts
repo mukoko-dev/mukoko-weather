@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-// Use vi.hoisted() to ensure mockTrack is available before vi.mock runs
-const mockTrack = vi.hoisted(() => vi.fn());
-vi.mock("@vercel/analytics", () => ({ track: mockTrack }));
-
 import { trackEvent, type AnalyticsEvents } from "./analytics";
 
 describe("analytics", () => {
@@ -12,7 +8,6 @@ describe("analytics", () => {
 
   beforeEach(() => {
     originalWindow = globalThis.window;
-    mockTrack.mockClear();
   });
 
   afterEach(() => {
@@ -29,24 +24,13 @@ describe("analytics", () => {
       // @ts-expect-error — simulate SSR
       delete globalThis.window;
 
-      trackEvent("report_submitted", {
-        type: "heavy-rain",
-        severity: "moderate",
-        location: "harare",
-      });
-
-      expect(mockTrack).not.toHaveBeenCalled();
-    });
-
-    it("fires Vercel Analytics track() with correct name and properties", () => {
-      // @ts-expect-error — minimal window mock
-      globalThis.window = {};
-
-      trackEvent("location_saved", { slug: "harare" });
-
-      expect(mockTrack).toHaveBeenCalledWith("location_saved", {
-        slug: "harare",
-      });
+      expect(() =>
+        trackEvent("report_submitted", {
+          type: "heavy-rain",
+          severity: "moderate",
+          location: "harare",
+        }),
+      ).not.toThrow();
     });
 
     it("fires GA4 gtag() with correct event name and properties", () => {
@@ -56,12 +40,14 @@ describe("analytics", () => {
 
       trackEvent("theme_changed", { theme: "dark" });
 
-      expect(mockGtag).toHaveBeenCalledWith("event", "theme_changed", {
-        theme: "dark",
-      });
+      expect(mockGtag).toHaveBeenCalledExactlyOnceWith(
+        "event",
+        "theme_changed",
+        { theme: "dark" },
+      );
     });
 
-    it("fires both GA4 and Vercel Analytics for a single event", () => {
+    it("sends one GA4 event per call and nothing else", () => {
       const mockGtag = vi.fn();
       // @ts-expect-error — minimal window mock with gtag
       globalThis.window = { gtag: mockGtag };
@@ -71,55 +57,39 @@ describe("analytics", () => {
         enabled: true,
       });
 
-      expect(mockTrack).toHaveBeenCalledTimes(1);
       expect(mockGtag).toHaveBeenCalledTimes(1);
-      expect(mockTrack).toHaveBeenCalledWith("activity_toggled", {
-        activityId: "farming-maize",
-        enabled: true,
-      });
       expect(mockGtag).toHaveBeenCalledWith("event", "activity_toggled", {
         activityId: "farming-maize",
         enabled: true,
       });
     });
 
-    it("silently continues if gtag is not defined", () => {
+    it("silently continues if gtag is not defined (an ad blocker)", () => {
       // @ts-expect-error — window without gtag
       globalThis.window = {};
 
       expect(() => {
         trackEvent("modal_opened", { modal: "my-weather" });
       }).not.toThrow();
-
-      // Vercel track should still fire
-      expect(mockTrack).toHaveBeenCalledWith("modal_opened", {
-        modal: "my-weather",
-      });
     });
 
-    it("silently continues if Vercel track() throws", () => {
-      mockTrack.mockImplementation(() => {
-        throw new Error("Vercel Analytics unavailable");
+    it("never lets a throwing gtag break the app", () => {
+      const mockGtag = vi.fn(() => {
+        throw new Error("gtag blocked");
       });
-
-      const mockGtag = vi.fn();
-      // @ts-expect-error — minimal window mock with gtag
+      // @ts-expect-error — minimal window mock with a failing gtag
       globalThis.window = { gtag: mockGtag };
 
       expect(() => {
         trackEvent("explore_search", { query: "farming", resultCount: 5 });
       }).not.toThrow();
-
-      // GA4 should still fire even if Vercel throws
-      expect(mockGtag).toHaveBeenCalledWith("event", "explore_search", {
-        query: "farming",
-        resultCount: 5,
-      });
+      expect(mockGtag).toHaveBeenCalledTimes(1);
     });
 
     it("handles all event types with correct property shapes", () => {
-      // @ts-expect-error — minimal window mock
-      globalThis.window = {};
+      const mockGtag = vi.fn();
+      // @ts-expect-error — minimal window mock with gtag
+      globalThis.window = { gtag: mockGtag };
 
       const events: {
         [K in keyof AnalyticsEvents]: AnalyticsEvents[K];
@@ -152,12 +122,12 @@ describe("analytics", () => {
       };
 
       for (const [name, props] of Object.entries(events)) {
-        mockTrack.mockClear();
+        mockGtag.mockClear();
         trackEvent(
           name as keyof AnalyticsEvents,
           props as AnalyticsEvents[keyof AnalyticsEvents],
         );
-        expect(mockTrack).toHaveBeenCalledWith(name, props);
+        expect(mockGtag).toHaveBeenCalledWith("event", name, props);
       }
     });
   });

@@ -160,16 +160,8 @@ export default function PrivacyPage() {
               .
             </p>
             <p className="mt-2">
-              We also use{" "}
-              <strong className="text-text-primary">
-                Vercel Web Analytics
-              </strong>{" "}
-              to monitor website performance. Vercel Analytics does not use
-              cookies and collects no personally identifiable information.
-            </p>
-            <p className="mt-2">
               We do not use advertising pixels, fingerprinting technologies, or
-              any tracking beyond Google Analytics and Vercel Analytics.
+              any tracking beyond Google Analytics.
             </p>
           </ProseSection>
 

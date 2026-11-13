@@ -25,7 +25,6 @@
     "@react-pdf/renderer": "^4.9.0",
     "@serwist/next": "^9.5.13",
     "@types/three": "^0.184.1",
-    "@vercel/analytics": "^2.0.1",
     "@vercel/functions": "^3.10.3",
     "@workos-inc/authkit-nextjs": "^4.6.2",
     "chart.js": "^4.6.1",
