@@ -24,6 +24,7 @@ import {
 import { canonicalSlug, storageKeySlug } from "../slug-migration";
 import { forgetHomeSnapshot, rememberHomeSnapshot } from "../home-snapshot";
 import type { WeatherPlaceDocType } from "./schemas";
+import { storageMayStart } from "./start-gate";
 
 /** The slice of an RxDB collection this module uses (so tests can fake it). */
 export interface PlaceCollection {
@@ -148,6 +149,9 @@ export async function rememberPlace(
     bytes: serialised.bytes,
   };
 
+  // Writing the copy back is not needed to paint: on the home page it waits
+  // for the weather to be on screen (start-gate.ts).
+  await storageMayStart();
   const col = await collection();
   if (!col) return false;
   try {

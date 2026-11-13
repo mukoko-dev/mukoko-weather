@@ -1,5 +1,10 @@
 import { create } from "zustand";
 import { updatePreferences, initRxDBBridge, getDeviceId } from "./rxdb/bridge";
+import {
+  holdStorageForFirstScreen,
+  isStorageHeld,
+  storageMayStart,
+} from "./rxdb/start-gate";
 import type { PreferencesDocType } from "./rxdb/schemas";
 import { getFeatureFlag } from "./feature-flags";
 // Types only: the sync code itself is imported dynamically, behind the flag.
@@ -552,6 +557,17 @@ export function initializeDeviceSync(): void {
     useAppStore.setState({ theme: recorded });
   }
 
+  // On the home page the database waits for the weather to be on screen and
+  // the browser to be idle (src/lib/rxdb/start-gate.ts, issue 551): the theme
+  // is already settled above, and the place and its forecast come from
+  // localStorage. Everywhere else the wait is over at once.
+  holdStorageForFirstScreen(window.location?.pathname ?? "");
+  if (isStorageHeld()) void storageMayStart().then(startDeviceSync);
+  else startDeviceSync();
+}
+
+/** Opens the preferences database and starts replication. */
+function startDeviceSync(): void {
   initRxDBBridge({
     applyToStore: (incoming: Partial<PreferencesDocType>) => {
       // Canonical-slug migration (#317), once and idempotent: every path that

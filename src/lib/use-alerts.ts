@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { AlertSnapshot } from "./alerts-watch";
 import { useIdleOnce } from "./use-idle-once";
+import { isStorageHeld, storageMayStart } from "./rxdb/start-gate";
 
 /**
  * The alerts for the person's places, kept current by `watchAlerts`
@@ -46,7 +47,26 @@ export function useAlertSnapshot(enabled: boolean): AlertSnapshot | null {
  */
 export function useAlertBadge(): number {
   const idle = useIdleOnce(2500);
-  const snapshot = useAlertSnapshot(idle);
+  // The badge reads the stored places, which opens the on-device database; on
+  // the home page that waits for the weather to be on screen (start-gate.ts).
+  const storage = useStorageMayStart();
+  const snapshot = useAlertSnapshot(idle && storage);
   if (!snapshot || snapshot.quiet) return 0;
   return snapshot.shown.length;
+}
+
+/** False while the home page holds the on-device database back. */
+function useStorageMayStart(): boolean {
+  const [ready, setReady] = useState(() => !isStorageHeld());
+  useEffect(() => {
+    if (ready) return;
+    let live = true;
+    void storageMayStart().then(() => {
+      if (live) setReady(true);
+    });
+    return () => {
+      live = false;
+    };
+  }, [ready]);
+  return ready;
 }

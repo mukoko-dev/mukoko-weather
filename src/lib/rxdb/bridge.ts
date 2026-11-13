@@ -12,6 +12,7 @@
  */
 
 import { preferencesCollection } from "./collections";
+import { storageMayStart } from "./start-gate";
 import type { PreferencesDocType } from "./schemas";
 import {
   DEFAULT_NOTIFICATION_PREFS,
@@ -324,6 +325,10 @@ export async function updatePreferences(
   updates: Partial<Omit<PreferencesDocType, "id">>,
 ): Promise<void> {
   try {
+    // A write is queued behind the first screen on the home page, after the
+    // hydration that started first (start-gate.ts). The theme is also kept in
+    // localStorage by the store, so it survives a tab closed in that moment.
+    await storageMayStart();
     const col = await preferencesCollection();
     if (!col) {
       // RxDB unavailable — persist to localStorage so the preference survives.
