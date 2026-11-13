@@ -27,14 +27,18 @@
 //   RUNS=3 SETTLE=12000 LABEL=before node scripts/browser-check/first-screen.mjs
 //
 // Other settings: ROUTE (default /), COLOR_SCHEME (light or dark: the phone's
-// setting), STORED_THEME (light or dark, as the old localStorage preference),
-// FILM=1 (record the screen and print its brightness over time: a pale frame
+// setting), SEED_THEME (light or dark: the theme the person chose in the app,
+// written where the app keeps it, in IndexedDB, after the first visit, then one
+// more visit so the app can record it, before the WARM one: a person who chose
+// dark on a light phone), FILM=1 (record the screen and print its brightness over time: a pale frame
 // followed by a dark one is a flash), FILM_SAVE=1 (also keep every frame as a
 // JPEG under OUT/film), OUT (where <LABEL>.json goes; the full runs are there).
 //
 // Reports, per scenario (milliseconds from the start of the navigation):
 //   fcp, lcp           first and largest paint
 //   weather            when the real hero (not the skeleton) is on screen
+//   themeAtFcp, themeFlipMs   the page's theme at first paint, and how long
+//                      after it the theme changed (0: it did not: no flash)
 //   threeStart/End     when the Three.js chunks were requested / finished
 //   threeAfterWeather  how long after the weather the first of them was asked for
 //   blocked*           sum of long tasks: in the whole window, before the real
@@ -62,7 +66,7 @@ const SETTLE_MS = Number(process.env.SETTLE ?? 12000);
 const OUT =
   process.env.OUT ?? join(process.env.TMPDIR ?? "/tmp", "first-screen");
 const COLOR_SCHEME = process.env.COLOR_SCHEME ?? "light";
-const STORED_THEME = process.env.STORED_THEME ?? "";
+const SEED_THEME = process.env.SEED_THEME ?? "";
 
 const LINK = {
   latency: 150,
@@ -178,17 +182,6 @@ async function slowForecast(context) {
 async function openPage(context) {
   const page = await context.newPage();
   await page.addInitScript(INIT);
-  if (STORED_THEME) {
-    await page.addInitScript((theme) => {
-      try {
-        if (!localStorage.getItem("mukoko-weather-prefs"))
-          localStorage.setItem(
-            "mukoko-weather-prefs",
-            JSON.stringify({ state: { theme } }),
-          );
-      } catch {}
-    }, STORED_THEME);
-  }
   const cdp = await context.newCDPSession(page);
   await cdp.send("Performance.enable");
   await throttle(cdp);
@@ -261,6 +254,39 @@ async function threeChunks(chunks) {
   return found;
 }
 
+/**
+ * Write the theme a person chose in the app where the app keeps it: the
+ * `preferences` document in IndexedDB (found by listing the databases, as in
+ * memory-harness.mjs), as the app does when a visitor picks "dark".
+ */
+async function seedTheme(page, theme) {
+  const result = await page.evaluate(async (theme) => {
+    const names = (await indexedDB.databases()).map((d) => d.name);
+    const name = names.find((n) => /^rxdb-dexie-.*--preferences$/.test(n));
+    if (!name) return { ok: false, why: `no preferences database in ${names}` };
+    return new Promise((resolve) => {
+      const open = indexedDB.open(name);
+      open.onerror = () => resolve({ ok: false, why: "cannot open" });
+      open.onsuccess = () => {
+        const store = open.result
+          .transaction("docs", "readwrite")
+          .objectStore("docs");
+        const all = store.getAll();
+        all.onsuccess = () => {
+          const doc = all.result[0];
+          if (!doc) return resolve({ ok: false, why: "no document" });
+          Object.assign(doc, { theme, updatedAt: Date.now() });
+          store.put(doc).onsuccess = () => resolve({ ok: true });
+        };
+      };
+    });
+  }, theme);
+  if (!result.ok)
+    throw new Error(
+      `SEED_THEME: ${result.why}; the preferences store changed.`,
+    );
+}
+
 async function snapshot(page, cdp) {
   await page.waitForTimeout(SETTLE_MS);
   const inPage = await page.evaluate(async () => {
@@ -294,7 +320,14 @@ async function snapshot(page, cdp) {
         .filter(([start]) => start >= from && start < to)
         .reduce((a, [, d]) => a + d, 0);
     const bg = (el) => getComputedStyle(el).backgroundColor;
+    // The theme at first paint and the first change after it (a flash).
+    const fcpAt = window.__perf.fcp ?? 0;
+    const log = window.__perf.theme;
+    const atFcp = [...log].reverse().find(([t]) => t <= fcpAt)?.[1] ?? null;
+    const flip = log.find(([t, v]) => t > fcpAt && v !== atFcp);
     return {
+      themeAtFcp: atFcp,
+      themeFlipMs: flip ? Math.round(flip[0] - fcpAt) : 0,
       ttfb: Math.round(nav.responseStart),
       htmlDone: Math.round(nav.responseEnd),
       fcp: window.__perf.fcp && Math.round(window.__perf.fcp),
@@ -406,8 +439,19 @@ try {
         }
       }
       all[scenario].push(snap);
+      if (scenario === "cold" && SEED_THEME) await seedTheme(page, SEED_THEME);
       await page.close();
-      if (scenario === "cold") await new Promise((r) => setTimeout(r, 8000));
+      if (scenario === "cold") {
+        await new Promise((r) => setTimeout(r, 8000));
+        if (SEED_THEME) {
+          // One more visit, so the app reads the theme from IndexedDB and can
+          // record it for the next one (the warm visit measured below).
+          const again = await openPage(context);
+          await again.page.goto(BASE + PATH_, { waitUntil: "commit" });
+          await again.page.waitForTimeout(6000);
+          await again.page.close();
+        }
+      }
     }
     await context.close();
     console.error(`run ${i + 1}/${RUNS} done`);
