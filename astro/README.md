@@ -60,10 +60,25 @@ npm run budget                 # JavaScript and CSS of each page against js-budg
 ASTRO_SOURCEMAP=1 npm run build   # with source maps, to see what is in a chunk
 npm run serve                  # dist/client over HTTP, gzipped like Cloudflare's edge
 CHROME_PATH=/path/to/chrome npm run check:shell   # persistence and no-JavaScript checks
+CHROME_PATH=/path/to/chrome npm run measure -- --url http://127.0.0.1:4321 --path /about --label astro --runs 3
 ```
 
 `check:shell` uses the runner's Chrome (`channel: "chrome"`) unless
 `CHROME_PATH` names a Chromium binary.
+
+## Measuring
+
+Every pull request on this track states the bytes of JavaScript and the JS heap
+before and after (#475). `npm run measure` loads a page in Chromium with a
+Pixel 5 profile, Slow 4G (1.6 Mbps, 150 ms) and a 4x CPU slowdown, cold and
+warm, and prints the median of the runs: first and largest paint, long tasks,
+JavaScript and CSS transferred and decoded, inline script bytes, script CPU
+time, DOM nodes and the JS heap (after a forced garbage collection). To
+compare with the Next.js build, run `npm run build` and `next start` in the
+repo root with dummy sign-in settings, and run the same command against it. Use
+`npm run serve` for this build: `astro preview` does not compress, and
+Cloudflare's edge does. Compare two runs made on the same machine, minutes
+apart; the numbers say nothing across machines.
 
 ## Not here yet
 
