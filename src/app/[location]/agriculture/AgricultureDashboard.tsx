@@ -113,9 +113,7 @@ export function AgricultureDashboard({ location, season, user }: Props) {
       <h1 className="elephant">{location.name} Agriculture</h1>
       <p className="mt-1 text-base text-text-secondary">
         {location.province} &middot; {location.elevation}m &middot;{" "}
-        {data?.season
-          ? seasonLabel(data.season)
-          : seasonLabel(season)}
+        {data?.season ? seasonLabel(data.season) : seasonLabel(season)}
       </p>
 
       <div className="mt-4 mb-6">

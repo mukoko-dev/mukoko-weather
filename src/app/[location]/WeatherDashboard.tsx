@@ -1009,10 +1009,7 @@ export function WeatherDashboard({
                           value={location.nominatimAddress.displayName}
                         />
                       )}
-                      <InfoRow
-                        label="Season"
-                        value={seasonLabel(season)}
-                      />
+                      <InfoRow label="Season" value={seasonLabel(season)} />
                     </dl>
                     <ChartErrorBoundary name="place knowledge">
                       <PlaceKnowledgeRows

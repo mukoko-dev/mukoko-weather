@@ -72,9 +72,12 @@ describe("season names in the seed", () => {
     }
     // Zhizha is the summer rains, Chirimo the hot dry spring: not swapped.
     const resolve = (month: number, region: string) =>
-      resolveSeasonName(rows("ZW").find((s) => s.months.includes(month))!, {
-        region,
-      });
+      resolveSeasonName(
+        rows("ZW").find((s) => s.months.includes(month))!,
+        {
+          region,
+        },
+      );
     expect(resolve(12, "ZW19")).toBe("Zhizha");
     expect(resolve(9, "ZW19")).toBe("Chirimo");
     expect(resolve(6, "ZW19")).toBe("Chando");
@@ -82,9 +85,12 @@ describe("season names in the seed", () => {
 
   it("serves a place the name used where it is, per month", () => {
     const at = (month: number, region: string) =>
-      resolveSeasonName(rows("ZW").find((s) => s.months.includes(month))!, {
-        region,
-      });
+      resolveSeasonName(
+        rows("ZW").find((s) => s.months.includes(month))!,
+        {
+          region,
+        },
+      );
     expect(at(1, "ZW10")).toBe("Ihlobo"); // Bulawayo
     expect(at(1, "ZW15")).toBe("Ihlobo"); // Matabeleland North
     expect(at(1, "ZW13")).toBe("Zhizha"); // Mashonaland East
