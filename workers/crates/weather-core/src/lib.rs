@@ -17,6 +17,7 @@ pub mod ai;
 pub mod air_quality;
 pub mod alert_delivery;
 pub mod alert_plan;
+pub mod alert_run;
 pub mod aq_grid;
 pub mod auth;
 pub mod aviation;
