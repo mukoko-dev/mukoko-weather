@@ -1120,6 +1120,230 @@
     "description": "Dry, dusty Harmattan winds, cool mornings"
   },
   {
+    "countryCode": "LR",
+    "name": "Long rains",
+    "localName": "Long rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Long rains"
+      }
+    ],
+    "months": [4, 5, 6, 7],
+    "hemisphere": "north",
+    "description": "Heavy rains, flooding, main farming season"
+  },
+  {
+    "countryCode": "LR",
+    "name": "Short dry",
+    "localName": "Short dry",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Short dry"
+      }
+    ],
+    "months": [8],
+    "hemisphere": "north",
+    "description": "Brief dry spell, mid-season break"
+  },
+  {
+    "countryCode": "LR",
+    "name": "Short rains",
+    "localName": "Short rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Short rains"
+      }
+    ],
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Second rains, late planting"
+  },
+  {
+    "countryCode": "LR",
+    "name": "Dry season",
+    "localName": "Dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Dry season"
+      }
+    ],
+    "months": [12, 1, 2, 3],
+    "hemisphere": "north",
+    "description": "Dry, dusty Harmattan winds, cool mornings"
+  },
+  {
+    "countryCode": "SL",
+    "name": "Long rains",
+    "localName": "Long rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Long rains"
+      }
+    ],
+    "months": [4, 5, 6, 7],
+    "hemisphere": "north",
+    "description": "Heavy rains, flooding, main farming season"
+  },
+  {
+    "countryCode": "SL",
+    "name": "Short dry",
+    "localName": "Short dry",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Short dry"
+      }
+    ],
+    "months": [8],
+    "hemisphere": "north",
+    "description": "Brief dry spell, mid-season break"
+  },
+  {
+    "countryCode": "SL",
+    "name": "Short rains",
+    "localName": "Short rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Short rains"
+      }
+    ],
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Second rains, late planting"
+  },
+  {
+    "countryCode": "SL",
+    "name": "Dry season",
+    "localName": "Dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Dry season"
+      }
+    ],
+    "months": [12, 1, 2, 3],
+    "hemisphere": "north",
+    "description": "Dry, dusty Harmattan winds, cool mornings"
+  },
+  {
+    "countryCode": "GM",
+    "name": "Long rains",
+    "localName": "Long rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Long rains"
+      }
+    ],
+    "months": [4, 5, 6, 7],
+    "hemisphere": "north",
+    "description": "Heavy rains, flooding, main farming season"
+  },
+  {
+    "countryCode": "GM",
+    "name": "Short dry",
+    "localName": "Short dry",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Short dry"
+      }
+    ],
+    "months": [8],
+    "hemisphere": "north",
+    "description": "Brief dry spell, mid-season break"
+  },
+  {
+    "countryCode": "GM",
+    "name": "Short rains",
+    "localName": "Short rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Short rains"
+      }
+    ],
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Second rains, late planting"
+  },
+  {
+    "countryCode": "GM",
+    "name": "Dry season",
+    "localName": "Dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Dry season"
+      }
+    ],
+    "months": [12, 1, 2, 3],
+    "hemisphere": "north",
+    "description": "Dry, dusty Harmattan winds, cool mornings"
+  },
+  {
+    "countryCode": "GW",
+    "name": "Long rains",
+    "localName": "Long rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Long rains"
+      }
+    ],
+    "months": [4, 5, 6, 7],
+    "hemisphere": "north",
+    "description": "Heavy rains, flooding, main farming season"
+  },
+  {
+    "countryCode": "GW",
+    "name": "Short dry",
+    "localName": "Short dry",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Short dry"
+      }
+    ],
+    "months": [8],
+    "hemisphere": "north",
+    "description": "Brief dry spell, mid-season break"
+  },
+  {
+    "countryCode": "GW",
+    "name": "Short rains",
+    "localName": "Short rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Short rains"
+      }
+    ],
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Second rains, late planting"
+  },
+  {
+    "countryCode": "GW",
+    "name": "Dry season",
+    "localName": "Dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Dry season"
+      }
+    ],
+    "months": [12, 1, 2, 3],
+    "hemisphere": "north",
+    "description": "Dry, dusty Harmattan winds, cool mornings"
+  },
+  {
     "countryCode": "SN",
     "name": "Long rains",
     "localName": "Grande saison des pluies",
@@ -1248,70 +1472,6 @@
     "description": "Dry, dusty Harmattan winds, cool mornings"
   },
   {
-    "countryCode": "LR",
-    "name": "Long rains",
-    "localName": "Grande saison des pluies",
-    "months": [4, 5, 6, 7],
-    "hemisphere": "north",
-    "description": "Heavy rains, flooding, main farming season"
-  },
-  {
-    "countryCode": "LR",
-    "name": "Short dry",
-    "localName": "Petite saison sèche",
-    "months": [8],
-    "hemisphere": "north",
-    "description": "Brief dry spell, mid-season break"
-  },
-  {
-    "countryCode": "LR",
-    "name": "Short rains",
-    "localName": "Petite saison des pluies",
-    "months": [9, 10, 11],
-    "hemisphere": "north",
-    "description": "Second rains, late planting"
-  },
-  {
-    "countryCode": "LR",
-    "name": "Dry season",
-    "localName": "Harmattan",
-    "months": [12, 1, 2, 3],
-    "hemisphere": "north",
-    "description": "Dry, dusty Harmattan winds, cool mornings"
-  },
-  {
-    "countryCode": "SL",
-    "name": "Long rains",
-    "localName": "Grande saison des pluies",
-    "months": [4, 5, 6, 7],
-    "hemisphere": "north",
-    "description": "Heavy rains, flooding, main farming season"
-  },
-  {
-    "countryCode": "SL",
-    "name": "Short dry",
-    "localName": "Petite saison sèche",
-    "months": [8],
-    "hemisphere": "north",
-    "description": "Brief dry spell, mid-season break"
-  },
-  {
-    "countryCode": "SL",
-    "name": "Short rains",
-    "localName": "Petite saison des pluies",
-    "months": [9, 10, 11],
-    "hemisphere": "north",
-    "description": "Second rains, late planting"
-  },
-  {
-    "countryCode": "SL",
-    "name": "Dry season",
-    "localName": "Harmattan",
-    "months": [12, 1, 2, 3],
-    "hemisphere": "north",
-    "description": "Dry, dusty Harmattan winds, cool mornings"
-  },
-  {
     "countryCode": "GN",
     "name": "Long rains",
     "localName": "Grande saison des pluies",
@@ -1337,70 +1497,6 @@
   },
   {
     "countryCode": "GN",
-    "name": "Dry season",
-    "localName": "Harmattan",
-    "months": [12, 1, 2, 3],
-    "hemisphere": "north",
-    "description": "Dry, dusty Harmattan winds, cool mornings"
-  },
-  {
-    "countryCode": "GW",
-    "name": "Long rains",
-    "localName": "Grande saison des pluies",
-    "months": [4, 5, 6, 7],
-    "hemisphere": "north",
-    "description": "Heavy rains, flooding, main farming season"
-  },
-  {
-    "countryCode": "GW",
-    "name": "Short dry",
-    "localName": "Petite saison sèche",
-    "months": [8],
-    "hemisphere": "north",
-    "description": "Brief dry spell, mid-season break"
-  },
-  {
-    "countryCode": "GW",
-    "name": "Short rains",
-    "localName": "Petite saison des pluies",
-    "months": [9, 10, 11],
-    "hemisphere": "north",
-    "description": "Second rains, late planting"
-  },
-  {
-    "countryCode": "GW",
-    "name": "Dry season",
-    "localName": "Harmattan",
-    "months": [12, 1, 2, 3],
-    "hemisphere": "north",
-    "description": "Dry, dusty Harmattan winds, cool mornings"
-  },
-  {
-    "countryCode": "GM",
-    "name": "Long rains",
-    "localName": "Grande saison des pluies",
-    "months": [4, 5, 6, 7],
-    "hemisphere": "north",
-    "description": "Heavy rains, flooding, main farming season"
-  },
-  {
-    "countryCode": "GM",
-    "name": "Short dry",
-    "localName": "Petite saison sèche",
-    "months": [8],
-    "hemisphere": "north",
-    "description": "Brief dry spell, mid-season break"
-  },
-  {
-    "countryCode": "GM",
-    "name": "Short rains",
-    "localName": "Petite saison des pluies",
-    "months": [9, 10, 11],
-    "hemisphere": "north",
-    "description": "Second rains, late planting"
-  },
-  {
-    "countryCode": "GM",
     "name": "Dry season",
     "localName": "Harmattan",
     "months": [12, 1, 2, 3],

@@ -366,11 +366,13 @@ const SAHEL_SEASONS: SeasonTemplate[] = [
 ];
 const SAHEL_CODES = ["ML", "NE", "BF", "MR", "TD"];
 
-// ── West Africa, English names — Nigeria, Ghana ──────────────────────────
+// ── West Africa, English names — Nigeria, Ghana, Liberia, Sierra Leone, ──
+// ── The Gambia, Guinea-Bissau ─────────────────────────────────────────────
 // Bimodal rains near the coast, single season inland.
-// Nigeria and Ghana: English names only. These countries carried the French
-// names of the francophone coast ("Grande saison des pluies"), which neither
-// speaks. Local-language names are added only from a sourced speaker.
+// English names only. These countries carried the French names of the
+// francophone coast ("Grande saison des pluies"), which none of them speaks
+// (Guinea-Bissau's official language is Portuguese). Local-language names are
+// added only from a sourced speaker.
 const WEST_AFRICA_ENGLISH: SeasonTemplate[] = [
   {
     name: "Long rains",
@@ -405,11 +407,11 @@ const WEST_AFRICA_ENGLISH: SeasonTemplate[] = [
     description: "Dry, dusty Harmattan winds, cool mornings",
   },
 ];
-const WEST_AFRICA_ENGLISH_CODES = ["NG", "GH"];
+const WEST_AFRICA_ENGLISH_CODES = ["NG", "GH", "LR", "SL", "GM", "GW"];
 
-// ── West Africa coastal — Senegal, Côte d'Ivoire, Benin, Togo, etc. ─────
-// Same months, French names. (Liberia, Sierra Leone and The Gambia are
-// anglophone and still carry these: a follow-up, not decided here.)
+// ── West Africa coastal, francophone — Senegal, Côte d'Ivoire, Benin, ────
+// ── Togo, Guinea ──────────────────────────────────────────────────────────
+// Same months, French names.
 const WEST_AFRICA_COASTAL: SeasonTemplate[] = [
   {
     name: "Long rains",
@@ -440,17 +442,7 @@ const WEST_AFRICA_COASTAL: SeasonTemplate[] = [
     description: "Dry, dusty Harmattan winds, cool mornings",
   },
 ];
-const WEST_AFRICA_COASTAL_CODES = [
-  "SN",
-  "CI",
-  "BJ",
-  "TG",
-  "LR",
-  "SL",
-  "GN",
-  "GW",
-  "GM",
-];
+const WEST_AFRICA_COASTAL_CODES = ["SN", "CI", "BJ", "TG", "GN"];
 
 // ── Central Africa — Cameroon, DRC, Congo, Gabon, CAR, Eq. Guinea, STP ─
 // Equatorial double-maxima rainfall

@@ -92,15 +92,26 @@ describe("season names in the seed", () => {
     expect(at(7, "ZW18")).toBe("Chando"); // Masvingo
   });
 
-  it("Ghana and Nigeria: English names, no French", () => {
-    for (const code of ["GH", "NG"]) {
-      expect(rows(code)).toHaveLength(4);
+  it("anglophone and lusophone West Africa: English names, no French", () => {
+    // Ghana and Nigeria, and Liberia, Sierra Leone and The Gambia (anglophone),
+    // and Guinea-Bissau (Portuguese) carried the francophone coast's names.
+    for (const code of ["GH", "NG", "LR", "SL", "GM", "GW"]) {
+      expect(rows(code), code).toHaveLength(4);
       for (const s of rows(code)) {
         expect(s.names, `${code} ${s.name}`).toEqual([
           { lang: "en", name: s.name },
         ]);
         expect(JSON.stringify(s), `${code} ${s.name}`).not.toMatch(FRENCH);
       }
+    }
+  });
+
+  it("francophone West Africa keeps its French names", () => {
+    for (const code of ["SN", "CI", "BJ", "TG", "GN"]) {
+      expect(
+        rows(code).some((s) => FRENCH.test(s.localName)),
+        code,
+      ).toBe(true);
     }
   });
 
