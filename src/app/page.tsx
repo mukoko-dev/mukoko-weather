@@ -17,6 +17,7 @@ import { fetchPlaces } from "@/lib/weather-api";
 import { usableIpGeo } from "@/lib/location-choice";
 import { canonicalSlug } from "@/lib/slug-migration";
 import { LocationSkeleton } from "@/components/weather/LocationSkeleton";
+import { placeAdminPcode } from "@/lib/admin-pcodes";
 
 // Bound the Worker geo fetch so a hung or protected upstream can't stall
 // the home render — Harare, a shipped seed, is the fallback.
@@ -219,7 +220,9 @@ async function buildHome() {
   const countryCode = (location.country ?? "").toUpperCase();
   const initial: PlaceSeed = {
     location,
-    season: localSeason(new Date(), countryCode, location.lat ?? 0),
+    season: localSeason(new Date(), countryCode, location.lat ?? 0, {
+      region: placeAdminPcode(location),
+    }),
     countryName: countryDisplayName(countryCode),
   };
 

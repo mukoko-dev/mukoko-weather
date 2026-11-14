@@ -55,6 +55,7 @@ import {
 import type { RegionDoc } from "./seed-regions";
 import type { TagDoc } from "./seed-tags";
 import type { SeasonDoc } from "./seed-seasons";
+import { resolveSeasonName, type SeasonNameContext } from "./season-names";
 import type { ActivityCategoryDoc } from "./seed-categories";
 import type { AIPromptDoc, AISuggestedPromptRule } from "./seed-ai-prompts";
 import { workerUrl } from "@/lib/weather-api";
@@ -1506,6 +1507,25 @@ export async function syncSeasons(seasons: SeasonDoc[]): Promise<void> {
   if (bulkOps.length > 0) {
     await seasonsCollection().bulkWrite(bulkOps);
   }
+
+  // A row is keyed by (country, English name), so a season whose English name
+  // changed leaves the old row behind, with months that overlap the new one's.
+  // getSeasonFromDb takes the first row for a month, so the stale row could
+  // win. For each country the seed defines (and only those: rows of other
+  // countries, such as the retired AI enrichment's, are not ours to remove),
+  // drop the rows the seed no longer has.
+  const namesByCountry = new Map<string, string[]>();
+  for (const s of seasons) {
+    const names = namesByCountry.get(s.countryCode) ?? [];
+    names.push(s.name);
+    namesByCountry.set(s.countryCode, names);
+  }
+  const staleOps = [...namesByCountry].map(([countryCode, names]) => ({
+    deleteMany: { filter: { countryCode, name: { $nin: names } } },
+  }));
+  if (staleOps.length > 0) {
+    await seasonsCollection().bulkWrite(staleOps);
+  }
 }
 
 /**
@@ -1532,15 +1552,24 @@ export async function getSeasonForDate(
   date: Date = new Date(),
   countryCode: string = "",
   lat: number = 0,
+  names: SeasonNameContext = {},
 ): Promise<Season> {
   try {
     if (countryCode) {
       const doc = await getSeasonFromDb(date, countryCode);
       if (doc) {
-        // Guard: old pre-migration docs may have "shona" instead of "localName"
-        const localName =
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          doc.localName || ((doc as any).shona as string) || doc.name;
+        // The name for where the person is (`names`); a doc written before
+        // that field existed is read the old way, and a pre-migration doc may
+        // still have "shona" instead of "localName".
+        const localName = resolveSeasonName(
+          {
+            name: doc.name,
+            names: doc.names,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            localName: doc.localName || ((doc as any).shona as string),
+          },
+          names,
+        );
         return { name: doc.name, localName, description: doc.description };
       }
     }

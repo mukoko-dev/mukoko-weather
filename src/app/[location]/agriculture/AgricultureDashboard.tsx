@@ -25,6 +25,7 @@ import { fetchAgriculture } from "@/lib/agriculture-client";
 import type { WeatherLocation } from "@/lib/locations";
 import type { Season } from "@/lib/weather";
 import type { AISummaryUser } from "@/components/weather/AISummary";
+import { seasonLabel } from "@/lib/season-names";
 
 const AgricultureSnapshot = lazy(() =>
   import("@/components/weather/AgricultureSnapshot").then((m) => ({
@@ -113,8 +114,8 @@ export function AgricultureDashboard({ location, season, user }: Props) {
       <p className="mt-1 text-base text-text-secondary">
         {location.province} &middot; {location.elevation}m &middot;{" "}
         {data?.season
-          ? `${data.season.localName} (${data.season.name})`
-          : `${season.localName} (${season.name})`}
+          ? seasonLabel(data.season)
+          : seasonLabel(season)}
       </p>
 
       <div className="mt-4 mb-6">

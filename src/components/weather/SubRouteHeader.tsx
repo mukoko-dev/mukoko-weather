@@ -1,6 +1,7 @@
 import { SeasonBadge } from "@/components/weather/SeasonBadge";
 import type { WeatherLocation } from "@/lib/locations";
 import type { Season } from "@/lib/weather";
+import { seasonLabel } from "@/lib/season-names";
 
 /**
  * The heading block of `/[location]/forecast` and `/[location]/atmosphere`:
@@ -26,7 +27,7 @@ export function SubRouteHeader({
   const line = [
     location.province,
     location.elevationApproximate ? "" : `${location.elevation}m`,
-    `${season.localName} (${season.name})`,
+    seasonLabel(season),
   ]
     .filter(Boolean)
     .join(" · ");

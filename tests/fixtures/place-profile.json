@@ -17207,16 +17207,16 @@
       "rows": [
         {
           "countryCode": "ZW",
-          "name": "Main rains",
-          "localName": "Masika",
+          "name": "Summer rains",
+          "localName": "Summer rains",
           "months": [11, 12, 1, 2, 3],
           "hemisphere": "south",
           "description": "Flooding, road damage, planting"
         },
         {
           "countryCode": "ZW",
-          "name": "Short rains",
-          "localName": "Munakamwe",
+          "name": "Late rains and harvest",
+          "localName": "Late rains and harvest",
           "months": [4],
           "hemisphere": "south",
           "description": "Harvest, late rains"
@@ -17224,7 +17224,7 @@
         {
           "countryCode": "ZW",
           "name": "Cool dry",
-          "localName": "Chirimo",
+          "localName": "Cool dry",
           "months": [5, 6, 7, 8],
           "hemisphere": "south",
           "description": "Frost, cold snaps, veld fires"
@@ -17232,7 +17232,7 @@
         {
           "countryCode": "ZW",
           "name": "Hot dry",
-          "localName": "Zhizha",
+          "localName": "Hot dry",
           "months": [9, 10],
           "hemisphere": "south",
           "description": "Heat stress, UV, water scarcity"
@@ -17241,26 +17241,26 @@
       "out": {
         "calendar": [
           {
-            "name": "Short rains",
-            "localName": "Munakamwe",
+            "name": "Late rains and harvest",
+            "localName": "Late rains and harvest",
             "months": [4],
             "description": "Harvest, late rains"
           },
           {
             "name": "Cool dry",
-            "localName": "Chirimo",
+            "localName": "Cool dry",
             "months": [5, 6, 7, 8],
             "description": "Frost, cold snaps, veld fires"
           },
           {
             "name": "Hot dry",
-            "localName": "Zhizha",
+            "localName": "Hot dry",
             "months": [9, 10],
             "description": "Heat stress, UV, water scarcity"
           },
           {
-            "name": "Main rains",
-            "localName": "Masika",
+            "name": "Summer rains",
+            "localName": "Summer rains",
             "months": [11, 12, 1, 2, 3],
             "description": "Flooding, road damage, planting"
           }
@@ -17433,26 +17433,26 @@
       "out": {
         "calendar": [
           {
-            "name": "Short rains",
-            "localName": "Munakamwe",
+            "name": "Late rains and harvest",
+            "localName": "Late rains and harvest",
             "months": [4],
             "description": "Harvest, late rains"
           },
           {
             "name": "Cool dry",
-            "localName": "Chirimo",
+            "localName": "Cool dry",
             "months": [5, 6, 7, 8],
             "description": "Frost, cold snaps, veld fires"
           },
           {
             "name": "Hot dry",
-            "localName": "Zhizha",
+            "localName": "Hot dry",
             "months": [9, 10],
             "description": "Heat stress, UV, water scarcity"
           },
           {
-            "name": "Main rains",
-            "localName": "Masika",
+            "name": "Summer rains",
+            "localName": "Summer rains",
             "months": [11, 12, 1, 2, 3],
             "description": "Flooding, road damage, planting"
           }
@@ -17472,15 +17472,15 @@
       "day": "2026-01-01",
       "out": [
         {
-          "name": "Main rains",
-          "localName": "Masika",
+          "name": "Summer rains",
+          "localName": "Summer rains",
           "description": "Flooding, road damage, planting",
           "verified": true,
           "source": "seed"
         },
         {
-          "name": "Short rains",
-          "localName": "Munakamwe",
+          "name": "Late rains and harvest",
+          "localName": "Late rains and harvest",
           "startsOn": "2026-04-01"
         }
       ]
@@ -17490,15 +17490,15 @@
       "day": "2026-03-31",
       "out": [
         {
-          "name": "Main rains",
-          "localName": "Masika",
+          "name": "Summer rains",
+          "localName": "Summer rains",
           "description": "Flooding, road damage, planting",
           "verified": true,
           "source": "seed"
         },
         {
-          "name": "Short rains",
-          "localName": "Munakamwe",
+          "name": "Late rains and harvest",
+          "localName": "Late rains and harvest",
           "startsOn": "2026-04-01"
         }
       ]
@@ -17508,13 +17508,17 @@
       "day": "2026-04-01",
       "out": [
         {
-          "name": "Short rains",
-          "localName": "Munakamwe",
+          "name": "Late rains and harvest",
+          "localName": "Late rains and harvest",
           "description": "Harvest, late rains",
           "verified": true,
           "source": "seed"
         },
-        { "name": "Cool dry", "localName": "Chirimo", "startsOn": "2026-05-01" }
+        {
+          "name": "Cool dry",
+          "localName": "Cool dry",
+          "startsOn": "2026-05-01"
+        }
       ]
     },
     {
@@ -17523,12 +17527,12 @@
       "out": [
         {
           "name": "Cool dry",
-          "localName": "Chirimo",
+          "localName": "Cool dry",
           "description": "Frost, cold snaps, veld fires",
           "verified": true,
           "source": "seed"
         },
-        { "name": "Hot dry", "localName": "Zhizha", "startsOn": "2026-09-01" }
+        { "name": "Hot dry", "localName": "Hot dry", "startsOn": "2026-09-01" }
       ]
     },
     {
@@ -17537,14 +17541,14 @@
       "out": [
         {
           "name": "Hot dry",
-          "localName": "Zhizha",
+          "localName": "Hot dry",
           "description": "Heat stress, UV, water scarcity",
           "verified": true,
           "source": "seed"
         },
         {
-          "name": "Main rains",
-          "localName": "Masika",
+          "name": "Summer rains",
+          "localName": "Summer rains",
           "startsOn": "2026-11-01"
         }
       ]
@@ -17555,14 +17559,14 @@
       "out": [
         {
           "name": "Hot dry",
-          "localName": "Zhizha",
+          "localName": "Hot dry",
           "description": "Heat stress, UV, water scarcity",
           "verified": true,
           "source": "seed"
         },
         {
-          "name": "Main rains",
-          "localName": "Masika",
+          "name": "Summer rains",
+          "localName": "Summer rains",
           "startsOn": "2026-11-01"
         }
       ]
@@ -17572,15 +17576,15 @@
       "day": "2026-11-01",
       "out": [
         {
-          "name": "Main rains",
-          "localName": "Masika",
+          "name": "Summer rains",
+          "localName": "Summer rains",
           "description": "Flooding, road damage, planting",
           "verified": true,
           "source": "seed"
         },
         {
-          "name": "Short rains",
-          "localName": "Munakamwe",
+          "name": "Late rains and harvest",
+          "localName": "Late rains and harvest",
           "startsOn": "2027-04-01"
         }
       ]
@@ -17590,15 +17594,15 @@
       "day": "2026-12-31",
       "out": [
         {
-          "name": "Main rains",
-          "localName": "Masika",
+          "name": "Summer rains",
+          "localName": "Summer rains",
           "description": "Flooding, road damage, planting",
           "verified": true,
           "source": "seed"
         },
         {
-          "name": "Short rains",
-          "localName": "Munakamwe",
+          "name": "Late rains and harvest",
+          "localName": "Late rains and harvest",
           "startsOn": "2027-04-01"
         }
       ]
@@ -20062,26 +20066,26 @@
         "seasons": {
           "calendar": [
             {
-              "name": "Short rains",
-              "localName": "Munakamwe",
+              "name": "Late rains and harvest",
+              "localName": "Late rains and harvest",
               "months": [4],
               "description": "Harvest, late rains"
             },
             {
               "name": "Cool dry",
-              "localName": "Chirimo",
+              "localName": "Cool dry",
               "months": [5, 6, 7, 8],
               "description": "Frost, cold snaps, veld fires"
             },
             {
               "name": "Hot dry",
-              "localName": "Zhizha",
+              "localName": "Hot dry",
               "months": [9, 10],
               "description": "Heat stress, UV, water scarcity"
             },
             {
-              "name": "Main rains",
-              "localName": "Masika",
+              "name": "Summer rains",
+              "localName": "Summer rains",
               "months": [11, 12, 1, 2, 3],
               "description": "Flooding, road damage, planting"
             }
@@ -20251,14 +20255,14 @@
           "month": 10,
           "season": {
             "name": "Hot dry",
-            "localName": "Zhizha",
+            "localName": "Hot dry",
             "description": "Heat stress, UV, water scarcity",
             "verified": true,
             "source": "seed"
           },
           "nextSeason": {
-            "name": "Main rains",
-            "localName": "Masika",
+            "name": "Summer rains",
+            "localName": "Summer rains",
             "startsOn": "2026-11-01"
           },
           "normalsThisMonth": {
@@ -20320,7 +20324,7 @@
         },
         "season": {
           "name": "Hot dry",
-          "localName": "Zhizha",
+          "localName": "Hot dry",
           "description": "Heat stress, UV, water scarcity",
           "verified": true,
           "source": "seed"
@@ -20343,7 +20347,7 @@
         "koppen": "Cwa",
         "enso": { "phase": "La Niña", "oni": -0.6 }
       },
-      "block": "Place profile (stored facts about this place; lines marked ~ are derived estimates — present them as approximate, never as fact):\n- Harare, ZW; 1490 m; southern hemisphere; Africa/Harare\n- ~Climate zone Cwa (humid subtropical, dry winter)\n- Oct normals (ERA5 1991–2020): high 27°C, low 17°C, rain 38 mm on 4 days\n- Season: Hot dry (Zhizha); next Main rains (Masika) from 1 Nov\n- Crop calendar (GEOGLAM, Mashonaland East): maize out of season, planting to early vegetative from 1 Nov; sorghum out of season, planting to early vegetative from 16 Nov; winter wheat ripening through harvest, end of harvest from 1 Nov\n- ~Grazing: normal rain under 30 mm in 6 months, when forage and surface water are usually scarcer\n- Soil (SoilGrids model): Lixisols, sandy clay loam\n- ENSO La Niña (weak); moon first quarter; day length 12.6 h, lengthening",
+      "block": "Place profile (stored facts about this place; lines marked ~ are derived estimates — present them as approximate, never as fact):\n- Harare, ZW; 1490 m; southern hemisphere; Africa/Harare\n- ~Climate zone Cwa (humid subtropical, dry winter)\n- Oct normals (ERA5 1991–2020): high 27°C, low 17°C, rain 38 mm on 4 days\n- Season: Hot dry; next Summer rains from 1 Nov\n- Crop calendar (GEOGLAM, Mashonaland East): maize out of season, planting to early vegetative from 1 Nov; sorghum out of season, planting to early vegetative from 16 Nov; winter wheat ripening through harvest, end of harvest from 1 Nov\n- ~Grazing: normal rain under 30 mm in 6 months, when forage and surface water are usually scarcer\n- Soil (SoilGrids model): Lixisols, sandy clay loam\n- ENSO La Niña (weak); moon first quarter; day length 12.6 h, lengthening",
       "koppenOnly": null
     },
     {
@@ -20609,26 +20613,26 @@
         "seasons": {
           "calendar": [
             {
-              "name": "Short rains",
-              "localName": "Munakamwe",
+              "name": "Late rains and harvest",
+              "localName": "Late rains and harvest",
               "months": [4],
               "description": "Harvest, late rains"
             },
             {
               "name": "Cool dry",
-              "localName": "Chirimo",
+              "localName": "Cool dry",
               "months": [5, 6, 7, 8],
               "description": "Frost, cold snaps, veld fires"
             },
             {
               "name": "Hot dry",
-              "localName": "Zhizha",
+              "localName": "Hot dry",
               "months": [9, 10],
               "description": "Heat stress, UV, water scarcity"
             },
             {
-              "name": "Main rains",
-              "localName": "Masika",
+              "name": "Summer rains",
+              "localName": "Summer rains",
               "months": [11, 12, 1, 2, 3],
               "description": "Flooding, road damage, planting"
             }
@@ -20797,15 +20801,15 @@
           "date": "2027-01-01",
           "month": 1,
           "season": {
-            "name": "Main rains",
-            "localName": "Masika",
+            "name": "Summer rains",
+            "localName": "Summer rains",
             "description": "Flooding, road damage, planting",
             "verified": true,
             "source": "seed"
           },
           "nextSeason": {
-            "name": "Short rains",
-            "localName": "Munakamwe",
+            "name": "Late rains and harvest",
+            "localName": "Late rains and harvest",
             "startsOn": "2027-04-01"
           },
           "normalsThisMonth": {
@@ -20866,8 +20870,8 @@
           }
         },
         "season": {
-          "name": "Main rains",
-          "localName": "Masika",
+          "name": "Summer rains",
+          "localName": "Summer rains",
           "description": "Flooding, road damage, planting",
           "verified": true,
           "source": "seed"
@@ -20890,7 +20894,7 @@
         "koppen": "Cwa",
         "enso": { "phase": "La Niña", "oni": -0.6 }
       },
-      "block": "Place profile (stored facts about this place; lines marked ~ are derived estimates — present them as approximate, never as fact):\n- Harare, ZW; 1490 m; southern hemisphere; Africa/Harare\n- ~Climate zone Cwa (humid subtropical, dry winter)\n- Jan normals (ERA5 1991–2020): high 26°C, low 16°C, rain 190 mm on 21 days\n- Season: Main rains (Masika); next Short rains (Munakamwe) from 1 Apr\n- Crop calendar (GEOGLAM, Mashonaland East): maize vegetative to reproductive, ripening through harvest from 1 Apr; sorghum vegetative to reproductive, ripening through harvest from 16 Mar; winter wheat out of season, planting to early vegetative from 16 Apr\n- ~Grazing: normal rain under 30 mm in 6 months, when forage and surface water are usually scarcer\n- Soil (SoilGrids model): Lixisols, sandy clay loam\n- ENSO La Niña (weak); moon last quarter; day length 13.2 h, shortening",
+      "block": "Place profile (stored facts about this place; lines marked ~ are derived estimates — present them as approximate, never as fact):\n- Harare, ZW; 1490 m; southern hemisphere; Africa/Harare\n- ~Climate zone Cwa (humid subtropical, dry winter)\n- Jan normals (ERA5 1991–2020): high 26°C, low 16°C, rain 190 mm on 21 days\n- Season: Summer rains; next Late rains and harvest from 1 Apr\n- Crop calendar (GEOGLAM, Mashonaland East): maize vegetative to reproductive, ripening through harvest from 1 Apr; sorghum vegetative to reproductive, ripening through harvest from 16 Mar; winter wheat out of season, planting to early vegetative from 16 Apr\n- ~Grazing: normal rain under 30 mm in 6 months, when forage and surface water are usually scarcer\n- Soil (SoilGrids model): Lixisols, sandy clay loam\n- ENSO La Niña (weak); moon last quarter; day length 13.2 h, shortening",
       "koppenOnly": null
     },
     {
@@ -21156,26 +21160,26 @@
         "seasons": {
           "calendar": [
             {
-              "name": "Short rains",
-              "localName": "Munakamwe",
+              "name": "Late rains and harvest",
+              "localName": "Late rains and harvest",
               "months": [4],
               "description": "Harvest, late rains"
             },
             {
               "name": "Cool dry",
-              "localName": "Chirimo",
+              "localName": "Cool dry",
               "months": [5, 6, 7, 8],
               "description": "Frost, cold snaps, veld fires"
             },
             {
               "name": "Hot dry",
-              "localName": "Zhizha",
+              "localName": "Hot dry",
               "months": [9, 10],
               "description": "Heat stress, UV, water scarcity"
             },
             {
-              "name": "Main rains",
-              "localName": "Masika",
+              "name": "Summer rains",
+              "localName": "Summer rains",
               "months": [11, 12, 1, 2, 3],
               "description": "Flooding, road damage, planting"
             }
@@ -21344,15 +21348,15 @@
           "date": "2027-04-01",
           "month": 4,
           "season": {
-            "name": "Short rains",
-            "localName": "Munakamwe",
+            "name": "Late rains and harvest",
+            "localName": "Late rains and harvest",
             "description": "Harvest, late rains",
             "verified": true,
             "source": "seed"
           },
           "nextSeason": {
             "name": "Cool dry",
-            "localName": "Chirimo",
+            "localName": "Cool dry",
             "startsOn": "2027-05-01"
           },
           "normalsThisMonth": {
@@ -21413,8 +21417,8 @@
           }
         },
         "season": {
-          "name": "Short rains",
-          "localName": "Munakamwe",
+          "name": "Late rains and harvest",
+          "localName": "Late rains and harvest",
           "description": "Harvest, late rains",
           "verified": true,
           "source": "seed"
@@ -21437,7 +21441,7 @@
         "koppen": "Cwa",
         "enso": { "phase": "La Niña", "oni": -0.6 }
       },
-      "block": "Place profile (stored facts about this place; lines marked ~ are derived estimates — present them as approximate, never as fact):\n- Harare, ZW; 1490 m; southern hemisphere; Africa/Harare\n- ~Climate zone Cwa (humid subtropical, dry winter)\n- Apr normals (ERA5 1991–2020): high 24°C, low 14°C, rain 28 mm on 3 days\n- Season: Short rains (Munakamwe); next Cool dry (Chirimo) from 1 May\n- Crop calendar (GEOGLAM, Mashonaland East): maize ripening through harvest, end of harvest from 16 May; sorghum ripening through harvest, end of harvest from 16 Apr; winter wheat out of season, planting to early vegetative from 16 Apr\n- ~Grazing: normal rain under 30 mm in 6 months, when forage and surface water are usually scarcer\n- Soil (SoilGrids model): Lixisols, sandy clay loam\n- ENSO La Niña (weak); moon last quarter; day length 11.9 h, shortening",
+      "block": "Place profile (stored facts about this place; lines marked ~ are derived estimates — present them as approximate, never as fact):\n- Harare, ZW; 1490 m; southern hemisphere; Africa/Harare\n- ~Climate zone Cwa (humid subtropical, dry winter)\n- Apr normals (ERA5 1991–2020): high 24°C, low 14°C, rain 28 mm on 3 days\n- Season: Late rains and harvest; next Cool dry from 1 May\n- Crop calendar (GEOGLAM, Mashonaland East): maize ripening through harvest, end of harvest from 16 May; sorghum ripening through harvest, end of harvest from 16 Apr; winter wheat out of season, planting to early vegetative from 16 Apr\n- ~Grazing: normal rain under 30 mm in 6 months, when forage and surface water are usually scarcer\n- Soil (SoilGrids model): Lixisols, sandy clay loam\n- ENSO La Niña (weak); moon last quarter; day length 11.9 h, shortening",
       "koppenOnly": null
     },
     {

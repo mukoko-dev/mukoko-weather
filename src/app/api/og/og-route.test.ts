@@ -402,7 +402,8 @@ describe("OG image wiring in metadata", () => {
       resolve(__dirname, "../../../lib/place-seed-server.ts"),
       "utf-8",
     );
-    expect(payload).toContain("cache((");
+    // `cache(` then the arrow function, however the formatter wraps it.
+    expect(payload).toMatch(/cache\(\s*\(/);
     expect(payload).toContain("getSeasonForDate");
   });
 

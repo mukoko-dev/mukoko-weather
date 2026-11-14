@@ -12,13 +12,40 @@
  * Sources: national meteorological services, WMO climate normals, FAO crop calendars.
  */
 
+/**
+ * One name for a season, in one language, optionally only for some regions.
+ * Season names change by region, not by country: Zimbabwe's summer rains are
+ * Zhizha in Shona-speaking provinces and Ihlobo in Ndebele-speaking ones.
+ */
+export interface SeasonName {
+  /** BCP 47 language tag ("en", "sn", "nd", "af"). */
+  lang: string;
+  name: string;
+  /**
+   * Admin-1 P-codes (OCHA COD-AB, as in `agriculture.adminAreas`) this name
+   * is used in. Absent: the name is for the whole country.
+   */
+  regions?: string[];
+}
+
 export interface SeasonDoc {
   /** ISO 3166-1 alpha-2 country code */
   countryCode: string;
   /** English season name */
   name: string;
-  /** Local language name */
+  /**
+   * DEPRECATED, kept while readers move to `names` (the Rust Workers still
+   * read it). A single name locked a country to one language, so on a row
+   * that has `names` this is the English name. Rows not yet converted still
+   * carry their old single local name here.
+   */
   localName: string;
+  /**
+   * The season's names by language and region. Resolve with
+   * `resolveSeasonName` (season-names.ts): the user's region first, then
+   * their language, then English. Absent on rows not yet converted.
+   */
+  names?: SeasonName[];
   /** 1-based months that belong to this season (e.g. [11, 12, 1, 2, 3]) */
   months: number[];
   hemisphere: "north" | "south" | "equatorial";
@@ -30,6 +57,7 @@ export interface SeasonDoc {
 interface SeasonTemplate {
   name: string;
   localName: string;
+  names?: SeasonName[];
   months: number[];
   hemisphere: "north" | "south" | "equatorial";
   description: string;
@@ -46,19 +74,49 @@ function expand(codes: string[], templates: SeasonTemplate[]): SeasonDoc[] {
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── Zimbabwe (ZW) ─────────────────────────────────────────────────────────
+// Shona is spoken in the five Mashonaland/Manicaland/Masvingo/Midlands
+// provinces and Harare, Ndebele in Matabeleland North and South and Bulawayo.
+// The codes are the province P-codes of OCHA COD-AB (HDX cod-ab-zwe, as held
+// in `agriculture.adminAreas`); the names and the month edges still need
+// confirming by a native Shona and a native Ndebele speaker.
+const ZW_SHONA_REGIONS = [
+  "ZW11", // Manicaland
+  "ZW12", // Mashonaland Central
+  "ZW13", // Mashonaland East
+  "ZW14", // Mashonaland West
+  "ZW17", // Midlands
+  "ZW18", // Masvingo
+  "ZW19", // Harare
+];
+const ZW_NDEBELE_REGIONS = [
+  "ZW10", // Bulawayo
+  "ZW15", // Matabeleland North
+  "ZW16", // Matabeleland South
+];
+const zwNames = (
+  name: string,
+  shona: string,
+  ndebele: string,
+): SeasonName[] => [
+  { lang: "en", name },
+  { lang: "sn", name: shona, regions: ZW_SHONA_REGIONS },
+  { lang: "nd", name: ndebele, regions: ZW_NDEBELE_REGIONS },
+];
 const ZW_SEASONS: SeasonDoc[] = [
   {
     countryCode: "ZW",
-    name: "Main rains",
-    localName: "Masika",
+    name: "Summer rains",
+    localName: "Summer rains",
+    names: zwNames("Summer rains", "Zhizha", "Ihlobo"),
     months: [11, 12, 1, 2, 3],
     hemisphere: "south",
     description: "Flooding, road damage, planting",
   },
   {
     countryCode: "ZW",
-    name: "Short rains",
-    localName: "Munakamwe",
+    name: "Late rains and harvest",
+    localName: "Late rains and harvest",
+    names: zwNames("Late rains and harvest", "Matsutso", "Ikwindla"),
     months: [4],
     hemisphere: "south",
     description: "Harvest, late rains",
@@ -66,7 +124,8 @@ const ZW_SEASONS: SeasonDoc[] = [
   {
     countryCode: "ZW",
     name: "Cool dry",
-    localName: "Chirimo",
+    localName: "Cool dry",
+    names: zwNames("Cool dry", "Chando", "Ubusika"),
     months: [5, 6, 7, 8],
     hemisphere: "south",
     description: "Frost, cold snaps, veld fires",
@@ -74,7 +133,8 @@ const ZW_SEASONS: SeasonDoc[] = [
   {
     countryCode: "ZW",
     name: "Hot dry",
-    localName: "Zhizha",
+    localName: "Hot dry",
+    names: zwNames("Hot dry", "Chirimo", "Intwasahlobo"),
     months: [9, 10],
     hemisphere: "south",
     description: "Heat stress, UV, water scarcity",
@@ -83,10 +143,12 @@ const ZW_SEASONS: SeasonDoc[] = [
 
 // ── Southern Africa (similar to ZW) ──────────────────────────────────────
 // Zambia, Mozambique, Malawi, Botswana, Namibia, Angola, eSwatini, Lesotho
+// English only until a speaker of each language sources the local names.
 const SOUTHERN_AFRICA_WET_DRY: SeasonTemplate[] = [
   {
     name: "Wet season",
-    localName: "Rainy season",
+    localName: "Wet season",
+    names: [{ lang: "en", name: "Wet season" }],
     months: [11, 12, 1, 2, 3],
     hemisphere: "south",
     description: "Heavy rains, flooding, planting season",
@@ -94,20 +156,23 @@ const SOUTHERN_AFRICA_WET_DRY: SeasonTemplate[] = [
   {
     name: "Late rains",
     localName: "Late rains",
+    names: [{ lang: "en", name: "Late rains" }],
     months: [4],
     hemisphere: "south",
     description: "Harvest, scattered showers",
   },
   {
     name: "Cool dry season",
-    localName: "Winter",
+    localName: "Cool dry season",
+    names: [{ lang: "en", name: "Cool dry season" }],
     months: [5, 6, 7, 8],
     hemisphere: "south",
     description: "Cool temperatures, frost risk in highlands",
   },
   {
     name: "Hot dry season",
-    localName: "Pre-rains",
+    localName: "Hot dry season",
+    names: [{ lang: "en", name: "Hot dry season" }],
     months: [9, 10],
     hemisphere: "south",
     description: "Heat, dust, bushfire risk",
@@ -120,7 +185,11 @@ const ZA_SEASONS: SeasonDoc[] = [
   {
     countryCode: "ZA",
     name: "Summer",
-    localName: "Somer",
+    localName: "Summer",
+    names: [
+      { lang: "en", name: "Summer" },
+      { lang: "af", name: "Somer" },
+    ],
     months: [12, 1, 2],
     hemisphere: "south",
     description: "Hot, thunderstorms in the interior, beach season",
@@ -128,7 +197,11 @@ const ZA_SEASONS: SeasonDoc[] = [
   {
     countryCode: "ZA",
     name: "Autumn",
-    localName: "Herfs",
+    localName: "Autumn",
+    names: [
+      { lang: "en", name: "Autumn" },
+      { lang: "af", name: "Herfs" },
+    ],
     months: [3, 4, 5],
     hemisphere: "south",
     description: "Cooling, grape harvest, moderate rainfall",
@@ -137,6 +210,10 @@ const ZA_SEASONS: SeasonDoc[] = [
     countryCode: "ZA",
     name: "Winter",
     localName: "Winter",
+    names: [
+      { lang: "en", name: "Winter" },
+      { lang: "af", name: "Winter" },
+    ],
     months: [6, 7, 8],
     hemisphere: "south",
     description: "Cold, Cape rains, snow on peaks, frost inland",
@@ -144,7 +221,11 @@ const ZA_SEASONS: SeasonDoc[] = [
   {
     countryCode: "ZA",
     name: "Spring",
-    localName: "Lente",
+    localName: "Spring",
+    names: [
+      { lang: "en", name: "Spring" },
+      { lang: "af", name: "Lente" },
+    ],
     months: [9, 10, 11],
     hemisphere: "south",
     description: "Warming, wildflower blooms, jacaranda season",
@@ -285,8 +366,50 @@ const SAHEL_SEASONS: SeasonTemplate[] = [
 ];
 const SAHEL_CODES = ["ML", "NE", "BF", "MR", "TD"];
 
-// ── West Africa coastal — Nigeria, Ghana, Senegal, Côte d'Ivoire, etc. ─
-// Bimodal rains near the coast, single season inland
+// ── West Africa, English names — Nigeria, Ghana ──────────────────────────
+// Bimodal rains near the coast, single season inland.
+// Nigeria and Ghana: English names only. These countries carried the French
+// names of the francophone coast ("Grande saison des pluies"), which neither
+// speaks. Local-language names are added only from a sourced speaker.
+const WEST_AFRICA_ENGLISH: SeasonTemplate[] = [
+  {
+    name: "Long rains",
+    localName: "Long rains",
+    names: [{ lang: "en", name: "Long rains" }],
+    months: [4, 5, 6, 7],
+    hemisphere: "north",
+    description: "Heavy rains, flooding, main farming season",
+  },
+  {
+    name: "Short dry",
+    localName: "Short dry",
+    names: [{ lang: "en", name: "Short dry" }],
+    months: [8],
+    hemisphere: "north",
+    description: "Brief dry spell, mid-season break",
+  },
+  {
+    name: "Short rains",
+    localName: "Short rains",
+    names: [{ lang: "en", name: "Short rains" }],
+    months: [9, 10, 11],
+    hemisphere: "north",
+    description: "Second rains, late planting",
+  },
+  {
+    name: "Dry season",
+    localName: "Dry season",
+    names: [{ lang: "en", name: "Dry season" }],
+    months: [12, 1, 2, 3],
+    hemisphere: "north",
+    description: "Dry, dusty Harmattan winds, cool mornings",
+  },
+];
+const WEST_AFRICA_ENGLISH_CODES = ["NG", "GH"];
+
+// ── West Africa coastal — Senegal, Côte d'Ivoire, Benin, Togo, etc. ─────
+// Same months, French names. (Liberia, Sierra Leone and The Gambia are
+// anglophone and still carry these: a follow-up, not decided here.)
 const WEST_AFRICA_COASTAL: SeasonTemplate[] = [
   {
     name: "Long rains",
@@ -318,8 +441,6 @@ const WEST_AFRICA_COASTAL: SeasonTemplate[] = [
   },
 ];
 const WEST_AFRICA_COASTAL_CODES = [
-  "NG",
-  "GH",
   "SN",
   "CI",
   "BJ",
@@ -581,6 +702,7 @@ export const SEASONS: SeasonDoc[] = [
 
   // West Africa
   ...expand(SAHEL_CODES, SAHEL_SEASONS),
+  ...expand(WEST_AFRICA_ENGLISH_CODES, WEST_AFRICA_ENGLISH),
   ...expand(WEST_AFRICA_COASTAL_CODES, WEST_AFRICA_COASTAL),
   ...CV_SEASONS,
 

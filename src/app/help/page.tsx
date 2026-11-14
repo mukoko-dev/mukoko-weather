@@ -224,9 +224,10 @@ export default function HelpPage() {
           <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
             <p>
               mukoko weather displays country-specific seasonal context on
-              forecast pages. Season data covers 50+ countries with local season
-              names and agricultural calendars — from Zimbabwe&apos;s Masika and
-              Chirimo to tropical monsoon and dry seasons across Africa, Asia,
+              forecast pages. Season data covers 50+ countries, with season
+              names that follow where you are rather than one name for a whole
+              country, and agricultural calendars — from Zimbabwe&apos;s
+              provinces to tropical monsoon and dry seasons across Africa, Asia,
               and beyond.
             </p>
             <p>

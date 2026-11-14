@@ -209,26 +209,26 @@ This queue is a workaround for memory pressure, not the design (see Platform dir
 
 ### Collections
 
-| Collection            |        TTL         | Purpose                                                                                   |
-| --------------------- | :----------------: | ----------------------------------------------------------------------------------------- |
-| `ai_summaries`        |   30/60/120 min    | Cached AI weather summaries (tiered by location). Now KV in the AI Worker; no longer read |
-| `weather_history`     |        None        | Permanent historical weather records                                                      |
-| `history_analysis`    |       1 hour       | Unused: AI history analyses are cached in the AI Worker's KV (`history:v1:`)              |
-| `locations`           |        None        | Seed + community locations                                                                |
-| `activities`          |        None        | Activity definitions (30+ activities, 6 categories)                                       |
-| `activity_categories` |        None        | Category metadata with mineral color styles                                               |
-| `suitability_rules`   |        None        | Condition-based weather suitability rules                                                 |
-| `tags`                |        None        | Tag metadata (slug, label, icon, featured)                                                |
-| `regions`             |        None        | Supported geographic regions (bounding boxes)                                             |
-| `seasons`             |        None        | Country-specific season definitions                                                       |
-| `countries`           |        None        | Country metadata (54 AU + ASEAN)                                                          |
-| `provinces`           |        None        | Province/state metadata                                                                   |
-| `ai_prompts`          |        None        | Database-driven AI system prompts                                                         |
-| `ai_suggested_rules`  |        None        | Dynamic suggested prompt rules                                                            |
-| `weather_reports`     | TTL on `expiresAt` | Community weather reports (24h/48h/72h by severity); written by the MongoDB bridge Worker |
-| `device_profiles`     |        None        | Cross-device preference sync (anonymous UUID); written by the MongoDB bridge Worker       |
-| `rate_limits`         | TTL on `expiresAt` | IP rate limiting (atomic findOneAndUpdate)                                                |
-| `api_keys`            |        None        | Third-party API keys (Tomorrow.io, Stytch)                                                |
+| Collection            |        TTL         | Purpose                                                                                                                       |
+| --------------------- | :----------------: | ----------------------------------------------------------------------------------------------------------------------------- |
+| `ai_summaries`        |   30/60/120 min    | Cached AI weather summaries (tiered by location). Now KV in the AI Worker; no longer read                                     |
+| `weather_history`     |        None        | Permanent historical weather records                                                                                          |
+| `history_analysis`    |       1 hour       | Unused: AI history analyses are cached in the AI Worker's KV (`history:v1:`)                                                  |
+| `locations`           |        None        | Seed + community locations                                                                                                    |
+| `activities`          |        None        | Activity definitions (30+ activities, 6 categories)                                                                           |
+| `activity_categories` |        None        | Category metadata with mineral color styles                                                                                   |
+| `suitability_rules`   |        None        | Condition-based weather suitability rules                                                                                     |
+| `tags`                |        None        | Tag metadata (slug, label, icon, featured)                                                                                    |
+| `regions`             |        None        | Supported geographic regions (bounding boxes)                                                                                 |
+| `seasons`             |        None        | Country season calendars; `names` gives each season a name by language and region (admin-1 P-code), `localName` is deprecated |
+| `countries`           |        None        | Country metadata (54 AU + ASEAN)                                                                                              |
+| `provinces`           |        None        | Province/state metadata                                                                                                       |
+| `ai_prompts`          |        None        | Database-driven AI system prompts                                                                                             |
+| `ai_suggested_rules`  |        None        | Dynamic suggested prompt rules                                                                                                |
+| `weather_reports`     | TTL on `expiresAt` | Community weather reports (24h/48h/72h by severity); written by the MongoDB bridge Worker                                     |
+| `device_profiles`     |        None        | Cross-device preference sync (anonymous UUID); written by the MongoDB bridge Worker                                           |
+| `rate_limits`         | TTL on `expiresAt` | IP rate limiting (atomic findOneAndUpdate)                                                                                    |
+| `api_keys`            |        None        | Third-party API keys (Tomorrow.io, Stytch)                                                                                    |
 
 A signed-in person's activities and saved places are not in this list: they belong to the person, not to a weather collection, and live on the person's own `identity.persons` record (off until nyuchi applies the validator change; see [docs/mongodb-schema-map.md](docs/mongodb-schema-map.md)).
 

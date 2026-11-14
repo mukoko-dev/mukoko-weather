@@ -23,8 +23,9 @@ football match — each with a feasibility trend and deterministic, weather-driv
 advice (rain windows, spraying wind, frost, UV, heat, storm safety).
 
 It was built for places the global providers model badly. Zimbabwe is the
-reference market: 98 seed locations there, country-specific seasons under their
-local names (Masika, Chirimo, Zhizha, Munakamwe), and a mining and smallholder
+reference market: 98 seed locations there, country-specific seasons named for where
+you are (a Shona or an Ndebele name by province in Zimbabwe; English where no
+local name is sourced yet), and a mining and smallholder
 farming vocabulary. The same machinery now covers 265 seed locations across 64
 countries, and grows by use — a search or a GPS fix in an unmapped place
 reverse-geocodes through Nominatim and becomes a location.
