@@ -259,6 +259,8 @@ pub fn summary_identity(
 }
 
 /// The summary's user message, byte for byte what the Python backend built
+/// (except that a season whose local name is its English name is written once,
+/// see `season_label`)
 /// from `WeatherData` (`api/py/_ai.py`, pinned by `tests/fixtures/ai-summary.json`).
 ///
 /// `activities` are the summary's activity ids ([`summary_activities`]); their
@@ -335,7 +337,7 @@ The country and specific location matter: ground every recommendation in this pl
 
 Current conditions: {current}
 3-day forecast summary: max temps {max}, min temps {min}, weather codes {codes}{insights}
-Season: {local} ({season}){profile_block}
+Season: {season_label}{profile_block}
 
 Provide:
 1. A 2-sentence general summary
@@ -347,8 +349,7 @@ Provide:
         max = py_dumps(&first_n(&daily["temperature_2m_max"], 3)),
         min = py_dumps(&first_n(&daily["temperature_2m_min"], 3)),
         codes = py_dumps(&first_n(&daily["weather_code"], 3)),
-        local = season.local_name,
-        season = season.name,
+        season_label = season_label(&season.local_name, &season.name),
     )
 }
 
@@ -391,6 +392,17 @@ fn insights_line(data: &Value) -> String {
     }
 }
 
+/// How the prompts name a season: the local name with the English one beside
+/// it when they differ ("Masika (Long rains)"), else the name once. A row with
+/// no name of its own apart from English used to print "Summer rains (Summer
+/// rains)".
+pub(super) fn season_label(local: &str, name: &str) -> String {
+    if local.is_empty() || local == name {
+        name.to_owned()
+    } else {
+        format!("{local} ({name})")
+    }
+}
 /// The summary served when the model cannot answer: the Python backend's
 /// fallback text, except that the description's own full stop is not doubled
 /// (the one visible typo fixed). The temperature rounds half to even, as
@@ -404,9 +416,12 @@ pub fn fallback_insight(location_name: &str, data: &Value, season: &Season) -> S
         py_scalar(&data["current"]["relative_humidity_2m"]).unwrap_or_else(|| "N/A".into());
     format!(
         "Current conditions in {location_name}: {temp}\u{00B0}C with {humidity}% humidity. \
-         We are in the {local} season ({name}). {desc}. Stay informed and plan your day accordingly.",
-        local = season.local_name,
-        name = season.name,
+         We are in the {season_phrase}. {desc}. Stay informed and plan your day accordingly.",
+        season_phrase = if season.local_name.is_empty() || season.local_name == season.name {
+            format!("{} season", season.name)
+        } else {
+            format!("{} season ({})", season.local_name, season.name)
+        },
         desc = season.description.trim_end_matches('.'),
     )
 }
@@ -668,13 +683,12 @@ pub fn history_request(
     };
     format!(
         "Analyze this weather history for {location_name} (elevation: {elevation}m).
-Season: {local} ({name}) — {desc}
+Season: {season_label} — {desc}
 {note}{profile}
 
 Statistical summary:
 {stats}",
-        local = season.local_name,
-        name = season.name,
+        season_label = season_label(&season.local_name, &season.name),
         desc = season.description,
     )
 }
@@ -719,7 +733,7 @@ mod tests {
         let s = season(-17.8, at(10));
         assert_eq!(
             fallback_insight("Harare", &data(), &s),
-            "Current conditions in Harare: 25\u{b0}C with 40% humidity. We are in the Spring season (Spring). Warming temperatures, early rains possible. Stay informed and plan your day accordingly."
+            "Current conditions in Harare: 25\u{b0}C with 40% humidity. We are in the Spring season. Warming temperatures, early rains possible. Stay informed and plan your day accordingly."
         );
         let empty = fallback_insight("X", &json!({}), &s);
         assert!(empty.starts_with("Current conditions in X: N/A\u{b0}C with N/A% humidity."));

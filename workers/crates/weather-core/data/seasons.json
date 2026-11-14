@@ -1,16 +1,48 @@
 [
   {
     "countryCode": "ZW",
-    "name": "Main rains",
-    "localName": "Masika",
+    "name": "Summer rains",
+    "localName": "Summer rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Summer rains"
+      },
+      {
+        "lang": "sn",
+        "name": "Zhizha",
+        "regions": ["ZW11", "ZW12", "ZW13", "ZW14", "ZW17", "ZW18", "ZW19"]
+      },
+      {
+        "lang": "nd",
+        "name": "Ihlobo",
+        "regions": ["ZW10", "ZW15", "ZW16"]
+      }
+    ],
     "months": [11, 12, 1, 2, 3],
     "hemisphere": "south",
     "description": "Flooding, road damage, planting"
   },
   {
     "countryCode": "ZW",
-    "name": "Short rains",
-    "localName": "Munakamwe",
+    "name": "Late rains and harvest",
+    "localName": "Late rains and harvest",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Late rains and harvest"
+      },
+      {
+        "lang": "sn",
+        "name": "Matsutso",
+        "regions": ["ZW11", "ZW12", "ZW13", "ZW14", "ZW17", "ZW18", "ZW19"]
+      },
+      {
+        "lang": "nd",
+        "name": "Ikwindla",
+        "regions": ["ZW10", "ZW15", "ZW16"]
+      }
+    ],
     "months": [4],
     "hemisphere": "south",
     "description": "Harvest, late rains"
@@ -18,7 +50,23 @@
   {
     "countryCode": "ZW",
     "name": "Cool dry",
-    "localName": "Chirimo",
+    "localName": "Cool dry",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Cool dry"
+      },
+      {
+        "lang": "sn",
+        "name": "Chando",
+        "regions": ["ZW11", "ZW12", "ZW13", "ZW14", "ZW17", "ZW18", "ZW19"]
+      },
+      {
+        "lang": "nd",
+        "name": "Ubusika",
+        "regions": ["ZW10", "ZW15", "ZW16"]
+      }
+    ],
     "months": [5, 6, 7, 8],
     "hemisphere": "south",
     "description": "Frost, cold snaps, veld fires"
@@ -26,7 +74,23 @@
   {
     "countryCode": "ZW",
     "name": "Hot dry",
-    "localName": "Zhizha",
+    "localName": "Hot dry",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Hot dry"
+      },
+      {
+        "lang": "sn",
+        "name": "Chirimo",
+        "regions": ["ZW11", "ZW12", "ZW13", "ZW14", "ZW17", "ZW18", "ZW19"]
+      },
+      {
+        "lang": "nd",
+        "name": "Intwasahlobo",
+        "regions": ["ZW10", "ZW15", "ZW16"]
+      }
+    ],
     "months": [9, 10],
     "hemisphere": "south",
     "description": "Heat stress, UV, water scarcity"
@@ -34,7 +98,17 @@
   {
     "countryCode": "ZA",
     "name": "Summer",
-    "localName": "Somer",
+    "localName": "Summer",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Summer"
+      },
+      {
+        "lang": "af",
+        "name": "Somer"
+      }
+    ],
     "months": [12, 1, 2],
     "hemisphere": "south",
     "description": "Hot, thunderstorms in the interior, beach season"
@@ -42,7 +116,17 @@
   {
     "countryCode": "ZA",
     "name": "Autumn",
-    "localName": "Herfs",
+    "localName": "Autumn",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Autumn"
+      },
+      {
+        "lang": "af",
+        "name": "Herfs"
+      }
+    ],
     "months": [3, 4, 5],
     "hemisphere": "south",
     "description": "Cooling, grape harvest, moderate rainfall"
@@ -51,6 +135,16 @@
     "countryCode": "ZA",
     "name": "Winter",
     "localName": "Winter",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Winter"
+      },
+      {
+        "lang": "af",
+        "name": "Winter"
+      }
+    ],
     "months": [6, 7, 8],
     "hemisphere": "south",
     "description": "Cold, Cape rains, snow on peaks, frost inland"
@@ -58,7 +152,17 @@
   {
     "countryCode": "ZA",
     "name": "Spring",
-    "localName": "Lente",
+    "localName": "Spring",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Spring"
+      },
+      {
+        "lang": "af",
+        "name": "Lente"
+      }
+    ],
     "months": [9, 10, 11],
     "hemisphere": "south",
     "description": "Warming, wildflower blooms, jacaranda season"
@@ -66,7 +170,13 @@
   {
     "countryCode": "ZM",
     "name": "Wet season",
-    "localName": "Rainy season",
+    "localName": "Wet season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Wet season"
+      }
+    ],
     "months": [11, 12, 1, 2, 3],
     "hemisphere": "south",
     "description": "Heavy rains, flooding, planting season"
@@ -75,6 +185,12 @@
     "countryCode": "ZM",
     "name": "Late rains",
     "localName": "Late rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Late rains"
+      }
+    ],
     "months": [4],
     "hemisphere": "south",
     "description": "Harvest, scattered showers"
@@ -82,7 +198,13 @@
   {
     "countryCode": "ZM",
     "name": "Cool dry season",
-    "localName": "Winter",
+    "localName": "Cool dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Cool dry season"
+      }
+    ],
     "months": [5, 6, 7, 8],
     "hemisphere": "south",
     "description": "Cool temperatures, frost risk in highlands"
@@ -90,7 +212,13 @@
   {
     "countryCode": "ZM",
     "name": "Hot dry season",
-    "localName": "Pre-rains",
+    "localName": "Hot dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Hot dry season"
+      }
+    ],
     "months": [9, 10],
     "hemisphere": "south",
     "description": "Heat, dust, bushfire risk"
@@ -98,7 +226,13 @@
   {
     "countryCode": "MZ",
     "name": "Wet season",
-    "localName": "Rainy season",
+    "localName": "Wet season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Wet season"
+      }
+    ],
     "months": [11, 12, 1, 2, 3],
     "hemisphere": "south",
     "description": "Heavy rains, flooding, planting season"
@@ -107,6 +241,12 @@
     "countryCode": "MZ",
     "name": "Late rains",
     "localName": "Late rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Late rains"
+      }
+    ],
     "months": [4],
     "hemisphere": "south",
     "description": "Harvest, scattered showers"
@@ -114,7 +254,13 @@
   {
     "countryCode": "MZ",
     "name": "Cool dry season",
-    "localName": "Winter",
+    "localName": "Cool dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Cool dry season"
+      }
+    ],
     "months": [5, 6, 7, 8],
     "hemisphere": "south",
     "description": "Cool temperatures, frost risk in highlands"
@@ -122,7 +268,13 @@
   {
     "countryCode": "MZ",
     "name": "Hot dry season",
-    "localName": "Pre-rains",
+    "localName": "Hot dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Hot dry season"
+      }
+    ],
     "months": [9, 10],
     "hemisphere": "south",
     "description": "Heat, dust, bushfire risk"
@@ -130,7 +282,13 @@
   {
     "countryCode": "MW",
     "name": "Wet season",
-    "localName": "Rainy season",
+    "localName": "Wet season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Wet season"
+      }
+    ],
     "months": [11, 12, 1, 2, 3],
     "hemisphere": "south",
     "description": "Heavy rains, flooding, planting season"
@@ -139,6 +297,12 @@
     "countryCode": "MW",
     "name": "Late rains",
     "localName": "Late rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Late rains"
+      }
+    ],
     "months": [4],
     "hemisphere": "south",
     "description": "Harvest, scattered showers"
@@ -146,7 +310,13 @@
   {
     "countryCode": "MW",
     "name": "Cool dry season",
-    "localName": "Winter",
+    "localName": "Cool dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Cool dry season"
+      }
+    ],
     "months": [5, 6, 7, 8],
     "hemisphere": "south",
     "description": "Cool temperatures, frost risk in highlands"
@@ -154,7 +324,13 @@
   {
     "countryCode": "MW",
     "name": "Hot dry season",
-    "localName": "Pre-rains",
+    "localName": "Hot dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Hot dry season"
+      }
+    ],
     "months": [9, 10],
     "hemisphere": "south",
     "description": "Heat, dust, bushfire risk"
@@ -162,7 +338,13 @@
   {
     "countryCode": "BW",
     "name": "Wet season",
-    "localName": "Rainy season",
+    "localName": "Wet season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Wet season"
+      }
+    ],
     "months": [11, 12, 1, 2, 3],
     "hemisphere": "south",
     "description": "Heavy rains, flooding, planting season"
@@ -171,6 +353,12 @@
     "countryCode": "BW",
     "name": "Late rains",
     "localName": "Late rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Late rains"
+      }
+    ],
     "months": [4],
     "hemisphere": "south",
     "description": "Harvest, scattered showers"
@@ -178,7 +366,13 @@
   {
     "countryCode": "BW",
     "name": "Cool dry season",
-    "localName": "Winter",
+    "localName": "Cool dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Cool dry season"
+      }
+    ],
     "months": [5, 6, 7, 8],
     "hemisphere": "south",
     "description": "Cool temperatures, frost risk in highlands"
@@ -186,7 +380,13 @@
   {
     "countryCode": "BW",
     "name": "Hot dry season",
-    "localName": "Pre-rains",
+    "localName": "Hot dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Hot dry season"
+      }
+    ],
     "months": [9, 10],
     "hemisphere": "south",
     "description": "Heat, dust, bushfire risk"
@@ -194,7 +394,13 @@
   {
     "countryCode": "NA",
     "name": "Wet season",
-    "localName": "Rainy season",
+    "localName": "Wet season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Wet season"
+      }
+    ],
     "months": [11, 12, 1, 2, 3],
     "hemisphere": "south",
     "description": "Heavy rains, flooding, planting season"
@@ -203,6 +409,12 @@
     "countryCode": "NA",
     "name": "Late rains",
     "localName": "Late rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Late rains"
+      }
+    ],
     "months": [4],
     "hemisphere": "south",
     "description": "Harvest, scattered showers"
@@ -210,7 +422,13 @@
   {
     "countryCode": "NA",
     "name": "Cool dry season",
-    "localName": "Winter",
+    "localName": "Cool dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Cool dry season"
+      }
+    ],
     "months": [5, 6, 7, 8],
     "hemisphere": "south",
     "description": "Cool temperatures, frost risk in highlands"
@@ -218,7 +436,13 @@
   {
     "countryCode": "NA",
     "name": "Hot dry season",
-    "localName": "Pre-rains",
+    "localName": "Hot dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Hot dry season"
+      }
+    ],
     "months": [9, 10],
     "hemisphere": "south",
     "description": "Heat, dust, bushfire risk"
@@ -226,7 +450,13 @@
   {
     "countryCode": "AO",
     "name": "Wet season",
-    "localName": "Rainy season",
+    "localName": "Wet season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Wet season"
+      }
+    ],
     "months": [11, 12, 1, 2, 3],
     "hemisphere": "south",
     "description": "Heavy rains, flooding, planting season"
@@ -235,6 +465,12 @@
     "countryCode": "AO",
     "name": "Late rains",
     "localName": "Late rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Late rains"
+      }
+    ],
     "months": [4],
     "hemisphere": "south",
     "description": "Harvest, scattered showers"
@@ -242,7 +478,13 @@
   {
     "countryCode": "AO",
     "name": "Cool dry season",
-    "localName": "Winter",
+    "localName": "Cool dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Cool dry season"
+      }
+    ],
     "months": [5, 6, 7, 8],
     "hemisphere": "south",
     "description": "Cool temperatures, frost risk in highlands"
@@ -250,7 +492,13 @@
   {
     "countryCode": "AO",
     "name": "Hot dry season",
-    "localName": "Pre-rains",
+    "localName": "Hot dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Hot dry season"
+      }
+    ],
     "months": [9, 10],
     "hemisphere": "south",
     "description": "Heat, dust, bushfire risk"
@@ -258,7 +506,13 @@
   {
     "countryCode": "SZ",
     "name": "Wet season",
-    "localName": "Rainy season",
+    "localName": "Wet season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Wet season"
+      }
+    ],
     "months": [11, 12, 1, 2, 3],
     "hemisphere": "south",
     "description": "Heavy rains, flooding, planting season"
@@ -267,6 +521,12 @@
     "countryCode": "SZ",
     "name": "Late rains",
     "localName": "Late rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Late rains"
+      }
+    ],
     "months": [4],
     "hemisphere": "south",
     "description": "Harvest, scattered showers"
@@ -274,7 +534,13 @@
   {
     "countryCode": "SZ",
     "name": "Cool dry season",
-    "localName": "Winter",
+    "localName": "Cool dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Cool dry season"
+      }
+    ],
     "months": [5, 6, 7, 8],
     "hemisphere": "south",
     "description": "Cool temperatures, frost risk in highlands"
@@ -282,7 +548,13 @@
   {
     "countryCode": "SZ",
     "name": "Hot dry season",
-    "localName": "Pre-rains",
+    "localName": "Hot dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Hot dry season"
+      }
+    ],
     "months": [9, 10],
     "hemisphere": "south",
     "description": "Heat, dust, bushfire risk"
@@ -290,7 +562,13 @@
   {
     "countryCode": "LS",
     "name": "Wet season",
-    "localName": "Rainy season",
+    "localName": "Wet season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Wet season"
+      }
+    ],
     "months": [11, 12, 1, 2, 3],
     "hemisphere": "south",
     "description": "Heavy rains, flooding, planting season"
@@ -299,6 +577,12 @@
     "countryCode": "LS",
     "name": "Late rains",
     "localName": "Late rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Late rains"
+      }
+    ],
     "months": [4],
     "hemisphere": "south",
     "description": "Harvest, scattered showers"
@@ -306,7 +590,13 @@
   {
     "countryCode": "LS",
     "name": "Cool dry season",
-    "localName": "Winter",
+    "localName": "Cool dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Cool dry season"
+      }
+    ],
     "months": [5, 6, 7, 8],
     "hemisphere": "south",
     "description": "Cool temperatures, frost risk in highlands"
@@ -314,7 +604,13 @@
   {
     "countryCode": "LS",
     "name": "Hot dry season",
-    "localName": "Pre-rains",
+    "localName": "Hot dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Hot dry season"
+      }
+    ],
     "months": [9, 10],
     "hemisphere": "south",
     "description": "Heat, dust, bushfire risk"
@@ -714,7 +1010,13 @@
   {
     "countryCode": "NG",
     "name": "Long rains",
-    "localName": "Grande saison des pluies",
+    "localName": "Long rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Long rains"
+      }
+    ],
     "months": [4, 5, 6, 7],
     "hemisphere": "north",
     "description": "Heavy rains, flooding, main farming season"
@@ -722,7 +1024,13 @@
   {
     "countryCode": "NG",
     "name": "Short dry",
-    "localName": "Petite saison sèche",
+    "localName": "Short dry",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Short dry"
+      }
+    ],
     "months": [8],
     "hemisphere": "north",
     "description": "Brief dry spell, mid-season break"
@@ -730,7 +1038,13 @@
   {
     "countryCode": "NG",
     "name": "Short rains",
-    "localName": "Petite saison des pluies",
+    "localName": "Short rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Short rains"
+      }
+    ],
     "months": [9, 10, 11],
     "hemisphere": "north",
     "description": "Second rains, late planting"
@@ -738,7 +1052,13 @@
   {
     "countryCode": "NG",
     "name": "Dry season",
-    "localName": "Harmattan",
+    "localName": "Dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Dry season"
+      }
+    ],
     "months": [12, 1, 2, 3],
     "hemisphere": "north",
     "description": "Dry, dusty Harmattan winds, cool mornings"
@@ -746,7 +1066,13 @@
   {
     "countryCode": "GH",
     "name": "Long rains",
-    "localName": "Grande saison des pluies",
+    "localName": "Long rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Long rains"
+      }
+    ],
     "months": [4, 5, 6, 7],
     "hemisphere": "north",
     "description": "Heavy rains, flooding, main farming season"
@@ -754,7 +1080,13 @@
   {
     "countryCode": "GH",
     "name": "Short dry",
-    "localName": "Petite saison sèche",
+    "localName": "Short dry",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Short dry"
+      }
+    ],
     "months": [8],
     "hemisphere": "north",
     "description": "Brief dry spell, mid-season break"
@@ -762,7 +1094,13 @@
   {
     "countryCode": "GH",
     "name": "Short rains",
-    "localName": "Petite saison des pluies",
+    "localName": "Short rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Short rains"
+      }
+    ],
     "months": [9, 10, 11],
     "hemisphere": "north",
     "description": "Second rains, late planting"
@@ -770,7 +1108,237 @@
   {
     "countryCode": "GH",
     "name": "Dry season",
-    "localName": "Harmattan",
+    "localName": "Dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Dry season"
+      }
+    ],
+    "months": [12, 1, 2, 3],
+    "hemisphere": "north",
+    "description": "Dry, dusty Harmattan winds, cool mornings"
+  },
+  {
+    "countryCode": "LR",
+    "name": "Long rains",
+    "localName": "Long rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Long rains"
+      }
+    ],
+    "months": [4, 5, 6, 7],
+    "hemisphere": "north",
+    "description": "Heavy rains, flooding, main farming season"
+  },
+  {
+    "countryCode": "LR",
+    "name": "Short dry",
+    "localName": "Short dry",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Short dry"
+      }
+    ],
+    "months": [8],
+    "hemisphere": "north",
+    "description": "Brief dry spell, mid-season break"
+  },
+  {
+    "countryCode": "LR",
+    "name": "Short rains",
+    "localName": "Short rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Short rains"
+      }
+    ],
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Second rains, late planting"
+  },
+  {
+    "countryCode": "LR",
+    "name": "Dry season",
+    "localName": "Dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Dry season"
+      }
+    ],
+    "months": [12, 1, 2, 3],
+    "hemisphere": "north",
+    "description": "Dry, dusty Harmattan winds, cool mornings"
+  },
+  {
+    "countryCode": "SL",
+    "name": "Long rains",
+    "localName": "Long rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Long rains"
+      }
+    ],
+    "months": [4, 5, 6, 7],
+    "hemisphere": "north",
+    "description": "Heavy rains, flooding, main farming season"
+  },
+  {
+    "countryCode": "SL",
+    "name": "Short dry",
+    "localName": "Short dry",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Short dry"
+      }
+    ],
+    "months": [8],
+    "hemisphere": "north",
+    "description": "Brief dry spell, mid-season break"
+  },
+  {
+    "countryCode": "SL",
+    "name": "Short rains",
+    "localName": "Short rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Short rains"
+      }
+    ],
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Second rains, late planting"
+  },
+  {
+    "countryCode": "SL",
+    "name": "Dry season",
+    "localName": "Dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Dry season"
+      }
+    ],
+    "months": [12, 1, 2, 3],
+    "hemisphere": "north",
+    "description": "Dry, dusty Harmattan winds, cool mornings"
+  },
+  {
+    "countryCode": "GM",
+    "name": "Long rains",
+    "localName": "Long rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Long rains"
+      }
+    ],
+    "months": [4, 5, 6, 7],
+    "hemisphere": "north",
+    "description": "Heavy rains, flooding, main farming season"
+  },
+  {
+    "countryCode": "GM",
+    "name": "Short dry",
+    "localName": "Short dry",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Short dry"
+      }
+    ],
+    "months": [8],
+    "hemisphere": "north",
+    "description": "Brief dry spell, mid-season break"
+  },
+  {
+    "countryCode": "GM",
+    "name": "Short rains",
+    "localName": "Short rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Short rains"
+      }
+    ],
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Second rains, late planting"
+  },
+  {
+    "countryCode": "GM",
+    "name": "Dry season",
+    "localName": "Dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Dry season"
+      }
+    ],
+    "months": [12, 1, 2, 3],
+    "hemisphere": "north",
+    "description": "Dry, dusty Harmattan winds, cool mornings"
+  },
+  {
+    "countryCode": "GW",
+    "name": "Long rains",
+    "localName": "Long rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Long rains"
+      }
+    ],
+    "months": [4, 5, 6, 7],
+    "hemisphere": "north",
+    "description": "Heavy rains, flooding, main farming season"
+  },
+  {
+    "countryCode": "GW",
+    "name": "Short dry",
+    "localName": "Short dry",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Short dry"
+      }
+    ],
+    "months": [8],
+    "hemisphere": "north",
+    "description": "Brief dry spell, mid-season break"
+  },
+  {
+    "countryCode": "GW",
+    "name": "Short rains",
+    "localName": "Short rains",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Short rains"
+      }
+    ],
+    "months": [9, 10, 11],
+    "hemisphere": "north",
+    "description": "Second rains, late planting"
+  },
+  {
+    "countryCode": "GW",
+    "name": "Dry season",
+    "localName": "Dry season",
+    "names": [
+      {
+        "lang": "en",
+        "name": "Dry season"
+      }
+    ],
     "months": [12, 1, 2, 3],
     "hemisphere": "north",
     "description": "Dry, dusty Harmattan winds, cool mornings"
@@ -904,70 +1472,6 @@
     "description": "Dry, dusty Harmattan winds, cool mornings"
   },
   {
-    "countryCode": "LR",
-    "name": "Long rains",
-    "localName": "Grande saison des pluies",
-    "months": [4, 5, 6, 7],
-    "hemisphere": "north",
-    "description": "Heavy rains, flooding, main farming season"
-  },
-  {
-    "countryCode": "LR",
-    "name": "Short dry",
-    "localName": "Petite saison sèche",
-    "months": [8],
-    "hemisphere": "north",
-    "description": "Brief dry spell, mid-season break"
-  },
-  {
-    "countryCode": "LR",
-    "name": "Short rains",
-    "localName": "Petite saison des pluies",
-    "months": [9, 10, 11],
-    "hemisphere": "north",
-    "description": "Second rains, late planting"
-  },
-  {
-    "countryCode": "LR",
-    "name": "Dry season",
-    "localName": "Harmattan",
-    "months": [12, 1, 2, 3],
-    "hemisphere": "north",
-    "description": "Dry, dusty Harmattan winds, cool mornings"
-  },
-  {
-    "countryCode": "SL",
-    "name": "Long rains",
-    "localName": "Grande saison des pluies",
-    "months": [4, 5, 6, 7],
-    "hemisphere": "north",
-    "description": "Heavy rains, flooding, main farming season"
-  },
-  {
-    "countryCode": "SL",
-    "name": "Short dry",
-    "localName": "Petite saison sèche",
-    "months": [8],
-    "hemisphere": "north",
-    "description": "Brief dry spell, mid-season break"
-  },
-  {
-    "countryCode": "SL",
-    "name": "Short rains",
-    "localName": "Petite saison des pluies",
-    "months": [9, 10, 11],
-    "hemisphere": "north",
-    "description": "Second rains, late planting"
-  },
-  {
-    "countryCode": "SL",
-    "name": "Dry season",
-    "localName": "Harmattan",
-    "months": [12, 1, 2, 3],
-    "hemisphere": "north",
-    "description": "Dry, dusty Harmattan winds, cool mornings"
-  },
-  {
     "countryCode": "GN",
     "name": "Long rains",
     "localName": "Grande saison des pluies",
@@ -993,70 +1497,6 @@
   },
   {
     "countryCode": "GN",
-    "name": "Dry season",
-    "localName": "Harmattan",
-    "months": [12, 1, 2, 3],
-    "hemisphere": "north",
-    "description": "Dry, dusty Harmattan winds, cool mornings"
-  },
-  {
-    "countryCode": "GW",
-    "name": "Long rains",
-    "localName": "Grande saison des pluies",
-    "months": [4, 5, 6, 7],
-    "hemisphere": "north",
-    "description": "Heavy rains, flooding, main farming season"
-  },
-  {
-    "countryCode": "GW",
-    "name": "Short dry",
-    "localName": "Petite saison sèche",
-    "months": [8],
-    "hemisphere": "north",
-    "description": "Brief dry spell, mid-season break"
-  },
-  {
-    "countryCode": "GW",
-    "name": "Short rains",
-    "localName": "Petite saison des pluies",
-    "months": [9, 10, 11],
-    "hemisphere": "north",
-    "description": "Second rains, late planting"
-  },
-  {
-    "countryCode": "GW",
-    "name": "Dry season",
-    "localName": "Harmattan",
-    "months": [12, 1, 2, 3],
-    "hemisphere": "north",
-    "description": "Dry, dusty Harmattan winds, cool mornings"
-  },
-  {
-    "countryCode": "GM",
-    "name": "Long rains",
-    "localName": "Grande saison des pluies",
-    "months": [4, 5, 6, 7],
-    "hemisphere": "north",
-    "description": "Heavy rains, flooding, main farming season"
-  },
-  {
-    "countryCode": "GM",
-    "name": "Short dry",
-    "localName": "Petite saison sèche",
-    "months": [8],
-    "hemisphere": "north",
-    "description": "Brief dry spell, mid-season break"
-  },
-  {
-    "countryCode": "GM",
-    "name": "Short rains",
-    "localName": "Petite saison des pluies",
-    "months": [9, 10, 11],
-    "hemisphere": "north",
-    "description": "Second rains, late planting"
-  },
-  {
-    "countryCode": "GM",
     "name": "Dry season",
     "localName": "Harmattan",
     "months": [12, 1, 2, 3],

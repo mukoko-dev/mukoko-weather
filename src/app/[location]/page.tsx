@@ -10,6 +10,7 @@ import { PlaceResolver } from "@/components/weather/PlaceResolver";
 import { PlaceStage } from "@/components/weather/PlaceStage";
 import { SITE_URL } from "@/lib/site";
 import { countryDisplayName, placeLine } from "@/lib/location-country";
+import { placeAdminPcode } from "@/lib/admin-pcodes";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata({
@@ -133,7 +134,9 @@ export default async function LocationPage({
     );
 
   const countryCode = (location.country ?? "").toUpperCase();
-  const season = localSeason(new Date(), countryCode, location.lat ?? 0);
+  const season = localSeason(new Date(), countryCode, location.lat ?? 0, {
+    region: placeAdminPcode(location),
+  });
   const countryName = countryDisplayName(countryCode);
   const now = new Date().toISOString();
 

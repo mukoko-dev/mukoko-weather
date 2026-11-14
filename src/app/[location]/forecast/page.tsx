@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { resolveLocationParam } from "@/lib/load-location";
 import { seasonWithinBudget } from "@/lib/place-seed-server";
+import { placeAdminPcode } from "@/lib/admin-pcodes";
 import { breadcrumbJsonLd } from "@/lib/json-ld";
 import { buildPageMetadata } from "@/lib/metadata";
 import { JsonLd } from "@/components/layout/JsonLd";
@@ -62,6 +63,8 @@ export default async function ForecastPage({
   const season = await seasonWithinBudget(
     (location.country ?? "").toUpperCase(),
     location.lat ?? 0,
+    undefined,
+    placeAdminPcode(location),
   );
 
   const breadcrumbSchema = breadcrumbJsonLd([

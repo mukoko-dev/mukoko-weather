@@ -7,16 +7,41 @@ import { getDefaultSeason } from "./weather";
 const inMonth = (month: number) => new Date(2026, month - 1, 15, 12);
 
 describe("localSeason: the season for a country with no database read", () => {
-  it("gives Zimbabwe its local names in every month", () => {
-    const names = Array.from({ length: 12 }, (_, i) =>
-      localSeason(inMonth(i + 1), "ZW", -17.8),
-    );
-    expect(names[0]).toMatchObject({ name: "Main rains", localName: "Masika" });
-    for (const season of names) {
-      expect(season.name).toBeTruthy();
-      expect(season.localName).toBeTruthy();
-      expect(season.description).toBeTruthy();
+  it("serves Zimbabwe the name used where the place is, in every month", () => {
+    // Harare (ZW19) is Shona-speaking, Bulawayo (ZW10) Ndebele-speaking.
+    const harare = { region: "ZW19" };
+    const bulawayo = { region: "ZW10" };
+    const at = (month: number, names = {}) =>
+      localSeason(inMonth(month), "ZW", -17.8, names);
+    expect(at(1, harare)).toMatchObject({
+      name: "Summer rains",
+      localName: "Zhizha",
+    });
+    expect(at(1, bulawayo)).toMatchObject({
+      name: "Summer rains",
+      localName: "Ihlobo",
+    });
+    expect(at(4, harare).localName).toBe("Matsutso");
+    expect(at(4, bulawayo).localName).toBe("Ikwindla");
+    expect(at(7, harare).localName).toBe("Chando");
+    expect(at(7, bulawayo).localName).toBe("Ubusika");
+    expect(at(10, harare).localName).toBe("Chirimo");
+    expect(at(10, bulawayo).localName).toBe("Intwasahlobo");
+    for (let month = 1; month <= 12; month++) {
+      for (const names of [harare, bulawayo, {}]) {
+        const season = at(month, names);
+        expect(season.name).toBeTruthy();
+        expect(season.localName).toBeTruthy();
+        expect(season.description).toBeTruthy();
+      }
     }
+  });
+
+  it("does not lock Zimbabwe to Shona: with no region or language it is English", () => {
+    expect(localSeason(inMonth(1), "ZW", -17.8)).toMatchObject({
+      name: "Summer rains",
+      localName: "Summer rains",
+    });
   });
 
   it("answers exactly what the seed table says, for every country and month", () => {

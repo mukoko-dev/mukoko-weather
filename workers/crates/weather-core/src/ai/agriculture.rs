@@ -336,10 +336,14 @@ pub fn user_prompt(place: &PromptPlace<'_>, crops: &[String], data: &Value) -> S
     )];
     let season = &data["season"];
     if present(season) {
+        let (local, name) = (text(season, "localName"), text(season, "name"));
+        // The name once when there is no local name apart from it.
+        let label = match (local, name) {
+            (Some(l), Some(n)) if l == n => n.to_owned(),
+            _ => format!("{} ({})", or_none(local), or_none(name)),
+        };
         parts.push(format!(
-            "Season: {} ({}) — {}",
-            or_none(text(season, "localName")),
-            or_none(text(season, "name")),
+            "Season: {label} — {}",
             text(season, "description").unwrap_or("")
         ));
     }

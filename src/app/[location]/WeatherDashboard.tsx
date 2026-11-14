@@ -166,6 +166,7 @@ const ModelComparisonChart = lazy(() =>
 
 import { formatCoords } from "@/lib/utils";
 import { fetchActivities } from "@/lib/activities-client";
+import { seasonLabel } from "@/lib/season-names";
 
 interface WeatherDashboardProps {
   weather: WeatherData;
@@ -835,7 +836,7 @@ export function WeatherDashboard({
                                       weather={weather}
                                       location={location}
                                       initialSummary={aiSummary}
-                                      season={`${season.localName} (${season.name})`}
+                                      season={seasonLabel(season)}
                                       user={user}
                                     />
                                   </Suspense>
@@ -1008,10 +1009,7 @@ export function WeatherDashboard({
                           value={location.nominatimAddress.displayName}
                         />
                       )}
-                      <InfoRow
-                        label="Season"
-                        value={`${season.localName} (${season.name})`}
-                      />
+                      <InfoRow label="Season" value={seasonLabel(season)} />
                     </dl>
                     <ChartErrorBoundary name="place knowledge">
                       <PlaceKnowledgeRows

@@ -290,10 +290,13 @@ mod tests {
     #[test]
     fn the_country_calendar_wins_over_the_hemisphere() {
         let nov = season_for(Some("ZW"), -17.8, at(11));
-        assert_eq!(nov.name, "Main rains");
-        assert_eq!(nov.local_name, "Masika");
+        // Zimbabwe's names are by region (Zhizha in Mashonaland, Ihlobo in
+        // Matabeleland), not by country, so the compiled row's old single
+        // `localName` is the English name and the prompt names the season once.
+        assert_eq!(nov.name, "Summer rains");
+        assert_eq!(nov.local_name, "Summer rains");
         assert_eq!(nov.description, "Flooding, road damage, planting");
-        assert_eq!(season_for(Some("zw"), -17.8, at(7)).local_name, "Chirimo");
+        assert_eq!(season_for(Some("zw"), -17.8, at(7)).local_name, "Cool dry");
         // No calendar for the country, or no country: the hemisphere.
         assert_eq!(season_for(Some("ZZ"), -17.8, at(1)).name, "Summer");
         assert_eq!(season_for(None, 51.5, at(1)).name, "Winter");

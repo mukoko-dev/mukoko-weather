@@ -16,8 +16,9 @@ export type Season = Awaited<ReturnType<typeof getSeasonForDate>>;
  * Season for a country on today's date, deduplicated per request. Pages and
  * `generateMetadata` share it, so one request reads the season once.
  */
-export const getCachedSeason = cache((countryCode: string, lat: number = 0) =>
-  getSeasonForDate(new Date(), countryCode, lat),
+export const getCachedSeason = cache(
+  (countryCode: string, lat: number = 0, region: string | null = null) =>
+    getSeasonForDate(new Date(), countryCode, lat, { region }),
 );
 
 /**
@@ -32,6 +33,8 @@ export async function seasonWithinBudget(
   countryCode: string,
   lat: number,
   budgetMs: number = SEED_SEASON_BUDGET_MS,
+  /** The place's admin-1 P-code (`placeAdminPcode`), for its regional season name. */
+  region: string | null = null,
 ): Promise<Season> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const fallback = new Promise<Season>((resolve) => {
@@ -42,7 +45,7 @@ export async function seasonWithinBudget(
   });
   try {
     return await Promise.race([
-      getCachedSeason(countryCode, lat).catch(() =>
+      getCachedSeason(countryCode, lat, region).catch(() =>
         getDefaultSeason(new Date(), lat),
       ),
       fallback,

@@ -13,11 +13,16 @@
  * writing four for GB, made by the retired AI season enrichment) are not in
  * the seed, so those countries get the hemisphere default here.
  *
+ * `names` says where the person is (admin-1 P-code) and what they speak, so
+ * the season is called what it is called there (season-names.ts); with
+ * neither, it is the English name.
+ *
  * Server-side: it pulls in the seed table (about 600 lines), which the
  * browser should not download. Pure otherwise.
  */
 
 import { SEASONS } from "./seed-seasons";
+import { resolveSeasonName, type SeasonNameContext } from "./season-names";
 import { getDefaultSeason, type Season } from "./weather";
 
 /** Seed rows by country, built once. */
@@ -32,6 +37,7 @@ export function localSeason(
   date: Date,
   countryCode: string,
   lat: number,
+  names: SeasonNameContext = {},
 ): Season {
   const code = (countryCode ?? "").trim().toUpperCase();
   const month = date.getMonth() + 1;
@@ -41,7 +47,7 @@ export function localSeason(
   if (row) {
     return {
       name: row.name,
-      localName: row.localName || row.name,
+      localName: resolveSeasonName(row, names),
       description: row.description,
     };
   }

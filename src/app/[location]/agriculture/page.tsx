@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { resolveLocationParam } from "@/lib/load-location";
 import { getCachedSeason } from "@/lib/place-seed-server";
+import { placeAdminPcode } from "@/lib/admin-pcodes";
 import { getCurrentUser } from "@/lib/auth";
 import { breadcrumbJsonLd } from "@/lib/json-ld";
 import { buildPageMetadata } from "@/lib/metadata";
@@ -50,7 +51,11 @@ export default async function AgriculturePage({
   if (!location) notFound();
 
   const [season, user] = await Promise.all([
-    getCachedSeason(location.country ?? "", location.lat ?? 0),
+    getCachedSeason(
+      location.country ?? "",
+      location.lat ?? 0,
+      placeAdminPcode(location),
+    ),
     getCurrentUser().catch(() => null),
   ]);
   const pageUrl = `${SITE_URL}/${location.slug}/agriculture`;
