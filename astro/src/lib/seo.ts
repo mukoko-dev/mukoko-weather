@@ -3,7 +3,7 @@
  * (src/app/layout.tsx) puts in `metadata`. `seo.test.ts` reads the layout and
  * fails when the two disagree, so a change to one is a change to both.
  */
-import { SITE_URL } from "@/lib/site";
+import { ogUrlFor } from "~/lib/og/pages";
 
 export const DEFAULT_TITLE = "mukoko weather — Global Weather Intelligence";
 
@@ -28,16 +28,17 @@ export const KEYWORDS = [
   "Nyuchi Africa",
 ];
 
-/** The card image every page without its own shares (the layout's). */
-export const OG_IMAGE_URL = `${SITE_URL}/api/og?${new URLSearchParams({
-  title: "mukoko weather",
-  subtitle: "Global Weather Intelligence",
-  template: "home",
-})}`;
+/**
+ * The card image every page without its own shares: the site card, drawn at
+ * build time (src/lib/og). The Next.js layout still points at its `/api/og`
+ * route; the Astro head does not repeat that URL, it has its own cards.
+ */
+export const OG_IMAGE_URL = ogUrlFor();
 
 export const OG_IMAGE = {
   width: 1200,
   height: 630,
+  type: "image/png",
   alt: DEFAULT_TITLE,
 } as const;
 

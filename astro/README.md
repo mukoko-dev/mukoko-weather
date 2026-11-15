@@ -149,6 +149,82 @@ Differences from the Next.js pages, on purpose:
 - Terms and Privacy skip layout and paint work for every section from the third
   down (`content-visibility: auto`, see `src/styles/global.css`).
 
+## Social cards (Open Graph images)
+
+Every page and every place has its own card, drawn at build time and served as
+a static PNG. Nothing runs when a scraper fetches one.
+
+| URL                        | What                                                      |
+| -------------------------- | --------------------------------------------------------- |
+| `/og/site.png`             | the site card: pages without a card of their own share it |
+| `/og/pages/<page>.png`     | one per page in `src/lib/og/pages.ts` (`PAGE_CARDS`)      |
+| `/og/locations/<slug>.png` | one per place in `LOCATIONS` (`src/lib/locations.ts`)     |
+
+The card is the Mzizi "hive" template (`mzizi:discoverability`): deep-night
+ground `#1B1A17`, a faint flat-top honeycomb (white at 5%), five solid mineral
+cells on the right, then the Seed of Life mark, the eyebrow, the title, the
+description and the domain, left aligned. The mark is `../public/logo-dark.svg`
+embedded byte for byte (no recolour, no reorder, no gradient); a test checks
+it is still seven flat cells in the seven dark minerals. Title `#F5F5F4`,
+secondary `#E5E3DE` and domain `#FFD740` are checked in `og.test.ts` with APCA
+(Lc 75 or more large, 90 or more body). With APCA-W3 0.0.98G-4g the title
+reads Lc 99.9, the secondary 88.5 and the domain 83.1 (the skill's table says
+92, 81 and 76, from another revision of the formula); the secondary is large
+text on the card (30 px) and clears the large floor, not the body floor. The
+Mzizi MCP's checker computes WCAG 2 ratios only (15.95, 13.57, 12.47).
+
+How it is built:
+
+- `src/pages/og/[...slug].png.ts` has `getStaticPaths` over `allCards()`
+  (`src/lib/og/cards.ts`) and draws each card with `src/lib/og/render.ts`:
+  satori (element tree to SVG), then sharp (SVG to PNG, no alpha, palette).
+  satori and sharp are devDependencies and are used by the build only.
+- The build runs on Node, with no adapter (the output is static; see "Static
+  output" above), so sharp (a native module) and the font files are available
+  to the card code. The pages are plain files in `dist`: `og-dist.test.ts`
+  fails if a `node:` import, `sharp` or `satori` reaches `dist`, and
+  `npm run check:artefact` fails on any server artefact.
+- Fonts are Noto Sans 400 and 600 and Noto Serif 700 from the Fontsource
+  packages in `node_modules` (Latin, Latin Extended and Vietnamese subsets),
+  read from disk at build. Nothing is fetched. A place name in another script
+  (Arabic, CJK, Cyrillic) would draw as empty boxes, so the card uses the
+  name made from the slug instead (`isRenderable` in `src/lib/og/text.ts`).
+- The shell derives `og:image` and `twitter:image` from `canonicalPath`: the
+  page's card when `PAGE_CARDS` has it, the site card otherwise, always an
+  absolute `https://weather.mukoko.com/og/...png`. No page writes an image
+  URL (a test fails on a literal `og:image`, `twitter:image` or `/api/og`
+  outside the shell). `og:image:type`, `:width`, `:height`, `:alt`, the
+  `twitter:image:alt` and `summary_large_image` are set on every page.
+  `ogImage` and `ogImageAlt` props override it for a page that needs to.
+- A new page needs a `PAGE_CARDS` entry with the same title and description
+  as its `<Shell>` props (`og.test.ts` compares them with the page file, and
+  fails on a page with a `canonicalPath` and no entry).
+- `/og/locations/<slug>.png` exists for every place now, although the place
+  pages are not served from Astro yet. To use them from the Next.js app, the
+  place page's `generateMetadata` (`src/app/[location]/page.tsx`) would set
+  its og and twitter image to `${SITE_URL}/og/locations/${loc.slug}.png`
+  instead of the `/api/og?...` URL, once the edge serves `/og/*` from this
+  build. Not done here: the Next.js metadata is unchanged. A slug that is not
+  a shipped place (a spot, a community place) has no card yet; the page
+  should fall back to `/og/site.png`.
+
+Build cost, measured in a 2-vCPU container: 271 cards (the site, 6 pages and
+264 places) add about 36 s to a cold build (40.5 s against 4.5 s without them,
+about 0.13 s a card, one card at a time) and 0.7 s when the disk cache is
+warm. The output is 8.9 MB of PNG (33 KB a card on average, none over 150 KB,
+which a test enforces). The drawing is cached in
+`node_modules/.cache/mukoko-og`, keyed on a hash of the element tree, the
+fonts and the mark, so a rebuild redraws only what changed. CI does not keep
+that directory between runs yet, so it pays the cold cost; the cost grows
+linearly with places, so a place list in the thousands needs the cache kept or
+the cards drawn on demand instead. `npm run test:dist` checks the built files.
+
+What the Worker needs for `/og/*.png` (not done here, `workers/` is another
+change): serve the file from the static assets with `Content-Type:
+image/png` and `Cache-Control: public, max-age=86400,
+stale-while-revalidate=604800`. The files are not content-hashed, so they
+must not be `immutable`.
+
 ## Known gaps in what is built
 
 - The footer's year is the year of the build (the pages are prerendered); the

@@ -18,7 +18,8 @@
     "check:shell": "node scripts/check-shell.mjs",
     "check:pages": "node scripts/check-pages.mjs",
     "serve": "node scripts/serve-dist.mjs",
-    "measure": "node scripts/measure.mjs"
+    "measure": "node scripts/measure.mjs",
+    "test:dist": "OG_DIST_REQUIRED=1 vitest run src/lib/og/og-dist.test.ts"
   },
   "dependencies": {
     "@astrojs/react": "^7.1.8",
@@ -29,11 +30,15 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.12",
+    "@fontsource/noto-sans": "^5.3.0",
+    "@fontsource/noto-serif": "^5.3.0",
     "@tailwindcss/vite": "^4.3.5",
     "@types/node": "^26.6.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "playwright-core": "^1.65.0",
+    "satori": "^0.63.2",
+    "sharp": "^0.35.5",
     "tailwindcss": "^4.3.1",
     "typescript": "6.0.3",
     "vitest": "^4.1.11",
