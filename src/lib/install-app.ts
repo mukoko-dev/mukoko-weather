@@ -24,7 +24,11 @@
 
 import { isStandalone } from "@/lib/device-info";
 
-export type InstallOutcome = "accepted" | "dismissed" | "unavailable" | "failed";
+export type InstallOutcome =
+  | "accepted"
+  | "dismissed"
+  | "unavailable"
+  | "failed";
 
 /** The `beforeinstallprompt` event (not in lib.dom.d.ts). */
 interface BeforeInstallPromptEvent extends Event {
@@ -94,9 +98,7 @@ export async function requestInstall(): Promise<InstallOutcome> {
   try {
     if (supportsWebInstall()) {
       // First statement of the handler's call chain: keeps the activation.
-      await (
-        navigator as unknown as { install(): Promise<unknown> }
-      ).install();
+      await (navigator as unknown as { install(): Promise<unknown> }).install();
       return "accepted";
     }
     const prompt = deferred;
