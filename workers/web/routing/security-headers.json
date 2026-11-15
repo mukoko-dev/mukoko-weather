@@ -23,14 +23,8 @@
       "value": "SAMEORIGIN"
     }
   ],
-  "frameablePaths": [
-    "embed",
-    "display"
-  ],
-  "corsOpen": [
-    "/api/embed/:path*",
-    "/embed/:path*"
-  ],
+  "frameablePaths": ["embed", "display"],
+  "corsOpen": ["/api/embed/:path*", "/embed/:path*"],
   "corsHeaders": [
     {
       "key": "Access-Control-Allow-Origin",
