@@ -25,6 +25,7 @@ workers/
   push/                  mukoko-weather-push       Web Push sender, runtime half: WebCrypto key agreement and signer, fetch transport (dark, not deployed)
   ai/                    mukoko-weather-ai         Shamwari Weather: summaries, chat, follow-ups, history analysis
   tiles/                 mukoko-weather-tiles      weather map overlay tiles (Tomorrow.io proxy, edge + KV cache)
+  web/                   mukoko-weather-web        serves the Astro static build and routes the web app (Rust serves it; dark, not deployed, no route)
   d1/migrations/         schema of the D1 database `mukoko-weather` (stations, rate events, history; no device or report data)
   scripts/               gen-reference-data.mjs (activities, suitability rules, tags, regions, AI prompts), and
                          gen-seed-locations.mjs (seed places, airports and the legacy to canonical
@@ -73,6 +74,70 @@ workers/
 - **Self-hosted Open-Meteo is still not supported.** Only the three commercial hosts above are mapped; a base URL for a self-hosted instance (`infra/open-meteo/`) is not threaded through the Workers.
 
 **Deploy order against Vercel.** Every route is a Worker route now (the Python backend is deleted, #333) and the app calls `weather-api.mukoko.com` with **no fallback** (`src/lib/weather-api.ts`). A push to `main` that touches `workers/` deploys all the Workers (`workers-deploy.yml`, in the binding order below: `forecast` first, `public-api` last), and Vercel deploys the app from the same push, so for some minutes the new app can run against the previous Workers and the new Workers against the previous app. A route the app calls before it exists answers `404` and the card it feeds (for the profile route, the place-knowledge rows of the About card) renders nothing until the Workers are up. So release in two steps, expand then contract: ship the Worker change first, tolerated by the previous app, and the app change that uses it in a later release (or make the app degrade when the route is missing); remove a route or field from the app in one release and from the Workers in the next. A new binding, store secret or D1 migration must exist before the release that needs it: the deploy applies none of them. Rolling the Workers back past a ported route breaks the live app the same way, so roll Vercel back first. The full rules are in CONTRIBUTING.md, "Deploying the Workers".
+
+## The web Worker (`web/`, [#579](https://github.com/mukoko-dev/mukoko-weather/issues/579), [#475](https://github.com/mukoko-dev/mukoko-weather/issues/475))
+
+Owner decision: **Rust serves it, JS only in the browser.** The web build is
+static files (`astro/dist`, from `astro build` with no adapter) plus this
+Worker. No Node, Vercel or JavaScript server runtime runs in production.
+
+**Status: dark.** `wrangler.jsonc` has no `routes`, `workers_dev` is off, and
+the Worker is built by `workers.yml` but is not in `workers-deploy.yml` (like
+`push`). It has **not run in a Workers runtime**: the decisions are unit tested
+natively and the glue is checked by compiling for `wasm32-unknown-unknown`.
+
+What it does, in `weather_core::web` (pure, tested) with `web/src/lib.rs` as the
+glue that reads the file through the `ASSETS` binding (`run_worker_first`,
+`html_handling: none`, so the Worker alone maps paths):
+
+| Path | Answer |
+| ---- | ------ |
+| `/about` | `about.html`, `Cache-Control: no-cache` (a page is never `no-store`, so Back restores it from the bfcache; the binding's `ETag` makes revalidation a `304`) |
+| `/about/` | `308` to `/about` (URLs never have a trailing slash, as in Astro's `format: file`) |
+| `/about.html`, unknown paths | `404` problem+json |
+| `/_astro/*` | `public, max-age=31536000, immutable` (hashed names) |
+| `/sw.js` | `no-cache`, `Content-Type: text/javascript`, `Service-Worker-Allowed: /` |
+| `/manifest.json` | `no-cache`, `application/manifest+json` |
+| a route in `routing/routes.json` still `not_migrated` | `404` `application/problem+json` (RFC 9457, type `.../problems/not-migrated`); with the var `LEGACY_ORIGIN` (a bare origin) set, forwarded there (10 s timeout, 1 MiB body limit, redirects not followed). Default: none |
+| `OPTIONS` | `204` with `Allow` (the embed routes also carry their open CORS headers) |
+| `HEAD`, other methods | `HEAD` as `GET`; a write to a file answers `405` |
+| `/health`, `/ready` | liveness (no dependency); readiness reads the first migrated page from the assets (`no-store`: probes are not pages) |
+
+Every response carries the security headers of `src/lib/security-headers.ts`
+(baseline, `X-Frame-Options` except `/embed` and `/display`, the report-only CSP
+except under `/api/` and `/_astro/`, `frame-ancestors *` on `/embed/widget`,
+open CORS on the embed routes). They are ported as data in
+`weather-core/src/web/headers.rs`; `routing/security-headers.json` is a snapshot
+of the TypeScript written by `scripts/gen-web-headers.mjs`. CI runs it with
+`--check` and the Rust tests compare to it, so neither side can drift.
+
+`routing/routes.json` lists every Next.js route (`src/app`) as `migrated` or
+`not_migrated`, with the phase of #475 that moves it. A Rust test walks `src/app`
+and fails on a route missing from the table or one that no longer exists; an
+Astro test checks the `migrated` rows equal `astro/src/lib/routes.ts`. Move a
+route in the PR that adds its page.
+
+A handler panic is a WebAssembly trap: the platform answers `500` and the next
+request gets a fresh instance (a panic hook logs the reason first). The decision
+code denies `unwrap`, `expect` and indexing, and a test feeds it hostile paths.
+That recovery is the platform's and is not tested here. The Worker's own errors
+are `500` problem documents.
+
+**CI gate** (`astro/scripts/check-artefact.mjs`, `npm run check:artefact`, run
+by `astro.yml` and the `web-artefact` job in `workers.yml`): the build must be
+static files only. It fails, naming the file, on `_worker.js`, a `server/` or
+adapter `client/` folder, `_headers`/`_redirects`, `wrangler.json`, `_routes.json`,
+`functions/`, `package.json`, any script importing `node:*` or `cloudflare:*`, a
+migrated page missing from the build, an Astro adapter or `output` other than
+`static`, a Worker whose `main` is not `build/index.js` or that is not
+`run_worker_first`, a route or `workers_dev` on, or JavaScript inside
+`workers/web`. The same job runs `wrangler deploy --dry-run`, which validates the
+config and assets folder without deploying.
+
+Not here yet (later phases of #475): the service worker and `public/` files in the
+build (until then `/sw.js` answers `not-migrated`, and other `public/` files are
+served only when the build holds them), analytics, the other pages, sign-in and
+the API routes, and the cutover itself (DNS and routes are the owner's).
 
 ## Shamwari Weather (the AI Worker)
 

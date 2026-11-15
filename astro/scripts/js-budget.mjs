@@ -14,7 +14,7 @@ import { gzipSync } from "node:zlib";
 import { join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = fileURLToPath(new URL("../dist/client", import.meta.url));
+const ROOT = fileURLToPath(new URL("../dist", import.meta.url));
 const BUDGETS = JSON.parse(
   await readFile(new URL("../js-budget.json", import.meta.url), "utf8"),
 );

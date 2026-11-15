@@ -15,10 +15,19 @@ until the owner points a route at it.
   paint.
 - `/about`, ported from `src/app/about/page.tsx`, prerendered, no JavaScript of
   its own. The bottom bar is the only island on it.
-- Astro 7 on the Cloudflare adapter, React for islands, Tailwind 4 and the
-  Mzizi tokens (`src/app/mzizi-tokens.css`, through `src/app/globals.css`).
-  Both pages are prerendered, so the build makes static assets and no Worker
-  bundle; a Worker appears with the first page rendered on demand.
+- Astro 7 with **static output and no adapter**, React for islands, Tailwind 4
+  and the Mzizi tokens (`src/app/mzizi-tokens.css`, through
+  `src/app/globals.css`). `astro build` writes plain files to `dist/` and
+  nothing that runs on a server. Owner decision (#579): **Rust serves it, JS
+  only in the browser.** The Rust Worker in `../workers/web` serves `dist/` and
+  owns routing, headers and caching (see `workers/README.md`, "The web Worker").
+  A page that needs a server is not an Astro page: it prerenders, or Rust
+  renders it. `npm run check:artefact` (run in CI) fails on a server bundle,
+  `_worker.js`, an adapter, `_headers`/`_redirects` or a Node/Cloudflare import
+  in the output. `astro dev` now runs on Node, not workerd; that is development
+  only and ships nothing.
+- Which pages the build serves is `src/lib/routes.ts`; the Worker's route table
+  (`../workers/web/routing/routes.json`) must agree, and a test checks it.
 
 ## How it reuses the Next.js app
 
@@ -52,13 +61,14 @@ root install.
 ```bash
 npm ci                         # in the repo root
 cd astro && npm ci
-npm run dev                    # astro dev (workerd)
+npm run dev                    # astro dev (Node, development only)
 npm run check                  # astro check and tsc
 npm test                       # unit tests
-npm run build                  # the prerendered pages in dist/client
+npm run build                  # the static pages in dist
+npm run check:artefact         # the build is static files only (no server bundle, no adapter)
 npm run budget                 # JavaScript and CSS of each page against js-budget.json
 ASTRO_SOURCEMAP=1 npm run build   # with source maps, to see what is in a chunk
-npm run serve                  # dist/client over HTTP, gzipped like Cloudflare's edge
+npm run serve                  # dist over HTTP, gzipped like Cloudflare's edge
 CHROME_PATH=/path/to/chrome npm run check:shell   # persistence and no-JavaScript checks
 CHROME_PATH=/path/to/chrome npm run measure -- --url http://127.0.0.1:4321 --path /about --label astro --runs 3
 ```

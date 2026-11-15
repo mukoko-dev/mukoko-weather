@@ -1,0 +1,318 @@
+{
+  "$comment": [
+    "Every route the Next.js app serves, and whether the Rust web Worker serves it yet (mukoko-dev/mukoko-weather#579, #475).",
+    "pattern: the route in Next.js syntax ([param], [...rest], [[...rest]]). next_file: the file in src/app that makes it (sw.ts is built to /sw.js; robots.ts and sitemap.ts are metadata routes).",
+    "status: migrated (the build has the page: asset names the file) or not_migrated (only Next.js serves it: the Worker answers a 404 problem+json, or forwards to LEGACY_ORIGIN when the deployment names one). phase: the phase of #475 that moves it.",
+    "A test in weather-core lists src/app and fails when a route is missing from here or no longer exists. astro_only: pages in the Astro build with no Next.js route. Flip a route to migrated in the same PR that adds its page; astro/src/lib/routes.ts must agree (a test checks)."
+  ],
+  "version": 1,
+  "routes": [
+    {
+      "pattern": "/",
+      "next_file": "src/app/page.tsx",
+      "status": "not_migrated",
+      "phase": "1"
+    },
+    {
+      "pattern": "/[location]",
+      "next_file": "src/app/[location]/page.tsx",
+      "status": "not_migrated",
+      "phase": "1"
+    },
+    {
+      "pattern": "/[location]/agriculture",
+      "next_file": "src/app/[location]/agriculture/page.tsx",
+      "status": "not_migrated",
+      "phase": "1"
+    },
+    {
+      "pattern": "/[location]/atmosphere",
+      "next_file": "src/app/[location]/atmosphere/page.tsx",
+      "status": "not_migrated",
+      "phase": "1"
+    },
+    {
+      "pattern": "/[location]/forecast",
+      "next_file": "src/app/[location]/forecast/page.tsx",
+      "status": "not_migrated",
+      "phase": "1"
+    },
+    {
+      "pattern": "/[location]/map",
+      "next_file": "src/app/[location]/map/page.tsx",
+      "status": "not_migrated",
+      "phase": "1"
+    },
+    {
+      "pattern": "/about",
+      "next_file": "src/app/about/page.tsx",
+      "status": "migrated",
+      "asset": "about.html",
+      "phase": "0"
+    },
+    {
+      "pattern": "/api/ai/[[...path]]",
+      "next_file": "src/app/api/ai/[[...path]]/route.ts",
+      "status": "not_migrated",
+      "phase": "3"
+    },
+    {
+      "pattern": "/api/app-keys",
+      "next_file": "src/app/api/app-keys/route.ts",
+      "status": "not_migrated",
+      "phase": "3"
+    },
+    {
+      "pattern": "/api/app-keys/[id]",
+      "next_file": "src/app/api/app-keys/[id]/route.ts",
+      "status": "not_migrated",
+      "phase": "3"
+    },
+    {
+      "pattern": "/api/couch/session",
+      "next_file": "src/app/api/couch/session/route.ts",
+      "status": "not_migrated",
+      "phase": "3"
+    },
+    {
+      "pattern": "/api/csp-report",
+      "next_file": "src/app/api/csp-report/route.ts",
+      "status": "not_migrated",
+      "phase": "3"
+    },
+    {
+      "pattern": "/api/db-init",
+      "next_file": "src/app/api/db-init/route.ts",
+      "status": "not_migrated",
+      "phase": "3"
+    },
+    {
+      "pattern": "/api/devices",
+      "next_file": "src/app/api/devices/route.ts",
+      "status": "not_migrated",
+      "phase": "3"
+    },
+    {
+      "pattern": "/api/devices/[id]",
+      "next_file": "src/app/api/devices/[id]/route.ts",
+      "status": "not_migrated",
+      "phase": "3"
+    },
+    {
+      "pattern": "/api/embed/current",
+      "next_file": "src/app/api/embed/current/route.ts",
+      "status": "not_migrated",
+      "phase": "3"
+    },
+    {
+      "pattern": "/api/keys",
+      "next_file": "src/app/api/keys/route.ts",
+      "status": "not_migrated",
+      "phase": "3"
+    },
+    {
+      "pattern": "/api/keys/[id]",
+      "next_file": "src/app/api/keys/[id]/route.ts",
+      "status": "not_migrated",
+      "phase": "3"
+    },
+    {
+      "pattern": "/api/missing-asset",
+      "next_file": "src/app/api/missing-asset/route.ts",
+      "status": "not_migrated",
+      "phase": "3"
+    },
+    {
+      "pattern": "/api/og",
+      "next_file": "src/app/api/og/route.tsx",
+      "status": "not_migrated",
+      "phase": "3"
+    },
+    {
+      "pattern": "/api/profile/preferences",
+      "next_file": "src/app/api/profile/preferences/route.ts",
+      "status": "not_migrated",
+      "phase": "3"
+    },
+    {
+      "pattern": "/api/retired",
+      "next_file": "src/app/api/retired/route.ts",
+      "status": "not_migrated",
+      "phase": "3"
+    },
+    {
+      "pattern": "/auth/signin",
+      "next_file": "src/app/auth/signin/route.ts",
+      "status": "not_migrated",
+      "phase": "3"
+    },
+    {
+      "pattern": "/auth/signout",
+      "next_file": "src/app/auth/signout/route.ts",
+      "status": "not_migrated",
+      "phase": "3"
+    },
+    {
+      "pattern": "/aviation",
+      "next_file": "src/app/aviation/page.tsx",
+      "status": "not_migrated",
+      "phase": "2"
+    },
+    {
+      "pattern": "/callback",
+      "next_file": "src/app/callback/route.ts",
+      "status": "not_migrated",
+      "phase": "3"
+    },
+    {
+      "pattern": "/developers",
+      "next_file": "src/app/developers/page.tsx",
+      "status": "not_migrated",
+      "phase": "2"
+    },
+    {
+      "pattern": "/developers/keys",
+      "next_file": "src/app/developers/keys/page.tsx",
+      "status": "not_migrated",
+      "phase": "3"
+    },
+    {
+      "pattern": "/display",
+      "next_file": "src/app/display/page.tsx",
+      "status": "not_migrated",
+      "phase": "2"
+    },
+    {
+      "pattern": "/embed",
+      "next_file": "src/app/embed/page.tsx",
+      "status": "not_migrated",
+      "phase": "2"
+    },
+    {
+      "pattern": "/embed/widget",
+      "next_file": "src/app/embed/widget/page.tsx",
+      "status": "not_migrated",
+      "phase": "2"
+    },
+    {
+      "pattern": "/explore",
+      "next_file": "src/app/explore/page.tsx",
+      "status": "not_migrated",
+      "phase": "2"
+    },
+    {
+      "pattern": "/explore/[tag]",
+      "next_file": "src/app/explore/[tag]/page.tsx",
+      "status": "not_migrated",
+      "phase": "2"
+    },
+    {
+      "pattern": "/explore/country",
+      "next_file": "src/app/explore/country/page.tsx",
+      "status": "not_migrated",
+      "phase": "2"
+    },
+    {
+      "pattern": "/explore/country/[code]",
+      "next_file": "src/app/explore/country/[code]/page.tsx",
+      "status": "not_migrated",
+      "phase": "2"
+    },
+    {
+      "pattern": "/explore/country/[code]/[province]",
+      "next_file": "src/app/explore/country/[code]/[province]/page.tsx",
+      "status": "not_migrated",
+      "phase": "2"
+    },
+    {
+      "pattern": "/help",
+      "next_file": "src/app/help/page.tsx",
+      "status": "not_migrated",
+      "phase": "2"
+    },
+    {
+      "pattern": "/history",
+      "next_file": "src/app/history/page.tsx",
+      "status": "not_migrated",
+      "phase": "2"
+    },
+    {
+      "pattern": "/locations",
+      "next_file": "src/app/locations/page.tsx",
+      "status": "not_migrated",
+      "phase": "2"
+    },
+    {
+      "pattern": "/offline",
+      "next_file": "src/app/offline/page.tsx",
+      "status": "not_migrated",
+      "phase": "4"
+    },
+    {
+      "pattern": "/privacy",
+      "next_file": "src/app/privacy/page.tsx",
+      "status": "not_migrated",
+      "phase": "2"
+    },
+    {
+      "pattern": "/profile",
+      "next_file": "src/app/profile/page.tsx",
+      "status": "not_migrated",
+      "phase": "3"
+    },
+    {
+      "pattern": "/releases",
+      "next_file": "src/app/releases/page.tsx",
+      "status": "not_migrated",
+      "phase": "2"
+    },
+    {
+      "pattern": "/releases/feed.xml",
+      "next_file": "src/app/releases/feed.xml/route.ts",
+      "status": "not_migrated",
+      "phase": "2"
+    },
+    {
+      "pattern": "/robots.txt",
+      "next_file": "src/app/robots.ts",
+      "status": "not_migrated",
+      "phase": "4"
+    },
+    {
+      "pattern": "/shamwari",
+      "next_file": "src/app/shamwari/page.tsx",
+      "status": "not_migrated",
+      "phase": "2"
+    },
+    {
+      "pattern": "/sitemap.xml",
+      "next_file": "src/app/sitemap.ts",
+      "status": "not_migrated",
+      "phase": "4"
+    },
+    {
+      "pattern": "/status",
+      "next_file": "src/app/status/page.tsx",
+      "status": "not_migrated",
+      "phase": "2"
+    },
+    {
+      "pattern": "/sw.js",
+      "next_file": "src/app/sw.ts",
+      "status": "not_migrated",
+      "phase": "4"
+    },
+    {
+      "pattern": "/terms",
+      "next_file": "src/app/terms/page.tsx",
+      "status": "not_migrated",
+      "phase": "2"
+    }
+  ],
+  "astro_only": [
+    {
+      "pattern": "/shell-preview",
+      "asset": "shell-preview.html"
+    }
+  ]
+}

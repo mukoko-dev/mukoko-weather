@@ -1,0 +1,20 @@
+[package]
+name = "mukoko-weather-web"
+description = "mukoko-weather-web: serves the Astro static build and routes the web app (Rust serves it, JS only in the browser)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+weather-core.workspace = true
+weather-edge.workspace = true
+worker.workspace = true
+serde_json.workspace = true
+futures.workspace = true
+js-sys.workspace = true

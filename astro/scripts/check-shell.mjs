@@ -10,7 +10,7 @@
 //  4. Back and forward keep the shell and the theme, and the theme is applied
 //     before the first paint.
 //
-//   node scripts/check-shell.mjs        (serves dist/client itself)
+//   node scripts/check-shell.mjs        (serves dist itself)
 import { startServer } from "./serve-dist.mjs";
 import { launch, devices } from "./browser.mjs";
 

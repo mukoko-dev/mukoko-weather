@@ -1,0 +1,118 @@
+{
+  "generatedBy": "workers/scripts/gen-web-headers.mjs from src/lib/security-headers.ts",
+  "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https://api.maptiler.com https://*.maptiler.com https://gibs.earthdata.nasa.gov https://weather-tiles.mukoko.com https://*.googleusercontent.com https://*.workoscdn.com https://avatars.githubusercontent.com https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://*.g.doubleclick.net https://www.google.com; connect-src 'self' https://api.maptiler.com https://*.maptiler.com https://api.open-meteo.com https://weather-api.mukoko.com https://weather-tiles.mukoko.com https://api.nyuchi.com https://api.tomorrow.io https://gibs.earthdata.nasa.gov https://api.workos.com https://*.authkit.app https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://*.g.doubleclick.net https://www.google.com; worker-src 'self' blob:; child-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; manifest-src 'self'; report-uri /api/csp-report",
+  "cspReportPath": "/api/csp-report",
+  "cspWithExtra": "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https://api.maptiler.com https://*.maptiler.com https://gibs.earthdata.nasa.gov https://weather-tiles.mukoko.com https://*.googleusercontent.com https://*.workoscdn.com https://avatars.githubusercontent.com https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://*.g.doubleclick.net https://www.google.com; connect-src 'self' https://api.maptiler.com https://*.maptiler.com https://api.open-meteo.com https://weather-api.mukoko.com https://weather-tiles.mukoko.com https://api.nyuchi.com https://api.tomorrow.io https://gibs.earthdata.nasa.gov https://api.workos.com https://*.authkit.app https://www.googletagmanager.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://*.g.doubleclick.net https://www.google.com https://staging.example.test; worker-src 'self' blob:; child-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; manifest-src 'self'; report-uri /api/csp-report",
+  "baseline": [
+    {
+      "key": "Referrer-Policy",
+      "value": "strict-origin-when-cross-origin"
+    },
+    {
+      "key": "X-Content-Type-Options",
+      "value": "nosniff"
+    },
+    {
+      "key": "Permissions-Policy",
+      "value": "geolocation=(self), camera=(), microphone=(), payment=(), usb=()"
+    }
+  ],
+  "frame": [
+    {
+      "key": "X-Frame-Options",
+      "value": "SAMEORIGIN"
+    }
+  ],
+  "frameablePaths": [
+    "embed",
+    "display"
+  ],
+  "corsOpen": [
+    "/api/embed/:path*",
+    "/embed/:path*"
+  ],
+  "corsHeaders": [
+    {
+      "key": "Access-Control-Allow-Origin",
+      "value": "*"
+    },
+    {
+      "key": "Access-Control-Allow-Methods",
+      "value": "GET, OPTIONS"
+    },
+    {
+      "key": "Access-Control-Allow-Headers",
+      "value": "Content-Type"
+    }
+  ],
+  "bareOrigin": [
+    {
+      "input": "https://api.nyuchi.com",
+      "origin": "https://api.nyuchi.com"
+    },
+    {
+      "input": "https://api.nyuchi.com/",
+      "origin": "https://api.nyuchi.com"
+    },
+    {
+      "input": "https://api.nyuchi.com:8443",
+      "origin": "https://api.nyuchi.com:8443"
+    },
+    {
+      "input": "https://api.nyuchi.com:443",
+      "origin": "https://api.nyuchi.com"
+    },
+    {
+      "input": "HTTPS://Example.COM:443/",
+      "origin": "https://example.com"
+    },
+    {
+      "input": "http://localhost:3000",
+      "origin": "http://localhost:3000"
+    },
+    {
+      "input": "http://127.0.0.1:8787",
+      "origin": "http://127.0.0.1:8787"
+    },
+    {
+      "input": "http://example.com",
+      "origin": null
+    },
+    {
+      "input": "https://user:pw@example.com",
+      "origin": null
+    },
+    {
+      "input": "https://example.com/v1",
+      "origin": null
+    },
+    {
+      "input": "https://example.com?x=1",
+      "origin": null
+    },
+    {
+      "input": "https://example.com#f",
+      "origin": null
+    },
+    {
+      "input": "https://example.com:99999",
+      "origin": null
+    },
+    {
+      "input": "ftp://example.com",
+      "origin": null
+    },
+    {
+      "input": "api.nyuchi.com",
+      "origin": null
+    },
+    {
+      "input": "",
+      "origin": null
+    },
+    {
+      "input": "not a url",
+      "origin": null
+    }
+  ]
+}
