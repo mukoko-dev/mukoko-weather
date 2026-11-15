@@ -90,6 +90,13 @@ jobs:
         working-directory: astro
         run: npm run check:artefact
 
+      # The social cards are drawn by the build (src/lib/og); this checks the
+      # built files: one PNG per place, an absolute og:image on every page, and
+      # no Node module in what the browser gets.
+      - name: Cards and built head
+        working-directory: astro
+        run: npm run test:dist
+
       - name: JavaScript budget
         working-directory: astro
         run: npm run budget
