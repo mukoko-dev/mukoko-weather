@@ -353,7 +353,7 @@ mod tests {
             "/harare/forecast",
             "/explore",
             "/api/keys",
-            "/status",
+            "/aviation",
         ] {
             assert_eq!(
                 kind(&run("GET", path, &cfg)),

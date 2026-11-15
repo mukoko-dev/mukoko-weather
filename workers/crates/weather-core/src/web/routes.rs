@@ -444,6 +444,16 @@ mod tests {
                 asset: "shell-preview.html".into()
             }
         );
+        // The static pages prerendered in Astro (phase 2, batch 1).
+        for page in ["help", "privacy", "releases", "status", "terms"] {
+            assert_eq!(
+                t.lookup(&format!("/{page}")).unwrap().target,
+                Target::Page {
+                    asset: format!("{page}.html")
+                },
+                "{page}"
+            );
+        }
         assert_eq!(t.lookup("/").unwrap().target, Target::NotMigrated);
         assert_eq!(t.lookup("/harare").unwrap().target, Target::NotMigrated);
         assert_eq!(
