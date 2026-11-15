@@ -1,0 +1,57 @@
+---
+/**
+ * /releases, from src/app/releases/page.tsx. Built once from the curated files
+ * in releases/ (the same loader), so a new release note ships with the build
+ * that adds it. ReleaseEntry and the structured data are the Next.js page's.
+ */
+import Shell from "../layouts/Shell.astro";
+import PageMain from "../components/PageMain.astro";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Breadcrumb, trail } from "@/components/layout/Breadcrumb";
+import { ReleaseEntry } from "@/components/releases/ReleaseEntry";
+import { GITHUB_RELEASES_URL, releasesJsonLd } from "@/lib/release-notes";
+import { SITE_URL } from "@/lib/site";
+import { WIDTH_CLASS } from "~/lib/page-width";
+import { releases } from "~/lib/releases";
+
+const notes = releases();
+---
+
+<Shell
+  title="Release notes"
+  description="What's new in mukoko weather: new features, improvements and fixes in each release, in plain language."
+  canonicalPath="/releases"
+  jsonLd={releasesJsonLd(notes, SITE_URL)}
+>
+  <link
+    slot="head"
+    rel="alternate"
+    type="application/atom+xml"
+    href={`${SITE_URL}/releases/feed.xml`}
+    title="mukoko weather release notes"
+  />
+  <Breadcrumb className={WIDTH_CLASS.prose} items={trail({ label: "Release notes" })} />
+  <PageMain>
+    <PageHeader
+      title="Release notes"
+      intro="What changed in each release of mukoko weather, newest first."
+    />
+    <p class="dove mt-2">
+      <a href="/releases/feed.xml" data-astro-reload class="sunbird dik-dik">Follow updates with the feed</a>
+      {" · "}
+      <a href={GITHUB_RELEASES_URL} class="sunbird dik-dik" target="_blank" rel="noopener noreferrer"
+        >Full technical history on GitHub</a
+      >
+    </p>
+
+    <ol aria-label="Releases" class="herd mt-8">
+      {
+        notes.map((release, i) => (
+          <li>
+            <ReleaseEntry release={release} latest={i === 0} />
+          </li>
+        ))
+      }
+    </ol>
+  </PageMain>
+</Shell>

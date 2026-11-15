@@ -1,0 +1,23 @@
+---
+/**
+ * /status, from src/app/status/page.tsx. The page is prerendered; the health
+ * checks are read in the browser, from the Rust Worker's /v1/status, by the
+ * same StatusDashboard component (a React island). The HTML carries its
+ * loading skeleton, so nothing about the page waits on the check.
+ */
+import Shell from "../layouts/Shell.astro";
+import PageMain from "../components/PageMain.astro";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { StatusDashboard } from "@/app/status/StatusDashboard";
+---
+
+<Shell
+  title="System Status"
+  description="Live health checks for mukoko weather services — weather APIs, AI summaries, database, and caching status."
+  canonicalPath="/status"
+>
+  <PageMain>
+    <PageHeader title="System Status" intro="Live health checks for mukoko weather services." />
+    <StatusDashboard client:load />
+  </PageMain>
+</Shell>

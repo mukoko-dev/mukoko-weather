@@ -13,7 +13,7 @@ describe("isAstroRoute", () => {
       "/",
       "/explore",
       "/harare--ksy4dd1",
-      "/privacy",
+      "/developers",
       "/api/og",
     ]) {
       expect(isAstroRoute(href)).toBe(false);

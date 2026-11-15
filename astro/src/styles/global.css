@@ -13,3 +13,21 @@
 @source "../../../src/components/layout";
 @source "../../../src/components/ui";
 @source "../../../src/lib/harness";
+@source "../../../src/app/terms";
+@source "../../../src/app/privacy";
+@source "../../../src/app/help";
+@source "../../../src/app/status";
+@source "../../../src/components/releases";
+
+/*
+ * Long-form pages (terms, privacy): from the third section down the page is
+ * below the first screen, so the browser may skip laying it out and painting
+ * it until it is near the viewport. `auto` in contain-intrinsic-size remembers
+ * the real height once a section has been seen, so the scrollbar does not
+ * jump. Find-in-page, anchors and the accessibility tree still reach the
+ * skipped sections (modern-web-guidance: defer-rendering-heavy-content).
+ */
+[data-slot="prose-body"] > section:nth-child(n + 3) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto none auto 18rem;
+}

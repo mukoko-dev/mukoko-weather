@@ -15,6 +15,7 @@
     "test": "vitest run",
     "budget": "node scripts/js-budget.mjs",
     "check:shell": "node scripts/check-shell.mjs",
+    "check:pages": "node scripts/check-pages.mjs",
     "serve": "node scripts/serve-dist.mjs",
     "measure": "node scripts/measure.mjs"
   },
