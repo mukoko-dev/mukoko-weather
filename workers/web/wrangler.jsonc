@@ -1,0 +1,48 @@
+// mukoko-weather-web: serves the Astro static build and routes the web app
+// (mukoko-dev/mukoko-weather#579, #475). Owner decision: "Rust serves it, JS
+// only in the browser". The only code that runs here is the Rust in src/;
+// astro/dist is plain files, read through the ASSETS binding.
+//
+// DARK. No `routes`, no custom domain, `workers_dev` off: nothing reaches this
+// Worker until the owner points a route at it (the cutover, phase 5 of #475).
+// It is built by workers.yml and is NOT in workers-deploy.yml, on purpose.
+//
+// Needs the build first: `cd astro && npm run build` writes astro/dist, which
+// `assets.directory` names. `scripts/check-artefact.mjs` (npm run check:artefact
+// in astro/) fails if that folder holds anything but static files.
+//
+// No secret. Optional vars, none set here (add one only to use it):
+//   LEGACY_ORIGIN    the bare origin of the Next.js app. Unset (the default): a
+//                    route that is not migrated answers a 404 problem+json.
+//                    Set: it is forwarded there. A stopgap for the cutover.
+//   NYUCHI_API_URL   an API origin added to the CSP's connect-src (the same
+//                    variable the Next.js app reads for it).
+{
+  "name": "mukoko-weather-web",
+  "main": "build/index.js",
+  "compatibility_date": "2026-09-15",
+  "build": { "command": "worker-build --release" },
+  "workers_dev": false,
+  "preview_urls": false,
+  "keep_vars": true,
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": { "enabled": true, "invocation_logs": true },
+    "traces": { "enabled": true },
+  },
+  "assets": {
+    "directory": "../../astro/dist",
+    "binding": "ASSETS",
+    // Every request reaches the Worker first: it owns routing, headers and
+    // caching. The binding is only a file reader.
+    "run_worker_first": true,
+    // The Worker maps /about to about.html itself (and redirects /about/), so
+    // the binding must not rewrite, redirect or fall back to an index page.
+    "html_handling": "none",
+    "not_found_handling": "none",
+  },
+  "vars": {
+    "ENVIRONMENT": "production",
+  },
+}

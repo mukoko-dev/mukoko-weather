@@ -59,7 +59,7 @@ describe("no Vercel tracking", () => {
   });
 
   it("tells the privacy page's reader the truth: GA4 only", () => {
-    const privacy = read("src/app/privacy/page.tsx");
+    const privacy = read("src/app/privacy/PrivacyContent.tsx");
     expect(privacy).not.toMatch(/Vercel (Web )?Analytics/);
     expect(privacy).toContain("any tracking beyond Google Analytics.");
   });

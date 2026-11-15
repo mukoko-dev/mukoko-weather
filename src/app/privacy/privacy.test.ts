@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const source = readFileSync(join(__dirname, "page.tsx"), "utf8");
+const source = readFileSync(join(__dirname, "PrivacyContent.tsx"), "utf8");
 
 describe("privacy page: MET Norway", () => {
   const start = source.indexOf(">MET Norway</dt>");

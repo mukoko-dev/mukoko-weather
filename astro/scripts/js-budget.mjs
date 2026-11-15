@@ -14,7 +14,7 @@ import { gzipSync } from "node:zlib";
 import { join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = fileURLToPath(new URL("../dist/client", import.meta.url));
+const ROOT = fileURLToPath(new URL("../dist", import.meta.url));
 const BUDGETS = JSON.parse(
   await readFile(new URL("../js-budget.json", import.meta.url), "utf8"),
 );
@@ -64,8 +64,12 @@ export async function measureRoute(route) {
     css.raw += code.length;
     css.gzip += gzipSync(code, { level: 9 }).length;
   }
+  // Inline code only: a JSON-LD block is data the browser never runs, and is
+  // counted in the HTML instead.
   const inline = [
-    ...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g),
+    ...html.matchAll(
+      /<script(?![^>]*\bsrc=)(?![^>]*type="application\/ld\+json")[^>]*>([\s\S]*?)<\/script>/g,
+    ),
   ]
     .map((m) => m[1])
     .reduce((n, s) => n + Buffer.byteLength(s), 0);

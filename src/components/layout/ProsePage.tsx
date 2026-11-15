@@ -19,7 +19,10 @@ export function ProsePage({
   return (
     <>
       <PageHeader title={title} updated={updated} />
-      <div className="mt-8 space-y-8 text-text-secondary leading-relaxed">
+      <div
+        data-slot="prose-body"
+        className="mt-8 space-y-8 text-text-secondary leading-relaxed"
+      >
         {children}
       </div>
     </>

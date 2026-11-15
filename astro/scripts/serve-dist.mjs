@@ -1,7 +1,7 @@
-// Serve the built, prerendered pages (dist/client) the way Cloudflare's static
-// assets serve them, so the shell can be checked and measured without a
-// deploy: the same paths, the same Cache-Control for /_astro/* (the `_headers`
-// file the adapter writes), and gzip on text, which Cloudflare's edge does and
+// Serve the built, prerendered pages (dist) the way the Rust web Worker
+// (../workers/web) serves them, so the shell can be checked and measured
+// without a deploy: the same paths, the same Cache-Control for /_astro/*
+// (workers/web's cache rules), and gzip on text, which Cloudflare's edge does and
 // `astro preview` does not. The Next.js build is compressed by its own server,
 // so without this the comparison would charge Astro for bytes Cloudflare
 // would never send.
@@ -13,7 +13,7 @@ import { gzipSync } from "node:zlib";
 import { extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = resolve(fileURLToPath(new URL("../dist/client", import.meta.url)));
+const ROOT = resolve(fileURLToPath(new URL("../dist", import.meta.url)));
 const TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",

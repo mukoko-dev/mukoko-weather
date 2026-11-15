@@ -1,0 +1,70 @@
+---
+/**
+ * /help, from src/app/help/page.tsx: the body is the same React component
+ * (HelpContent) and the FAQPage structured data is the same object. The FAQ is
+ * the one part that differs on purpose: the Next.js page uses a Radix
+ * accordion (a React island); here it is FaqStatic, plain markup wired by the
+ * few lines of script below, so the page needs no framework in the browser.
+ */
+import Shell from "../layouts/Shell.astro";
+import PageMain from "../components/PageMain.astro";
+import { HelpContent, faqSchema } from "@/app/help/HelpContent";
+import { FaqStatic } from "@/app/help/FaqStatic";
+---
+
+<Shell
+  title="Help & FAQ"
+  description="Get help with mukoko weather — how to use forecasts, understand frost alerts, install the app, and more. Frequently asked questions about our weather intelligence platform."
+  canonicalPath="/help"
+  jsonLd={[faqSchema]}
+>
+  <!-- The answers start hidden; the script below makes them findable and the
+       buttons do the rest. With no script they are all shown. Plain rules
+       rather than the `hidden` attribute: Tailwind's reset marks `[hidden]`
+       !important inside a cascade layer, which no later rule can undo. -->
+  <style is:inline slot="head">
+    [data-faq-panel]:not([data-ready]) {
+      display: none;
+    }
+  </style>
+  <noscript slot="head">
+    <style>
+      [data-faq-panel] {
+        display: block !important;
+      }
+    </style>
+  </noscript>
+  <PageMain>
+    <HelpContent><FaqStatic /></HelpContent>
+  </PageMain>
+</Shell>
+
+<script>
+  // The FAQ's buttons, delegated from the document (which the client router
+  // keeps), so one listener serves the page however it was reached.
+  //
+  // Once the page is live every answer is hidden with `until-found`, which the
+  // browser's find-in-page can open (React cannot render that value). The
+  // browser removes it on a match and says so with `beforematch`, which is
+  // mirrored into the button.
+  document.addEventListener("astro:page-load", () => {
+    for (const panel of document.querySelectorAll<HTMLElement>("[data-faq-panel]:not([data-ready])")) {
+      panel.hidden = "until-found" as unknown as boolean;
+      panel.setAttribute("data-ready", "");
+    }
+  });
+  function setOpen(button: Element, open: boolean) {
+    const panel = document.getElementById(button.getAttribute("aria-controls") ?? "");
+    if (!panel) return;
+    panel.hidden = open ? false : ("until-found" as unknown as boolean);
+    button.setAttribute("aria-expanded", String(open));
+  }
+  document.addEventListener("click", (event) => {
+    const button = (event.target as Element | null)?.closest("[data-faq-trigger]");
+    if (button) setOpen(button, button.getAttribute("aria-expanded") !== "true");
+  });
+  document.addEventListener("beforematch", (event) => {
+    const id = (event.target as Element | null)?.id;
+    if (id) document.querySelector(`[data-faq-trigger][aria-controls="${CSS.escape(id)}"]`)?.setAttribute("aria-expanded", "true");
+  });
+</script>

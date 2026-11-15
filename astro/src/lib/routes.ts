@@ -7,7 +7,14 @@
  * owner points a route at this app). `preview` pages exist only to exercise
  * the shell and are never linked, indexed or routed.
  */
-export const SERVED_ROUTES: readonly string[] = ["/about"];
+export const SERVED_ROUTES: readonly string[] = [
+  "/about",
+  "/help",
+  "/privacy",
+  "/releases",
+  "/status",
+  "/terms",
+];
 export const PREVIEW_ROUTES: readonly string[] = ["/shell-preview"];
 
 const OWNED = new Set([...SERVED_ROUTES, ...PREVIEW_ROUTES]);

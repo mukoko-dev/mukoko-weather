@@ -1,8 +1,8 @@
 name: Astro
 
 # The Astro app in astro/ (phase 0 of the move to Astro,
-# mukoko-dev/mukoko-weather#475): type check, unit tests, build for the
-# Cloudflare adapter, the JavaScript budget of the built pages, and the shell
+# mukoko-dev/mukoko-weather#475): type check, unit tests, the static build, the
+# JavaScript budget of the built pages, and the shell
 # checks in a real browser. Nothing here deploys anything; the Next.js app
 # still serves every route.
 #
@@ -15,6 +15,7 @@ on:
     branches: [main, staging]
     paths:
       - "astro/**"
+      - "workers/web/**"
       - "src/components/**"
       - "src/lib/**"
       - "src/app/globals.css"
@@ -27,6 +28,7 @@ on:
     branches: [main, staging]
     paths:
       - "astro/**"
+      - "workers/web/**"
       - "src/components/**"
       - "src/lib/**"
       - "src/app/globals.css"
@@ -79,9 +81,14 @@ jobs:
         working-directory: astro
         run: npm test
 
-      - name: Build (Cloudflare adapter)
+      - name: Build (static output)
         working-directory: astro
         run: npm run build
+
+      # "Rust serves it, JS only in the browser" (#579): static files only.
+      - name: Build output is static files only
+        working-directory: astro
+        run: npm run check:artefact
 
       - name: JavaScript budget
         working-directory: astro

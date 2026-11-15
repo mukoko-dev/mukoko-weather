@@ -58,6 +58,11 @@ export const CONTROL_CLASSES = new Set([
  * map zoom controls, drag handles — counted per file, each with a reason.
  */
 const ALLOWED_EXCEPTIONS: Record<string, { count: number; reason: string }> = {
+  "src/app/help/FaqStatic.tsx": {
+    count: 1,
+    reason:
+      "FAQ question row inside a heading (the static twin of AccordionTrigger, which is a Radix trigger, not a button control)",
+  },
   "src/components/layout/PhoneMenu.tsx": {
     count: 3,
     reason:

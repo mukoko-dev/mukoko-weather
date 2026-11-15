@@ -14,12 +14,13 @@
     "check": "astro check && tsc --noEmit -p .",
     "test": "vitest run",
     "budget": "node scripts/js-budget.mjs",
+    "check:artefact": "node scripts/check-artefact.mjs",
     "check:shell": "node scripts/check-shell.mjs",
+    "check:pages": "node scripts/check-pages.mjs",
     "serve": "node scripts/serve-dist.mjs",
     "measure": "node scripts/measure.mjs"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "^14.4.7",
     "@astrojs/react": "^7.1.8",
     "astro": "^7.4.11",
     "lucide-react": "^1.72.0",

@@ -10,20 +10,9 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { trackEvent } from "@/lib/analytics";
+import { requestInstall } from "@/lib/install-app";
+import { useCanInstall } from "@/lib/use-install-app";
 import { readStorage, removeStorage, writeStorage } from "@/lib/safe-storage";
-
-// ---------------------------------------------------------------------------
-// Types for the beforeinstallprompt event (not in lib.dom.d.ts)
-// ---------------------------------------------------------------------------
-
-interface BeforeInstallPromptEvent extends Event {
-  readonly platforms: string[];
-  readonly userChoice: Promise<{
-    outcome: "accepted" | "dismissed";
-    platform: string;
-  }>;
-  prompt(): Promise<void>;
-}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -43,26 +32,28 @@ const SHOW_DELAY_MS = 60_000; // 1 minute
 // ---------------------------------------------------------------------------
 
 /**
- * PWA install prompt — shows a branded dialog when the browser fires
- * `beforeinstallprompt`. Respects user dismissal (30-day cooldown).
+ * PWA install prompt: a branded dialog offered a minute after the browser says
+ * the app can be installed, never on load. Respects user dismissal (30-day
+ * cooldown). The install itself is `requestInstall()` (src/lib/install-app.ts):
+ * `navigator.install()` where the browser has it, else the captured
+ * `beforeinstallprompt`. The same action is always on request in the profile
+ * ("Install app"), so a dismissal is never a dead end.
  *
- * This does NOT show on iOS Safari (which doesn't fire beforeinstallprompt).
- * iOS users get instructions in the Help/FAQ page instead.
+ * This does NOT show on iOS Safari (neither mechanism exists there). iOS users
+ * get instructions in the Help/FAQ page instead.
  */
 export function PWAInstallPrompt() {
   const [open, setOpen] = useState(false);
-  const deferredPrompt = useRef<BeforeInstallPromptEvent | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // True once Install has been pressed: the dialog then closes without that
+  // being recorded as a dismissal.
+  const acted = useRef(false);
   const installButton = useRef<HTMLButtonElement | null>(null);
+  // False when running as the installed app, or when the browser offers no way
+  // to install (the dialog is never shown for something it cannot do).
+  const available = useCanInstall();
 
   useEffect(() => {
-    // Already installed as PWA — don't show
-    if (
-      typeof window !== "undefined" &&
-      window.matchMedia("(display-mode: standalone)").matches
-    ) {
-      return;
-    }
+    if (!available) return;
 
     // Check dismissal cooldown
     const dismissed = readStorage(DISMISSED_KEY);
@@ -76,54 +67,38 @@ export function PWAInstallPrompt() {
       }
     }
 
-    const handler = (e: Event) => {
-      // Prevent Chrome's default mini-infobar
-      e.preventDefault();
-      deferredPrompt.current = e as BeforeInstallPromptEvent;
-
-      // Delay showing the prompt to let the user experience the app
-      timerRef.current = setTimeout(() => {
-        setOpen(true);
-        trackEvent("modal_opened", { modal: "pwa_install" });
-      }, SHOW_DELAY_MS);
-    };
-
-    window.addEventListener("beforeinstallprompt", handler);
-
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handler);
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, []);
+    // Delay showing the prompt to let the user experience the app
+    const timer = setTimeout(() => {
+      acted.current = false;
+      setOpen(true);
+      trackEvent("modal_opened", { modal: "pwa_install" });
+    }, SHOW_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [available]);
 
   const handleInstall = useCallback(async () => {
-    if (!deferredPrompt.current) return;
-
-    try {
-      await deferredPrompt.current.prompt();
-      const { outcome } = await deferredPrompt.current.userChoice;
+    // Called first, before anything is awaited: navigator.install() needs the
+    // tap's transient user activation.
+    const pending = requestInstall();
+    acted.current = true;
+    const outcome = await pending;
+    if (outcome === "accepted" || outcome === "dismissed") {
       trackEvent("onboarding_completed", { method: `pwa_install_${outcome}` });
-
-      if (outcome === "accepted") {
-        // User accepted — mark as installed
-        removeStorage(DISMISSED_KEY);
-      }
-    } catch {
-      // prompt() can throw if already called or dismissed
     }
-
-    deferredPrompt.current = null;
+    if (outcome === "accepted") {
+      // User accepted — mark as installed
+      removeStorage(DISMISSED_KEY);
+    }
     setOpen(false);
   }, []);
 
   const handleDismiss = useCallback(() => {
-    // Guard: if deferredPrompt is already null, the user accepted the install
-    // (handleInstall nulls the ref before closing the dialog). Without this
-    // check, onOpenChange(false) would incorrectly record a dismissal.
-    if (!deferredPrompt.current) return;
+    // Guard: once Install was pressed the dialog closes as a choice to install
+    // (handleInstall closes it). Without this check, onOpenChange(false) would
+    // incorrectly record a dismissal.
+    if (acted.current) return;
 
     setOpen(false);
-    deferredPrompt.current = null;
 
     // Record dismissal with timestamp for cooldown
     writeStorage(DISMISSED_KEY, String(Date.now()));

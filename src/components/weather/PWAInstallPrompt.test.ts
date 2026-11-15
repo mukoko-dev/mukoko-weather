@@ -9,12 +9,14 @@ describe("PWAInstallPrompt — component structure", () => {
     expect(src).toMatch(/^"use client"/);
   });
 
-  it("listens for beforeinstallprompt event", () => {
-    expect(src).toContain("beforeinstallprompt");
+  it("installs through the shared install module, not its own event listener", () => {
+    expect(src).toContain('from "@/lib/install-app"');
+    expect(src).toContain("requestInstall()");
+    expect(src).not.toContain("addEventListener");
   });
 
-  it("checks if already running as standalone PWA", () => {
-    expect(src).toContain("display-mode: standalone");
+  it("only offers the dialog when an install can start (not installed, supported)", () => {
+    expect(src).toContain("useCanInstall()");
   });
 
   it("respects dismissal cooldown via localStorage", () => {
@@ -30,36 +32,26 @@ describe("PWAInstallPrompt — component structure", () => {
     expect(src).toContain("SHOW_DELAY_MS");
   });
 
-  it("prevents Chrome default mini-infobar", () => {
-    expect(src).toContain("e.preventDefault()");
-  });
-
   it("tracks install events via analytics", () => {
     expect(src).toContain("trackEvent");
     expect(src).toContain("pwa_install");
   });
 
-  it("handleDismiss guards against null deferredPrompt to prevent false dismissal after install", () => {
-    // handleDismiss must early-return when deferredPrompt.current is null
-    // (which happens after handleInstall nulls the ref before closing the dialog).
-    // Without this guard, onOpenChange(false) would record a dismissal even on accept.
-    expect(src).toMatch(
-      /const handleDismiss[\s\S]*?if\s*\(\s*!deferredPrompt\.current\s*\)\s*return/,
-    );
-  });
-
-  it("handleInstall nulls deferredPrompt before calling setOpen(false)", () => {
-    // handleInstall must null the ref BEFORE closing, so the onOpenChange
-    // handler's handleDismiss call sees null and exits early.
-    const installFn = src.slice(
+  it("calls requestInstall first in the tap handler, before any await", () => {
+    const fn = src.slice(
       src.indexOf("const handleInstall"),
       src.indexOf("const handleDismiss"),
     );
-    const nullIdx = installFn.indexOf("deferredPrompt.current = null");
-    const closeIdx = installFn.indexOf("setOpen(false)");
-    expect(nullIdx).toBeGreaterThan(-1);
-    expect(closeIdx).toBeGreaterThan(-1);
-    expect(nullIdx).toBeLessThan(closeIdx);
+    expect(fn.indexOf("requestInstall()")).toBeGreaterThan(-1);
+    expect(fn.indexOf("requestInstall()")).toBeLessThan(
+      fn.indexOf("await pending"),
+    );
+  });
+
+  it("handleDismiss does not record a dismissal once Install was pressed", () => {
+    expect(src).toMatch(
+      /const handleDismiss[\s\S]*?if\s*\(\s*acted\.current\s*\)\s*return/,
+    );
   });
 });
 

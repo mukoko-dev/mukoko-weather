@@ -15,6 +15,10 @@ on:
       - "src/lib/locations.ts"
       - "src/lib/locations-global.ts"
       - "src/lib/icao-codes.ts"
+      - "src/lib/security-headers.ts"
+      - "src/lib/bare-origin.ts"
+      - "src/app/**"
+      - "astro/**"
       - ".github/workflows/workers.yml"
   pull_request:
     branches: [main, staging]
@@ -24,6 +28,10 @@ on:
       - "src/lib/locations.ts"
       - "src/lib/locations-global.ts"
       - "src/lib/icao-codes.ts"
+      - "src/lib/security-headers.ts"
+      - "src/lib/bare-origin.ts"
+      - "src/app/**"
+      - "astro/**"
       - ".github/workflows/workers.yml"
   # The gate before a full deploy (workers-deploy.yml). It takes no ref
   # input: called from the deploy, it checks out github.sha, the same
@@ -86,6 +94,10 @@ jobs:
         working-directory: .
         run: node --experimental-strip-types workers/scripts/gen-seasons.mjs --check
 
+      - name: Web security headers snapshot is current
+        working-directory: .
+        run: node --experimental-strip-types workers/scripts/gen-web-headers.mjs --check
+
       - name: Station import transform tests
         working-directory: .
         run: node --test workers/scripts/stations-to-devices.test.mjs
@@ -138,7 +150,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        worker: [ai, forecast, internal-api, places, public-api, push, stations, aviation, jobs, tiles]
+        worker: [ai, forecast, internal-api, places, public-api, push, stations, aviation, jobs, tiles, web]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -173,3 +185,70 @@ jobs:
           size=$(gzip -c build/index_bg.wasm | wc -c)
           echo "gzipped wasm: ${size} bytes"
           test "$size" -lt 2000000
+
+  # The web build is static files plus the Rust Worker, nothing else (#579,
+  # "Rust serves it, JS only in the browser"). This builds both halves, fails
+  # if the output holds a server bundle or a JS runtime config
+  # (astro/scripts/check-artefact.mjs), and has wrangler check the Worker's
+  # config and assets folder without deploying anything.
+  web-artefact:
+    name: Workers - web build is static plus Rust
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            astro/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install Astro dependencies
+        working-directory: astro
+        run: npm ci
+
+      - name: Build the static pages
+        working-directory: astro
+        run: npm run build
+
+      - name: Build output is static files only
+        working-directory: astro
+        run: npm run check:artefact
+
+      - name: Install Rust (stable, wasm32)
+        run: |
+          rustup toolchain install stable --profile minimal --target wasm32-unknown-unknown
+          rustup default stable
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/worker-build
+            workers/target
+          key: workers-build-web-artefact-${{ hashFiles('workers/Cargo.lock') }}
+
+      - name: Install worker-build
+        run: command -v worker-build || cargo install --locked "worker-build@^0.8"
+
+      - name: Build the Worker
+        working-directory: workers/web
+        run: worker-build --release
+
+      # Validates the config and the assets folder (astro/dist) and bundles
+      # the Worker, without publishing.
+      - name: Wrangler dry run (no deploy)
+        working-directory: workers/web
+        run: ../../astro/node_modules/.bin/wrangler deploy --dry-run --outdir /tmp/web-dry-run

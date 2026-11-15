@@ -1,5 +1,5 @@
 {
-  "note": "Budgets for the prerendered pages, from the first build of phase 0 (#475) plus about 8% room. Raise one only in a pull request that says why.",
+  "note": "Budgets for the prerendered pages, from the first build of phase 0 (#475) plus about 8% room. Raise one only in a pull request that says why. `why` says what a page's JavaScript is, measured on the build that set the budget.",
   "routes": {
     "/about": {
       "jsGzipBytes": 115000,
@@ -10,6 +10,36 @@
       "jsGzipBytes": 115000,
       "inlineScriptBytes": 7000,
       "cssGzipBytes": 25000
+    },
+    "/terms": {
+      "jsGzipBytes": 115000,
+      "inlineScriptBytes": 7000,
+      "cssGzipBytes": 25000,
+      "why": "No JavaScript of its own: 107100 B gzip is the shell (the bottom bar island and React), the same as /about."
+    },
+    "/privacy": {
+      "jsGzipBytes": 115000,
+      "inlineScriptBytes": 7000,
+      "cssGzipBytes": 25000,
+      "why": "No JavaScript of its own: 107100 B gzip is the shell, the same as /about."
+    },
+    "/releases": {
+      "jsGzipBytes": 115000,
+      "inlineScriptBytes": 7000,
+      "cssGzipBytes": 25000,
+      "why": "No JavaScript of its own: 107100 B gzip is the shell, the same as /about. The notes are HTML, built from releases/."
+    },
+    "/help": {
+      "jsGzipBytes": 115000,
+      "inlineScriptBytes": 7200,
+      "cssGzipBytes": 25000,
+      "why": "The shell plus 660 B of inline script for the FAQ buttons (6749 B inline against 6089 B on /about). The Radix accordion the Next.js page ships is not loaded: the FAQ is plain markup."
+    },
+    "/status": {
+      "jsGzipBytes": 118500,
+      "inlineScriptBytes": 7000,
+      "cssGzipBytes": 25000,
+      "why": "The shell plus the StatusDashboard island (109891 B gzip, 2791 B over the shell): the health checks are read in the browser from the Worker's /v1/status, which is the point of the page, so the island loads at once."
     }
   }
 }

@@ -8,7 +8,7 @@ import {
   AccordionContent,
 } from "@/components/ui/accordion";
 
-const FAQ_ITEMS = [
+export const FAQ_ITEMS = [
   {
     value: "free",
     question: "Is mukoko weather free?",
