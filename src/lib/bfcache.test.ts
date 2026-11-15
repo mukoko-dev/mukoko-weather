@@ -48,7 +48,12 @@ describe("bfcache header rule", () => {
       expect(matches(`/${root}`), root).toBe(false);
       expect(matches(`/${root}/x`), root).toBe(false);
     }
-    for (const path of ["/sw.js", "/manifest.json", "/favicon.ico", "/a/b.png"]) {
+    for (const path of [
+      "/sw.js",
+      "/manifest.json",
+      "/favicon.ico",
+      "/a/b.png",
+    ]) {
       expect(matches(path), path).toBe(false);
     }
   });

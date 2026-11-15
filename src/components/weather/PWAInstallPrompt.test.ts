@@ -43,7 +43,9 @@ describe("PWAInstallPrompt — component structure", () => {
       src.indexOf("const handleDismiss"),
     );
     expect(fn.indexOf("requestInstall()")).toBeGreaterThan(-1);
-    expect(fn.indexOf("requestInstall()")).toBeLessThan(fn.indexOf("await pending"));
+    expect(fn.indexOf("requestInstall()")).toBeLessThan(
+      fn.indexOf("await pending"),
+    );
   });
 
   it("handleDismiss does not record a dismissal once Install was pressed", () => {
