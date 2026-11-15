@@ -11,7 +11,7 @@
 //   node scripts/measure.mjs --url http://127.0.0.1:4321 --path /about \
 //        --label astro --runs 3 [--out dir] [--film]
 //
-// For the Astro build, serve dist/client with scripts/serve-dist.mjs (it gzips
+// For the Astro build, serve dist with scripts/serve-dist.mjs (it gzips
 // like Cloudflare's edge); for the Next.js build use `next start`. Numbers are a
 // lab measurement on one machine: compare two runs of this script made on the
 // same machine, minutes apart, never against another machine's numbers.

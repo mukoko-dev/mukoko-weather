@@ -18,6 +18,7 @@ members = [
   "stations",
   "aviation",
   "tiles",
+  "web",
 ]
 
 [workspace.package]

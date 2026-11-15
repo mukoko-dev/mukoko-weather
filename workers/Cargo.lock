@@ -643,6 +643,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "mukoko-weather-web"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "js-sys",
+ "serde_json",
+ "weather-core",
+ "weather-edge",
+ "worker",
+]
+
+[[package]]
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"

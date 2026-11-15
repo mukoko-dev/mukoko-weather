@@ -10,8 +10,11 @@
 // whole cost of reusing a Next-written component here; it must not grow
 // without a reason written next to it.
 import { fileURLToPath } from "node:url";
-import { defineConfig, fontProviders } from "astro/config";
-import cloudflare from "@astrojs/cloudflare";
+import {
+  defineConfig,
+  fontProviders,
+  passthroughImageService,
+} from "astro/config";
 import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 
@@ -19,20 +22,27 @@ const here = (path) => fileURLToPath(new URL(path, import.meta.url));
 
 export default defineConfig({
   site: "https://weather.mukoko.com",
-  adapter: cloudflare({ imageService: "passthrough" }),
+  // STATIC output and no adapter, on purpose (mukoko-dev/mukoko-weather#579,
+  // owner decision: "Rust serves it, JS only in the browser"). `astro build`
+  // writes plain files into dist/ and nothing that runs on a server: no
+  // `_worker.js`, no server bundle, no runtime config. The Rust Worker in
+  // ../workers/web serves those files and owns routing, headers and caching.
+  // A page that needs a server is not an Astro page here: it prerenders, or
+  // Rust renders it. scripts/check-artefact.mjs fails the build if an adapter
+  // or a server bundle comes back.
+  output: "static",
   integrations: [react()],
+  // No image is optimised here, and sharp is a Node dependency.
+  image: { service: passthroughImageService() },
   // WorkOS keeps its own sealed cookie (phase 3); nothing here uses Astro
-  // sessions, so no KV namespace is bound and the session runtime is left out
-  // of the Worker bundle.
+  // sessions.
   session: false,
   // The Next.js app's URLs have no trailing slash (`/about`, and the canonical
-  // links say so). `file` writes about.html, which Workers static assets serve
+  // links say so). `file` writes about.html, which the Rust Worker (../workers/web) serves
   // at `/about`; `directory` would write about/index.html and answer `/about`
   // with a redirect to `/about/`.
   trailingSlash: "never",
   build: { format: "file" },
-  // No image is optimised here; skip the Images binding the adapter would add.
-  // (adapter option below)
   fonts: [
     {
       provider: fontProviders.fontsource(),
