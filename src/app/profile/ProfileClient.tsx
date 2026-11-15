@@ -24,6 +24,7 @@ import { ProfileIdentity } from "@/components/profile/ProfileIdentity";
 import { ProfileGroup } from "@/components/profile/ProfileGroup";
 import { GroupedRow } from "@/components/profile/GroupedRow";
 import { ProfileOrganizations } from "@/components/profile/ProfileOrganizations";
+import { ProfileInstallRow } from "@/components/profile/ProfileInstallRow";
 import { ProfileDevices } from "@/components/profile/ProfileDevices";
 import { ProfileAppearance } from "@/components/profile/ProfileAppearance";
 import { ProfileNavigation } from "@/components/profile/ProfileNavigation";
@@ -73,6 +74,7 @@ export function ProfileClient({
           value={prefsSummary(notificationPrefs)}
           onClick={() => openNotifications("settings")}
         />
+        <ProfileInstallRow />
       </ProfileGroup>
 
       <ProfileOrganizations organizations={organizations} />

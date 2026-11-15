@@ -5,6 +5,7 @@ import {
   MISSING_ASSET_DESTINATION,
   MISSING_ASSET_SOURCE,
 } from "./src/lib/missing-asset";
+import { BFCACHE_HEADER_RULE } from "./src/lib/bfcache";
 import {
   RETIRED_API_DESTINATION,
   RETIRED_API_ROOT,
@@ -98,6 +99,13 @@ const nextConfig: NextConfig = {
             value: buildCsp(CSP_REPORT_PATH, couchApiConnectSrc(process.env)),
           },
         ],
+      },
+      {
+        // An anonymous page may be restored by Back (bfcache): no `no-store`.
+        // Reasoning and the exclusions are in src/lib/bfcache.ts.
+        ...BFCACHE_HEADER_RULE,
+        missing: [...BFCACHE_HEADER_RULE.missing],
+        headers: [...BFCACHE_HEADER_RULE.headers],
       },
       {
         // The service worker script must never be served stale — always
