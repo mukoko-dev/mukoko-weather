@@ -227,8 +227,9 @@
     {
       "pattern": "/help",
       "next_file": "src/app/help/page.tsx",
-      "status": "not_migrated",
-      "phase": "2"
+      "status": "migrated",
+      "phase": "2",
+      "asset": "help.html"
     },
     {
       "pattern": "/history",
@@ -251,8 +252,9 @@
     {
       "pattern": "/privacy",
       "next_file": "src/app/privacy/page.tsx",
-      "status": "not_migrated",
-      "phase": "2"
+      "status": "migrated",
+      "phase": "2",
+      "asset": "privacy.html"
     },
     {
       "pattern": "/profile",
@@ -263,8 +265,9 @@
     {
       "pattern": "/releases",
       "next_file": "src/app/releases/page.tsx",
-      "status": "not_migrated",
-      "phase": "2"
+      "status": "migrated",
+      "phase": "2",
+      "asset": "releases.html"
     },
     {
       "pattern": "/releases/feed.xml",
@@ -293,8 +296,9 @@
     {
       "pattern": "/status",
       "next_file": "src/app/status/page.tsx",
-      "status": "not_migrated",
-      "phase": "2"
+      "status": "migrated",
+      "phase": "2",
+      "asset": "status.html"
     },
     {
       "pattern": "/sw.js",
@@ -305,8 +309,9 @@
     {
       "pattern": "/terms",
       "next_file": "src/app/terms/page.tsx",
-      "status": "not_migrated",
-      "phase": "2"
+      "status": "migrated",
+      "phase": "2",
+      "asset": "terms.html"
     }
   ],
   "astro_only": [

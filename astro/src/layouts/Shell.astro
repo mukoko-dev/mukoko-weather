@@ -21,11 +21,11 @@ import { siteJsonLd } from "@/lib/site-json-ld";
 import {
   KEYWORDS,
   OG_IMAGE,
-  OG_IMAGE_URL,
   ROBOTS,
   TWITTER_DESCRIPTION,
   pageTitle as titleOf,
 } from "~/lib/seo";
+import { ogUrlFor } from "~/lib/og/pages";
 
 interface Props {
   title: string;
@@ -36,14 +36,33 @@ interface Props {
   noindex?: boolean;
   /** Page-level structured data (JSON-LD), one script each, after the site-wide one. */
   jsonLd?: readonly unknown[];
+  /**
+   * The card image, as a path or absolute URL. Omit it: it is derived from
+   * `canonicalPath` (the page's own card when it has one, else the site card),
+   * so every page gets an absolute, existing og:image and twitter:image.
+   */
+  ogImage?: string;
+  /** What the card shows, for people who cannot see it. Defaults to the title. */
+  ogImageAlt?: string;
 }
 
-const { title, description, canonicalPath, noindex = false, jsonLd = [] } = Astro.props;
+const {
+  title,
+  description,
+  canonicalPath,
+  noindex = false,
+  jsonLd = [],
+  ogImage,
+  ogImageAlt,
+} = Astro.props;
 const pageTitle = titleOf(title);
 // Site-wide structured data: the Next.js layout's, from one module. Flags are
 // read at build time, like everywhere in this app.
 const siteData = siteJsonLd(isFeatureEnabled("shamwari_chat"));
 const canonical = canonicalPath ? new URL(canonicalPath, Astro.site).href : undefined;
+// Always absolute: a scraper resolves nothing against the page.
+const cardUrl = ogImage ? new URL(ogImage, Astro.site).href : ogUrlFor(canonicalPath);
+const cardAlt = ogImageAlt ?? (canonicalPath ? pageTitle : OG_IMAGE.alt);
 ---
 
 <!doctype html>
@@ -63,16 +82,18 @@ const canonical = canonicalPath ? new URL(canonicalPath, Astro.site).href : unde
     <meta property="og:title" content={pageTitle} />
     <meta property="og:description" content={description} />
     {canonical && <meta property="og:url" content={canonical} />}
-    <meta property="og:image" content={OG_IMAGE_URL} />
+    <meta property="og:image" content={cardUrl} />
+    <meta property="og:image:type" content={OG_IMAGE.type} />
     <meta property="og:image:width" content={String(OG_IMAGE.width)} />
     <meta property="og:image:height" content={String(OG_IMAGE.height)} />
-    <meta property="og:image:alt" content={OG_IMAGE.alt} />
+    <meta property="og:image:alt" content={cardAlt} />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={pageTitle} />
     <meta name="twitter:description" content={TWITTER_DESCRIPTION} />
     <meta name="twitter:site" content="@mukokoafrica" />
     <meta name="twitter:creator" content="@mukokoafrica" />
-    <meta name="twitter:image" content={OG_IMAGE_URL} />
+    <meta name="twitter:image" content={cardUrl} />
+    <meta name="twitter:image:alt" content={cardAlt} />
     <slot name="head" />
     <script type="application/ld+json" set:html={safeJsonLd(siteData)} />
     {jsonLd.map((data) => <script type="application/ld+json" set:html={safeJsonLd(data)} />)}

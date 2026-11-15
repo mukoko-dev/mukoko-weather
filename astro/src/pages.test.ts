@@ -98,12 +98,10 @@ describe("the site-wide head matches the Next.js root layout", () => {
     for (const word of KEYWORDS) expect(layout).toContain(`"${word}"`);
   });
 
-  it("builds the card image URL the same way", () => {
-    expect(layout).toContain(
-      '`${SITE_URL}/api/og?${new URLSearchParams({ title: "mukoko weather", subtitle: "Global Weather Intelligence", template: "home" })}`',
-    );
-    expect(OG_IMAGE_URL).toBe(
-      "https://weather.mukoko.com/api/og?title=mukoko+weather&subtitle=Global+Weather+Intelligence&template=home",
-    );
+  it("has its own card image, on purpose: the Next.js layout's /api/og route is not used here", () => {
+    // The Next.js layout still draws its card with /api/og; this app draws a
+    // card per page at build time (src/lib/og). The two differ by design.
+    expect(layout).toContain("/api/og?");
+    expect(OG_IMAGE_URL).toBe("https://weather.mukoko.com/og/site.png");
   });
 });

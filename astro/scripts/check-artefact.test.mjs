@@ -42,7 +42,16 @@ async function fakeRepo() {
 
 async function goodDist(repo) {
   const dist = join(repo, "astro/dist");
-  await put(dist, "about.html", "<html></html>");
+  // Every page the route table says is served, so this fixture follows the
+  // table as pages move over instead of naming them here.
+  const table = JSON.parse(
+    await readFile(join(repo, "workers/web/routing/routes.json"), "utf8"),
+  );
+  for (const route of table.routes) {
+    if (route.status === "migrated") {
+      await put(dist, route.asset, "<html></html>");
+    }
+  }
   await put(dist, "shell-preview.html", "<html></html>");
   await put(dist, "_astro/client.abc.js", 'import "./react.def.js";');
   return dist;

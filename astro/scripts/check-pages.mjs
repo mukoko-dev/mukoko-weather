@@ -158,7 +158,7 @@ try {
       .evaluateAll((els) => els.map((e) => JSON.parse(e.textContent)));
     check(
       canonical === `https://weather.mukoko.com${path}` &&
-        ogImage?.includes("/api/og?") &&
+        ogImage === `https://weather.mukoko.com/og/pages${path}.png` &&
         ld.length >= 1,
       `${path} has a canonical link, a card image and JSON-LD`,
       `${canonical}, ${ld.length} JSON-LD block(s)`,
