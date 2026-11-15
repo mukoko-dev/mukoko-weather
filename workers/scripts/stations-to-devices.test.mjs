@@ -302,11 +302,16 @@ const secrets = [
 const names = fixture.flatMap((d) => [d.name, d.stationName]).filter(Boolean);
 
 test("the command writes batch files and prints only counts and masked ids", (t) => {
-  const out = join(scratch(t), "batches");
+  const dir = scratch(t);
+  const out = join(dir, "batches");
   const r = run([FIXTURE, "--out", out, "--batch-size", "2"]);
   assert.equal(r.status, 0, r.stderr);
 
-  const printed = r.stdout + r.stderr;
+  // The command prints the directory it wrote to, and that path is random
+  // (and, on a runner, can hold any letter). The fixture has a station named
+  // "x", so a path with an x in it looked like a leaked name about one run in
+  // ten. What the test checks is the command's own words, so the path goes.
+  const printed = (r.stdout + r.stderr).split(dir).join("<scratch>");
   for (const secret of secrets) assert.ok(!printed.includes(secret), secret);
   for (const name of names) assert.ok(!printed.includes(name), name);
   assert.ok(
