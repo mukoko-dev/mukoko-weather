@@ -16,9 +16,18 @@
 //!   `RETENTION_DAYS` to R2 and delete them; delete raw uploads older than
 //!   `RAW_RETENTION_DAYS`; drop day-old rate-limit events.
 //!
-//! Nothing here logs coordinates, payloads or keys: only job kinds and
-//! counts.
+//! - **alerts** (`10 * * * *`, hourly): device push for frost (#289, #579). One
+//!   `Job::Alerts` per `PUSH_PLACES` place (default `WARM_PLACES`): read the
+//!   forecast, ask the Nyuchi API who follows the place, CLAIM each alert in the
+//!   delivery log, push through the `PUSH` service binding only after the claim
+//!   is won, log the outcome, deactivate subscriptions that are gone
+//!   (`alerts.rs`). **Does nothing unless `ALERTS_ENABLED` is exactly `true`**:
+//!   with it off the tick logs one line and queues nothing.
+//!
+//! Nothing here logs coordinates, payloads, people, endpoints or keys: only job
+//! kinds, outcomes and counts.
 
+mod alerts;
 mod tasks;
 
 use weather_core::jobs::{plan, Job, Settings, Tick};
@@ -35,11 +44,13 @@ pub(crate) const QUEUE: &str = "JOBS";
 /// Workers Queues accept at most 100 messages in one `sendBatch`.
 const SEND_BATCH_MAX: usize = 100;
 
-fn settings(env: &Env) -> Settings {
+pub(crate) fn settings(env: &Env) -> Settings {
     Settings {
         warm_places: config(env, "WARM_PLACES"),
         retention_days: config(env, "RETENTION_DAYS"),
         raw_retention_days: config(env, "RAW_RETENTION_DAYS"),
+        push_places: config(env, "PUSH_PLACES"),
+        alerts_enabled: config(env, "ALERTS_ENABLED"),
     }
 }
 
@@ -52,7 +63,14 @@ pub async fn scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
     };
     let now = chrono::DateTime::from_timestamp_millis(event.schedule() as i64)
         .unwrap_or_else(weather_edge::now);
-    let jobs = plan(tick, now, &settings(&env));
+    let settings = settings(&env);
+    // The switch for device push. `plan` returns nothing for the alert tick
+    // while it is off; this says so, once, so a silent tick is not a mystery.
+    if tick == Tick::Alerts && !settings.alerts_enabled() {
+        console_log!("jobs: Alerts switched off (ALERTS_ENABLED is not true), nothing queued");
+        return;
+    }
+    let jobs = plan(tick, now, &settings);
     let count = jobs.len();
     match enqueue(&env, jobs).await {
         Ok(()) => console_log!("jobs: {tick:?} queued {count}"),

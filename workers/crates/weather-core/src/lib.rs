@@ -51,6 +51,7 @@ pub mod open_meteo;
 pub mod place_profile;
 pub mod places;
 pub mod push;
+pub mod push_wire;
 pub mod query;
 pub mod reference;
 pub mod resolve;

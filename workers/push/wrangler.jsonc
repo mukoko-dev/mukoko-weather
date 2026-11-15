@@ -1,27 +1,39 @@
 // mukoko-weather-push: the Workers-runtime half of the Web Push sender
-// (mukoko-dev/mukoko-weather#289, step c). DARK AND NOT DEPLOYED.
+// (mukoko-dev/mukoko-weather#289, #579).
 //
-// What this Worker is today: WebCrypto glue (ECDH key agreement, the ES256
-// VAPID signature) and a `fetch` transport for the push POST, with ONE route,
-// GET /health. It has no scheduled handler, no cron trigger, no send route, no
-// route to alert targets, no queue, no storage and no secret.
+// What this Worker is: WebCrypto glue (ECDH key agreement, the ES256 VAPID
+// signature), a `fetch` transport for the push POST, and TWO routes:
+// GET /health, and POST /send, which pushes ONE already-decided alert to ONE
+// subscription and answers only a classified outcome (never the endpoint, a key
+// or a body).
 //
-// Deliberately absent, each with its reason:
-//   - "triggers" / "crons": nothing evaluates or sends on a schedule yet (the
-//     evaluator tick belongs to mukoko-weather-jobs, a later step).
-//   - "secrets_store_secrets": a binding to a store secret that does not exist
-//     fails the deploy (error 10182), and the VAPID key pair does not exist
-//     yet. The code never reads a secret: a caller supplies the key as a value.
-//   - "routes" and workers.dev: there is nothing to reach from outside.
-//   - "services": the Worker binds to no other Worker.
+// Who can reach it: nobody from outside. No "routes", no workers.dev, no
+// preview URLs. The one caller is mukoko-weather-jobs over its PUSH service
+// binding, and /send also needs `Authorization: Bearer <PUSH_SEND_KEY>` (the
+// same Secrets Store value jobs holds), so a Worker that later gains a binding
+// to this one still cannot make it push. Without the key configured /send
+// answers 503; it never opens.
 //
-// Needs, before this can be deployed (workers/README.md, "Web Push alerts"):
-//   the VAPID key pair in the Secrets Store, the sender key, the evaluator.
-// Deploy order when it is time: before mukoko-weather-jobs. It is NOT in
-// workflows/workers-deploy.yml's order on purpose.
+// Secrets (Secrets Store, bound below). A binding to a store secret that does
+// not exist FAILS THE DEPLOY (error 10182): a missing secret stops the deploy
+// loudly, it is never skipped.
+//   MUKOKO_WEATHER_VAPID_PRIVATE_KEY  the VAPID private key (owner-generated)
+//   MUKOKO_WEATHER_PUSH_SEND_KEY      the shared key of /send
+// The entry (src/lib.rs) reads them and passes each on as a VALUE; the sender
+// code reads no environment (tripwire tests in crates/weather-webpush).
 //
-// The tests in crates/weather-webpush (src/tripwire.rs) read this file and
-// fail if any of the above appears here.
+// Vars (not secrets): VAPID_PUBLIC_KEY is the public half of the pair, the one
+// the Nyuchi API serves as `web_push_vapid_public_key` and browsers subscribe
+// against; VAPID_SUBJECT is the contact (`mailto:` or `https:`, RFC 8292). Both
+// are the owner's and ship EMPTY: /send answers 503 `not_configured` until they
+// are set, and the signer refuses a key that is not the pair of the public half.
+//
+// No schedule, no queue, no storage, no other binding: the sender decides
+// nothing and remembers nothing. Deploy order: BEFORE mukoko-weather-jobs
+// (workflows/workers-deploy.yml), whose PUSH binding names this Worker.
+//
+// The tests in crates/weather-webpush (src/tripwire.rs) read this file and fail
+// if it grows a route, a schedule or a binding beyond the two secrets.
 {
   "name": "mukoko-weather-push",
   "main": "build/index.js",
@@ -30,7 +42,26 @@
   "workers_dev": false,
   "preview_urls": false,
   "keep_vars": true,
-  // The code logs nothing: no endpoint, header, key or body is ever written.
+  "vars": {
+    // OWNER: the VAPID public key (unpadded base64url, 87 characters).
+    "VAPID_PUBLIC_KEY": "",
+    // OWNER: the contact, `mailto:you@example.com` or an https URL.
+    "VAPID_SUBJECT": "",
+  },
+  "secrets_store_secrets": [
+    {
+      "binding": "MUKOKO_WEATHER_VAPID_PRIVATE_KEY",
+      "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
+      "secret_name": "MUKOKO_WEATHER_VAPID_PRIVATE_KEY",
+    },
+    {
+      "binding": "MUKOKO_WEATHER_PUSH_SEND_KEY",
+      "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
+      "secret_name": "MUKOKO_WEATHER_PUSH_SEND_KEY",
+    },
+  ],
+  // The code logs outcomes and codes only: never an endpoint, header, key or
+  // body.
   "observability": {
     "enabled": true,
     "redact_query_string": true,

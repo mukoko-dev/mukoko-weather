@@ -13,6 +13,15 @@ use std::fmt;
 
 use serde_json::{json, Value};
 
+/// People per page asked of the targets route (the API's own cap).
+pub const TARGETS_PAGE_LIMIT: u32 = 100;
+/// Pages read for one place in one tick. Bounds the tick's subrequests whatever
+/// the API answers: 10 pages is 1,000 people, which is also
+/// `alert_plan::MAX_TARGETS_PER_PLACE`-sized work for one plan (a place with more
+/// followers than that is read again on the next tick, never skipped silently:
+/// the log says so).
+pub const MAX_TARGET_PAGES: usize = 10;
+
 use crate::alert_delivery::Deactivation;
 use crate::alert_plan::AlertTarget;
 use crate::push::{AlertPrefs, KIND_FROST, MAX_PUSHES_PER_DAY, MAX_PUSHES_PER_KIND_PER_NIGHT};
@@ -108,6 +117,118 @@ pub fn parse_targets(body: &Value) -> TargetsPage {
         });
     }
     page
+}
+
+/// The most subrequests one alert job makes: a Worker invocation allows 1,000,
+/// and this leaves room for the forecast read, the pages, the deactivations and
+/// the platform's own.
+pub const MAX_SUBREQUESTS_PER_RUN: usize = 900;
+/// Subrequests one send costs when its claim is won: the claim, the push, the
+/// outcome log.
+pub const SUBREQUESTS_PER_SEND: usize = 3;
+
+/// Counts a job's subrequests so a place with many followers stops cleanly
+/// instead of the runtime cutting the job off mid-send (which would leave a
+/// claimed row `queued`: a missed alert). What is not reached this tick is
+/// planned again on the next one, with the same key.
+#[derive(Debug, Default)]
+pub struct Budget {
+    used: usize,
+}
+
+impl Budget {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Spend `n`; `false` (and nothing spent) when it would pass the cap.
+    pub fn take(&mut self, n: usize) -> bool {
+        if self.used + n > MAX_SUBREQUESTS_PER_RUN {
+            return false;
+        }
+        self.used += n;
+        true
+    }
+
+    /// Give back what a step reserved and did not use (a claim not won spends
+    /// one subrequest, not three).
+    pub fn refund(&mut self, n: usize) {
+        self.used = self.used.saturating_sub(n);
+    }
+
+    pub fn used(&self) -> usize {
+        self.used
+    }
+}
+
+/// A forecast series, read out of the forecast Worker's `/weather` answer.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ForecastSeries {
+    /// Local wall-clock `YYYY-MM-DDTHH:MM`, as Open-Meteo writes them.
+    pub times: Vec<String>,
+    /// Air temperature (C); `NaN` where the provider had none (the frost
+    /// evaluation skips a value that is not finite, so a gap never reads as
+    /// cold).
+    pub temps: Vec<f64>,
+    pub utc_offset_seconds: i32,
+}
+
+/// The hourly temperatures and the place's UTC offset from a `/weather`
+/// answer. `None` unless there is a series and an offset: the offset is what
+/// turns `now` into the place's local hour, and a guessed one would put a
+/// "tonight" alert on the wrong night, so a place with no offset gets no alert
+/// this tick rather than an assumed one.
+pub fn forecast_series(data: &Value) -> Option<ForecastSeries> {
+    let times: Vec<String> = data
+        .pointer("/hourly/time")?
+        .as_array()?
+        .iter()
+        .map(|t| t.as_str().map(str::to_owned))
+        .collect::<Option<_>>()?;
+    let temps: Vec<f64> = data
+        .pointer("/hourly/temperature_2m")?
+        .as_array()?
+        .iter()
+        .map(|t| t.as_f64().unwrap_or(f64::NAN))
+        .collect();
+    if times.is_empty() || temps.is_empty() {
+        return None;
+    }
+    let offset = data.get("utc_offset_seconds")?.as_f64()?;
+    // -12 to +14 hours, whole seconds (the bound `PlaceInput` documents).
+    if offset.fract() != 0.0 || !(-43_200.0..=50_400.0).contains(&offset) {
+        return None;
+    }
+    Some(ForecastSeries {
+        times,
+        temps,
+        utc_offset_seconds: offset as i32,
+    })
+}
+
+fn is_cursor(c: &str) -> bool {
+    (1..=64).contains(&c.len())
+        && c.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+}
+
+/// The path and query of one page of the targets route. `None` for a place
+/// slug or cursor outside what the API accepts (the place key grammar is the
+/// API's; a slug with anything but `[a-z0-9-]` is never put in a URL here, and
+/// a cursor must match the API's `^[A-Za-z0-9_-]{1,64}$`).
+pub fn targets_path(place_slug: &str, cursor: Option<&str>) -> Option<String> {
+    crate::push::validate_slug(place_slug).ok()?;
+    let mut path = format!(
+        "/v1/notifications/alerts/targets?place_slug={place_slug}&kind={KIND_FROST}&limit={TARGETS_PAGE_LIMIT}"
+    );
+    if let Some(c) = cursor {
+        if !is_cursor(c) {
+            return None;
+        }
+        path.push_str("&cursor=");
+        path.push_str(c);
+    }
+    Some(path)
 }
 
 /// What one person has been sent in this run, so the per-person caps hold
@@ -340,5 +461,137 @@ mod tests {
             deactivate_body(&call),
             json!({"subscriptions": [{"person_id": "p1", "id": "a1"}], "reason": "gone"})
         );
+    }
+
+    fn weather(offset: Value) -> Value {
+        json!({
+            "hourly": {
+                "time": ["2026-11-14T22:00", "2026-11-14T23:00", "2026-11-15T00:00"],
+                "temperature_2m": [4.5, null, 1.0],
+            },
+            "utc_offset_seconds": offset,
+        })
+    }
+
+    #[test]
+    fn a_series_is_read_with_a_gap_that_is_not_cold() {
+        let s = forecast_series(&weather(json!(7200))).expect("reads");
+        assert_eq!(s.times.len(), 3);
+        assert_eq!(s.utc_offset_seconds, 7200);
+        assert_eq!(s.temps[0], 4.5);
+        assert!(s.temps[1].is_nan(), "a missing value is not a number");
+        assert_eq!(s.temps[2], 1.0);
+    }
+
+    #[test]
+    fn a_series_without_an_offset_or_with_an_impossible_one_is_not_used() {
+        for offset in [
+            json!(null),
+            json!("7200"),
+            json!(7200.5),
+            json!(60 * 3600),
+            json!(-13 * 3600),
+        ] {
+            assert!(
+                forecast_series(&weather(offset.clone())).is_none(),
+                "{offset}"
+            );
+        }
+        let mut no_offset = weather(json!(0));
+        no_offset
+            .as_object_mut()
+            .expect("object")
+            .remove("utc_offset_seconds");
+        assert!(forecast_series(&no_offset).is_none());
+        assert_eq!(
+            forecast_series(&weather(json!(-43_200)))
+                .expect("edge")
+                .utc_offset_seconds,
+            -43_200
+        );
+        assert_eq!(
+            forecast_series(&weather(json!(50_400)))
+                .expect("edge")
+                .utc_offset_seconds,
+            50_400
+        );
+    }
+
+    #[test]
+    fn a_series_that_is_not_a_series_is_not_used() {
+        for body in [
+            json!({}),
+            json!({"hourly": {}, "utc_offset_seconds": 0}),
+            json!({"hourly": {"time": [], "temperature_2m": []}, "utc_offset_seconds": 0}),
+            json!({"hourly": {"time": [1, 2], "temperature_2m": [1.0, 2.0]}, "utc_offset_seconds": 0}),
+            json!({"hourly": {"time": ["2026-11-14T22:00"]}, "utc_offset_seconds": 0}),
+        ] {
+            assert!(forecast_series(&body).is_none(), "{body}");
+        }
+    }
+
+    #[test]
+    fn the_targets_path_names_the_place_the_kind_and_the_page_size() {
+        assert_eq!(
+            targets_path("victoria-falls", None).as_deref(),
+            Some("/v1/notifications/alerts/targets?place_slug=victoria-falls&kind=frost&limit=100")
+        );
+        assert_eq!(
+            targets_path("harare", Some("a1_B-2")).as_deref(),
+            Some("/v1/notifications/alerts/targets?place_slug=harare&kind=frost&limit=100&cursor=a1_B-2")
+        );
+    }
+
+    #[test]
+    fn nothing_but_a_slug_and_a_cursor_in_the_api_grammar_reaches_a_url() {
+        for slug in [
+            "",
+            "Harare",
+            "har are",
+            "harare&kind=severe",
+            "harare/../x",
+            "ha?re",
+        ] {
+            assert!(targets_path(slug, None).is_none(), "{slug:?}");
+        }
+        for cursor in ["", "a b", "x&limit=1", "a/b", "é", &"c".repeat(65)] {
+            assert!(targets_path("harare", Some(cursor)).is_none(), "{cursor:?}");
+        }
+        assert!(targets_path("harare", Some(&"c".repeat(64))).is_some());
+    }
+
+    #[test]
+    fn a_page_cap_exists_and_is_small() {
+        assert_eq!(MAX_TARGET_PAGES, 10);
+        assert_eq!(TARGETS_PAGE_LIMIT, 100);
+    }
+
+    #[test]
+    fn the_budget_stops_at_the_cap_and_a_refused_step_costs_nothing() {
+        let mut b = Budget::new();
+        assert!(b.take(MAX_SUBREQUESTS_PER_RUN - 2));
+        assert!(!b.take(3), "would pass the cap");
+        assert_eq!(
+            b.used(),
+            MAX_SUBREQUESTS_PER_RUN - 2,
+            "a refusal spends nothing"
+        );
+        assert!(b.take(2));
+        assert!(!b.take(1));
+        b.refund(2);
+        assert!(b.take(2), "a refund gives it back");
+        b.refund(10 * MAX_SUBREQUESTS_PER_RUN);
+        assert_eq!(b.used(), 0, "a refund never goes below zero");
+    }
+
+    #[test]
+    fn a_full_run_of_sends_fits_in_a_workers_subrequests() {
+        // The forecast, ten pages and a handful of deactivation calls, then
+        // sends at three each: the sends that fit are well under the runtime's
+        // 1,000.
+        let overhead = 1 + MAX_TARGET_PAGES + 5;
+        let sends = (MAX_SUBREQUESTS_PER_RUN - overhead) / SUBREQUESTS_PER_SEND;
+        assert!(overhead + sends * SUBREQUESTS_PER_SEND < 1000);
+        assert!(sends >= 200, "at least one plan's worth of sends: {sends}");
     }
 }
