@@ -90,18 +90,18 @@ What it does, in `weather_core::web` (pure, tested) with `web/src/lib.rs` as the
 glue that reads the file through the `ASSETS` binding (`run_worker_first`,
 `html_handling: none`, so the Worker alone maps paths):
 
-| Path | Answer |
-| ---- | ------ |
-| `/about` | `about.html`, `Cache-Control: no-cache` (a page is never `no-store`, so Back restores it from the bfcache; the binding's `ETag` makes revalidation a `304`) |
-| `/about/` | `308` to `/about` (URLs never have a trailing slash, as in Astro's `format: file`) |
-| `/about.html`, unknown paths | `404` problem+json |
-| `/_astro/*` | `public, max-age=31536000, immutable` (hashed names) |
-| `/sw.js` | `no-cache`, `Content-Type: text/javascript`, `Service-Worker-Allowed: /` |
-| `/manifest.json` | `no-cache`, `application/manifest+json` |
+| Path                                                  | Answer                                                                                                                                                                                                                   |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/about`                                              | `about.html`, `Cache-Control: no-cache` (a page is never `no-store`, so Back restores it from the bfcache; the binding's `ETag` makes revalidation a `304`)                                                              |
+| `/about/`                                             | `308` to `/about` (URLs never have a trailing slash, as in Astro's `format: file`)                                                                                                                                       |
+| `/about.html`, unknown paths                          | `404` problem+json                                                                                                                                                                                                       |
+| `/_astro/*`                                           | `public, max-age=31536000, immutable` (hashed names)                                                                                                                                                                     |
+| `/sw.js`                                              | `no-cache`, `Content-Type: text/javascript`, `Service-Worker-Allowed: /`                                                                                                                                                 |
+| `/manifest.json`                                      | `no-cache`, `application/manifest+json`                                                                                                                                                                                  |
 | a route in `routing/routes.json` still `not_migrated` | `404` `application/problem+json` (RFC 9457, type `.../problems/not-migrated`); with the var `LEGACY_ORIGIN` (a bare origin) set, forwarded there (10 s timeout, 1 MiB body limit, redirects not followed). Default: none |
-| `OPTIONS` | `204` with `Allow` (the embed routes also carry their open CORS headers) |
-| `HEAD`, other methods | `HEAD` as `GET`; a write to a file answers `405` |
-| `/health`, `/ready` | liveness (no dependency); readiness reads the first migrated page from the assets (`no-store`: probes are not pages) |
+| `OPTIONS`                                             | `204` with `Allow` (the embed routes also carry their open CORS headers)                                                                                                                                                 |
+| `HEAD`, other methods                                 | `HEAD` as `GET`; a write to a file answers `405`                                                                                                                                                                         |
+| `/health`, `/ready`                                   | liveness (no dependency); readiness reads the first migrated page from the assets (`no-store`: probes are not pages)                                                                                                     |
 
 Every response carries the security headers of `src/lib/security-headers.ts`
 (baseline, `X-Frame-Options` except `/embed` and `/display`, the report-only CSP
