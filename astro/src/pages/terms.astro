@@ -1,0 +1,20 @@
+---
+/**
+ * /terms, from src/app/terms/page.tsx: the body is the same React component
+ * (TermsContent), rendered to HTML at build time, so the page sends no
+ * JavaScript of its own.
+ */
+import Shell from "../layouts/Shell.astro";
+import PageMain from "../components/PageMain.astro";
+import { TermsContent } from "@/app/terms/TermsContent";
+---
+
+<Shell
+  title="Terms of Service"
+  description="Terms of Service for mukoko weather — a weather intelligence platform, operated by Mukoko Africa, a division of Nyuchi Africa (PVT) Ltd."
+  canonicalPath="/terms"
+>
+  <PageMain>
+    <TermsContent />
+  </PageMain>
+</Shell>

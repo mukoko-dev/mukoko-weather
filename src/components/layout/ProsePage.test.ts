@@ -23,7 +23,7 @@ describe("ProsePage", () => {
     expect(html).toContain('<h1 class="elephant">Terms of Service</h1>');
     expect(html).toContain("Last updated: June 2026");
     expect(html).toContain(
-      '<div class="mt-8 space-y-8 text-text-secondary leading-relaxed"><p>Body</p></div>',
+      '<div data-slot="prose-body" class="mt-8 space-y-8 text-text-secondary leading-relaxed"><p>Body</p></div>',
     );
   });
 

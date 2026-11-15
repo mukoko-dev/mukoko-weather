@@ -1,0 +1,392 @@
+import type { ReactNode } from "react";
+import Link from "next/link";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { FAQ } from "./FAQ";
+
+/** The FAQPage structured data: the questions in the schema.org vocabulary. */
+export const faqSchema = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: [
+    {
+      "@type": "Question",
+      name: "What is mukoko weather?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "mukoko weather is a global weather intelligence platform. It provides real-time weather conditions, 7-day forecasts, hourly predictions, frost alerts, and AI-generated weather advice for 265+ locations worldwide.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "How accurate is the weather data?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Weather data is sourced from Tomorrow.io and Open-Meteo, which aggregate data from national weather services and global models. Forecasts are generally reliable for 1-3 days ahead. Accuracy decreases for longer-range forecasts. For critical decisions, always consult your local meteorological service.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "How do frost alerts work?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "mukoko weather automatically scans hourly forecasts for temperatures at or below 3°C during nighttime hours (10pm to 8am). Alerts are classified as: Severe (below 0°C), High (0-2°C), or Moderate (2-3°C). These alerts are especially useful for farmers in frost-prone areas worldwide.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Can I install mukoko weather as an app?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Yes. On Android or Huawei phones, open weather.mukoko.com in Chrome or your browser, tap the menu (three dots), and select 'Add to Home Screen' or 'Install App'. The app launches in standalone mode for a native-like experience.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Is mukoko weather free?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Yes, mukoko weather is completely free. No account, registration, or payment required. Weather is a public good.",
+      },
+    },
+  ],
+};
+
+/**
+ * The body of /help: shared by the Next.js page and the Astro page, so the two
+ * cannot drift. The children are the FAQ accordion: the Astro page passes a static one
+ * (no JavaScript), the Next.js page leaves them out and gets its Radix one.
+ */
+export function HelpContent({ children }: { children?: ReactNode }) {
+  return (
+    <>
+      <PageHeader
+        title="Help & FAQ"
+        intro="Everything you need to know about using mukoko weather."
+      />
+
+      {/* Getting Started */}
+      <section className="mt-10">
+        <h2 className="eland">Getting started</h2>
+        <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
+          <p>
+            mukoko weather gives you accurate weather data for 265+ locations
+            worldwide. No account needed — just visit{" "}
+            <Link href="/" prefetch={false} className="sunbird">
+              weather.mukoko.com
+            </Link>{" "}
+            and you&apos;re ready to go.
+          </p>
+          <h3 className="font-semibold text-text-primary">
+            Selecting a location
+          </h3>
+          <p>
+            Tap the location button in the top-right corner of the header. You
+            can:
+          </p>
+          <ul className="springbok">
+            <li>
+              Search by name (e.g. &quot;London&quot;, &quot;Nairobi&quot;,
+              &quot;Bangkok&quot;)
+            </li>
+            <li>
+              Filter by category — cities, farming areas, mining, tourism,
+              national parks
+            </li>
+            <li>
+              Tap &quot;Use my location&quot; to auto-detect your nearest
+              supported weather location
+            </li>
+          </ul>
+
+          <h3 className="font-semibold text-text-primary">
+            Using your location
+          </h3>
+          <p>
+            When you tap &quot;Use my location&quot;, your browser will ask for
+            permission. Your coordinates are used to find the nearest supported
+            weather location. If you deny permission, you can always select a
+            location manually.
+          </p>
+        </div>
+      </section>
+
+      {/* Understanding the forecast */}
+      <section className="mt-10">
+        <h2 className="eland">Understanding the forecast</h2>
+        <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
+          <h3 className="font-semibold text-text-primary">
+            Current conditions
+          </h3>
+          <p>
+            The main card shows the current temperature, &quot;feels like&quot;
+            temperature, and weather condition (e.g. Clear sky, Partly cloudy,
+            Rain). Below that you&apos;ll find humidity, wind speed and
+            direction, UV index, atmospheric pressure, cloud cover, and
+            precipitation.
+          </p>
+
+          <h3 className="font-semibold text-text-primary">24-hour forecast</h3>
+          <p>
+            The hourly forecast shows hour-by-hour predictions for the next 24
+            hours, including temperature, weather icon, and rain probability.
+            Scroll horizontally to see the full timeline.
+          </p>
+
+          <h3 className="font-semibold text-text-primary">7-day forecast</h3>
+          <p>
+            The daily forecast shows each day&apos;s high and low temperatures,
+            weather condition, and rain probability. This helps with planning
+            the week ahead.
+          </p>
+
+          <h3 className="font-semibold text-text-primary">
+            AI weather summary
+          </h3>
+          <p>
+            Our AI assistant,{" "}
+            <strong className="text-text-primary">Shamwari Weather</strong>,
+            provides a contextual summary of current conditions with practical
+            advice. Summaries are tailored to the location type — farming areas
+            get crop advice, tourism spots get outdoor activity guidance, mining
+            areas get safety tips.
+          </p>
+
+          <h3 className="font-semibold text-text-primary">Sunrise & sunset</h3>
+          <p>
+            Today&apos;s sunrise and sunset times for your selected location,
+            useful for planning outdoor activities and understanding daylight
+            hours.
+          </p>
+        </div>
+      </section>
+
+      {/* Frost alerts */}
+      <section className="mt-10">
+        <h2 className="eland">Frost alerts</h2>
+        <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
+          <p>
+            mukoko weather automatically monitors overnight temperatures and
+            displays a frost alert banner when conditions are risky. This is
+            especially useful for farmers during frost-prone seasons.
+          </p>
+          <h3 className="font-semibold text-text-primary">Alert levels</h3>
+          <dl className="mt-2 space-y-2">
+            <div className="flex gap-3">
+              <dt className="w-24 flex-shrink-0 font-semibold text-text-primary">
+                Severe
+              </dt>
+              <dd>
+                Below 0°C — protect all crops immediately, cover sensitive
+                plants, drain exposed pipes
+              </dd>
+            </div>
+            <div className="flex gap-3">
+              <dt className="w-24 flex-shrink-0 font-semibold text-text-primary">
+                High
+              </dt>
+              <dd>
+                0°C to 2°C — significant frost risk, cover sensitive crops and
+                seedlings
+              </dd>
+            </div>
+            <div className="flex gap-3">
+              <dt className="w-24 flex-shrink-0 font-semibold text-text-primary">
+                Moderate
+              </dt>
+              <dd>
+                2°C to 3°C — light frost possible, protect delicate plants
+              </dd>
+            </div>
+          </dl>
+          <p>
+            Frost checks run for nighttime hours (10pm to 8am) when frost is
+            most likely. Alerts appear as a banner at the top of the weather
+            page.
+          </p>
+        </div>
+      </section>
+
+      {/* Seasonal awareness */}
+      <section className="mt-10">
+        <h2 className="eland">Seasonal awareness</h2>
+        <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
+          <p>
+            mukoko weather displays country-specific seasonal context on
+            forecast pages. Season data covers 50+ countries with local season
+            names and agricultural calendars — from Zimbabwe&apos;s Masika and
+            Chirimo to tropical monsoon and dry seasons across Africa, Asia, and
+            beyond.
+          </p>
+          <p>
+            Seasonal information helps you understand how weather patterns
+            affect daily life, agriculture, and travel in each region throughout
+            the year.
+          </p>
+        </div>
+      </section>
+
+      {/* Install as app */}
+      <section className="mt-10">
+        <h2 className="eland">Install as an app</h2>
+        <div className="mt-4 space-y-4 text-text-secondary leading-relaxed">
+          <p>
+            mukoko weather works as a Progressive Web App (PWA) — you can
+            install it on your phone&apos;s home screen for quick access.
+          </p>
+          <h3 className="font-semibold text-text-primary">Android / Huawei</h3>
+          <ol className="list-decimal pl-6 space-y-1">
+            <li>
+              Open{" "}
+              <strong className="text-text-primary">weather.mukoko.com</strong>{" "}
+              in Chrome or your browser
+            </li>
+            <li>
+              Tap the <strong className="text-text-primary">menu button</strong>{" "}
+              (three dots in the top-right)
+            </li>
+            <li>
+              Tap{" "}
+              <strong className="text-text-primary">
+                &quot;Add to Home Screen&quot;
+              </strong>{" "}
+              or{" "}
+              <strong className="text-text-primary">
+                &quot;Install App&quot;
+              </strong>
+            </li>
+            <li>The app icon will appear on your home screen</li>
+          </ol>
+          <h3 className="font-semibold text-text-primary">iPhone / iPad</h3>
+          <ol className="list-decimal pl-6 space-y-1">
+            <li>
+              Open{" "}
+              <strong className="text-text-primary">weather.mukoko.com</strong>{" "}
+              in Safari
+            </li>
+            <li>
+              Tap the{" "}
+              <strong className="text-text-primary">Share button</strong>{" "}
+              (square with arrow)
+            </li>
+            <li>
+              Scroll down and tap{" "}
+              <strong className="text-text-primary">
+                &quot;Add to Home Screen&quot;
+              </strong>
+            </li>
+          </ol>
+          <p>
+            Once installed, the app opens in standalone mode (no browser address
+            bar) and supports quick shortcuts to your favourite locations via
+            long-press on the app icon.
+          </p>
+        </div>
+      </section>
+
+      {/* Dark mode */}
+      <section className="mt-10">
+        <h2 className="eland">Dark mode</h2>
+        <div className="mt-4 text-text-secondary leading-relaxed">
+          <p>
+            Tap the theme toggle button in the top-right corner of the header
+            (next to the location selector) to switch between light and dark
+            mode. Your preference is saved and remembered on your next visit.
+          </p>
+        </div>
+      </section>
+
+      {/* Embed widget */}
+      <section className="mt-10">
+        <h2 className="eland">Embed widget</h2>
+        <div className="mt-4 text-text-secondary leading-relaxed">
+          <p>
+            mukoko weather offers an embeddable weather widget for third-party
+            websites. Visit the{" "}
+            <Link href="/embed" className="sunbird">
+              embed page
+            </Link>{" "}
+            for documentation and code snippets.
+          </p>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="mt-10">
+        <h2 className="eland">Frequently asked questions</h2>
+        <div className="mt-4">{children ?? <FAQ />}</div>
+      </section>
+
+      {/* Full guides */}
+      <section className="mt-10">
+        <h2 className="eland">Full guides</h2>
+        <div className="mt-4 text-text-secondary leading-relaxed">
+          <p>In-depth guides live in the Nyuchi documentation:</p>
+          <ul className="mt-2 space-y-1">
+            <li>
+              <a
+                href="https://docs.nyuchi.com/mukoko-weather/user-guide/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="sunbird"
+              >
+                Mukoko Weather user guide
+              </a>
+            </li>
+            <li>
+              <a
+                href="https://docs.nyuchi.com/mukoko-weather/weather-stations/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="sunbird"
+              >
+                Community weather stations — setup guide
+              </a>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      {/* Contact */}
+      <section className="mt-10">
+        <h2 className="eland">Still need help?</h2>
+        <div className="mt-4 text-text-secondary leading-relaxed">
+          <p>Reach out to us:</p>
+          <ul className="mt-2 space-y-1">
+            <li>
+              <strong className="text-text-primary">Support:</strong>{" "}
+              <a href="mailto:support@mukoko.com" className="sunbird">
+                support@mukoko.com
+              </a>
+            </li>
+            <li>
+              <strong className="text-text-primary">General:</strong>{" "}
+              <a href="mailto:hi@mukoko.com" className="sunbird">
+                hi@mukoko.com
+              </a>
+            </li>
+            <li>
+              <strong className="text-text-primary">Twitter:</strong>{" "}
+              <a
+                href="https://twitter.com/mukokoafrica"
+                className="sunbird"
+                rel="noopener noreferrer"
+              >
+                @mukokoafrica
+              </a>
+            </li>
+            <li>
+              <strong className="text-text-primary">Instagram:</strong>{" "}
+              <a
+                href="https://instagram.com/mukoko.africa"
+                className="sunbird"
+                rel="noopener noreferrer"
+              >
+                @mukoko.africa
+              </a>
+            </li>
+          </ul>
+        </div>
+      </section>
+    </>
+  );
+}

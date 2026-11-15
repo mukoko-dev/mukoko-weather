@@ -57,6 +57,7 @@ npm run check                  # astro check and tsc
 npm test                       # unit tests
 npm run build                  # the prerendered pages in dist/client
 npm run budget                 # JavaScript and CSS of each page against js-budget.json
+CHROME_PATH=/path/to/chrome npm run check:pages   # the static pages: no JavaScript needed, the FAQ, head metadata
 ASTRO_SOURCEMAP=1 npm run build   # with source maps, to see what is in a chunk
 npm run serve                  # dist/client over HTTP, gzipped like Cloudflare's edge
 CHROME_PATH=/path/to/chrome npm run check:shell   # persistence and no-JavaScript checks
@@ -80,6 +81,64 @@ repo root with dummy sign-in settings, and run the same command against it. Use
 Cloudflare's edge does. Compare two runs made on the same machine, minutes
 apart; the numbers say nothing across machines.
 
+## Route parity
+
+Every page below is prerendered to a `.html` file with the same URL as its
+Next.js route (`build.format: "file"`, no trailing slash). The body of each is
+the Next.js page's own component, imported from `../src` (`TermsContent`,
+`PrivacyContent`, `HelpContent`, `ReleaseEntry`, `StatusDashboard`), so the
+words cannot drift; `src/pages.test.ts` checks that each pair has the same
+title, description and canonical URL, and that the site-wide head (card image,
+keywords, twitter description) matches `src/app/layout.tsx`.
+
+| Next.js route        | Astro page                   | JavaScript of its own                                                                          |
+| -------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------- |
+| `/about`             | `pages/about.astro`          | none                                                                                           |
+| `/terms`             | `pages/terms.astro`          | none                                                                                           |
+| `/privacy`           | `pages/privacy.astro`        | none                                                                                           |
+| `/help`              | `pages/help.astro`           | 660 B inline: the FAQ buttons (the Radix accordion is not loaded)                              |
+| `/releases`          | `pages/releases.astro`       | none                                                                                           |
+| `/releases/feed.xml` | `pages/releases/feed.xml.ts` | none (a file written at build time)                                                            |
+| `/status`            | `pages/status.astro`         | the `StatusDashboard` island, 2.8 KB gzip over the shell: it reads `/v1/status` in the browser |
+
+Not moved, with the reason:
+
+- `/developers`: the Next.js page is rendered per visitor. Its "API keys"
+  section reads the signed-in user (`getCurrentUser`, shows their email and
+  links to the key manager) and the page reads a feature flag per request. A
+  prerendered page has no visitor. It moves with phase 3 (sign-in), as a static
+  page with that one block as an island that asks the session.
+- `/offline`: it is what the service worker precaches, and its body is
+  `OfflineShell`, which shows the last place saved on the device through
+  `DeviceSnapshot`: the Next.js `Header`, `CurrentConditions`, the hourly and
+  daily charts, `WeatherBackdrop`, and the real store with RxDB. Those are the
+  place page's components (phase 1); the shell's store shim has no RxDB, and the
+  build fails on it (`hasStoreHydrated` is not exported by `src/shims/store.ts`).
+  A cut-down `/offline` would lose the saved-weather view the Next.js one has.
+  The worker (`src/app/sw.ts`) also finds the page's scripts by their
+  `/_next/static/` URLs in the precached HTML (`src/lib/sw-shell.ts`), and an
+  Astro island is not a `<script src>` under `/_astro/`: both change with the
+  service worker in phase 4. Nothing in the worker is touched here.
+
+What a static file cannot carry is left to whatever serves it: the Next.js
+`/releases/feed.xml` route sets `Cache-Control: public, max-age=3600,
+s-maxage=86400`; the HTML pages get the same headers `src/lib/security-headers.ts`
+gives them today. The Cloudflare adapter writes `_headers` for `/_astro/*`
+(immutable); the rest is the Rust Worker's rules (#579).
+
+Differences from the Next.js pages, on purpose:
+
+- The Open Graph title is the page's own (`Terms of Service | mukoko weather`)
+  and `og:url` is the page's canonical. The Next.js pages without their own
+  `openGraph` (everything here but `/releases`) inherit the home page's title
+  and URL from the root layout, so a shared `/terms` link says "Global Weather
+  Intelligence" and points at `/`. Only `/releases` sets its own there.
+- `/help`'s FAQ is plain markup: each question is a heading with a button, the
+  answer is `hidden="until-found"` (find-in-page opens it) and, with no script,
+  every answer is shown.
+- Terms and Privacy skip layout and paint work for every section from the third
+  down (`content-visibility: auto`, see `src/styles/global.css`).
+
 ## Known gaps in what is built
 
 - The footer's year is the year of the build (the pages are prerendered); the
@@ -92,7 +151,7 @@ apart; the numbers say nothing across machines.
 
 ## Not here yet
 
-The place page (phase 1), the other static pages (phase 2), sign-in, the API
+The place page (phase 1), the rest of the static pages (phase 2: `/developers`, `/offline`, embed, explore, locations, history), sign-in, the API
 routes and the `proxy.ts` rules (phase 3), the service worker, analytics, push,
 JSON-LD, the sitemap and robots (phase 4), the Quick actions group, and any
 deploy or DNS change (phase 5, the owner's).

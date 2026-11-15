@@ -15,6 +15,17 @@ import "../styles/global.css";
 import ShellHeader from "../components/ShellHeader.astro";
 import ShellFooter from "../components/ShellFooter.astro";
 import BottomBar from "../islands/BottomBar";
+import { isFeatureEnabled } from "@/lib/feature-flags";
+import { safeJsonLd } from "@/lib/json-ld";
+import { siteJsonLd } from "@/lib/site-json-ld";
+import {
+  KEYWORDS,
+  OG_IMAGE,
+  OG_IMAGE_URL,
+  ROBOTS,
+  TWITTER_DESCRIPTION,
+  pageTitle as titleOf,
+} from "~/lib/seo";
 
 interface Props {
   title: string;
@@ -23,10 +34,15 @@ interface Props {
   canonicalPath?: string;
   /** Keep the page out of search engines (preview pages). */
   noindex?: boolean;
+  /** Page-level structured data (JSON-LD), one script each, after the site-wide one. */
+  jsonLd?: readonly unknown[];
 }
 
-const { title, description, canonicalPath, noindex = false } = Astro.props;
-const pageTitle = title.includes("mukoko") ? title : `${title} | mukoko weather`;
+const { title, description, canonicalPath, noindex = false, jsonLd = [] } = Astro.props;
+const pageTitle = titleOf(title);
+// Site-wide structured data: the Next.js layout's, from one module. Flags are
+// read at build time, like everywhere in this app.
+const siteData = siteJsonLd(isFeatureEnabled("shamwari_chat"));
 const canonical = canonicalPath ? new URL(canonicalPath, Astro.site).href : undefined;
 ---
 
@@ -38,12 +54,28 @@ const canonical = canonicalPath ? new URL(canonicalPath, Astro.site).href : unde
     <title>{pageTitle}</title>
     <meta name="description" content={description} />
     {canonical && <link rel="canonical" href={canonical} />}
-    {noindex && <meta name="robots" content="noindex, nofollow" />}
+    <meta name="robots" content={noindex ? "noindex, nofollow" : ROBOTS} />
+    <meta name="keywords" content={KEYWORDS.join(", ")} />
+    <meta name="author" content="Nyuchi Web Services" />
     <meta property="og:site_name" content="mukoko weather" />
     <meta property="og:type" content="website" />
+    <meta property="og:locale" content="en" />
     <meta property="og:title" content={pageTitle} />
     <meta property="og:description" content={description} />
     {canonical && <meta property="og:url" content={canonical} />}
+    <meta property="og:image" content={OG_IMAGE_URL} />
+    <meta property="og:image:width" content={String(OG_IMAGE.width)} />
+    <meta property="og:image:height" content={String(OG_IMAGE.height)} />
+    <meta property="og:image:alt" content={OG_IMAGE.alt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={pageTitle} />
+    <meta name="twitter:description" content={TWITTER_DESCRIPTION} />
+    <meta name="twitter:site" content="@mukokoafrica" />
+    <meta name="twitter:creator" content="@mukokoafrica" />
+    <meta name="twitter:image" content={OG_IMAGE_URL} />
+    <slot name="head" />
+    <script type="application/ld+json" set:html={safeJsonLd(siteData)} />
+    {jsonLd.map((data) => <script type="application/ld+json" set:html={safeJsonLd(data)} />)}
 
     <!-- Settle the theme from the device before the first paint (no pale
          flash on a dark phone, nor for a person who chose dark in the app on a

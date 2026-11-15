@@ -1,0 +1,20 @@
+---
+/**
+ * /privacy, from src/app/privacy/page.tsx: the body is the same React
+ * component (PrivacyContent), rendered to HTML at build time, so the page
+ * sends no JavaScript of its own.
+ */
+import Shell from "../layouts/Shell.astro";
+import PageMain from "../components/PageMain.astro";
+import { PrivacyContent } from "@/app/privacy/PrivacyContent";
+---
+
+<Shell
+  title="Privacy Policy"
+  description="Privacy Policy for mukoko weather. Learn how we handle your data — spoiler: we collect almost nothing."
+  canonicalPath="/privacy"
+>
+  <PageMain>
+    <PrivacyContent />
+  </PageMain>
+</Shell>
