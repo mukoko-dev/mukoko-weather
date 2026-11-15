@@ -44,9 +44,9 @@
   "keep_vars": true,
   "vars": {
     // OWNER: the VAPID public key (unpadded base64url, 87 characters).
-    "VAPID_PUBLIC_KEY": "",
+    "VAPID_PUBLIC_KEY": "BLaeuE-fg_Lwi7sZ5pLgaRUO6My30gbyF89dVt17tNJaA_xBwvJbHmXUUn1YKQ_aHMwIXB_rg5LCwXlDlDCWOLU",
     // OWNER: the contact, `mailto:you@example.com` or an https URL.
-    "VAPID_SUBJECT": "",
+    "VAPID_SUBJECT": "mailto:support@nyuchi.com",
   },
   "secrets_store_secrets": [
     {
