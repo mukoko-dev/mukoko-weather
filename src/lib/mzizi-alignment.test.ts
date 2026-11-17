@@ -76,6 +76,11 @@ const ALLOWED_EXCEPTIONS: Record<string, { count: number; reason: string }> = {
     count: 1,
     reason: "reorder drag handle — round grip, only shown while reordering",
   },
+  "src/components/weather/HeroDataCard.tsx": {
+    count: 1,
+    reason:
+      "the data card's last row: a full-width, 49px row (Add your activities, then an arrow) inside the card, like a list row, not a pill",
+  },
   "src/components/weather/CommunityLane.tsx": {
     count: 1,
     reason: "report pin on the 24h lane — round marker, positioned on a track",

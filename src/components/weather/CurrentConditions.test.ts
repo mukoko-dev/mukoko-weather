@@ -1,8 +1,10 @@
 /**
- * Tests for CurrentConditions — the open-sky hero (no card, centred stack over
- * the page sky): structure, top row, the registration the Quick actions group
- * reads and accessibility, by reading the source file. Rendered output is covered in
- * CurrentConditions.render.test.ts.
+ * Tests for CurrentConditions — the hero: open sky on top (bare text on the
+ * page sky, each row on its own line, nothing pulled up over anything) and one
+ * data card under it (HeroDataCard): structure, top row, the registration the
+ * Quick actions group reads and accessibility, by reading the source file.
+ * Rendered output is covered in CurrentConditions.render.test.ts, the card's
+ * rows in HeroDataCard.test.ts.
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
@@ -23,7 +25,7 @@ describe("CurrentConditions — client component", () => {
   });
 });
 
-describe("CurrentConditions — hero stack (matches the owner's mockup)", () => {
+describe('CurrentConditions — open sky (the owner-approved "open sky with a data card" design)', () => {
   it("renders the place name as the section heading (no duplicate h1)", () => {
     expect(source).toContain('id="current-conditions-heading"');
     expect(source).not.toContain("<h1");
@@ -48,20 +50,50 @@ describe("CurrentConditions — hero stack (matches the owner's mockup)", () => 
     expect(source).toContain('className="sr-only"');
   });
 
-  it("is a centred stack, not left-aligned", () => {
-    expect(source).toContain("items-center pt-4 pb-[26px] text-center");
-    expect(source).not.toContain("text-left");
+  it("is a left-aligned stack, not centred", () => {
+    expect(source).toContain('className="pt-4 pb-[26px]"');
+    expect(source).not.toContain("text-center");
   });
 
-  it("shows the condition at 20px with a small decorative glyph before it, day or night", () => {
+  it("gives the eyebrow, the name and the country each their own grid row, and the glyph its own column spanning them", () => {
+    expect(source).toContain(
+      "grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 min-[360px]:gap-x-3",
+    );
+    expect(source).toContain("col-start-1 row-start-1");
+    expect(source).toContain("col-start-1 row-start-2");
+    expect(source).toContain("col-start-1 row-start-3");
+    expect(source).toContain(
+      "col-start-2 row-span-3 row-start-1 self-center block size-10 min-[360px]:size-14",
+    );
+  });
+
+  it("gives a long place name room on a narrow phone: a 40px glyph, the name one step down (H3) under 360px, hyphenation instead of a raw break", () => {
+    expect(source).toContain("block size-10 min-[360px]:size-14");
+    expect(source).toContain(
+      "max-[359px]:text-[length:var(--text-h3)] max-[359px]:leading-[var(--text-h3-leading)]",
+    );
+    expect(source).toContain("break-words hyphens-auto");
+    expect(source).toContain('className="size-full"');
+  });
+
+  it("pulls nothing up over text: no negative margin, no transform, no absolute position in the sky", () => {
+    const sky = source
+      .slice(source.indexOf("<section"), source.indexOf("</section>"))
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
+    expect(sky).not.toMatch(/(^|[\s"'`:])-m[trblxy]?-/);
+    expect(sky).not.toMatch(/-translate|translate-|transform|rotate-|scale-/);
+    expect(sky).not.toMatch(/\babsolute\b|\bfixed\b|\bsticky\b/);
+    expect(source).not.toMatch(/\bz-\d|\bz-\[/);
+  });
+
+  it("shows the condition as text at Mzizi H5 (weight 600) and the glyph at 56px in its own right-hand column, a moon at night", () => {
     expect(source).toContain("<WeatherIcon");
     expect(source).toContain("nightIcon(info.icon)");
-    expect(source).toContain("size={20}");
+    expect(source).toContain("size={56}");
     expect(source).toContain(
-      "text-[length:var(--text-h5)] leading-[var(--text-h5-leading)] font-normal",
+      "text-[length:var(--text-h5)] leading-[var(--text-h5-leading)] font-semibold",
     );
-    expect(source).toContain('<span aria-hidden="true" className="shrink-0">');
-    expect(source).not.toContain("size={56}");
+    expect(source).not.toContain("size={20}");
   });
 
   it("shows H:/L: at Mzizi Body Large (18px, weight 600) in the dimmer sky white, wrapping between the parts", () => {
@@ -73,11 +105,22 @@ describe("CurrentConditions — hero stack (matches the owner's mockup)", () => 
     expect(source).toContain("flex-wrap");
   });
 
-  it("keeps the hero to eyebrow, name, numeral, condition and H/L: no outlook, no feels-like, no CTA", () => {
-    expect(source).not.toContain("heroOutlook");
-    expect(source).not.toContain("apparent_temperature");
-    expect(source).not.toContain("Pick activities");
+  it("adds the H / L / Feels line and the one-sentence outlook to the sky, through the shared helpers", () => {
+    expect(source).toContain("formatFeelsLike(current.apparent_temperature)");
+    expect(source).toContain("heroOutlook(hourly, now, utcOffsetSeconds)");
+    // Held at two lines until the client clock is known, so the card below
+    // does not move when the sentence arrives.
+    expect(source).toContain("holdOutlook");
+    expect(source).toContain(
+      "min-h-[calc(2*var(--text-body)*var(--text-body-leading))]",
+    );
+  });
+
+  it("puts everything you scan or tap in the data card, not on the sky: no activities call, no hour strip in this file", () => {
+    expect(source).toContain("<HeroDataCard");
     expect(source).not.toContain("openMyWeather");
+    expect(source).not.toContain("Add your activities");
+    expect(source).not.toContain("heroHourStrip");
   });
 
   it("reads the eyebrow clock only after mount, in the LOCATION's offset", () => {
@@ -89,10 +132,18 @@ describe("CurrentConditions — hero stack (matches the owner's mockup)", () => 
     );
   });
 
-  it("is the sky hero: no card, no glass, no shadow, no inline style", () => {
+  it("the sky stays bare of cards (no surface, glass or shadow, no inline style); the one card is a sibling, so it does not inherit the sky's white text and focus ring", () => {
     expect(source).toContain("data-sky-hero");
     expect(source).not.toMatch(
       /baobab|acacia|backdrop-blur|bg-white\/|glass|shadow-/,
+    );
+    const sky = source.slice(
+      source.indexOf("<section"),
+      source.indexOf("</section>"),
+    );
+    expect(sky).not.toContain("<HeroDataCard");
+    expect(source.indexOf("</section>")).toBeLessThan(
+      source.indexOf("<HeroDataCard"),
     );
     expect(source).not.toMatch(/\bkori\b/);
     expect(source).not.toContain("style={{");
@@ -103,13 +154,15 @@ describe("CurrentConditions — hero stack (matches the owner's mockup)", () => 
     expect(source).not.toMatch(/rgba?\(/);
   });
 
-  it("keeps the activity clause as one quiet line when activities are selected", () => {
+  it("keeps the activity clause logic when activities are selected, and hands it to the card's last row", () => {
     expect(source).toContain("selectedActivities");
     expect(source).toContain(
       "feasibilitySeries(activity, hourly, dbRules, 24, utcOffsetSeconds, now)",
     );
     expect(source).toContain("heroActivityClause(");
     expect(source).toContain("activityDotClass(activity.category)");
+    expect(source).toContain("hasSelection={hasSelection}");
+    expect(source).toContain("activityLine={activityLine}");
   });
 
   it("has no footer slot: the season line lives in the Conditions card", () => {

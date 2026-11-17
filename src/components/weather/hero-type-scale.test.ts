@@ -30,6 +30,9 @@ const SCALE: Record<string, [number, number]> = {
 
 const HERO_FILES = [
   "components/weather/CurrentConditions.tsx",
+  "components/weather/HeroDataCard.tsx",
+  "components/weather/HeroDayCurve.tsx",
+  "components/weather/hero-card-classes.ts",
   "components/weather/HourlyScrollCards.tsx",
   "components/weather/SeasonBadge.tsx",
   "components/weather/HeroSkeleton.tsx",

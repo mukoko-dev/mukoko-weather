@@ -1,9 +1,11 @@
 /**
- * The open-sky hero, rendered for real (react-dom/server): what a visitor's
- * HTML contains for each condition family, with and without an eyebrow, a
- * breadcrumb, a footer and missing data. Effects do not run on the server, so
- * the clock-driven pieces (the local-time eyebrow, the activity clause) are
- * covered by hero.test.ts.
+ * The hero, rendered for real (react-dom/server): open sky on top, one data
+ * card under it. What a visitor's HTML contains for each condition family,
+ * with and without an eyebrow, a breadcrumb, a country and missing data.
+ * Effects do not run on the server, so this is the first paint (the place's
+ * clock is not known yet); the clock-driven pieces (the local-time eyebrow,
+ * the outlook, the hours, the activity clause) are covered by hero.test.ts,
+ * hero-card.test.ts and HeroDataCard.test.ts.
  */
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -19,7 +21,11 @@ vi.mock("next/navigation", () => ({
 
 import { CurrentConditions } from "./CurrentConditions";
 import { skyFamily, type SkyFamily } from "@/lib/hero";
-import type { CurrentWeather, DailyWeather } from "@/lib/weather";
+import type {
+  CurrentWeather,
+  DailyWeather,
+  HourlyWeather,
+} from "@/lib/weather";
 
 const base: CurrentWeather = {
   time: "2026-10-31T10:00",
@@ -41,6 +47,18 @@ const daily = {
   temperature_2m_max: [28.4],
   temperature_2m_min: [13.2],
 } as unknown as DailyWeather;
+
+/** A short hourly series: only its presence matters before the clock is known. */
+const hourly = {
+  time: ["2026-10-31T10:00", "2026-10-31T11:00"],
+  temperature_2m: [27, 28],
+} as unknown as HourlyWeather;
+
+/** The hero's sky: the section the Quick actions group watches. */
+const skyOf = (html: string) =>
+  html.slice(html.indexOf("<section"), html.indexOf("</section>"));
+/** Everything under the sky: the data card. */
+const cardOf = (html: string) => html.slice(html.indexOf("</section>"));
 
 function render(
   current: Partial<CurrentWeather> = {},
@@ -76,15 +94,37 @@ describe("CurrentConditions render — the sky hero", () => {
     expect(html).toContain("data-sky-hero");
   });
 
-  it("has no card: no baobab/acacia surface, shadow or legacy plate", () => {
-    expect(render()).not.toMatch(/baobab|acacia|shadow|kori|plate/);
+  it("keeps the sky bare of cards: no surface, shadow or legacy plate; the card below is ONE surface", () => {
+    const html = render();
+    expect(skyOf(html)).not.toMatch(/baobab|acacia|shadow|kori|plate/);
+    expect(html).not.toMatch(/baobab|kori|plate/);
+    expect(html.match(/\bacacia\b/g)).toHaveLength(1);
+    expect(cardOf(html)).toContain("data-hero-card");
+    // The card is a sibling of the sky, not inside it: the sky's white text
+    // and focus ring are not the card's.
+    expect(skyOf(html)).not.toContain("data-hero-card");
   });
 
-  it("is a centred stack labelled by the place-name heading", () => {
-    const html = render();
-    expect(html).toContain("text-center");
+  it("is a left-aligned stack labelled by the place-name heading, each identity row on its own line", () => {
+    const html = render({}, { countryName: "Zimbabwe" });
+    expect(html).not.toContain("text-center");
     expect(html).toContain('aria-labelledby="current-conditions-heading"');
     expect(html).toMatch(/<h2 id="current-conditions-heading"[^>]*>Harare</);
+    const eyebrow = html.indexOf("col-start-1 row-start-1");
+    const name = html.indexOf("col-start-1 row-start-2");
+    const country = html.indexOf("col-start-1 row-start-3");
+    const glyph = html.indexOf("col-start-2 row-span-3 row-start-1");
+    expect(eyebrow).toBeGreaterThan(-1);
+    expect(name).toBeGreaterThan(eyebrow);
+    expect(country).toBeGreaterThan(name);
+    expect(glyph).toBeGreaterThan(country);
+    expect(html).toMatch(
+      /<p class="col-start-1 row-start-3[^"]*">Zimbabwe<\/p>/,
+    );
+  });
+
+  it("leaves the country row out when it is not known", () => {
+    expect(render()).not.toContain("row-start-3");
   });
 
   it("shows the temperature as one Display-size, weight-400 numeral with the degree sign", () => {
@@ -96,32 +136,54 @@ describe("CurrentConditions render — the sky hero", () => {
     expect(html).toMatch(/<span aria-hidden="true">28°<\/span>/);
   });
 
-  it("shows the condition with an aria-hidden 20px glyph, a moon at night", () => {
+  it("shows the condition as text and the glyph at 56px, aria-hidden, in its own column, a moon at night", () => {
     const day = render({ weather_code: 0, is_day: 1 });
     const night = render({ weather_code: 0, is_day: 0 });
-    expect(day).toContain('width="20"');
-    expect(day).toMatch(/<span aria-hidden="true" class="shrink-0"><svg/);
+    expect(day).toContain('width="56"');
+    expect(day).toMatch(
+      /<span aria-hidden="true" class="col-start-2 row-span-3 row-start-1 self-center block size-10 min-\[360px\]:size-14"><svg/,
+    );
     expect(day).toContain("Clear sky");
     expect(night).not.toBe(day);
   });
 
-  it("shows H:/L: as two wrapping parts", () => {
+  it("shows H:/L:/Feels as three wrapping parts", () => {
     const html = render();
-    expect(html).toContain("<span>H:28°</span><span>L:13°</span>");
+    expect(html).toContain(
+      "<span>H:28°</span><span>L:13°</span><span>Feels 27°</span>",
+    );
     expect(html).toContain("flex-wrap");
   });
 
-  it("omits H/L when missing, never H:NaN or zero", () => {
-    const html = render({}, { daily: undefined });
-    expect(html).not.toMatch(/H:/);
+  it("omits H/L when missing and Feels when missing, each on its own, never NaN or zero", () => {
+    const noDaily = render({}, { daily: undefined });
+    expect(noDaily).not.toMatch(/H:/);
+    expect(noDaily).toContain("<span>Feels 27°</span>");
+    expect(noDaily).not.toContain("NaN");
+    const noFeels = render({ apparent_temperature: Number.NaN });
+    expect(noFeels).toContain("<span>H:28°</span><span>L:13°</span>");
+    expect(noFeels).not.toContain("Feels 27");
+    expect(noFeels).not.toContain("NaN");
+    const neither = render(
+      { apparent_temperature: Number.NaN },
+      { daily: undefined },
+    );
+    expect(neither).not.toContain("tabular-nums text-[var(--sky-fg-dim)]");
+  });
+
+  it("prints a cold day with its minus signs", () => {
+    const html = render({ temperature_2m: -3.2, apparent_temperature: -7.6 });
+    expect(html).toContain('<span aria-hidden="true">-3°</span>');
+    expect(html).toContain("Feels -8°");
     expect(html).not.toContain("NaN");
   });
 
-  it("does not repeat the outlook, feels-like or an activities call in the hero", () => {
-    const html = render();
-    expect(html).not.toContain("Feels");
-    expect(html).not.toContain("Pick activities");
-    expect(html).not.toContain("kudu");
+  it("holds two lines for the outlook while the clock is unknown, and nothing when there is no hourly forecast", () => {
+    const withHourly = render({}, { hourly, utcOffsetSeconds: 7200 });
+    expect(withHourly).toContain(
+      "min-h-[calc(2*var(--text-body)*var(--text-body-leading))]",
+    );
+    expect(render()).not.toContain("min-h-[calc(2*");
   });
 
   it("puts the breadcrumb in the top row, before the stack, and leaves room for the Quick actions group on phones", () => {
@@ -163,9 +225,9 @@ describe("CurrentConditions render — the sky hero", () => {
     const html = render();
     expect(html).toContain("data-sky-hero");
     // The first line of the content stack is the eyebrow: always drawn, with
-    // its height reserved, after the top row.
+    // its height reserved, first in the identity grid after the top row.
     expect(html).toMatch(
-      /<div class="flex flex-col items-center pt-4 pb-\[26px\] text-center"><p class="flex min-h-\[calc\(var\(--text-caption\)/,
+      /<div class="pt-4 pb-\[26px\]"><div class="grid grid-cols-\[minmax\(0,1fr\)_auto\] items-start gap-x-2 min-\[360px\]:gap-x-3"><p class="col-start-1 row-start-1 flex min-h-\[calc\(var\(--text-caption\)/,
     );
   });
 
@@ -173,7 +235,7 @@ describe("CurrentConditions render — the sky hero", () => {
     // The eyebrow line, not the page.
     const eyebrow = (html: string) =>
       html.match(
-        /<p class="flex min-h-\[calc\(var\(--text-caption\)[^"]*">([\s\S]*?)<\/p>/,
+        /<p class="col-start-1 row-start-1 flex min-h-\[calc\(var\(--text-caption\)[^"]*">([\s\S]*?)<\/p>/,
       )?.[1] ?? "";
     const plain = render();
     expect(eyebrow(plain)).not.toContain("My Location");
@@ -183,5 +245,75 @@ describe("CurrentConditions render — the sky hero", () => {
     const html = render({}, { isCurrentLocation: true });
     expect(eyebrow(html)).toContain("My Location");
     expect(html).toContain("uppercase");
+  });
+
+  it("opens the data card under the sky: a labelled section with the first-paint strip, readings and the activities row last", () => {
+    const html = render({}, { hourly, utcOffsetSeconds: 7200 });
+    const card = cardOf(html);
+    expect(card).toContain('aria-labelledby="hero-card-heading"');
+    expect(card).toContain(
+      '<h3 id="hero-card-heading" class="sr-only">Next hours and readings for Harare</h3>',
+    );
+    // Before the clock: "Now" with the numeral's temperature, the other four
+    // hours hold their width, hidden.
+    expect(card).toContain(">Now<");
+    expect(card.match(/<li\b/g)).toHaveLength(5);
+    expect(card.match(/<li aria-hidden="true"/g)).toHaveLength(4);
+    // Feels / Wind / UV.
+    expect(card).toContain("<dt");
+    expect(card).toContain(">Feels<");
+    expect(card).toContain(">Wind<");
+    expect(card).toContain(">UV<");
+    expect(card).toContain(">High<");
+    // The activities row is the last thing in the card.
+    const row = card.indexOf("Add your activities");
+    expect(row).toBeGreaterThan(card.indexOf(">UV<"));
+    expect(card.slice(row)).not.toMatch(/<(li|dl|dt|dd|ol|svg)\b/);
+  });
+
+  it("draws the activities invitation as a full-width button of at least the touch floor, with an arrow", () => {
+    const card = cardOf(render());
+    const button = card.match(/<button[^>]*>/)?.[0] ?? "";
+    expect(button).toContain('type="button"');
+    expect(button).toContain("w-full");
+    expect(button).toContain("min-h-[var(--touch-target-min)]");
+    expect(card).toContain("<span>Add your activities</span>");
+    expect(card).toContain('<span aria-hidden="true">→</span>');
+  });
+
+  it("without an hourly forecast the hours and the curve are absent, not empty boxes, and the rest stays", () => {
+    const html = render();
+    const card = cardOf(html);
+    expect(card).not.toContain("<ol");
+    expect(card).not.toContain("<li");
+    expect(card).not.toMatch(/<svg[^>]*viewBox/);
+    expect(card).toContain(">Feels<");
+    expect(card).toContain("Add your activities");
+    expect(html).not.toContain("NaN");
+    expect(html).not.toContain("undefined");
+  });
+
+  it("leaves a reading out when the payload lacks it, and the whole row when it lacks all three", () => {
+    const some = cardOf(render({ wind_speed_10m: Number.NaN }));
+    expect(some).toContain(">Feels<");
+    expect(some).not.toContain(">Wind<");
+    const none = cardOf(
+      render({
+        apparent_temperature: Number.NaN,
+        wind_speed_10m: Number.NaN,
+        uv_index: Number.NaN,
+      }),
+    );
+    expect(none).not.toContain("<dl");
+    expect(none).not.toContain("NaN");
+  });
+
+  it("is a surface made from the Mzizi tokens: card surface, line, radius, tabular figures, the floor's gaps", () => {
+    const card = cardOf(render());
+    expect(card).toContain("acacia");
+    expect(card).toContain("tabular-nums");
+    expect(card).toContain("rounded-[var(--radius-input)]");
+    expect(card).toContain("gap-[var(--gap-floor)]");
+    expect(card).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(|style=/);
   });
 });

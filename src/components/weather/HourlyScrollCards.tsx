@@ -6,7 +6,6 @@ import { weatherCodeToInfo, type HourlyWeather } from "@/lib/weather";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { SectionHeader } from "@/components/ui/section-header";
 import { useHydrated } from "@/lib/use-hydrated";
-import { heroOutlook } from "@/lib/hero";
 import {
   currentHourIndex,
   locationClockLabel,
@@ -37,8 +36,10 @@ interface Props {
 }
 
 /**
- * The Conditions card: the one-sentence outlook and the horizontal
- * hour-by-hour strip. Renders eagerly right under the hero on the location page.
+ * The Conditions card: the horizontal hour-by-hour strip (a glyph, the
+ * temperature and the chance of rain for each of the next 24 hours). The
+ * one-sentence outlook is the hero's, not repeated here. Renders eagerly right
+ * under the hero on the location page.
  */
 export function HourlyScrollCards({
   hourly,
@@ -58,12 +59,6 @@ export function HourlyScrollCards({
   const offset = resolveOffsetSeconds(utcOffsetSeconds);
   const start = hydrated ? currentHourIndex(hourly.time, offset) : 0;
   const hours = hourly.time.slice(start, start + 24);
-  // The one plain sentence about the day ahead (deterministic, no AI call),
-  // read in the PLACE's time. Hydration-gated like the start hour: it needs
-  // the current instant, which the server render cannot match.
-  const outlook = hydrated ? heroOutlook(hourly, new Date(), offset) : null;
-
-  // The one-sentence outlook sits above the strip, in this card.
 
   // The horizontal scroller is Radix's Viewport, which ScrollArea doesn't let
   // us attribute directly. Keyboard users need it focusable (axe:
@@ -95,9 +90,6 @@ export function HourlyScrollCards({
           title={heading.title}
           action={heading.action}
         />
-      )}
-      {outlook && (
-        <p className="gazelle mt-1 border-b border-border pb-3">{outlook}</p>
       )}
       <ScrollArea className="mt-3 w-full" type="hover" viewportRef={scrollRef}>
         <div
