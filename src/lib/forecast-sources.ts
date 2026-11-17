@@ -147,6 +147,55 @@ export function creditsFor(
 }
 
 /**
+ * Where the OBSERVATIONS in `current` come from when the server overlays them
+ * (`current_overlay.source` in the weather payload, `X-Current-Source`),
+ * and the credit that source's licence requires. Today: NEA, Singapore's
+ * National Environment Agency, through data.gov.sg (#596).
+ *
+ * The Singapore Open Data Licence v1.0 asks for a conspicuous notice
+ * acknowledging the source, with a link to the licence. The text is the
+ * Rust constant `weather_core::nea_current::ATTRIBUTION`, split around the
+ * linked licence name (`forecast-sources.test.ts` pins `before + linkText +
+ * after` to it, and the licence URL to `LICENCE_URL`). The credit is shown
+ * only when the overlay was used: no `current_overlay`, no credit.
+ */
+export type CurrentSourceId = "nea";
+
+export interface CurrentSource {
+  id: CurrentSourceId;
+  /** The notice up to the licence name. */
+  before: string;
+  /** The licence name, linked to `href`. */
+  linkText: string;
+  /** What follows the licence name. */
+  after: string;
+  /** The licence (its most recent version). */
+  href: string;
+}
+
+export const CURRENT_SOURCES: Readonly<Record<CurrentSourceId, CurrentSource>> =
+  {
+    nea: {
+      id: "nea",
+      before:
+        "Contains information from the National Environment Agency's real-time weather datasets accessed from data.gov.sg, which is made available under the terms of the ",
+      linkText: "Singapore Open Data Licence version 1.0",
+      after: ".",
+      href: "https://data.gov.sg/open-data-licence",
+    },
+  };
+
+/** The credit due for a `current_overlay.source`, or `null` (none is due). */
+export function currentSourceCredit(
+  source: string | null | undefined,
+): CurrentSource | null {
+  return source != null &&
+    Object.prototype.hasOwnProperty.call(CURRENT_SOURCES, source)
+    ? CURRENT_SOURCES[source as CurrentSourceId]
+    : null;
+}
+
+/**
  * Whether Apple Weather is offered at all. Off until the Servers API origin
  * (Gwaihir) serves it and the owner has confirmed the Developer Program terms:
  * a picker entry that does nothing would be a lie. Honours the dev override

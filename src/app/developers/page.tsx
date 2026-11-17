@@ -186,7 +186,12 @@ curl "https://weather-api.mukoko.com/v1/weather?lat=-17.83&lon=31.05&model=ecmwf
             <code className="termite">X-Current-Source</code> (origin of the{" "}
             <code className="termite">current</code> block, which may be{" "}
             <code className="termite">stationkit</code> when a nearby weather
-            station is in range).
+            station is in range, or <code className="termite">nea</code> in
+            Singapore, where the National Environment Agency&apos;s open data on
+            data.gov.sg corrects it; the payload then carries{" "}
+            <code className="termite">current_overlay</code> with the stations
+            used, and the Singapore Open Data Licence notice must be shown with
+            it).
           </p>
         </section>
 

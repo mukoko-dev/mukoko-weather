@@ -45,6 +45,14 @@ export interface CurrentWeather {
   is_day: number;
 }
 
+/** Where an observation overlay on `current` came from (`current_overlay`). */
+export interface CurrentOverlay {
+  /** `nea` today; the key of `CURRENT_SOURCES` in `forecast-sources.ts`. */
+  source: string;
+  /** RFC 3339 UTC time of the newest observation used. */
+  observedAt?: string | null;
+}
+
 export interface HourlyWeather {
   time: string[];
   temperature_2m: number[];
@@ -101,6 +109,12 @@ export interface WeatherData {
   insights?: WeatherInsights;
   /** Next-hour precipitation nowcast (4 × 15-min steps) from Open-Meteo */
   minutely?: MinutelyData;
+  /**
+   * Present only when the server overlaid observations on `current` from an
+   * open-data feed (Singapore: NEA via data.gov.sg, `source: "nea"`). Names
+   * the source for its credit (`currentSourceCredit`); absent otherwise.
+   */
+  current_overlay?: CurrentOverlay;
   /** Per-model hourly temperature/precip comparison series (Windy-style) */
   models?: ModelForecast[];
   /** Model ids that returned usable data (subset of the requested set) */

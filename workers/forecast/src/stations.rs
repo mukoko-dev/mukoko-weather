@@ -16,6 +16,12 @@
 //! Whatever is missing or fails, the forecast is served unchanged; in `nyuchi`
 //! mode a missing piece is also logged as an `ALERT`, because the overlay is
 //! then silently off.
+//!
+//! Inside Singapore, where there is no StationKit station, the same entry point
+//! then overlays NEA's real-time open data (`sg_nea.rs`, mukoko-dev/mukoko-weather#596).
+//! It runs after StationKit and wins the fields it reports (its station is
+//! within 8 km, StationKit's rule allows 50); StationKit keeps the fields NEA
+//! does not (pressure, UV).
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -29,7 +35,7 @@ use weather_core::station_latest::{
 use weather_core::station_service::{Backend, BACKEND_VAR};
 use weather_core::{normalize, station, Source};
 use weather_edge::{config, log_throttled, now_ms};
-use worker::Env;
+use worker::{Context, Env};
 
 pub const DB_BINDING: &str = "WEATHER_DB";
 /// Within 50 km and 60 minutes, as in the Python backend.
@@ -58,9 +64,16 @@ pub fn backend_name(env: &Env) -> &'static str {
 }
 
 /// Overlay the freshest nearby observation onto `data["current"]`. Returns
-/// `Some(StationKit)` when one was used.
-pub async fn overlay(env: &Env, data: &mut Value, lat: f64, lon: f64) -> Option<Source> {
-    match Backend::parse(config(env, BACKEND_VAR).as_deref()) {
+/// `Some(StationKit)` when one was used, and `Some(Nea)` when NEA's open data
+/// was (a point in Singapore; it names the origin of the fields it set).
+pub async fn overlay(
+    env: &Env,
+    ctx: &Context,
+    data: &mut Value,
+    lat: f64,
+    lon: f64,
+) -> Option<Source> {
+    let station = match Backend::parse(config(env, BACKEND_VAR).as_deref()) {
         Ok(Backend::D1) => overlay_d1(env, data, lat, lon).await,
         Ok(Backend::Nyuchi) => overlay_snapshot(env, data, lat, lon).await,
         // Fail closed: no overlay, and say so.
@@ -68,7 +81,10 @@ pub async fn overlay(env: &Env, data: &mut Value, lat: f64, lon: f64) -> Option<
             log_throttled("stations_backend_unknown", true, &bad.log_line());
             None
         }
-    }
+    };
+    crate::sg_nea::overlay(env, ctx, data, lat, lon)
+        .await
+        .or(station)
 }
 
 /// The snapshot, from the isolate's memo while it is fresh, else from KV. An

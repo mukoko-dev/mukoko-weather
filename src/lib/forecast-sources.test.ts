@@ -11,10 +11,12 @@ import { FLAGS } from "./feature-flags";
 import { FORECAST_MODEL_LABELS, ForecastModel } from "./weather";
 import {
   APPLE_WEATHERKIT_MODEL,
+  CURRENT_SOURCES,
   FORECAST_PROVIDERS,
   appleWeatherEnabled,
   creditFor,
   creditsFor,
+  currentSourceCredit,
   isExternalForecastModel,
   providerForModel,
   servedProviderFor,
@@ -150,5 +152,60 @@ describe("the switch", () => {
     // The wiring of the image (and the CSP img-src for Apple's host) is a
     // follow-up; the credit component renders text until then.
     expect(typeof FLAGS.apple_weatherkit).toBe("boolean");
+  });
+});
+
+describe("current-source credit (NEA, Singapore, #596)", () => {
+  const nea = readFileSync(
+    join(process.cwd(), "workers/crates/weather-core/src/nea_current.rs"),
+    "utf8",
+  );
+  const neaConst = (name: string): string => {
+    const m = nea.match(new RegExp(`pub const ${name}: &str =\\s*"([^"]*)";`));
+    expect(m, `${name} in nea_current.rs`).not.toBeNull();
+    return m![1];
+  };
+  const credit = CURRENT_SOURCES.nea;
+
+  it("is the notice the Rust side serves, split around the linked licence", () => {
+    expect(credit.id).toBe(neaConst("SOURCE_ID"));
+    expect(credit.before + credit.linkText + credit.after).toBe(
+      neaConst("ATTRIBUTION"),
+    );
+    expect(credit.href).toBe(neaConst("LICENCE_URL"));
+  });
+
+  it("acknowledges the source and links the licence, as the licence asks", () => {
+    expect(credit.before).toContain("National Environment Agency");
+    expect(credit.before).toContain("data.gov.sg");
+    expect(credit.linkText).toBe("Singapore Open Data Licence version 1.0");
+    expect(new URL(credit.href).protocol).toBe("https:");
+    expect(new URL(credit.href).hostname).toBe("data.gov.sg");
+    // It must not suggest the agency endorses the app.
+    expect(credit.before.toLowerCase()).not.toContain("endors");
+    expect(credit.before.toLowerCase()).not.toContain("official");
+  });
+
+  it("is due only for a source the server named", () => {
+    expect(currentSourceCredit("nea")).toBe(credit);
+    for (const none of [
+      undefined,
+      null,
+      "",
+      "stationkit",
+      "open-meteo",
+      "NEA",
+    ]) {
+      expect(currentSourceCredit(none)).toBeNull();
+    }
+    // Names on the prototype are not sources.
+    for (const odd of [
+      "__proto__",
+      "constructor",
+      "toString",
+      "hasOwnProperty",
+    ]) {
+      expect(currentSourceCredit(odd)).toBeNull();
+    }
   });
 });

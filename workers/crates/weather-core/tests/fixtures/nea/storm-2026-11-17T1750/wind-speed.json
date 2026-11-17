@@ -1,0 +1,95 @@
+{
+  "code": 0,
+  "data": {
+    "stations": [
+      {
+        "id": "S108",
+        "deviceId": "S108",
+        "name": "Marina Barrage",
+        "location": {
+          "latitude": 1.2799,
+          "longitude": 103.8703
+        }
+      },
+      {
+        "id": "S109",
+        "deviceId": "S109",
+        "name": "Ang Mo Kio Avenue 5",
+        "location": {
+          "latitude": 1.3793,
+          "longitude": 103.85
+        }
+      },
+      {
+        "id": "S104",
+        "deviceId": "S104",
+        "name": "Woodlands Avenue 9",
+        "location": {
+          "latitude": 1.4439,
+          "longitude": 103.7854
+        }
+      },
+      {
+        "id": "S60",
+        "deviceId": "S60",
+        "name": "Artillery Avenue (Sentosa)",
+        "location": {
+          "latitude": 1.2504,
+          "longitude": 103.8275
+        }
+      },
+      {
+        "id": "S50",
+        "deviceId": "S50",
+        "name": "Clementi Road",
+        "location": {
+          "latitude": 1.3318,
+          "longitude": 103.7762
+        }
+      },
+      {
+        "id": "S111",
+        "deviceId": "S111",
+        "name": "Scotts Road",
+        "location": {
+          "latitude": 1.3106,
+          "longitude": 103.8365
+        }
+      }
+    ],
+    "readings": [
+      {
+        "timestamp": "2026-11-17T17:50:00+08:00",
+        "data": [
+          {
+            "stationId": "S108",
+            "value": 4.2
+          },
+          {
+            "stationId": "S109",
+            "value": 4.3
+          },
+          {
+            "stationId": "S104",
+            "value": 15.8
+          },
+          {
+            "stationId": "S60",
+            "value": 2.6
+          },
+          {
+            "stationId": "S50",
+            "value": 2.4
+          },
+          {
+            "stationId": "S111",
+            "value": 3.4
+          }
+        ]
+      }
+    ],
+    "readingType": "Wind Speed AVG(S)10M M1M",
+    "readingUnit": "knots"
+  },
+  "errorMsg": ""
+}

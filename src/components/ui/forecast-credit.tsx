@@ -1,4 +1,8 @@
-import { creditsFor, type CreditUse } from "@/lib/forecast-sources";
+import {
+  creditsFor,
+  currentSourceCredit,
+  type CreditUse,
+} from "@/lib/forecast-sources";
 import { cn } from "@/lib/utils";
 
 /**
@@ -13,6 +17,10 @@ import { cn } from "@/lib/utils";
  * (the baseline fills gaps from another model and derives insights from the
  * values); `use="plotted"` is a series shown as it came.
  *
+ * `currentSource` is the origin of an observation overlay on `current`
+ * (`current_overlay.source`: NEA in Singapore). Its licence notice is shown
+ * only when the server says it used the observations.
+ *
  * Renders nothing for models no credit is due for (every Open-Meteo model:
  * the footer credits those). Server- and client-safe: no hooks. Links open in
  * a new tab with a full touch target (`.dik-dik`), prose-link style
@@ -21,15 +29,19 @@ import { cn } from "@/lib/utils";
 export function ForecastCredit({
   models,
   use,
+  currentSource,
   className,
 }: {
   /** The model ids on screen; only those with a provider credit render. */
   models: readonly string[];
   use: CreditUse;
+  /** `current_overlay.source` of the data on screen, when there is one. */
+  currentSource?: string | null;
   className?: string;
 }) {
   const credits = creditsFor(models, use);
-  if (credits.length === 0) return null;
+  const observed = currentSourceCredit(currentSource);
+  if (credits.length === 0 && !observed) return null;
   return (
     <ul
       className={cn("dove space-y-1", className)}
@@ -53,6 +65,20 @@ export function ForecastCredit({
           {c.notice && <span>{` · ${c.notice}`}</span>}
         </li>
       ))}
+      {observed && (
+        <li key={observed.id} data-forecast-provider={observed.id}>
+          {observed.before}
+          <a
+            href={observed.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="sunbird dik-dik"
+          >
+            {observed.linkText}
+          </a>
+          {observed.after}
+        </li>
+      )}
     </ul>
   );
 }
