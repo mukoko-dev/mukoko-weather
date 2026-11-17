@@ -1,0 +1,121 @@
+{
+  "code": 0,
+  "data": {
+    "stations": [
+      {
+        "id": "S109",
+        "deviceId": "S109",
+        "name": "Ang Mo Kio Avenue 5",
+        "location": {
+          "latitude": 1.3793,
+          "longitude": 103.85
+        }
+      },
+      {
+        "id": "S104",
+        "deviceId": "S104",
+        "name": "Woodlands Avenue 9",
+        "location": {
+          "latitude": 1.4439,
+          "longitude": 103.7854
+        }
+      },
+      {
+        "id": "S115",
+        "deviceId": "S115",
+        "name": "Tuas South Avenue 3",
+        "location": {
+          "latitude": 1.2938,
+          "longitude": 103.6184
+        }
+      },
+      {
+        "id": "S80",
+        "deviceId": "S80",
+        "name": "Sembawang Meteorological Station",
+        "location": {
+          "latitude": 1.4247,
+          "longitude": 103.8201
+        }
+      },
+      {
+        "id": "S60",
+        "deviceId": "S60",
+        "name": "Artillery Avenue (Sentosa)",
+        "location": {
+          "latitude": 1.2504,
+          "longitude": 103.8275
+        }
+      },
+      {
+        "id": "S50",
+        "deviceId": "S50",
+        "name": "Clementi Road",
+        "location": {
+          "latitude": 1.3318,
+          "longitude": 103.7762
+        }
+      },
+      {
+        "id": "S24",
+        "deviceId": "S24",
+        "name": "Changi Meteorological Station",
+        "location": {
+          "latitude": 1.3678,
+          "longitude": 103.9823
+        }
+      },
+      {
+        "id": "S111",
+        "deviceId": "S111",
+        "name": "Scotts Road",
+        "location": {
+          "latitude": 1.3106,
+          "longitude": 103.8365
+        }
+      }
+    ],
+    "readings": [
+      {
+        "timestamp": "2026-11-17T23:03:00+08:00",
+        "data": [
+          {
+            "stationId": "S109",
+            "value": 94.7
+          },
+          {
+            "stationId": "S104",
+            "value": 95.4
+          },
+          {
+            "stationId": "S115",
+            "value": 84.8
+          },
+          {
+            "stationId": "S80",
+            "value": 100
+          },
+          {
+            "stationId": "S60",
+            "value": 84.6
+          },
+          {
+            "stationId": "S50",
+            "value": 95.7
+          },
+          {
+            "stationId": "S24",
+            "value": 85.8
+          },
+          {
+            "stationId": "S111",
+            "value": 97.2
+          }
+        ]
+      }
+    ],
+    "readingType": "RH 1M F",
+    "readingUnit": "percentage"
+  },
+  "errorMsg": ""
+}

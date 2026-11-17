@@ -1,0 +1,212 @@
+{
+  "code": 0,
+  "data": {
+    "stations": [
+      {
+        "id": "S216",
+        "deviceId": "S216",
+        "name": "Ang Mo Kio Avenue 10",
+        "location": {
+          "latitude": 1.36019,
+          "longitude": 103.85335
+        }
+      },
+      {
+        "id": "S217",
+        "deviceId": "S217",
+        "name": "Bishan Street 13",
+        "location": {
+          "latitude": 1.35028,
+          "longitude": 103.855
+        }
+      },
+      {
+        "id": "S80",
+        "deviceId": "S80",
+        "name": "Sembawang Meteorological Station",
+        "location": {
+          "latitude": 1.4247,
+          "longitude": 103.8201
+        }
+      },
+      {
+        "id": "S40",
+        "deviceId": "S40",
+        "name": "Mandai Lake Road",
+        "location": {
+          "latitude": 1.4067,
+          "longitude": 103.7832
+        }
+      },
+      {
+        "id": "S100",
+        "deviceId": "S100",
+        "name": "Sungei Kadut Street 3",
+        "location": {
+          "latitude": 1.4172,
+          "longitude": 103.74855
+        }
+      },
+      {
+        "id": "S07",
+        "deviceId": "S07",
+        "name": "Macritchie Reservoir",
+        "location": {
+          "latitude": 1.3418,
+          "longitude": 103.8339
+        }
+      },
+      {
+        "id": "S209",
+        "deviceId": "S209",
+        "name": "Yishun Ring Road",
+        "location": {
+          "latitude": 1.42111,
+          "longitude": 103.84472
+        }
+      },
+      {
+        "id": "S211",
+        "deviceId": "S211",
+        "name": "Kranji Road",
+        "location": {
+          "latitude": 1.42918,
+          "longitude": 103.75711
+        }
+      },
+      {
+        "id": "S115",
+        "deviceId": "S115",
+        "name": "Tuas South Avenue 3",
+        "location": {
+          "latitude": 1.2938,
+          "longitude": 103.6184
+        }
+      },
+      {
+        "id": "S60",
+        "deviceId": "S60",
+        "name": "Artillery Avenue (Sentosa)",
+        "location": {
+          "latitude": 1.2504,
+          "longitude": 103.8275
+        }
+      },
+      {
+        "id": "S24",
+        "deviceId": "S24",
+        "name": "Changi Meteorological Station",
+        "location": {
+          "latitude": 1.3678,
+          "longitude": 103.9823
+        }
+      },
+      {
+        "id": "S900",
+        "deviceId": "S900",
+        "name": "Seletar Meteorological Station",
+        "location": {
+          "latitude": 1.4114,
+          "longitude": 103.8627
+        }
+      },
+      {
+        "id": "S227",
+        "deviceId": "S227",
+        "name": "Woodlands Drive 62",
+        "location": {
+          "latitude": 1.43944,
+          "longitude": 103.80389
+        }
+      },
+      {
+        "id": "S104",
+        "deviceId": "S104",
+        "name": "Woodlands Avenue 9",
+        "location": {
+          "latitude": 1.4439,
+          "longitude": 103.7854
+        }
+      },
+      {
+        "id": "S79",
+        "deviceId": "S79",
+        "name": "Somerset Road",
+        "location": {
+          "latitude": 1.3003,
+          "longitude": 103.8372
+        }
+      }
+    ],
+    "readings": [
+      {
+        "timestamp": "2026-11-17T17:50:00+08:00",
+        "data": [
+          {
+            "stationId": "S216",
+            "value": 0
+          },
+          {
+            "stationId": "S217",
+            "value": 0
+          },
+          {
+            "stationId": "S80",
+            "value": 0
+          },
+          {
+            "stationId": "S40",
+            "value": 0
+          },
+          {
+            "stationId": "S100",
+            "value": 5.2
+          },
+          {
+            "stationId": "S07",
+            "value": 0
+          },
+          {
+            "stationId": "S209",
+            "value": 0
+          },
+          {
+            "stationId": "S211",
+            "value": 6.8
+          },
+          {
+            "stationId": "S115",
+            "value": 0
+          },
+          {
+            "stationId": "S60",
+            "value": 0
+          },
+          {
+            "stationId": "S24",
+            "value": 0
+          },
+          {
+            "stationId": "S900",
+            "value": 0.6
+          },
+          {
+            "stationId": "S227",
+            "value": 1
+          },
+          {
+            "stationId": "S104",
+            "value": 9
+          },
+          {
+            "stationId": "S79",
+            "value": 0
+          }
+        ]
+      }
+    ],
+    "readingType": "TB1 Rainfall 5 Minute Total F",
+    "readingUnit": "mm"
+  },
+  "errorMsg": ""
+}

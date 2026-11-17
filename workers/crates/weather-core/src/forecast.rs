@@ -29,6 +29,11 @@ pub enum Source {
     /// Open-Meteo refuses (`met_no`).
     #[serde(rename = "met-no")]
     MetNo,
+    /// Singapore's `current` from NEA's real-time open data on data.gov.sg
+    /// (`nea_current`). Only ever the origin of a `current` overlay
+    /// (`X-Current-Source`), never of a forecast.
+    #[serde(rename = "nea")]
+    Nea,
     /// Seasonal estimates. Never served by the internal API.
     #[serde(rename = "fallback")]
     Fallback,
@@ -41,6 +46,7 @@ impl Source {
             Source::Tomorrow => "tomorrow",
             Source::OpenMeteo => "open-meteo",
             Source::MetNo => "met-no",
+            Source::Nea => crate::nea_current::SOURCE_ID,
             Source::Fallback => "fallback",
         }
     }
@@ -51,6 +57,7 @@ impl Source {
             "tomorrow" => Some(Source::Tomorrow),
             "open-meteo" => Some(Source::OpenMeteo),
             "met-no" => Some(Source::MetNo),
+            "nea" => Some(Source::Nea),
             "fallback" => Some(Source::Fallback),
             _ => None,
         }
@@ -65,6 +72,7 @@ impl Source {
             Source::Tomorrow => "Powered by Tomorrow.io.",
             Source::OpenMeteo => "Weather data by Open-Meteo.com (CC BY 4.0).",
             Source::MetNo => crate::met_no::ATTRIBUTION,
+            Source::Nea => crate::nea_current::ATTRIBUTION,
             Source::Fallback => {
                 "Seasonal estimate by Mukoko Weather; no live forecast was available."
             }
@@ -271,6 +279,7 @@ mod tests {
             Source::Tomorrow,
             Source::OpenMeteo,
             Source::MetNo,
+            Source::Nea,
             Source::Fallback,
         ] {
             assert_eq!(Source::parse(s.as_str()), Some(s));

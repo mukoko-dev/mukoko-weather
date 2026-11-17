@@ -44,6 +44,7 @@ pub mod jobs;
 pub mod locations;
 pub mod met_no;
 pub mod model_grid;
+pub mod nea_current;
 pub mod normalize;
 pub mod normals;
 pub mod open_meteo;

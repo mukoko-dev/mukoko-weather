@@ -587,6 +587,18 @@ export function WeatherDashboard({
             </div>
           )}
 
+          {/* The licence notice for observations the server used in `current`
+              (NEA in Singapore, #596): shown only when it says it used them. */}
+          {weather.current_overlay?.source && (
+            <div className="kestrel-ink">
+              <ForecastCredit
+                models={[]}
+                use="plotted"
+                currentSource={weather.current_overlay.source}
+              />
+            </div>
+          )}
+
           {/* Weather unavailable banner — shown when all providers failed */}
           {banner.show && (
             <WeatherUnavailableBanner banner={banner} onRetry={live.retryNow} />

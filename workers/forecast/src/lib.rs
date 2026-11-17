@@ -32,7 +32,11 @@
 //! answer is `best_match`. Tomorrow.io is ENRICHMENT ONLY: it adds
 //! a few insights fields behind a D1 budget (12 an hour and 250 a day for
 //! normal traffic) and never provides the baseline. A validated StationKit
-//! observation within 50 km and 60 min overlays `current`. When every provider
+//! observation within 50 km and 60 min overlays `current`; in Singapore, where
+//! there is no station, NEA's real-time open data does (`sg_nea.rs`: nearest
+//! station temperature, humidity and wind, the nearest rain gauge, and NEA's
+//! 2-hour forecast phrase for the sky; `current_overlay` in the payload and
+//! `X-Current-Source: nea`). When every provider
 //! fails this Worker answers `503`; it never invents data. Callers that want
 //! the seasonal estimate (the app) add it themselves.
 //!
@@ -61,6 +65,7 @@ mod normals;
 mod places;
 mod profile;
 mod sg_air;
+mod sg_nea;
 mod stations;
 
 use serde_json::{json, Value};
@@ -183,7 +188,6 @@ async fn weather(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
 
     // Tomorrow.io enriches the insights; it never touches the baseline.
     let enrichment = enrich::apply(env, ctx, &mut got.data, lat, lon, priority).await;
-    let station = stations::overlay(env, &mut got.data, lat, lon).await;
 
     // The comparison series come from Open-Meteo, the provider that just
     // refused us: a MET Norway answer does not ask it for more, and is never
@@ -211,6 +215,11 @@ async fn weather(req: &Request, env: &Env, ctx: &Context) -> Result<Response> {
             blend::age_seconds(&got.fetched_at, now()).unwrap_or(blend::STALE_TTL_SECONDS as i64);
         blend::mark_stale(&mut got.data, age, offset, now());
     }
+
+    // Observations overlay `current` last, so a stale row's hourly rebase
+    // (`mark_stale`) cannot wipe them: StationKit within 50 km, and in
+    // Singapore NEA's open data (`sg_nea.rs`).
+    let station = stations::overlay(env, ctx, &mut got.data, lat, lon).await;
 
     let resp = json(200, &got.data)?;
     let h = resp.headers();
