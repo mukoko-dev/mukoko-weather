@@ -5,6 +5,7 @@ import {
   SKY_CLASS,
   activityDotClass,
   currentHourIndex,
+  formatFeelsLike,
   formatHighLowParts,
   skyTexture,
   heroLocalTime,
@@ -101,6 +102,24 @@ describe("formatHighLowParts", () => {
     expect(formatHighLowParts(undefined, 25)).toBeNull();
     expect(formatHighLowParts(34, null)).toBeNull();
     expect(formatHighLowParts(Number.NaN, 25)).toBeNull();
+  });
+});
+
+describe("formatFeelsLike", () => {
+  it("is the hero's third part, rounded to a whole degree", () => {
+    expect(formatFeelsLike(26.6)).toBe("Feels 27°");
+    expect(formatFeelsLike(-3.4)).toBe("Feels -3°");
+  });
+
+  it("never prints -0", () => {
+    expect(formatFeelsLike(-0.2)).toBe("Feels 0°");
+  });
+
+  it("is null when the value is missing or not finite, never 'Feels NaN°'", () => {
+    expect(formatFeelsLike(undefined)).toBeNull();
+    expect(formatFeelsLike(null)).toBeNull();
+    expect(formatFeelsLike(Number.NaN)).toBeNull();
+    expect(formatFeelsLike(Number.POSITIVE_INFINITY)).toBeNull();
   });
 });
 

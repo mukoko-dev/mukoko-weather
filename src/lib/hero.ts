@@ -82,6 +82,19 @@ export function formatHighLowParts(
 }
 
 /**
+ * The hero's feels-like part, "Feels 27°", set after the high and low.
+ * Null when the value is missing or not finite, so the hero never prints
+ * "Feels NaN°".
+ */
+export function formatFeelsLike(
+  apparent: number | null | undefined,
+): string | null {
+  if (!isFiniteNumber(apparent)) return null;
+  const rounded = Math.round(apparent);
+  return `Feels ${rounded === 0 ? 0 : rounded}°`;
+}
+
+/**
  * "17:03 LOCAL" — the place's own clock for the hero eyebrow when no MY
  * LOCATION / HOME badge applies. Read in the PLACE's UTC offset, never the
  * viewer's zone; null until the caller has a client clock.

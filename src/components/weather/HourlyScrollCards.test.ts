@@ -102,24 +102,19 @@ describe("HourlyScrollCards — weather data", () => {
   });
 });
 
-describe("HourlyScrollCards — the Conditions card owns the outlook", () => {
-  it("shows the one-sentence outlook above the hours, hydration-gated, in the place's time", () => {
-    expect(source).toContain('from "@/lib/hero"');
-    expect(source).toContain(
-      "hydrated ? heroOutlook(hourly, new Date(), offset) : null",
-    );
-    expect(source).toContain("{outlook && (");
-    expect(source.indexOf("{outlook && (")).toBeLessThan(
-      source.indexOf("<ScrollArea"),
-    );
+describe("HourlyScrollCards — the hero owns the outlook, the card does not repeat it", () => {
+  it("shows the hours only: no outlook sentence above the strip", () => {
+    expect(source).not.toContain("heroOutlook");
+    expect(source).not.toContain("{outlook");
+    expect(source).not.toContain("gazelle");
   });
 
-  it("the hero no longer renders the outlook", () => {
+  it("the hero renders the one-sentence outlook, read in the place's time after mount", () => {
     const hero = readFileSync(
       resolve(__dirname, "CurrentConditions.tsx"),
       "utf-8",
     );
-    expect(hero).not.toContain("heroOutlook(");
+    expect(hero).toContain("heroOutlook(hourly, now, utcOffsetSeconds)");
   });
 });
 

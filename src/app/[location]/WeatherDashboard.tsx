@@ -664,6 +664,7 @@ export function WeatherDashboard({
                                 <CurrentConditions
                                   current={weather.current}
                                   locationName={location.name}
+                                  countryName={countryName}
                                   daily={weather.daily}
                                   hourly={weather.hourly}
                                   utcOffsetSeconds={weather.utc_offset_seconds}
