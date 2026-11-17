@@ -11,9 +11,9 @@ import {
   HOURLY_PLACEHOLDER_COUNT,
   LocationSkeleton,
   TILE_PLACEHOLDER_COUNT,
-  TYPICAL_OUTLOOK,
   TYPICAL_SEASON_NOTE,
 } from "./LocationSkeleton";
+import { TYPICAL_OUTLOOK } from "./HeroSkeleton";
 
 const read = (p: string) => readFileSync(resolve(__dirname, p), "utf-8");
 const skeletonSrc = read("LocationSkeleton.tsx");
@@ -72,23 +72,30 @@ describe("LocationSkeleton — structure", () => {
 });
 
 describe("LocationSkeleton — sized by typical copy", () => {
-  it("lays a typical outlook sentence out invisibly, with the real paragraph type", () => {
-    expect(TYPICAL_OUTLOOK.length).toBeGreaterThanOrEqual(60);
+  it("lays a typical outlook sentence out invisibly in the hero, with the hero's own paragraph type", () => {
+    expect(TYPICAL_OUTLOOK.length).toBeGreaterThanOrEqual(40);
     expect(TYPICAL_OUTLOOK.length).toBeLessThanOrEqual(110);
     expect(html).toContain(`<span class="invisible">${TYPICAL_OUTLOOK}</span>`);
-    // Same text size and leading as HourlyScrollCards' `.gazelle` outlook.
-    expect(html).toMatch(
-      /<p class="relative mt-1 border-b border-border pb-3 text-base leading-relaxed">/,
+    // Same text size, leading and measure as the hero's outlook line.
+    expect(html).toContain(
+      '<p class="relative mt-3 max-w-[40ch] text-pretty text-[length:var(--text-body)] leading-[var(--text-body-leading)]">',
+    );
+    expect(heroSrc).toContain(
+      "mt-3 max-w-[40ch] text-pretty text-[length:var(--text-body)] leading-[var(--text-body-leading)]",
     );
   });
 
+  it("the Conditions card skeleton has no outlook line: the hero owns the outlook", () => {
+    const conditions = html.slice(html.indexOf('data-skeleton="conditions"'));
+    expect(conditions).not.toContain(TYPICAL_OUTLOOK);
+    expect(skeletonSrc).not.toContain("TYPICAL_OUTLOOK");
+  });
+
   it("draws one bar per wrapped line: the mask period is the line height", () => {
-    // leading-relaxed is 1.625, so the repeating mask runs in 1.625em steps.
-    expect(skeletonSrc).toContain("transparent_1.625em");
-    expect(skeletonSrc).toContain("[mask-image:repeating-linear-gradient(");
-    expect(skeletonSrc).toContain(
-      "[-webkit-mask-image:repeating-linear-gradient(",
-    );
+    // --text-body-leading is 1.6, so the repeating mask runs in 1.6em steps.
+    expect(heroSrc).toContain("transparent_1.6em");
+    expect(heroSrc).toContain("[mask-image:repeating-linear-gradient(");
+    expect(heroSrc).toContain("[-webkit-mask-image:repeating-linear-gradient(");
   });
 
   it("sizes the season line with a note of typical length (19 to 51 chars)", () => {
@@ -177,6 +184,68 @@ describe("LocationSkeleton — the hero's top row matches the loaded hero", () =
   });
 });
 
+describe("LocationSkeleton — the hero's data card is the live card's box", () => {
+  const cardSrc = read("hero-card-classes.ts");
+  const liveSrc = read("HeroDataCard.tsx");
+  const curveSrc = read("HeroDayCurve.tsx");
+
+  it("draws the card under the sky, in the same surface, strip, curve, readings and row classes the live card reads", () => {
+    expect(html.indexOf('data-skeleton="hero"')).toBeLessThan(
+      html.indexOf('data-skeleton="hero-card"'),
+    );
+    for (const name of [
+      "HERO_CARD_CLASS",
+      "HERO_STRIP_CLASS",
+      "HERO_STRIP_CELL_CLASS",
+      "HERO_CURVE_CLASS",
+      "HERO_READINGS_CLASS",
+      "HERO_READING_CLASS",
+      "HERO_ROW_CLASS",
+      "HERO_CAPTION",
+      "HERO_FIGURE",
+    ]) {
+      expect(cardSrc, name).toContain(`export const ${name}`);
+      expect(heroSrc, name).toContain(name);
+    }
+    // The live card reads the very same strings (one source, so no drift).
+    for (const name of [
+      "HERO_CARD_CLASS",
+      "HERO_STRIP_CLASS",
+      "HERO_READINGS_CLASS",
+      "HERO_READING_CLASS",
+      "HERO_ROW_CLASS",
+    ]) {
+      expect(liveSrc, name).toContain(name);
+    }
+    expect(curveSrc).toContain("HERO_CURVE_CLASS");
+  });
+
+  it("holds as many hour cells as the live strip, three readings, the curve's height and a 49px last row", () => {
+    expect(html.match(/<li class="min-w-0 text-center">/g)).toHaveLength(5);
+    expect(heroSrc).toContain("HERO_STRIP_HOURS");
+    expect(heroSrc).toContain("[0, 1, 2].map");
+    expect(heroSrc).toContain("HERO_CURVE_HEIGHT_CLASS");
+    expect(cardSrc).toContain("min-h-[var(--touch-target-min)]");
+    expect(cardSrc).toContain("h-[7.25rem]");
+  });
+
+  it("the skeleton's sky rows are the live sky's rows (identity grid, glyph column, outlook)", () => {
+    const live = read("CurrentConditions.tsx");
+    for (const cls of [
+      "grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 min-[360px]:gap-x-3",
+      "col-start-1 row-start-1",
+      "col-start-1 row-start-2",
+      "col-start-1 row-start-3",
+      "col-start-2 row-span-3 row-start-1 self-center block size-10 min-[360px]:size-14",
+      "pt-4 pb-[26px]",
+      "mt-3 max-w-[40ch] text-pretty text-[length:var(--text-body)] leading-[var(--text-body-leading)]",
+    ]) {
+      expect(heroSrc, cls).toContain(cls);
+      expect(live, cls).toContain(cls);
+    }
+  });
+});
+
 describe("LocationSkeleton — tokens only", () => {
   it("has no hex, rgba, inline style or shadow", () => {
     for (const src of [skeletonSrc, heroSrc, shimmerSrc]) {
@@ -201,11 +270,12 @@ describe("LocationSkeleton — tokens only", () => {
     }
   });
 
-  it("the hero has no plate, no button and no outlook rows", () => {
+  it("the hero has no plate and no button: the sky is bars, the card is one surface", () => {
     expect(heroSrc).not.toContain("kori");
     expect(heroSrc).not.toContain("kudu");
     expect(heroSrc).not.toContain("Pick activities");
     expect(heroSrc).not.toContain("leading-relaxed");
+    expect(html).not.toContain("<button");
   });
 
   it("only animates when motion is welcome; static otherwise", () => {
