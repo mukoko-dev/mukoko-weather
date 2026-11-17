@@ -15,8 +15,14 @@ import { ForecastCredit } from "./forecast-credit";
 
 const LEGAL = "https://developer.apple.com/weatherkit/data-source-attribution/";
 
-const html = (models: string[], use: "plotted" | "baseline") =>
-  renderToStaticMarkup(createElement(ForecastCredit, { models, use }));
+const html = (
+  models: string[],
+  use: "plotted" | "baseline",
+  currentSource?: string | null,
+) =>
+  renderToStaticMarkup(
+    createElement(ForecastCredit, { models, use, currentSource }),
+  );
 
 const read = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
 
@@ -69,6 +75,52 @@ describe("ForecastCredit rendered", () => {
     // The wording comes from forecast-sources, never hand-written here.
     expect(src).not.toContain("developer.apple.com");
     expect(src).not.toContain("Data provided by Apple");
+  });
+});
+
+describe("the NEA licence notice (Singapore observations in `current`)", () => {
+  const LICENCE = "https://data.gov.sg/open-data-licence";
+
+  it("names the source and links the licence when the server used NEA", () => {
+    const out = html([], "plotted", "nea");
+    expect(out).toContain("National Environment Agency");
+    expect(out).toContain("accessed from data.gov.sg");
+    expect(out).toContain(`href="${LICENCE}"`);
+    expect(out).toContain(">Singapore Open Data Licence version 1.0</a>");
+    expect(out).toContain('target="_blank"');
+    expect(out).toContain('rel="noopener noreferrer"');
+    expect(out).toContain("dik-dik");
+    expect(out).toContain('data-forecast-provider="nea"');
+    expect(out).not.toContain("style=");
+  });
+
+  it("is nothing when no overlay was used, or the source is not one we credit", () => {
+    for (const none of [undefined, null, "", "stationkit", "nea "]) {
+      expect(html([], "plotted", none)).toBe("");
+    }
+  });
+
+  it("sits beside an Apple credit without replacing it", () => {
+    const out = html(["apple_weatherkit"], "baseline", "nea");
+    expect(out.match(/data-forecast-provider=/g)).toHaveLength(2);
+    expect(out).toContain("Apple Weather");
+    expect(out).toContain("National Environment Agency");
+  });
+
+  it("the dashboard shows it only when the payload names the overlay", () => {
+    const src = read("src/app/[location]/WeatherDashboard.tsx");
+    const at = src.indexOf("{weather.current_overlay?.source && (");
+    expect(at).toBeGreaterThan(-1);
+    // Nothing at all (not even the wrapper) without `current_overlay`. Read
+    // inline: a helper call or a const here made the React Compiler skip the
+    // component (eslint "preserve-manual-memoization").
+    expect(src.slice(at, at + 260)).toContain(
+      "currentSource={weather.current_overlay.source}",
+    );
+    // The wording lives in forecast-sources.ts, never in the component.
+    expect(read("src/components/ui/forecast-credit.tsx")).not.toContain(
+      "Contains information",
+    );
   });
 });
 

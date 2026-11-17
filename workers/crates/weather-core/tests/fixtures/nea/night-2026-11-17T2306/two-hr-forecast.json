@@ -1,0 +1,153 @@
+{
+  "code": 0,
+  "data": {
+    "area_metadata": [
+      {
+        "name": "Ang Mo Kio",
+        "label_location": {
+          "latitude": 1.375,
+          "longitude": 103.839
+        }
+      },
+      {
+        "name": "Bishan",
+        "label_location": {
+          "latitude": 1.350772,
+          "longitude": 103.839
+        }
+      },
+      {
+        "name": "Changi",
+        "label_location": {
+          "latitude": 1.357,
+          "longitude": 103.987
+        }
+      },
+      {
+        "name": "City",
+        "label_location": {
+          "latitude": 1.292,
+          "longitude": 103.844
+        }
+      },
+      {
+        "name": "Jurong West",
+        "label_location": {
+          "latitude": 1.34039,
+          "longitude": 103.705
+        }
+      },
+      {
+        "name": "Novena",
+        "label_location": {
+          "latitude": 1.327,
+          "longitude": 103.826
+        }
+      },
+      {
+        "name": "Sembawang",
+        "label_location": {
+          "latitude": 1.445,
+          "longitude": 103.818495
+        }
+      },
+      {
+        "name": "Sentosa",
+        "label_location": {
+          "latitude": 1.243,
+          "longitude": 103.832
+        }
+      },
+      {
+        "name": "Tampines",
+        "label_location": {
+          "latitude": 1.345,
+          "longitude": 103.944
+        }
+      },
+      {
+        "name": "Tuas",
+        "label_location": {
+          "latitude": 1.294947,
+          "longitude": 103.635
+        }
+      },
+      {
+        "name": "Woodlands",
+        "label_location": {
+          "latitude": 1.432,
+          "longitude": 103.786528
+        }
+      },
+      {
+        "name": "Yishun",
+        "label_location": {
+          "latitude": 1.418,
+          "longitude": 103.839
+        }
+      }
+    ],
+    "items": [
+      {
+        "update_timestamp": "2026-11-17T22:36:47+08:00",
+        "timestamp": "2026-11-17T22:30:00+08:00",
+        "valid_period": {
+          "start": "2026-11-17T22:30:00+08:00",
+          "end": "2026-11-18T00:30:00+08:00",
+          "text": "10.30 pm to 12.30 am"
+        },
+        "forecasts": [
+          {
+            "area": "Ang Mo Kio",
+            "forecast": "Cloudy"
+          },
+          {
+            "area": "Bishan",
+            "forecast": "Cloudy"
+          },
+          {
+            "area": "Changi",
+            "forecast": "Cloudy"
+          },
+          {
+            "area": "City",
+            "forecast": "Cloudy"
+          },
+          {
+            "area": "Jurong West",
+            "forecast": "Cloudy"
+          },
+          {
+            "area": "Novena",
+            "forecast": "Cloudy"
+          },
+          {
+            "area": "Sembawang",
+            "forecast": "Cloudy"
+          },
+          {
+            "area": "Sentosa",
+            "forecast": "Cloudy"
+          },
+          {
+            "area": "Tampines",
+            "forecast": "Cloudy"
+          },
+          {
+            "area": "Tuas",
+            "forecast": "Cloudy"
+          },
+          {
+            "area": "Woodlands",
+            "forecast": "Cloudy"
+          },
+          {
+            "area": "Yishun",
+            "forecast": "Cloudy"
+          }
+        ]
+      }
+    ]
+  },
+  "errorMsg": ""
+}
