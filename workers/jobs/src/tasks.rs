@@ -23,6 +23,7 @@ pub fn kind(job: &Job) -> &'static str {
         Job::Archive { .. } => "archive",
         Job::RawCleanup { .. } => "raw_cleanup",
         Job::RateEvents { .. } => "rate_events",
+        Job::Alerts { .. } => "alerts",
     }
 }
 
@@ -34,6 +35,7 @@ pub async fn run(env: &Env, job: &Job) -> Result<()> {
         Job::Archive { cutoff_ms } => archive(env, *cutoff_ms).await,
         Job::RawCleanup { prefix } => raw_cleanup(env, prefix).await,
         Job::RateEvents { before_ms } => rate_events(env, *before_ms).await,
+        Job::Alerts { slug } => crate::alerts::run(env, slug).await,
     }
 }
 
@@ -42,7 +44,7 @@ fn places(slugs: &[String]) -> Vec<&'static Place> {
 }
 
 /// `GET` a path on the forecast Worker; `None` unless it answers `200`.
-async fn ask_forecast(env: &Env, path_and_query: &str) -> Result<Option<Response>> {
+pub(crate) async fn ask_forecast(env: &Env, path_and_query: &str) -> Result<Option<Response>> {
     Ok(service::ask(env, FORECAST, path_and_query)
         .await?
         .filter(|r| r.status_code() == 200))

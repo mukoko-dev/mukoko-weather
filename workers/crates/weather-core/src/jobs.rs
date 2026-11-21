@@ -9,6 +9,7 @@
 //! | `*/15 * * * *`    | warm           | refresh the forecast cache for the popular places          |
 //! | `30 21 * * *`     | history        | one `place_daily` row per seed place (23:30 in Harare)      |
 //! | `15 2 * * *`      | maintenance    | `station_daily` rollup, retention to R2, raw cleanup, limits |
+//! | `10 * * * *`      | alerts         | one frost-alert evaluation per place (`PUSH_PLACES`), only when `ALERTS_ENABLED` is `true` |
 
 use chrono::{DateTime, Duration, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
@@ -25,6 +26,9 @@ pub const CRON_WARM: &str = "*/15 * * * *";
 pub const CRON_HISTORY: &str = "30 21 * * *";
 /// The maintenance schedule: rollups and retention, at a quiet hour.
 pub const CRON_MAINTENANCE: &str = "15 2 * * *";
+/// The frost-alert schedule: hourly, at :10 (the warm tick of :00 has just
+/// refreshed the forecast, and frost is read from hours, so hourly is enough).
+pub const CRON_ALERTS: &str = "10 * * * *";
 /// Ticks a day of [`CRON_WARM`].
 pub const WARM_TICKS_PER_DAY: usize = 96;
 
@@ -65,6 +69,12 @@ pub enum Job {
     RawCleanup { prefix: String },
     /// Delete rate-limit events older than this.
     RateEvents { before_ms: i64 },
+    /// Evaluate frost for one seed slug and push to the people who follow it
+    /// (`alert_run`). Only ever planned when `ALERTS_ENABLED` is `true`. One
+    /// place per message, not ten like warming: a place can plan up to
+    /// `alert_plan::MAX_SENDS_PER_PLACE` sends, each a claim, a push and a log
+    /// (three subrequests), so one place is about 600 of a Worker's 1,000.
+    Alerts { slug: String },
 }
 
 /// Which schedule fired.
@@ -73,6 +83,7 @@ pub enum Tick {
     Warm,
     History,
     Maintenance,
+    Alerts,
 }
 
 impl Tick {
@@ -82,6 +93,7 @@ impl Tick {
             CRON_WARM => Some(Tick::Warm),
             CRON_HISTORY => Some(Tick::History),
             CRON_MAINTENANCE => Some(Tick::Maintenance),
+            CRON_ALERTS => Some(Tick::Alerts),
             _ => None,
         }
     }
@@ -93,9 +105,28 @@ pub struct Settings {
     pub warm_places: Option<String>,
     pub retention_days: Option<String>,
     pub raw_retention_days: Option<String>,
+    /// `PUSH_PLACES`: seed slugs to evaluate for frost; `WARM_PLACES` when unset.
+    pub push_places: Option<String>,
+    /// `ALERTS_ENABLED`: the switch for device push. Only `true` turns it on.
+    pub alerts_enabled: Option<String>,
 }
 
 impl Settings {
+    /// Whether the alert tick may do anything. Fails closed: unset, blank,
+    /// `false`, `1`, `yes`, a typo, all mean off. Only `true` (any case, with
+    /// surrounding space) is on.
+    pub fn alerts_enabled(&self) -> bool {
+        self.alerts_enabled
+            .as_deref()
+            .is_some_and(|v| v.trim().eq_ignore_ascii_case("true"))
+    }
+
+    /// The places evaluated for alerts: `PUSH_PLACES`, else the warm places.
+    pub fn push_places(&self) -> Vec<&'static Place> {
+        let own = self.push_places.as_deref().filter(|l| !l.trim().is_empty());
+        warm_places(own.or(self.warm_places.as_deref()))
+    }
+
     /// `RETENTION_DAYS`, never below a week.
     pub fn retention_days(&self) -> u32 {
         parse_days(self.retention_days.as_deref(), DEFAULT_RETENTION_DAYS, 7)
@@ -154,6 +185,16 @@ pub fn plan(tick: Tick, now: DateTime<Utc>, settings: &Settings) -> Vec<Job> {
         Tick::Warm => slug_batches(warm_places(settings.warm_places.as_deref()).into_iter())
             .into_iter()
             .map(|slugs| Job::Warm { slugs })
+            .collect(),
+        // Nothing at all while the switch is off: no message, no forecast
+        // read, no call to the Nyuchi API or the sender.
+        Tick::Alerts if !settings.alerts_enabled() => Vec::new(),
+        Tick::Alerts => settings
+            .push_places()
+            .into_iter()
+            .map(|p| Job::Alerts {
+                slug: p.slug.clone(),
+            })
             .collect(),
         Tick::History => slug_batches(seed().iter())
             .into_iter()
@@ -457,5 +498,89 @@ mod tests {
         assert!(row.daily.is_none());
         assert!(row.insights.is_none());
         assert!(daily_record(&json!({"daily": {"time": []}})).is_none());
+    }
+
+    fn enabled(v: &str) -> Settings {
+        Settings {
+            alerts_enabled: Some(v.into()),
+            ..Settings::default()
+        }
+    }
+
+    #[test]
+    fn the_alert_cron_maps_to_its_tick() {
+        assert_eq!(Tick::from_cron("10 * * * *"), Some(Tick::Alerts));
+        assert_eq!(Tick::from_cron(CRON_ALERTS), Some(Tick::Alerts));
+    }
+
+    #[test]
+    fn the_switch_is_off_unless_it_says_true() {
+        assert!(!Settings::default().alerts_enabled());
+        for v in [
+            "", " ", "false", "False", "0", "1", "yes", "on", "tru", "enabled",
+        ] {
+            assert!(!enabled(v).alerts_enabled(), "{v:?}");
+        }
+        for v in ["true", "TRUE", " true "] {
+            assert!(enabled(v).alerts_enabled(), "{v:?}");
+        }
+    }
+
+    #[test]
+    fn with_the_switch_off_the_alert_tick_plans_nothing() {
+        let now = at(2026, 11, 14, 22);
+        assert!(plan(Tick::Alerts, now, &Settings::default()).is_empty());
+        assert!(plan(Tick::Alerts, now, &enabled("false")).is_empty());
+        assert!(plan(Tick::Alerts, now, &enabled("")).is_empty());
+    }
+
+    #[test]
+    fn with_the_switch_on_each_push_place_is_one_job_defaulting_to_the_warm_places() {
+        let now = at(2026, 11, 14, 22);
+        let jobs = plan(Tick::Alerts, now, &enabled("true"));
+        let want: Vec<Job> = DEFAULT_WARM_PLACES
+            .split(',')
+            .map(|s| Job::Alerts { slug: s.into() })
+            .collect();
+        assert_eq!(jobs, want);
+        // WARM_PLACES is what PUSH_PLACES defaults to, not just the built-in list.
+        let s = Settings {
+            warm_places: Some("harare,mutare".into()),
+            alerts_enabled: Some("true".into()),
+            ..Settings::default()
+        };
+        assert_eq!(plan(Tick::Alerts, now, &s).len(), 2);
+    }
+
+    #[test]
+    fn push_places_overrides_warm_places_and_skips_what_it_does_not_know() {
+        let s = Settings {
+            warm_places: Some("harare,mutare".into()),
+            push_places: Some("bulawayo, nowhere-at-all ,bulawayo".into()),
+            alerts_enabled: Some("true".into()),
+            ..Settings::default()
+        };
+        assert_eq!(
+            plan(Tick::Alerts, at(2026, 11, 14, 22), &s),
+            vec![Job::Alerts {
+                slug: "bulawayo".into()
+            }]
+        );
+        // A blank PUSH_PLACES is unset, not an empty list.
+        let blank = Settings {
+            push_places: Some("  ".into()),
+            ..s.clone()
+        };
+        assert_eq!(blank.push_places().len(), 2);
+    }
+
+    #[test]
+    fn an_alert_job_round_trips_through_the_queue_as_json() {
+        let job = Job::Alerts {
+            slug: "harare".into(),
+        };
+        let text = serde_json::to_string(&job).expect("serialises");
+        assert_eq!(text, r#"{"job":"alerts","slug":"harare"}"#);
+        assert_eq!(serde_json::from_str::<Job>(&text).expect("reads"), job);
     }
 }

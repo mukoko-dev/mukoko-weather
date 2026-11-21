@@ -1,6 +1,6 @@
 [package]
 name = "mukoko-weather-push"
-description = "mukoko-weather-push: the Workers-runtime half of the Web Push sender (WebCrypto key agreement and VAPID signer, the fetch transport). Dark: one /health route, no schedule, no secret, not deployed"
+description = "mukoko-weather-push: the Workers-runtime half of the Web Push sender (WebCrypto key agreement and VAPID signer, the fetch transport, POST /send behind a service binding and a service key)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

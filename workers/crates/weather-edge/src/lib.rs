@@ -236,6 +236,32 @@ async fn send(
         }
         None => Fetch::Url(parsed),
     };
+    run(fetch, timeout).await
+}
+
+/// `POST` a JSON body, giving up after `timeout` (aborted, so it does not keep
+/// a subrequest slot). `headers` carries the caller's credentials; the content
+/// type is set here. For the Nyuchi API and the Workers behind a service
+/// binding: no Open-Meteo host handling.
+pub async fn post_json_with_timeout(
+    url: &str,
+    headers: Headers,
+    body: &serde_json::Value,
+    timeout: Duration,
+) -> std::result::Result<Response, FetchError> {
+    headers
+        .set("Content-Type", "application/json")
+        .map_err(network_error)?;
+    let mut init = worker::RequestInit::new();
+    init.with_method(worker::Method::Post)
+        .with_headers(headers)
+        .with_body(Some(JsValue::from_str(&body.to_string())));
+    let req = Request::new_with_init(url, &init).map_err(network_error)?;
+    run(Fetch::Request(req), timeout).await
+}
+
+/// Send a prepared fetch, aborting it when `timeout` passes first.
+async fn run(fetch: Fetch, timeout: Duration) -> std::result::Result<Response, FetchError> {
     let controller = AbortController::default();
     let signal = controller.signal();
     let call = Box::pin(fetch.send_with_signal(&signal));
