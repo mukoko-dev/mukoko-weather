@@ -8,7 +8,7 @@ name: Workers
 # alone must run them.
 on:
   push:
-    branches: [main, staging]
+    branches: [main]
     paths:
       - "workers/**"
       - "tests/fixtures/**"
@@ -21,7 +21,7 @@ on:
       - "astro/**"
       - ".github/workflows/workers.yml"
   pull_request:
-    branches: [main, staging]
+    branches: [main]
     paths:
       - "workers/**"
       - "tests/fixtures/**"
