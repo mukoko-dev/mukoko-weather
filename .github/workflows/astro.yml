@@ -12,7 +12,7 @@ name: Astro
 # It is path-filtered and is not a required check.
 on:
   push:
-    branches: [main, staging]
+    branches: [main]
     paths:
       - "astro/**"
       - "workers/web/**"
@@ -25,7 +25,7 @@ on:
       - "package-lock.json"
       - ".github/workflows/astro.yml"
   pull_request:
-    branches: [main, staging]
+    branches: [main]
     paths:
       - "astro/**"
       - "workers/web/**"
