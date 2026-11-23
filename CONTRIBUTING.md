@@ -204,9 +204,9 @@ The old analyzer names may have silently fallen through to Atlas defaults — th
 
 ## Dependency updates
 
-Dependabot is configured in `.github/dependabot.yml`: one grouped pull request a week for each of npm, Cargo and GitHub Actions, against `staging`, with a seven-day cooldown on new releases. Major versions are not proposed there; plan a major upgrade as its own issue.
+Dependabot is configured in `.github/dependabot.yml`: one grouped pull request a week for each of npm, Cargo and GitHub Actions, against `main`, with a seven-day cooldown on new releases. Major versions are not proposed there; plan a major upgrade as its own issue.
 
-Security updates are the exception. Dependabot raises them against the default branch (`main`) only, so the "`main` takes releases only" check fails them. Retarget one with `gh pr edit <n> --base staging` and let its checks run again. A group of green Dependabot pull requests is merged through the merge queue like any other pull request, and the ones that fail for a reason the update did not cause (for example `npm audit` on a lockfile that already had advisories) are fixed in their own pull request first.
+Security updates open against `main` as well. A group of green Dependabot pull requests is merged through the merge queue like any other pull request, and the ones that fail for a reason the update did not cause (for example `npm audit` on a lockfile that already had advisories) are fixed in their own pull request first.
 
 ## GitHub Workflows
 
