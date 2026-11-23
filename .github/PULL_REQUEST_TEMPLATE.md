@@ -24,16 +24,7 @@ Closes #
 
 <!-- Check all that apply. Must match your Conventional Commits type. -->
 
-- [ ] `feat` — user-visible new feature
-- [ ] `fix` — user-visible bug fix
-- [ ] `perf` — performance improvement
-- [ ] `refactor` — code change, no behaviour change
-- [ ] `docs` — documentation only
-- [ ] `test` — tests only
-- [ ] `build` — build system, packaging, dependencies
-- [ ] `ci` — CI configuration
-- [ ] `chore` — maintenance
-- [ ] `revert` — revert of a prior commit
+- [ ] `feat` — user-visible new feature - [ ] `fix` — user-visible bug fix - [ ] `perf` — performance improvement - [ ] `refactor` — code change, no behaviour change - [ ] `docs` — documentation only - [ ] `test` — tests only - [ ] `build` — build system, packaging, dependencies - [ ] `ci` — CI configuration - [ ] `chore` — maintenance - [ ] `revert` — revert of a prior commit
 
 ## Breaking change?
 
@@ -58,9 +49,7 @@ Closes #
 - [ ] All of my commits are **signed** and show "Verified" on GitHub
       (GPG or SSH). See
       [CONTRIBUTING.md § Signed commits](https://github.com/nyuchi/.github/blob/main/CONTRIBUTING.md#signed-commits-required).
-- [ ] All of my commits have a **DCO sign-off** (`Signed-off-by:` trailer,
-      added by `git commit -s`).
-- [ ] My branch name follows `<type>/<short-kebab-description>` (see
+- [ ] All of my commits have a **DCO sign-off** (`Signed-off-by:` trailer, added by `git commit -s`). - [ ] My branch name follows `<type>/<short-kebab-description>` (see
       [CONTRIBUTING.md § Branch naming](https://github.com/nyuchi/.github/blob/main/CONTRIBUTING.md#branch-naming)).
 - [ ] I have **rebased** onto the latest default branch; no merge commits
       from the base branch in this PR.

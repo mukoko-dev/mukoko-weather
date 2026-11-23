@@ -11,9 +11,7 @@ This file is _advisory for humans_ and _authoritative for agents_.
 If you are a human reviewing an agent's PR, use this as the checklist
 for what the agent should have done.
 
-This is the one agent file for the org. Every org `.github` repo in
-the enterprise keeps its agent rules in `AGENTS.md` only: no
-`CLAUDE.md` and no `.claude/` directory. Claude Code, Cursor, Copilot
+This is the one agent file for the org. Every org `.github` repo in the enterprise keeps its agent rules in `AGENTS.md` only: no `CLAUDE.md` and no `.claude/` directory. Claude Code, Cursor, Copilot
 and the rest all read the same file. Individual repos may add their
 own `AGENTS.md` that layers on top of this one. Repo-level rules win
 over org-level rules where they conflict.
@@ -72,21 +70,18 @@ their `llms.txt` files.
    serving. Requests have timeouts and size limits. Services shut down
    gracefully. `/health` is liveness and `/ready` checks each dependency. The
    version reported is the real release, never hard-coded.
-3. **Everything ships to production.** Releases go `staging` → `main` through
-   the merge queue. Deploys run on every push to `main`, with no variable
+3. **Everything ships to production.** Releases go `staging` → `main` through the merge queue. Deploys run on every push to `main`, with no variable
    gates. A missing secret fails loudly, never silently skips.
 4. **Never close a conflicting PR.** Resolve the conflict and keep every
    feature.
 5. **Think as a data scientist, a software engineer, a psychologist and an
    engagement designer at once.** Every record is linkable across systems by
-   one canonical id: WorkOS `externalId` = Mongo entity id = ledger
-   `owner_id`. An empty screen loses a user, so design for engagement and
+   one canonical id: WorkOS `externalId` = Mongo entity id = ledger `owner_id`. An empty screen loses a user, so design for engagement and
    trust.
 6. **Honesty.** Report what is measured, label design as design, and never
    overclaim.
 
-**Dependencies.** Declare first-party packages (`@nyuchi/*`, `@bundu/*`,
-`mzizi-*`) and direct dependencies as minimum versions (`>=x.y.z`) with no
+**Dependencies.** Declare first-party packages (`@nyuchi/*`, `@bundu/*`, `mzizi-*`) and direct dependencies as minimum versions (`>=x.y.z`) with no
 upper bound; an old version blocks, the latest never does. Third-party
 selectors known to break across majors, and runtime dependencies of
 published packages, are capped within their major (`>=x <next-major`).
@@ -95,13 +90,10 @@ published packages, are capped within their major (`>=x <next-major`).
 
 Agents must read, in order:
 
-1. The repository's `README.md`.
-2. The repository's `CONTRIBUTING.md` (or this org's
-   [`CONTRIBUTING.md`](./CONTRIBUTING.md) if the repo doesn't ship
+1. The repository's `README.md`. 2. The repository's `CONTRIBUTING.md` (or this org's [`CONTRIBUTING.md`](./CONTRIBUTING.md) if the repo doesn't ship
    its own).
-3. The repository's `CODEOWNERS` file, if present.
-4. Any `AGENTS.md` or `CLAUDE.md` at the repo root.
-5. The specific file(s) you intend to modify, in full, before
+2. The repository's `CODEOWNERS` file, if present. 4. Any `AGENTS.md` or `CLAUDE.md` at the repo root.
+3. The specific file(s) you intend to modify, in full, before
    proposing changes.
 
 **Do not propose changes to code you have not read.**
@@ -137,20 +129,9 @@ contributions without exception. In particular:
 Use the prefix that matches the agent, so reviewers can see at a
 glance what opened the PR:
 
-| Prefix        | Agent                                     |
-| ------------- | ----------------------------------------- |
-| `claude/`     | Claude Code (Anthropic)                   |
-| `cursor/`     | Cursor background agent                   |
-| `copilot/`    | GitHub Copilot Workspace / Copilot coding |
-| `aider/`      | Aider                                     |
-| `devin/`      | Devin (Cognition AI)                      |
-| `codex/`      | OpenAI Codex CLI / Codex cloud agent      |
-| `windsurf/`   | Windsurf (Codeium)                        |
-| `amp/`        | Amp (Sourcegraph)                         |
-| `gemini/`     | Gemini Code Assist / Jules (Google)       |
-| `continue/`   | Continue.dev                              |
-| `supermaven/` | Supermaven                                |
-| `agent/`      | Any other agent not listed above          |
+| Prefix    | Agent                   |
+| --------- | ----------------------- |
+| `claude/` | Claude Code (Anthropic) |     | `cursor/` | Cursor background agent |     | `copilot/` | GitHub Copilot Workspace / Copilot coding |     | `aider/` | Aider |     | `devin/` | Devin (Cognition AI) |     | `codex/` | OpenAI Codex CLI / Codex cloud agent |     | `windsurf/` | Windsurf (Codeium) |     | `amp/` | Amp (Sourcegraph) |     | `gemini/` | Gemini Code Assist / Jules (Google) |     | `continue/` | Continue.dev |     | `supermaven/` | Supermaven |     | `agent/` | Any other agent not listed above |
 
 Everything else in [`CONTRIBUTING.md` § Branch naming](./CONTRIBUTING.md#branch-naming)
 still applies (lowercase, kebab-case, under 50 characters).
@@ -188,8 +169,7 @@ explicitly. Humans reviewing an agent's PR should check each.
 
 ### Tests and type checks
 
-- **Don't disable checks silently.** `eslint-disable`, `# type: ignore`,
-  `#[allow(...)]`, `// @ts-expect-error`, and friends require a
+- **Don't disable checks silently.** `eslint-disable`, `# type: ignore`, `#[allow(...)]`, `// @ts-expect-error`, and friends require a
   same-line comment explaining _why_.
 - **Don't weaken tests to make them pass.** If a test fails, fix
   the code, change the test's behaviour deliberately, or escalate.
@@ -202,18 +182,13 @@ explicitly. Humans reviewing an agent's PR should check each.
 ### Security
 
 - **Never commit secrets.** Scan the diff before proposing it —
-  API keys, tokens, `.env` contents, private keys, credentials.
-- **Never disable SECURITY checks** (`codeql`, `dependency-review`,
-  `pip-audit`, `pnpm audit`, `cargo deny`, secret-scanning,
-  `pr-title-lint`, DCO) to make a PR pass.
+  API keys, tokens, `.env` contents, private keys, credentials. - **Never disable SECURITY checks** (`codeql`, `dependency-review`, `pip-audit`, `pnpm audit`, `cargo deny`, secret-scanning, `pr-title-lint`, DCO) to make a PR pass.
 - **Pin third-party GitHub Actions by SHA** (not by floating tag)
   when you add a new one. Example:
-  `uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683`.
-  Per NA-03 §7.1.1, a `# vX.Y.Z` comment must follow the SHA on the
+  `uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683`. Per NA-03 §7.1.1, a `# vX.Y.Z` comment must follow the SHA on the
   same line.
 - **Never use `--no-verify`**, `--no-gpg-sign`, `--force-with-lease`
-  on a shared branch, `git reset --hard` on a tracking branch, or
-  any flag that bypasses the rules in `CONTRIBUTING.md`. If a hook
+  on a shared branch, `git reset --hard` on a tracking branch, or any flag that bypasses the rules in `CONTRIBUTING.md`. If a hook
   is failing, fix the underlying cause.
 - **Do not propose governance amendments directly as code changes.**
   Any change to NA-01, NA-02, NA-03, or `ORG_SETTINGS.md` requires
@@ -239,8 +214,7 @@ explicitly. Humans reviewing an agent's PR should check each.
 
 ### Data and blast radius
 
-- **Confirm before destructive actions.** `rm -rf`, `git reset
-  --hard`, dropping database tables, killing processes, deleting
+- **Confirm before destructive actions.** `rm -rf`, `git reset --hard`, dropping database tables, killing processes, deleting
   branches, force-pushing, overwriting uncommitted changes. Ask a
   human first.
 - **Do not push to shared branches without approval.** Even on
@@ -282,13 +256,10 @@ say so rather than "fixing" the system.
 - **Status vocabulary:** every component is **Live**, **Building**,
   **Designed** or **Goal**. Never describe Designed or Goal as running.
 - **Three sources of truth:** Supabase PostgreSQL 17 (projects
-  `nyuchi_relational_db`, `nyuchi_pay_db`, `shamwari_ai_db`,
-  `mzizi_db`), MongoDB Atlas, and the Honeycomb Pod (Goal). No fourth
+  `nyuchi_relational_db`, `nyuchi_pay_db`, `shamwari_ai_db`, `mzizi_db`), MongoDB Atlas, and the Honeycomb Pod (Goal). No fourth
   without Founder approval. Never reference removed Supabase projects,
-  including `tdcpuzqyoodrdsxldgsh`.
-- **Only the Nyuchi API connects to a database.** `api.nyuchi.com/v1`
-  ([`nyuchi/api-gateway`](https://github.com/nyuchi/api-gateway)) is
-  the internal API. `api.mukoko.com`
+  including `tdcpuzqyoodrdsxldgsh`. - **Only the Nyuchi API connects to a database.** `api.nyuchi.com/v1`
+  ([`nyuchi/api-gateway`](https://github.com/nyuchi/api-gateway)) is the internal API. `api.mukoko.com`
   ([`mukoko-dev/mukoko-api`](https://github.com/mukoko-dev/mukoko-api))
   is the public consumer API and has no database access.
 - **Identity is WorkOS AuthKit**, issuer `accounts.mukoko.com`. Stytch
@@ -328,16 +299,9 @@ Stop and ask the human operator when:
 Repos declare their own local check commands — honour what's there
 before guessing. Common patterns across the org:
 
-| Stack                | Install          | Check                                                                                                   |
-| -------------------- | ---------------- | ------------------------------------------------------------------------------------------------------- |
-| TypeScript / Next.js | `pnpm install`   | `pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm audit --audit-level=moderate`           |
-| TypeScript (Biome)   | `pnpm install`   | `pnpm check && pnpm typecheck && pnpm test && pnpm build`                                               |
-| TypeScript / Bun     | `bun install`    | `bun lint && bun typecheck && bun test && bun build`                                                    |
-| Rust                 | (cargo vendored) | `cargo fmt --check && cargo clippy --workspace -- -D warnings && cargo nextest run && cargo deny check` |
-| Python (uv)          | `uv sync`        | `uv run ruff check && uv run ruff format --check && uv run mypy . && uv run pytest`                     |
-| MDX / docs           | `pnpm install`   | `pnpm cspell && pnpm build`                                                                             |
-| Solidity (Foundry)   | (foundryup)      | `forge fmt --check && forge build && forge test`                                                        |
-| IaC (OpenTofu)       | (tofu in PATH)   | `tofu fmt -check -recursive && tofu validate`                                                           |
+| Stack                | Install        | Check                                                                                         |
+| -------------------- | -------------- | --------------------------------------------------------------------------------------------- |
+| TypeScript / Next.js | `pnpm install` | `pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm audit --audit-level=moderate` |     | TypeScript (Biome) | `pnpm install` | `pnpm check && pnpm typecheck && pnpm test && pnpm build` |     | TypeScript / Bun | `bun install` | `bun lint && bun typecheck && bun test && bun build` |     | Rust | (cargo vendored) | `cargo fmt --check && cargo clippy --workspace -- -D warnings && cargo nextest run && cargo deny check` |     | Python (uv) | `uv sync` | `uv run ruff check && uv run ruff format --check && uv run mypy . && uv run pytest` |     | MDX / docs | `pnpm install` | `pnpm cspell && pnpm build` |     | Solidity (Foundry) | (foundryup) | `forge fmt --check && forge build && forge test` |     | IaC (OpenTofu) | (tofu in PATH) | `tofu fmt -check -recursive && tofu validate` |
 
 If a repo disagrees with this table, the repo wins.
 
@@ -359,11 +323,9 @@ Owner decision, 2026-10-04 ([#80](https://github.com/nyuchi/.github/issues/80)).
 The branch decides the bump. Nobody labels a PR, and agents add nothing
 to a PR to choose a version:
 
-| Event                                        | Bump  | Example         |
-| -------------------------------------------- | ----- | --------------- |
-| A PR merged into `staging` (the live beta)   | PATCH | 0.27.3 → 0.27.4 |
-| `staging` released to `main`                 | MINOR | 0.27.4 → 0.28.0 |
-| A person runs the release with `bump: major` | MAJOR | 0.28.0 → 1.0.0  |
+| Event                                      | Bump  | Example         |
+| ------------------------------------------ | ----- | --------------- |
+| A PR merged into `staging` (the live beta) | PATCH | 0.27.3 → 0.27.4 |     | `staging` released to `main` | MINOR | 0.27.4 → 0.28.0 |     | A person runs the release with `bump: major` | MAJOR | 0.28.0 → 1.0.0 |
 
 - Minor and patch have no upper limit: patch 999 is followed by patch
   1000, minor 999 by minor 1000 (`v0.1000.0` is newer than `v0.999.0`).
@@ -371,15 +333,13 @@ to a PR to choose a version:
   segment stays 0–999.
 - **Agents never release a major** and never hand-edit a version to one.
   A major is the owner's call, made from the Actions tab.
-- In a repo whose version lives in a file (`package.json`,
-  `Cargo.toml`, ...), a PR that releases sets it to the next version
+- In a repo whose version lives in a file (`package.json`, `Cargo.toml`, ...), a PR that releases sets it to the next version
   the policy allows. CI refuses anything else and names the right
   version.
 - Released versions are never renumbered.
 
 The rules live in one place, the
-[`next-version`](./.github/actions/next-version) action, which
-`reusable-staging-release.yml`, `reusable-auto-tag.yml` and every repo's
+[`next-version`](./.github/actions/next-version) action, which `reusable-staging-release.yml`, `reusable-auto-tag.yml` and every repo's
 release flow pin by SHA.
 
 ---
@@ -387,8 +347,7 @@ release flow pin by SHA.
 ## Repo-level overrides
 
 A repo can extend or override this file by shipping its own
-`AGENTS.md` at the repo root (some product repos still carry a
-`CLAUDE.md`; read it the same way). Agents should merge the two mentally: **repo-level
+`AGENTS.md` at the repo root (some product repos still carry a `CLAUDE.md`; read it the same way). Agents should merge the two mentally: **repo-level
 rules override org-level rules when they conflict**, and
 **repo-level rules add to org-level rules when they don't**.
 
@@ -408,11 +367,9 @@ starts — so another session, agent or person can pick it up.
 - Every PR is attached to its issue, and the "Org lint" check
   (`issue attached`) fails without it. Put `Closes #n` in the
   description when the merge completes the issue, so GitHub closes it
-  on merge. Use `Refs #n` for partial work (the issue stays open), or
-  `No issue: <reason>` for a trivial change. Bot PRs are exempt.
+  on merge. Use `Refs #n` for partial work (the issue stays open), or `No issue: <reason>` for a trivial change. Bot PRs are exempt.
 - GitHub acts on a closing keyword only when the merge lands on the
-  default branch. A PR into `staging` therefore closes nothing yet: the
-  release PR to `main` repeats every `Closes #n` from the PRs it
+  default branch. A PR into `staging` therefore closes nothing yet: the release PR to `main` repeats every `Closes #n` from the PRs it
   carries, and the same check warns with the exact lines it is missing.
 - Post progress, decisions and a hand-off note (what's done, what's
   left, branch names) as issue comments — at each merge and before a
@@ -425,13 +382,10 @@ starts — so another session, agent or person can pick it up.
 ## Dev skills, progress reports and the merge gate
 
 Load the Mzizi **dev skills** before starting work:
-`mzizi_get_skills category=dev` on the Mzizi MCP (`mcp.mzizi.dev`), or
-`@nyuchi/mzizi-skills` from npm. They are `digital-hygiene` and
-`progress-report`.
+`mzizi_get_skills category=dev` on the Mzizi MCP (`mcp.mzizi.dev`), or `@nyuchi/mzizi-skills` from npm. They are `digital-hygiene` and `progress-report`.
 
 - **Digital hygiene.** Check free disk before starting, clone only
-  under `$TMPDIR`, share build caches, and audit, then delete, your
-  clones once the work merges (`digital-hygiene` skill).
+  under `$TMPDIR`, share build caches, and audit, then delete, your clones once the work merges (`digital-hygiene` skill).
 - **Clone isolation.** Clone only into a directory unique to you; never
   touch another agent's.
 - **Progress reports.** All dev work runs on a 10-minute
@@ -464,46 +418,35 @@ concurrent merge calls, not from git itself. These rules remove it.
   research work reads diffs and files with `gh api` or the GitHub MCP
   tools, without cloning or adding a worktree.
 - **Every workflow whose check is required must trigger on
-  `merge_group:`.** A required check that never reports on the queue's
-  `gh-readonly-queue/**` ref stalls every queued PR. Jobs that need a PR
-  (title lint, PR comments) skip themselves on `merge_group`; a skipped
+  `merge_group:`.** A required check that never reports on the queue's `gh-readonly-queue/**` ref stalls every queued PR. Jobs that need a PR (title lint, PR comments) skip themselves on `merge_group`; a skipped
   check counts as passed.
 
 ### Releases and the main gate
 
 - **The default branch takes releases only.** Where a repo has a `staging`
-  branch, a pull request into the default branch must come from `staging`,
-  a `release/*` branch, or the registry pin bot (`bot/registry-pin`). The
-  enforced release check refuses everything else; repos without `staging`
+  branch, a pull request into the default branch must come from `staging`, a `release/*` branch, or the registry pin bot (`bot/registry-pin`). The enforced release check refuses everything else; repos without `staging`
   are not affected. Dependabot opens its PRs against `staging`
-  (`target-branch: staging`). A repo named `.github` has no `staging` at
-  all: every org's `.github` repo works directly on its default branch.
-- **Promote `staging` to the default branch with a merge commit, never
-  squash.** A squash release is one commit `staging` lacks; the branches
+  (`target-branch: staging`). A repo named `.github` has no `staging` at all: every org's `.github` repo works directly on its default branch. - **Promote `staging` to the default branch with a merge commit, never squash.** A squash release is one commit `staging` lacks; the branches
   diverge and the next release silently erases work that exists only on
   the default branch (it did, on 2026-10-21). A merge commit keeps the
-  default branch at `staging` plus one merge, so the next release cannot
-  conflict and needs no sync-back. See `settings/README.md`.
+  default branch at `staging` plus one merge, so the next release cannot conflict and needs no sync-back. See `settings/README.md`.
 - **Nothing stays on the default branch alone.** If a commit reaches it
   outside a release (hotfix, pin bot), forward-port it to `staging` before
   the next release. The gate blocks the release until then; once the
   commits are on `staging`, the `forward-ported` label lets it through.
 - **One pin for the shared workflows, estate-wide.** Every repo calls
   `nyuchi/.github/.github/workflows/<workflow>.yml@<40-hex sha>  # vX.Y.Z`
-  at the same commit (two spaces before `#`); Dependabot raises the pin
-  after each release. Never `@main`, never a bare SHA without its tag
+  at the same commit (two spaces before `#`); Dependabot raises the pin after each release. Never `@main`, never a bare SHA without its tag
   comment.
 - **Releases are automatic.** Agents do not cut minor or patch releases
   by hand: `auto-release.yml` opens the staging → default-branch release
   PR every 15 minutes and turns auto-merge on, as the enterprise-owned
   `bundu-release` app (whose key lives only in the `org-release`
   environment). A MAJOR is still the owner's call: the owner applies the
-  `semver:major` label. The hotfix lane is unchanged. A repo opts out with
-  the `AUTO_RELEASE=off` variable.
+  `semver:major` label. The hotfix lane is unchanged. A repo opts out with the `AUTO_RELEASE=off` variable.
 - **Advisory waivers are org-level.** The dependency review blocks an
   advisory only while a patched release exists. The only waivers are the
-  org allowlist (`AUDIT_ALLOW_GHSAS` in nyuchi/.github's
-  `dependency-review.yml`), each with a reason and a review date; a repo
+  org allowlist (`AUDIT_ALLOW_GHSAS` in nyuchi/.github's `dependency-review.yml`), each with a reason and a review date; a repo
   cannot waive its own advisory.
 
 ---
