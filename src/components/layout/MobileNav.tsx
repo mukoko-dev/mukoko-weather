@@ -38,6 +38,8 @@ export function mobileNavItems(
         label: "Map",
         href: mapHref,
         icon: MapIcon,
+        // The icon alone, no text (owner, 2026-11-23); the name is the aria-label.
+        iconOnly: true,
         ariaLabel: hasMapLocation
           ? "Weather map"
           : "Choose a location for the weather map",

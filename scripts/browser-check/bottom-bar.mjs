@@ -7,11 +7,11 @@
 //
 //   BASE=http://localhost:3100 SHOTS=/tmp/shots node scripts/browser-check/bottom-bar.mjs
 //
-// What only a browser can show: Map's label fits whole inside its item (not
-// cut, not overflowing) at several phone widths, the lane keeps a usable
-// width, the items stay inside the bar, My Location comes right after Map and
-// the account trigger is the last control at the bar's right edge, below 360px
-// (label screen-reader-only) Map is one touch target wide, and the places lane
+// What only a browser can show: Map is the icon alone (owner, 2026-11-23: no
+// text on the Map icon), one touch target wide at several phone widths, the
+// lane keeps a usable width, the items stay inside the bar, My Location comes
+// right after Map and the account trigger is the last control at the bar's
+// right edge, and the places lane
 // moves sideways only (owner, 2026-11-05: "movable up and down as well, it
 // should only move left and right"). Screenshots go to SHOTS.
 import { join } from "node:path";
@@ -116,20 +116,13 @@ run(async () => {
         continue;
       }
       const [map] = m.items;
-      const compact = size.width < 360;
-      if (compact) {
-        note(
-          `${tag}: Map's label is screen-reader-only and the item is one touch target wide`,
-          !map.labelVisible && Math.abs(map.width - TOUCH_TARGET_PX) < 0.5,
-          `width ${map.width.toFixed(1)}px`,
-        );
-      } else {
-        note(
-          `${tag}: Map's label is shown whole (not cut)`,
-          map.labelVisible && !map.cut,
-          `Map label ${map.labelWidth.toFixed(1)}px in ${map.width.toFixed(1)}px`,
-        );
-      }
+      // Map is the icon alone at every width (owner, 2026-11-23): no visible
+      // text, one touch target wide.
+      note(
+        `${tag}: Map is the icon alone (no visible text) and one touch target wide`,
+        !map.labelVisible && Math.abs(map.width - TOUCH_TARGET_PX) < 0.5,
+        `width ${map.width.toFixed(1)}px, text "${map.text}"`,
+      );
       note(
         `${tag}: Map sits inside the bar and the lane is at least ${LANE_MIN_PX}px`,
         map.left >= m.nav.left && m.lane >= LANE_MIN_PX,

@@ -169,3 +169,51 @@ describe("isBottomNavItemActive", () => {
     expect(isBottomNavItemActive(item("a"), "/a", "b")).toBe(false);
   });
 });
+
+describe("MziziBottomNav — an icon-only item (local addition 12)", () => {
+  const html = renderToStaticMarkup(
+    createElement(MziziBottomNav, {
+      leading: [
+        { ...item("one"), iconOnly: true, ariaLabel: "Weather map" },
+        item("two"),
+      ],
+      lane: createElement("div"),
+    }),
+  );
+  const [first, second] = html.match(/<a\b[^>]*>[\s\S]*?<\/a>/g)!;
+
+  it("is the icon alone: no visible label, named by ariaLabel", () => {
+    expect(first).toContain('aria-label="Weather map"');
+    expect(first).not.toContain("<span");
+    expect(
+      first.replace(/<svg[\s\S]*?<\/svg>/, "").replace(/<[^>]+>/g, ""),
+    ).toBe("");
+  });
+
+  it("is a round target one touch target wide, with no preset width", () => {
+    expect(first).toContain("size-[var(--touch-target-min)]");
+    expect(first).toContain("rounded-full");
+    expect(first).toContain("plover");
+    expect(first).not.toContain("w-[var(--mobile-nav-item-width)]");
+  });
+
+  it("leaves a labelled item beside it as it was", () => {
+    expect(second).toContain("w-[var(--mobile-nav-item-width)]");
+    expect(second).toContain(">two</span>");
+  });
+
+  it("falls back to the label for its name, and keeps aria-current", () => {
+    const named = renderToStaticMarkup(
+      createElement(MziziBottomNav, {
+        leading: [{ ...item("one"), iconOnly: true }],
+        lane: createElement("div"),
+      }),
+    );
+    expect(named).toContain('aria-label="one"');
+    expect(named).toContain('aria-current="page"');
+  });
+
+  it("is documented as local addition 12", () => {
+    expect(source).toContain("12. An item may be `iconOnly`");
+  });
+});

@@ -84,6 +84,12 @@
  *    `.plover` in globals.css, which also sets the text colour, so this file
  *    sets none for the current item. `aria-current="page"` stays.
  *
+ * 12. An item may be `iconOnly` (owner, 2026-11-23: no text on the Map icon).
+ *    It is drawn as the icon alone in a round `.plover` target one touch target
+ *    wide (the account control's own shape), whatever the bar's width, with no
+ *    visible label and no preset width. It keeps its name (`ariaLabel`, else
+ *    `label`) and `aria-current`, so a screen reader still hears "Weather map".
+ *
  * `--mobile-nav-clearance` in globals.css is the bar (4.5rem) plus the lift,
  * the safe area and a breath, so page content always matches the one bar.
  */
@@ -111,6 +117,11 @@ export interface BottomNavItem {
   onFabClick?: () => void;
   /** Accessible name when it should say more than the visible label. */
   ariaLabel?: string;
+  /**
+   * Draw the icon alone, in a round touch target, with no visible label (local
+   * addition 12). The name is still `ariaLabel`, else `label`.
+   */
+  iconOnly?: boolean;
 }
 
 /**
@@ -198,6 +209,25 @@ export function MziziBottomNav({
 
     /* ── Standard nav item ────────────────────────────────── */
     const Icon = active && item.activeIcon ? item.activeIcon : item.icon;
+
+    /* ── Icon only (local addition 12) ────────────────────── */
+    if (item.iconOnly) {
+      return (
+        <Link
+          key={item.id}
+          href={item.href}
+          prefetch={false}
+          aria-current={active ? "page" : undefined}
+          aria-label={item.ariaLabel ?? item.label}
+          className="plover press-scale relative flex size-[var(--touch-target-min)] shrink-0 items-center justify-center rounded-full text-foreground"
+        >
+          <Icon
+            className={cn("size-5", active ? "stroke-[2.2]" : "stroke-[1.8]")}
+          />
+        </Link>
+      );
+    }
+
     return (
       <Link
         key={item.id}

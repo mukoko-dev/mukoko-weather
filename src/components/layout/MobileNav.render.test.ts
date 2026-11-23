@@ -160,12 +160,33 @@ describe("MobileNav render — one bar, one landmark", () => {
     );
   });
 
-  it("keeps Map a 48px target with the 16px label token", () => {
+  it("draws Map as the icon alone, in a round 49px target, named by its aria-label (owner, 2026-11-23: no text on the Map icon)", () => {
     const html = render("/");
-    expect(
-      html.match(/min-h-\[var\(--touch-target-min\)\]/g)!.length,
-    ).toBeGreaterThanOrEqual(1);
-    expect(html).toContain("text-[length:var(--text-nav-label)]");
+    const map = html.match(
+      /<a\b[^>]*aria-label="Weather map"[^>]*>[\s\S]*?<\/a>/,
+    )![0];
+    expect(map).toContain("size-[var(--touch-target-min)]");
+    expect(map).toContain("rounded-full");
+    expect(map).toContain("plover");
+    expect(map).toContain("lucide-map");
+    // No visible label: the link holds the glyph and nothing else.
+    expect(map.replace(/<svg[\s\S]*?<\/svg>/, "").replace(/<[^>]+>/g, "")).toBe(
+      "",
+    );
+    expect(map).not.toContain("<span");
+    expect(map).not.toContain("text-[length:var(--text-nav-label)]");
+  });
+
+  it("keeps Map's name for a screen reader when there is no location to map", () => {
+    const html = render("/", [], {
+      mapHref: "/explore",
+      hasMapLocation: false,
+    });
+    const map = html.match(
+      /<a\b[^>]*aria-label="Choose a location for the weather map"[^>]*>/,
+    )![0];
+    expect(map).toContain('href="/explore"');
+    expect(html).not.toContain(">Map</span>");
   });
 });
 
