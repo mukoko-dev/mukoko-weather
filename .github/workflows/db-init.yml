@@ -16,7 +16,7 @@ jobs:
     # the environment "Production – <project>" (en dash). Two Vercel projects
     # deploy from this repo, so match mukoko-weather's name exactly: a
     # "Production" prefix also matched "Production – mukoko-station-console".
-    # Previews ("Preview – <project>") and "workers-production" never match.
+    # Previews ("Preview – <project>") and the Workers deploy ("production") never match.
     if: >-
       github.event.deployment_status.state == 'success' &&
       github.event.deployment.environment == 'Production – mukoko-weather'

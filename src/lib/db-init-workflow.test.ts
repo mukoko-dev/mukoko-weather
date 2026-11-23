@@ -22,7 +22,7 @@ const REAL_ENVIRONMENTS = [
   "Production – mukoko-station-console",
   "Preview – mukoko-weather",
   "Preview – mukoko-station-console",
-  "workers-production",
+  "production",
 ];
 
 /** The environment literal the job's `if:` compares against. */
