@@ -240,7 +240,7 @@ explicitly. Humans reviewing an agent's PR should check each.
 ### Data and blast radius
 
 - **Confirm before destructive actions.** `rm -rf`, `git reset
---hard`, dropping database tables, killing processes, deleting
+  --hard`, dropping database tables, killing processes, deleting
   branches, force-pushing, overwriting uncommitted changes. Ask a
   human first.
 - **Do not push to shared branches without approval.** Even on
