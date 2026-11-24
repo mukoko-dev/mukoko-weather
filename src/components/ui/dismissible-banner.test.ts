@@ -10,12 +10,14 @@ const source = readFileSync(
   "utf8",
 );
 
+// The component requires its children; they are passed as the third argument
+// (the `children` prop is not set by hand: react/no-children-prop).
 const html = renderToStaticMarkup(
-  createElement(DismissibleBanner, {
-    id: "frost:high:cold",
-    closeLabel: "Dismiss frost advisory",
-    children: createElement("p", null, "Frost tonight"),
-  }),
+  createElement(
+    DismissibleBanner,
+    { id: "frost:high:cold", closeLabel: "Dismiss frost advisory" } as never,
+    createElement("p", null, "Frost tonight"),
+  ),
 );
 
 describe("DismissibleBanner", () => {

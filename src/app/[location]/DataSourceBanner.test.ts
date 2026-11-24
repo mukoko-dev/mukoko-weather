@@ -12,9 +12,11 @@ describe("DataSourceBanner (the NEA notice, as an alert banner)", () => {
   const nea = CURRENT_SOURCES.nea;
 
   it("says the licence's own words, with the link to the licence", () => {
-    // The whole statement, text and link: what the licence asks for.
-    const text = html.replace(/<[^>]+>/g, "").replace(/&#x27;/g, "'");
-    expect(text).toContain(`${nea.before}${nea.linkText}${nea.after}`);
+    // The whole statement, text and link: what the licence asks for. React
+    // writes an apostrophe as a character reference; nothing else in it moves.
+    const inMarkup = (text: string) => text.replace(/'/g, "&#x27;");
+    expect(html).toContain(inMarkup(nea.before));
+    expect(html).toContain(`>${nea.linkText}</a>${nea.after}</li>`);
     expect(html).toContain(`href="${nea.href}"`);
     expect(html).toContain('rel="noopener noreferrer"');
   });
