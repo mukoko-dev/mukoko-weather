@@ -185,9 +185,8 @@ describe("MziziBottomNav — an icon-only item (local addition 12)", () => {
   it("is the icon alone: no visible label, named by ariaLabel", () => {
     expect(first).toContain('aria-label="Weather map"');
     expect(first).not.toContain("<span");
-    expect(
-      first.replace(/<svg[\s\S]*?<\/svg>/, "").replace(/<[^>]+>/g, ""),
-    ).toBe("");
+    // The link holds the glyph and nothing else.
+    expect(first).toMatch(/^<a\b[^>]*><svg\b[\s\S]*<\/svg><\/a>$/);
   });
 
   it("is a round target one touch target wide, with no preset width", () => {

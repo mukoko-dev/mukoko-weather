@@ -170,9 +170,7 @@ describe("MobileNav render — one bar, one landmark", () => {
     expect(map).toContain("plover");
     expect(map).toContain("lucide-map");
     // No visible label: the link holds the glyph and nothing else.
-    expect(map.replace(/<svg[\s\S]*?<\/svg>/, "").replace(/<[^>]+>/g, "")).toBe(
-      "",
-    );
+    expect(map).toMatch(/^<a\b[^>]*><svg\b[\s\S]*<\/svg><\/a>$/);
     expect(map).not.toContain("<span");
     expect(map).not.toContain("text-[length:var(--text-nav-label)]");
   });
