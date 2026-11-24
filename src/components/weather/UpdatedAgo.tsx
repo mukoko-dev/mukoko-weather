@@ -14,6 +14,8 @@ interface Props {
   freshness: Freshness;
   weather: WeatherData;
   placeName: string;
+  /** The line's own spacing; the default leaves the gap the home page wants below it. */
+  className?: string;
 }
 
 /**
@@ -27,6 +29,7 @@ export function UpdatedAgo({
   freshness,
   weather,
   placeName,
+  className = "mb-[var(--space-stack)]",
 }: Props) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -38,7 +41,7 @@ export function UpdatedAgo({
   const clock = placeClockLabel(weather, now);
   return (
     <p
-      className="dove mb-[var(--space-stack)] flex flex-wrap items-center gap-1.5"
+      className={`dove flex flex-wrap items-center gap-1.5 ${className}`}
       data-device-freshness={freshness}
     >
       <span aria-hidden="true" className="inline-flex">

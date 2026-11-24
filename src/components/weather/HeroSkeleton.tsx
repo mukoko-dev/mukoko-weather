@@ -40,15 +40,16 @@ const OUTLOOK_BARS_CLASS =
  * When the location hero changes shape (CurrentConditions, HeroDataCard),
  * change this file only; LocationSkeleton just renders `<HeroSkeleton />`.
  *
- * It is the hero's box, row for row. The open sky: the 49px top row
- * (breadcrumb bar at the left; the Quick actions group is the layout's,
- * already on screen and live while the place loads, so there is nothing to
- * stand in for), then the stack (`pt-4 pb-[26px]`): the identity grid (eyebrow
+ * It is the hero's box, row for row. The open sky: the 49px top row on a
+ * phone (a disc where the mukoko mark is; the Quick actions group is the
+ * layout's, already on screen and live while the place loads, so there is
+ * nothing to stand in for), then the stack (`pt-4 pb-[26px]`): the identity grid (eyebrow
  * line, name and country at the left, the 56px glyph in its own column), the
  * numeral (Display), the condition (H5), the H/L/Feels line (Body Large) and
  * the outlook (Body, two lines). Then the data card under it: the five-hour
  * strip, the curve's box, the three readings and the activities row, from the
- * same class strings as the live card (hero-card-classes.ts). Every sky row
+ * same class strings as the live card (hero-card-classes.ts), and the
+ * breadcrumb's row under it. Every sky row
  * carries the REAL `--text-*` size and leading around an `em`-sized bar, so
  * each row is exactly as tall as the text it stands in for and the hero does
  * not change size when the content arrives. The sky has no card or plate:
@@ -74,22 +75,11 @@ export function HeroSkeleton() {
         data-skeleton="hero"
         className="relative text-[var(--sky-fg)]"
       >
-        <div className="flex items-center justify-between gap-3 pt-1">
-          {/* The breadcrumb's box: a typical trail laid out invisibly (so it
-              wraps on a narrow phone exactly as the real one does and the top
-              row has the same height), with one quiet bar drawn over it. */}
-          <div className="relative min-h-[var(--touch-target-min)] min-w-0 pr-[var(--hadeda-reserve)] text-[length:var(--text-body-sm)] leading-[var(--text-body-sm-leading)] sm:pr-0">
-            <ol className="invisible flex flex-wrap items-center gap-x-1.5">
-              <li>
-                <span className="dik-dik">Home</span>
-              </li>
-              <li>/</li>
-              <li>Zimbabwe</li>
-              <li>/</li>
-              <li>Harare</li>
-            </ol>
-            <Shimmer className="absolute top-1/2 left-0 h-[0.8em] w-40 max-w-full -translate-y-1/2" />
-          </div>
+        {/* The top row, phones only (as the live one): a quiet disc where the
+            mukoko mark is, in the same 49px row. Nothing for the alerts: none
+            is known yet, and none is drawn without one. */}
+        <div className="flex min-h-[var(--touch-target-min)] items-center justify-between gap-3 pt-1 sm:hidden">
+          <Shimmer className="size-8 rounded-full" />
         </div>
         <div className="pt-4 pb-[26px]">
           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 min-[360px]:gap-x-3">
@@ -161,6 +151,14 @@ export function HeroSkeleton() {
         <div className={HERO_ROW_CLASS}>
           <Shimmer className="h-[0.7em] w-40" />
         </div>
+      </div>
+      {/* The breadcrumb's row under the card: one line, as tall as the live one
+          (a full touch target where the pointer is coarse, the Home link's). */}
+      <div
+        data-skeleton="hero-breadcrumb"
+        className="mt-4 flex h-5 items-center [@media(pointer:coarse)]:h-[var(--touch-target-min)]"
+      >
+        <Shimmer className="h-[0.8em] w-40 max-w-full" />
       </div>
     </div>
   );

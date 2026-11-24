@@ -424,8 +424,56 @@ describe("WeatherDashboard — the hero is pinned first", () => {
   it("only treats the Conditions card as the sky card when the hero is first", () => {
     expect(source).toContain("sectionOrder[0] === PINNED_FIRST_SECTION");
   });
+});
 
-  it("puts the device 'updated ago' line on the sky ink so it reads over the sky", () => {
-    expect(source).toContain('<div className="kestrel-ink">');
+describe("WeatherDashboard — nothing above the hero (owner, 2026-11-23)", () => {
+  it("hands the hero its alerts, its sources and its breadcrumb, and draws nothing above it", () => {
+    expect(source).toContain("notices={notices}");
+    expect(source).toContain("sources={sources}");
+    expect(source).toContain("breadcrumb={breadcrumb}");
+    // main starts with the grid: the alerts, the credits and the freshness
+    // line used to sit here, under the Quick actions group at the top right.
+    const main = source.slice(source.indexOf("<main"));
+    expect(main.indexOf("<UpdatedAgo")).toBe(-1);
+    expect(main.indexOf("<ForecastCredit")).toBe(-1);
+    expect(main.indexOf("<FrostAlertBanner")).toBe(-1);
+    expect(main.indexOf("<WeatherUnavailableBanner")).toBe(-1);
+  });
+
+  it("makes the alerts banners with the stack's spacing, not their own margins", () => {
+    expect(source).toContain("<WeatherUnavailableBanner");
+    expect(source).toContain(
+      '<FrostAlertBanner alert={frostAlert} className="" />',
+    );
+  });
+
+  it("keeps the freshness line and the Apple credit in the sources, which cannot be closed", () => {
+    const sources = source.slice(
+      source.indexOf("const sources = "),
+      source.indexOf("const notices ="),
+    );
+    expect(sources).toContain("<UpdatedAgo");
+    expect(sources).toContain(
+      '<ForecastCredit models={[model]} use="baseline" />',
+    );
+    expect(sources).not.toContain("DismissibleBanner");
+    expect(sources).not.toContain("currentSource=");
+  });
+
+  it("puts the Singapore data notice in the alert banners, not on a line of its own (owner, 2026-11-23)", () => {
+    const notices = source.slice(source.indexOf("const notices ="));
+    expect(notices).toContain("<DataSourceBanner");
+    expect(source).toContain("weather.current_overlay?.source && (");
+    expect(source).toContain("source={weather.current_overlay.source}");
+    // No bare ForecastCredit for the observations anywhere in the dashboard.
+    expect(source).not.toContain("currentSource={");
+  });
+
+  it("draws the breadcrumb as one line that truncates the places in the middle first", () => {
+    expect(source).toContain(
+      "flex flex-nowrap items-center gap-x-1.5 overflow-x-clip whitespace-nowrap",
+    );
+    expect(source).toContain("min-w-0 shrink-[3] truncate");
+    expect(source).not.toContain("flex-wrap items-center gap-x-1.5");
   });
 });

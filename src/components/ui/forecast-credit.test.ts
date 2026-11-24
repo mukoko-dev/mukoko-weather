@@ -107,18 +107,28 @@ describe("the NEA licence notice (Singapore observations in `current`)", () => {
     expect(out).toContain("National Environment Agency");
   });
 
-  it("the dashboard shows it only when the payload names the overlay", () => {
+  it("the dashboard shows it, in an alert banner, only when the payload names the overlay", () => {
     const src = read("src/app/[location]/WeatherDashboard.tsx");
     const at = src.indexOf("{weather.current_overlay?.source && (");
     expect(at).toBeGreaterThan(-1);
     // Nothing at all (not even the wrapper) without `current_overlay`. Read
     // inline: a helper call or a const here made the React Compiler skip the
     // component (eslint "preserve-manual-memoization").
-    expect(src.slice(at, at + 260)).toContain(
-      "currentSource={weather.current_overlay.source}",
+    expect(src.slice(at, at + 200)).toContain(
+      "source={weather.current_overlay.source}",
     );
-    // The wording lives in forecast-sources.ts, never in the component.
+    // The notice is the information banner (owner, 2026-11-23), which reads the
+    // credit through ForecastCredit; the dashboard never draws it bare.
+    expect(src).toContain("<DataSourceBanner");
+    expect(src).not.toContain("currentSource={");
+    expect(read("src/app/[location]/DataSourceBanner.tsx")).toContain(
+      "currentSource={credit.id}",
+    );
+    // The wording lives in forecast-sources.ts, never in a component.
     expect(read("src/components/ui/forecast-credit.tsx")).not.toContain(
+      "Contains information",
+    );
+    expect(read("src/app/[location]/DataSourceBanner.tsx")).not.toContain(
       "Contains information",
     );
   });

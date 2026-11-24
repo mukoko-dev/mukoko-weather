@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, type ReactNode } from "react";
+import Link from "next/link";
+import { MukokoLogo } from "@/components/brand/MukokoLogo";
 import { useRegisterSkyHero } from "@/lib/sky-hero";
 import { NavigationIcon, WeatherIcon, nightIcon } from "@/lib/weather-icons";
 import {
@@ -45,7 +47,22 @@ interface Props {
   /** GPS-confirmed current location (silent-URL home) — shows the
    *  MY LOCATION eyebrow above the location name. */
   isCurrentLocation?: boolean;
-  /** The breadcrumb trail, rendered at the left of the hero's top row. */
+  /**
+   * Alerts for this place (frost, the weather being unavailable): banners a
+   * person can close, drawn under the top row and above the place's name, never
+   * under the Quick actions group at the top right.
+   */
+  notices?: ReactNode;
+  /**
+   * What the page owes its sources, quiet, under the data card: the licence
+   * and data credits and the line that says how old the data is. These are not
+   * closable: a licence notice has to stay on the page.
+   */
+  sources?: ReactNode;
+  /**
+   * The breadcrumb trail: one quiet line under the data card (the hero already
+   * says where you are, so the trail is for going up, not for orientation).
+   */
   breadcrumb?: ReactNode;
 }
 
@@ -92,6 +109,8 @@ export function CurrentConditions({
   utcOffsetSeconds,
   slug,
   isCurrentLocation = false,
+  notices,
+  sources,
   breadcrumb,
 }: Props) {
   const info = weatherCodeToInfo(current.weather_code);
@@ -208,20 +227,29 @@ export function CurrentConditions({
         data-sky={family}
         className="relative text-[var(--sky-fg)]"
       >
-        {/* Top row — the breadcrumb at the left. The Quick actions group
-            (Share, Notifications, Locations: the same on every page, owner
-            2026-11-11) is not drawn here: the layout mounts it once, fixed to
-            the top right of the screen, clear over this sky and solid after
-            the page scrolls past it (see QuickActions). On phones the
-            breadcrumb leaves room for it (`--hadeda-reserve`, sized from the
-            group's own tokens); from `sm` the group is in the site header row
-            above, so the trail has the whole row. Round 49px controls:
-            content stays distinct from controls. */}
-        <div className="flex items-center justify-between gap-3 pt-1">
-          <div className="min-h-[var(--touch-target-min)] min-w-0 pr-[var(--hadeda-reserve)] text-[length:var(--text-body-sm)] leading-[var(--text-body-sm-leading)] text-[var(--sky-fg-dim)] sm:pr-0">
-            {breadcrumb}
-          </div>
+        {/* Top row, phones only: the mukoko mark at the left and nothing else
+            (owner, 2026-11-23: the hero says where you are, so no words
+            here). The phone header is not drawn over a sky hero, so the mark
+            lives here; from `sm` the site header carries it and this row is
+            not drawn. The Quick actions group (Share, Notifications,
+            Locations: the same on every page, owner 2026-11-11) is not drawn
+            here either: the layout mounts it once, fixed to the top right of
+            the screen, clear over this sky and solid after the page scrolls
+            past it (see QuickActions). The row is as tall as the group's
+            controls (49px), so what follows it is always below the group. */}
+        <div className="flex min-h-[var(--touch-target-min)] items-center justify-between gap-3 pt-1 sm:hidden">
+          <Link
+            href="/"
+            prefetch={false}
+            aria-label="mukoko weather — return to home page"
+            className="flex min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] items-center"
+          >
+            <MukokoLogo wordmarkClassName="hidden" />
+          </Link>
         </div>
+        {/* Alerts: under the top row, never under the group, each one a
+            banner that can be closed. Nothing is drawn (no gap) without one. */}
+        {notices && <div className="space-y-3 pt-2">{notices}</div>}
         <div className="pt-4 pb-[26px]">
           {/* Identity: the eyebrow, the name and the country each on their own
               row at the left, the weather glyph in its own column at the right
@@ -311,6 +339,17 @@ export function CurrentConditions({
         hasSelection={hasSelection}
         activityLine={activityLine}
       />
+      {/* Under the card: the sources (licence and data credits, how old the
+          data is), then the breadcrumb, each one quiet line or short block.
+          The sky is still behind them (the Conditions card under this is the
+          translucent sky card), so they take the sky ink, as the hero's own
+          text does. A sibling of the sky section, like the card. */}
+      {(sources || breadcrumb) && (
+        <div className="kestrel-ink mt-4 space-y-3 text-[length:var(--text-caption)] leading-[var(--text-caption-leading)] text-[var(--sky-fg-dim)]">
+          {sources}
+          {breadcrumb}
+        </div>
+      )}
     </div>
   );
 }
