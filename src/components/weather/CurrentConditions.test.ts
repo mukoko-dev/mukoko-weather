@@ -187,13 +187,31 @@ describe('CurrentConditions — open sky (the owner-approved "open sky with a da
   });
 });
 
-describe("CurrentConditions — top row (the breadcrumb; the Quick actions group is the layout's)", () => {
-  it("takes the breadcrumb as a slot at the left of the top row, Body Small 14px, dim sky white", () => {
+describe("CurrentConditions — top row (the mark; the Quick actions group is the layout's)", () => {
+  it("takes the alerts, the sources and the breadcrumb as slots", () => {
+    expect(source).toContain("notices?: ReactNode");
+    expect(source).toContain("sources?: ReactNode");
     expect(source).toContain("breadcrumb?: ReactNode");
+    expect(source).toContain("{notices}");
+    expect(source).toContain("{sources}");
     expect(source).toContain("{breadcrumb}");
+  });
+
+  it("draws the mukoko mark alone in a 49px top row on phones: no words, a full touch target, a client-side link home", () => {
     expect(source).toContain(
-      "text-[length:var(--text-body-sm)] leading-[var(--text-body-sm-leading)] text-[var(--sky-fg-dim)]",
+      'import { MukokoLogo } from "@/components/brand/MukokoLogo"',
     );
+    expect(source).toContain('<MukokoLogo wordmarkClassName="hidden" />');
+    expect(source).toContain(
+      "flex min-h-[var(--touch-target-min)] items-center justify-between gap-3 pt-1 sm:hidden",
+    );
+    expect(source).toContain('href="/"');
+    expect(source).toContain("prefetch={false}");
+    expect(source).toContain(
+      "min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)]",
+    );
+    // From `sm` the site header carries the mark: the row is not drawn.
+    expect(source).toContain("sm:hidden");
   });
 
   it("draws no group of its own: Share, Notifications and Locations are the layout's, one mount for every page", () => {
@@ -206,11 +224,15 @@ describe("CurrentConditions — top row (the breadcrumb; the Quick actions group
     expect(source).not.toContain("<AccountMenu");
   });
 
-  it("keeps the top row 49px tall and leaves the breadcrumb room for the group (three controls wide) on phones", () => {
-    expect(source).toContain(
-      "min-h-[var(--touch-target-min)] min-w-0 pr-[var(--hadeda-reserve)]",
-    );
-    expect(source).toContain("sm:pr-0");
+  it("puts the alerts under the top row and above the identity stack, never above the row the group floats over", () => {
+    const row = source.indexOf("sm:hidden");
+    const notices = source.indexOf("{notices}");
+    const eyebrow = source.indexOf("ref={contentRef}");
+    expect(row).toBeGreaterThan(-1);
+    expect(notices).toBeGreaterThan(row);
+    expect(notices).toBeLessThan(eyebrow);
+    // Nothing (no gap) without an alert.
+    expect(source).toContain("{notices && <div");
   });
 
   it("registers its first line of content (the eyebrow) and its place as the sky hero, for the group's tone and its Share", () => {
@@ -221,19 +243,27 @@ describe("CurrentConditions — top row (the breadcrumb; the Quick actions group
       "useRegisterSkyHero(contentRef, { name: locationName, slug })",
     );
     expect(source).toContain("ref={contentRef}");
-    // The eyebrow is the first line of the stack after the top row; the
-    // block's own padding above it is bare sky, so the block is not the target
-    // (on a one-line breadcrumb the block's edge is above the group at rest).
+    // The eyebrow is the first line of the stack after the top row and the
+    // alerts; the block's own padding above it is bare sky, so the block is
+    // not the target.
     expect(source.indexOf("ref={contentRef}")).toBeGreaterThan(
-      source.indexOf("{breadcrumb}"),
+      source.indexOf("{notices}"),
     );
     expect(source).toContain("useRef<HTMLParagraphElement>(null)");
     expect(source).not.toMatch(/<div\s+ref=\{contentRef\}/);
   });
 
-  it("sits before the identity stack", () => {
-    expect(source.indexOf("{breadcrumb}")).toBeLessThan(
-      source.indexOf("{temperature}"),
+  it("puts the sources and then the breadcrumb under the data card, after the identity stack", () => {
+    const card = source.indexOf("<HeroDataCard");
+    expect(source.indexOf("{temperature}")).toBeLessThan(card);
+    expect(source.indexOf("{sources}")).toBeGreaterThan(card);
+    expect(source.indexOf("{breadcrumb}")).toBeGreaterThan(
+      source.indexOf("{sources}"),
+    );
+    // Quiet: caption size, in the sky ink (the sky is still behind them: the
+    // Conditions card under them is the translucent sky card).
+    expect(source).toContain(
+      "kestrel-ink mt-4 space-y-3 text-[length:var(--text-caption)] leading-[var(--text-caption-leading)] text-[var(--sky-fg-dim)]",
     );
   });
 });

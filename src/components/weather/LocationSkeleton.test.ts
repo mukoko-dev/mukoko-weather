@@ -159,7 +159,6 @@ describe("LocationSkeleton — accessibility", () => {
 
 describe("LocationSkeleton — the hero's top row matches the loaded hero", () => {
   it("draws no group of its own: the Quick actions group is the layout's, already on screen and live while the place loads", () => {
-    // (The breadcrumb keeps the group's reserve token, --hadeda-reserve.)
     expect(html).not.toMatch(/class="[^"]*(?<![-\w])hadeda(?![-\w])/);
     expect(html).not.toContain("data-quick-actions");
     expect(heroSrc).not.toMatch(/className="[^"]*(?<![-\w])hadeda(?![-\w])/);
@@ -177,10 +176,16 @@ describe("LocationSkeleton — the hero's top row matches the loaded hero", () =
     expect(heroSrc).toContain("data-sky-hero");
   });
 
-  it("leaves the breadcrumb the same room for the group, and the row the same 48px", () => {
-    expect(heroSrc).toContain("min-h-[var(--touch-target-min)]");
-    expect(heroSrc).toContain("pr-[var(--hadeda-reserve)]");
-    expect(heroSrc).toContain("sm:pr-0");
+  it("keeps the phone-only top row the live hero's height (a disc where the mark is), and the breadcrumb's row under the card", () => {
+    expect(heroSrc).toContain(
+      "flex min-h-[var(--touch-target-min)] items-center justify-between gap-3 pt-1 sm:hidden",
+    );
+    // The breadcrumb no longer sits in the top row, so nothing reserves room
+    // for the group there.
+    expect(heroSrc).not.toContain("pr-[var(--hadeda-reserve)]");
+    expect(html.indexOf('data-skeleton="hero-card"')).toBeLessThan(
+      html.indexOf('data-skeleton="hero-breadcrumb"'),
+    );
   });
 });
 

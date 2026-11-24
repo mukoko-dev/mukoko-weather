@@ -62,6 +62,7 @@ import {
   SIDEBAR_COLUMN_CLASS,
 } from "@/lib/dashboard-layout";
 import { FrostAlertBanner } from "./FrostAlertBanner";
+import { DataSourceBanner } from "./DataSourceBanner";
 import { WeatherUnavailableBanner } from "./WeatherUnavailableBanner";
 import { useAppStore, pinHeroFirst, PINNED_FIRST_SECTION } from "@/lib/store";
 import type { WeatherData, FrostAlert, Season } from "@/lib/weather";
@@ -481,17 +482,20 @@ export function WeatherDashboard({
     countryName,
   ]);
 
-  // The breadcrumb sits at the left of the hero's top row (over the sky), so
-  // its text takes the hero's foreground instead of the page text tokens.
   // The Conditions card is the translucent sky card only while it sits
   // directly under the hero; moved lower it is an ordinary card.
   const skyCard =
     sectionOrder[0] === PINNED_FIRST_SECTION &&
     sectionOrder[1] === "hourlyScroll";
+
+  // The breadcrumb is the hero's last row, under its data card (owner,
+  // 2026-11-23: it took too much room at the top, and the hero already says
+  // where you are). One line, never wrapped: the places in the middle give way
+  // first (truncated), Home and the current place stay.
   const breadcrumb = (
     <nav aria-label="Breadcrumb" data-breadcrumb>
-      <ol className="flex flex-wrap items-center gap-x-1.5">
-        <li>
+      <ol className="flex flex-nowrap items-center gap-x-1.5 overflow-x-clip whitespace-nowrap">
+        <li className="shrink-0">
           <Link
             href="/"
             prefetch={false}
@@ -500,31 +504,90 @@ export function WeatherDashboard({
             Home
           </Link>
         </li>
-        <li aria-hidden="true">/</li>
+        <li aria-hidden="true" className="shrink-0">
+          /
+        </li>
         {/* Country — always shown */}
         {countryName && (
           <>
-            <li>
+            <li className="min-w-0 shrink-[3] truncate">
               <span>{countryName}</span>
             </li>
-            <li aria-hidden="true">/</li>
+            <li aria-hidden="true" className="shrink-0">
+              /
+            </li>
           </>
         )}
         {/* Province — skip only if identical to location name */}
         {location.province && location.province !== location.name && (
           <>
-            <li>
+            <li className="min-w-0 shrink-[3] truncate">
               <span>{location.province}</span>
             </li>
-            <li aria-hidden="true">/</li>
+            <li aria-hidden="true" className="shrink-0">
+              /
+            </li>
           </>
         )}
-        <li aria-current="page">
+        <li aria-current="page" className="min-w-0 truncate">
           <span>{location.name}</span>
         </li>
       </ol>
     </nav>
   );
+
+  // What the page owes its sources, under the hero's data card. None of it can
+  // be closed: it is a trademark duty or the data's own age.
+  //  - how old the data is, for a page painted from the device;
+  //  - the credit an external forecast provider requires, while the server has
+  //    confirmed its forecast as the baseline on screen (Apple Weather:
+  //    trademark, legal link and the notice that its data was modified); nothing
+  //    for the blend or an Open-Meteo model.
+  // (The licence notice for observations the server used in `current`, NEA in
+  // Singapore, is an information banner with the alerts, below.)
+  const hasSources = Boolean(device || (modelBaseline && modelIsExternal));
+  const sources = hasSources ? (
+    <>
+      {device && (
+        <UpdatedAgo
+          fetchedAt={device.fetchedAt}
+          freshness={device.freshness}
+          weather={weather}
+          placeName={location.name}
+          className=""
+        />
+      )}
+      {modelBaseline && modelIsExternal && (
+        <ForecastCredit models={[model]} use="baseline" />
+      )}
+    </>
+  ) : null;
+
+  // Banners a person can close, drawn under the hero's top row: the weather
+  // being unavailable, the frost warning, and the data source notice (NEA in
+  // Singapore, when the server used its observations).
+  // (Read inline, with no helper call or const: that made the React Compiler
+  // skip this component. The banner itself draws nothing for a source with no
+  // credit due.)
+  const notices =
+    banner.show || frostAlert || weather.current_overlay?.source ? (
+      <>
+        {banner.show && (
+          <WeatherUnavailableBanner
+            banner={banner}
+            onRetry={live.retryNow}
+            className=""
+          />
+        )}
+        {frostAlert && <FrostAlertBanner alert={frostAlert} className="" />}
+        {weather.current_overlay?.source && (
+          <DataSourceBanner
+            source={weather.current_overlay.source}
+            className=""
+          />
+        )}
+      </>
+    ) : null;
 
   return (
     <>
@@ -566,46 +629,10 @@ export function WeatherDashboard({
             Weather loaded for {location.name}
           </div>
 
-          {device && (
-            <div className="kestrel-ink">
-              <UpdatedAgo
-                fetchedAt={device.fetchedAt}
-                freshness={device.freshness}
-                weather={weather}
-                placeName={location.name}
-              />
-            </div>
-          )}
-
-          {/* The credit an external forecast provider requires, while the
-              server has confirmed its forecast as the baseline on screen
-              (Apple Weather: trademark, legal link and the notice that its
-              data was modified). Nothing for the blend or an Open-Meteo model. */}
-          {modelBaseline && modelIsExternal && (
-            <div className="kestrel-ink">
-              <ForecastCredit models={[model]} use="baseline" />
-            </div>
-          )}
-
-          {/* The licence notice for observations the server used in `current`
-              (NEA in Singapore, #596): shown only when it says it used them. */}
-          {weather.current_overlay?.source && (
-            <div className="kestrel-ink">
-              <ForecastCredit
-                models={[]}
-                use="plotted"
-                currentSource={weather.current_overlay.source}
-              />
-            </div>
-          )}
-
-          {/* Weather unavailable banner — shown when all providers failed */}
-          {banner.show && (
-            <WeatherUnavailableBanner banner={banner} onRetry={live.retryNow} />
-          )}
-
-          {/* Frost alert banner */}
-          {frostAlert && <FrostAlertBanner alert={frostAlert} />}
+          {/* Nothing is drawn above the hero: alerts, credits and the
+              freshness line are the hero's own rows (`notices` and `sources`
+              below), so none of them can sit under the Quick actions group
+              at the top right. */}
 
           {/* Main grid: mobile = 1 col, lg = 3 col (2+1), xl = 4 col (3+1) */}
           <div
@@ -682,6 +709,8 @@ export function WeatherDashboard({
                                   utcOffsetSeconds={weather.utc_offset_seconds}
                                   slug={location.slug}
                                   isCurrentLocation={isCurrentLocation}
+                                  notices={notices}
+                                  sources={sources}
                                   breadcrumb={breadcrumb}
                                 />
                               </ChartErrorBoundary>

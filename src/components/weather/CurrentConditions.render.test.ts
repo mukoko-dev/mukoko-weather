@@ -186,7 +186,7 @@ describe("CurrentConditions render — the sky hero", () => {
     expect(render()).not.toContain("min-h-[calc(2*");
   });
 
-  it("puts the breadcrumb in the top row, before the stack, and leaves room for the Quick actions group on phones", () => {
+  it("draws the mukoko mark alone in the top row on phones: no breadcrumb, no words, before the place's name", () => {
     const html = render(
       {},
       {
@@ -197,15 +197,66 @@ describe("CurrentConditions render — the sky hero", () => {
         ),
       },
     );
-    const crumb = html.indexOf("Home / Harare");
-    const name = html.indexOf('id="current-conditions-heading"');
-    expect(crumb).toBeGreaterThan(-1);
-    expect(crumb).toBeLessThan(name);
-    // The group (Share, Notifications, Locations) floats at the top right,
-    // mounted once by the layout; the trail leaves room for it on phones
-    // (three controls wide) and has the whole row from `sm`.
-    expect(html).toContain("pr-[var(--hadeda-reserve)]");
-    expect(html).toContain("sm:pr-0");
+    const sky = skyOf(html);
+    const mark = sky.indexOf(
+      'aria-label="mukoko weather — return to home page"',
+    );
+    expect(mark).toBeGreaterThan(-1);
+    expect(mark).toBeLessThan(sky.indexOf('id="current-conditions-heading"'));
+    // A row for phones only (the site header carries the mark from `sm`), as
+    // tall as the group's controls; the trail is not in it.
+    expect(sky).toContain("sm:hidden");
+    expect(sky).not.toContain("Home / Harare");
+    // The group floats at the top right, mounted once by the layout: the row
+    // no longer reserves room beside it, because nothing is drawn beside it.
+    expect(html).not.toContain("pr-[var(--hadeda-reserve)]");
+  });
+
+  it("puts the breadcrumb under the data card, after the sky", () => {
+    const html = render(
+      {},
+      {
+        breadcrumb: createElement(
+          "nav",
+          { "aria-label": "Breadcrumb" },
+          "Home / Harare",
+        ),
+      },
+    );
+    expect(cardOf(html)).toContain("Home / Harare");
+    expect(html.indexOf("Home / Harare")).toBeGreaterThan(
+      html.indexOf("</section>"),
+    );
+  });
+
+  it("puts the sources above the breadcrumb, both under the card", () => {
+    const html = render(
+      {},
+      {
+        sources: createElement("p", null, "Contains information from NEA"),
+        breadcrumb: createElement("nav", null, "Home / Harare"),
+      },
+    );
+    const sources = html.indexOf("Contains information from NEA");
+    expect(sources).toBeGreaterThan(html.indexOf("</section>"));
+    expect(sources).toBeLessThan(html.indexOf("Home / Harare"));
+  });
+
+  it("puts the alerts under the top row and above the place's name, and draws no gap without one", () => {
+    const withAlert = render(
+      {},
+      { notices: createElement("div", { role: "alert" }, "Frost advisory") },
+    );
+    const sky = skyOf(withAlert);
+    const mark = sky.indexOf(
+      'aria-label="mukoko weather — return to home page"',
+    );
+    const alert = sky.indexOf("Frost advisory");
+    expect(alert).toBeGreaterThan(mark);
+    expect(alert).toBeLessThan(sky.indexOf('id="current-conditions-heading"'));
+    const without = skyOf(render());
+    expect(without).not.toContain("space-y-3 pt-2");
+    expect(without).not.toContain('role="alert"');
   });
 
   it("holds no controls of its own: no Share, no Notifications, no Locations, no group, no account menu", () => {
