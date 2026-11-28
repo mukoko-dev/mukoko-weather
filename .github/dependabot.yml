@@ -1,12 +1,6 @@
 version: 2
 # Pull requests target the default branch.
 #
-# Security updates are different: Dependabot raises them against the default
-# branch only, and ignores `target-branch` and the settings of an ecosystem that
-# sets it (GitHub docs, "Targeting pull requests against a non-default branch").
-# One of those on `main` is retargeted with `gh pr edit <n> --base staging`
-# (see CONTRIBUTING.md, "Dependency updates").
-#
 # Major versions are not proposed here (the ignore rules below): a major upgrade
 # is planned work with its own issue. Security fixes for a major still arrive
 # through security updates.
