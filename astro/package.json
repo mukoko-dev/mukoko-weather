@@ -22,9 +22,9 @@
     "test:dist": "OG_DIST_REQUIRED=1 vitest run src/lib/og/og-dist.test.ts"
   },
   "dependencies": {
-    "@astrojs/react": "^7.1.8",
-    "astro": "^7.4.11",
-    "lucide-react": "^1.72.0",
+    "@astrojs/react": "^7.1.9",
+    "astro": "^7.4.13",
+    "lucide-react": "^1.77.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
@@ -36,12 +36,12 @@
     "@types/node": "^26.6.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "playwright-core": "^1.65.0",
+    "playwright-core": "^1.65.1",
     "satori": "^0.63.2",
     "sharp": "^0.35.5",
     "tailwindcss": "^4.3.1",
     "typescript": "6.0.3",
     "vitest": "^4.1.11",
-    "wrangler": "^4.125.0"
+    "wrangler": "^4.166.0"
   }
 }
