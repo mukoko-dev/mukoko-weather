@@ -33,15 +33,23 @@
 #   1. forecast, aviation, mongo-bridge, stations, tiles
 #                                                    (bind to no Worker)
 #   2. places                                        (binds to mongo-bridge)
-#   3. ai, internal-api, jobs                        (bind to forecast; ai also
+#   3. ai, internal-api                              (bind to forecast; ai also
 #                                                    binds places)
 #   4. public-api                                    (binds to forecast,
 #                                                     aviation, places, ai)
+#   5. push                                          (binds to no Worker)
+#   6. jobs                                          (binds to forecast and push)
 #
-# `push` (mukoko-weather-push, #289) is built by workers.yml but deliberately
-# NOT listed here or in the choices: not yet, it needs the VAPID key pair in
-# the Secrets Store and the evaluator (workers/README.md, "Web Push alerts").
-# When it is switched on it deploys before `jobs`.
+# `push` (mukoko-weather-push, #289, #579) and `jobs` come LAST, after
+# `public-api`, on purpose: both declare Secrets Store bindings
+# (MUKOKO_WEATHER_VAPID_PRIVATE_KEY, _PUSH_SEND_KEY, _ALERT_SENDER_KEY), and a
+# binding to a store secret that does not exist FAILS `wrangler deploy` (error
+# 10182). That is the intent (a missing secret stops the deploy loudly and is
+# never skipped), but it must not hold back the Workers that do not need the
+# sender: a run stops at the first Worker that fails, so anything after `push`
+# does not deploy until the owner has created the three secrets
+# (workers/README.md, "Web Push alerts"). `push` deploys before `jobs`, whose
+# PUSH service binding names it.
 #
 # mongo-bridge is TypeScript (workers/mongo-bridge): the deploy installs its
 # dependencies with npm ci, and wrangler bundles it. It needs the Secrets
@@ -57,7 +65,8 @@
 # passed to wrangler as env. The Workers' runtime secrets live in the
 # account's Cloudflare Secrets Store, one store secret per key, bound in each
 # wrangler.jsonc (secrets_store_secrets), never here: MUKOKO_WEATHER_
-# TOMORROW_API_KEY, _NYUCHI_API_KEY, _SERVICE_API_KEY, _CHECKWX_API_KEY
+# TOMORROW_API_KEY, _NYUCHI_API_KEY, _SERVICE_API_KEY, _CHECKWX_API_KEY,
+# _VAPID_PRIVATE_KEY, _PUSH_SEND_KEY, _ALERT_SENDER_KEY
 # (CONTRIBUTING.md, "Deploying the Workers"). Binding a store secret on
 # deploy needs the token to hold Account Secrets Store Edit.
 name: Workers deploy
@@ -85,8 +94,9 @@ on:
           - tiles
           - ai
           - internal-api
-          - jobs
           - public-api
+          - push
+          - jobs
       environment:
         description: Where to deploy (production is the only environment; a push to main always deploys production)
         required: true
@@ -204,7 +214,7 @@ jobs:
           set -euo pipefail
 
           # Binding order: see the header of this file.
-          order=(forecast aviation mongo-bridge places stations tiles ai internal-api jobs public-api)
+          order=(forecast aviation mongo-bridge places stations tiles ai internal-api public-api push jobs)
           if [ "$WORKER" = "all" ]; then
             selected=("${order[@]}")
           else

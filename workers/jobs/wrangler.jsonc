@@ -2,10 +2,22 @@
 // No route and no workers.dev address. Cron Triggers only plan; each plan
 // goes on the `weather-jobs` queue and the consumer below does the work.
 //
-// No secrets. Vars: WARM_PLACES, RETENTION_DAYS, RAW_RETENTION_DAYS.
+// Vars: WARM_PLACES, RETENTION_DAYS, RAW_RETENTION_DAYS, and for device push
+// (#289, #579) ALERTS_ENABLED, PUSH_PLACES, NYUCHI_API_URL.
+// Secrets (Secrets Store; a binding to a secret that does not exist FAILS THE
+// DEPLOY, error 10182, so a missing one is loud, never skipped):
+//   MUKOKO_WEATHER_ALERT_SENDER_KEY  Nyuchi API internal key, scope
+//                                    notifications:alert-sender
+//   MUKOKO_WEATHER_PUSH_SEND_KEY     the shared key of mukoko-weather-push /send
 // OWNER: replace the placeholder D1 id (the same database as
 // forecast/wrangler.jsonc), and create the queues (workers/README.md,
-// "Owner steps"). Deploy after mukoko-weather-forecast.
+// "Owner steps"). Deploy after mukoko-weather-forecast AND mukoko-weather-push
+// (the PUSH service binding names it).
+//
+// The alert tick does NOTHING while ALERTS_ENABLED is not exactly "true": no
+// message is queued, no forecast is read, nothing is sent to the Nyuchi API or
+// the sender. It ships "false". Flipping it is the owner's, after the VAPID
+// pair, the sender key and the Nyuchi API's public key are in place.
 {
   "name": "mukoko-weather-jobs",
   "main": "build/index.js",
@@ -14,7 +26,8 @@
   "workers_dev": false,
   "preview_urls": false,
   "keep_vars": true,
-  // The code logs job kinds and counts only: no places, payloads or keys.
+  // The code logs job kinds, outcomes and counts only: no places, people, endpoints,
+  // payloads or keys.
   "observability": {
     "enabled": true,
     "redact_query_string": true,
@@ -29,6 +42,9 @@
       "30 21 * * *",
       // Maintenance: station_daily rollup, retention to R2, raw cleanup.
       "15 2 * * *",
+      // Frost alerts: hourly at :10, one job per PUSH_PLACES place. Plans
+      // nothing while ALERTS_ENABLED is not "true".
+      "10 * * * *",
     ],
   },
   "vars": {
@@ -38,8 +54,31 @@
     "RETENTION_DAYS": "90",
     // Raw uploads in R2 (raw/YYYY/MM/DD/) older than this are deleted.
     "RAW_RETENTION_DAYS": "365",
+    // The switch for device push. Only "true" turns the alert tick on.
+    "ALERTS_ENABLED": "false",
+    // Places evaluated for frost alerts: seed slugs, comma-separated. Left out,
+    // it is WARM_PLACES.
+    // "PUSH_PLACES": "harare,bulawayo",
+    // The Nyuchi API the alert tick reads targets from and logs deliveries to.
+    "NYUCHI_API_URL": "https://api.nyuchi.com",
   },
-  "services": [{ "binding": "FORECAST", "service": "mukoko-weather-forecast" }],
+  "services": [
+    { "binding": "FORECAST", "service": "mukoko-weather-forecast" },
+    // The sender. Deploys before this Worker (workers-deploy.yml).
+    { "binding": "PUSH", "service": "mukoko-weather-push" },
+  ],
+  "secrets_store_secrets": [
+    {
+      "binding": "MUKOKO_WEATHER_PUSH_SEND_KEY",
+      "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
+      "secret_name": "MUKOKO_WEATHER_PUSH_SEND_KEY",
+    },
+    {
+      "binding": "MUKOKO_WEATHER_ALERT_SENDER_KEY",
+      "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
+      "secret_name": "MUKOKO_WEATHER_ALERT_SENDER_KEY",
+    },
+  ],
   "d1_databases": [
     {
       "binding": "WEATHER_DB",

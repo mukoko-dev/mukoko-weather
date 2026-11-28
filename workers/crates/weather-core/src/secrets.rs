@@ -67,6 +67,25 @@ pub const CHECKWX_API_KEY: &str = "CHECKWX_API_KEY";
 /// Worker calls the free hosts exactly as before.
 pub const OPEN_METEO_API_KEY: &str = "OPEN_METEO_API_KEY";
 
+/// The VAPID private key (RFC 8292): the P-256 private scalar, unpadded
+/// base64url. Read ONLY by `mukoko-weather-push`, in its entry, and passed on as
+/// a value; it never reaches the Workers that call the sender. The public half
+/// is not a secret (the `VAPID_PUBLIC_KEY` var). The pair is the owner's:
+/// generated once outside this repository.
+pub const VAPID_PRIVATE_KEY: &str = "VAPID_PRIVATE_KEY";
+/// The key `mukoko-weather-jobs` presents to `mukoko-weather-push`'s `/send`
+/// (`Authorization: Bearer`). One value in the store, bound by both. The
+/// service binding is what makes the sender unreachable from outside; this is
+/// the second lock, so another Worker of the account that gains a binding to
+/// the sender still cannot make it push.
+pub const PUSH_SEND_KEY: &str = "PUSH_SEND_KEY";
+/// The Nyuchi API key of the alert tick: an internal key with the
+/// `notifications:alert-sender` scope (read the people to alert and where to
+/// push, claim and log deliveries, deactivate gone subscriptions). Bound only by
+/// `mukoko-weather-jobs`, and its own key on purpose: that scope must not sit on
+/// a key the forecast, places and ai Workers hold.
+pub const ALERT_SENDER_KEY: &str = "ALERT_SENDER_KEY";
+
 /// The MongoDB seed-list connection string (`mongodb://user:pass@host,host/db`)
 /// the read-only Mongo client (`weather-mongo`) uses. Not bound by any Worker
 /// yet: a binding to a store secret that does not exist fails the deploy, so
@@ -90,7 +109,7 @@ pub struct SecretSpec {
 }
 
 /// Every secret the Workers read.
-pub const ALL: [SecretSpec; 7] = [
+pub const ALL: [SecretSpec; 10] = [
     SecretSpec {
         name: TOMORROW_API_KEY,
         store: "MUKOKO_WEATHER_TOMORROW_API_KEY",
@@ -134,6 +153,32 @@ pub const ALL: [SecretSpec; 7] = [
         secret_name: "MUKOKO_WEATHER_MONGODB_URI",
         required: false,
         workers: &[],
+    },
+    // The three of device push (#289, #579). A binding to a store secret that
+    // does not exist fails the deploy (error 10182), so a missing one stops
+    // `push` and `jobs` loudly instead of leaving a sender that cannot send:
+    // `required` is true for that reason and not because the app needs them
+    // to start (the alert tick does nothing while `ALERTS_ENABLED` is off).
+    SecretSpec {
+        name: VAPID_PRIVATE_KEY,
+        store: "MUKOKO_WEATHER_VAPID_PRIVATE_KEY",
+        secret_name: "MUKOKO_WEATHER_VAPID_PRIVATE_KEY",
+        required: true,
+        workers: &["push"],
+    },
+    SecretSpec {
+        name: PUSH_SEND_KEY,
+        store: "MUKOKO_WEATHER_PUSH_SEND_KEY",
+        secret_name: "MUKOKO_WEATHER_PUSH_SEND_KEY",
+        required: true,
+        workers: &["jobs", "push"],
+    },
+    SecretSpec {
+        name: ALERT_SENDER_KEY,
+        store: "MUKOKO_WEATHER_ALERT_SENDER_KEY",
+        secret_name: "MUKOKO_WEATHER_ALERT_SENDER_KEY",
+        required: true,
+        workers: &["jobs"],
     },
     // The store secret was created as `OPEN_METEO_API_KEY` (owner,
     // 2026-11-02); only the binding carries the app prefix.
@@ -463,6 +508,7 @@ mod tests {
             "internal-api" => include_str!("../../../internal-api/wrangler.jsonc"),
             "jobs" => include_str!("../../../jobs/wrangler.jsonc"),
             "places" => include_str!("../../../places/wrangler.jsonc"),
+            "push" => include_str!("../../../push/wrangler.jsonc"),
             "public-api" => include_str!("../../../public-api/wrangler.jsonc"),
             "stations" => include_str!("../../../stations/wrangler.jsonc"),
             "tiles" => include_str!("../../../tiles/wrangler.jsonc"),
@@ -470,7 +516,7 @@ mod tests {
         }
     }
 
-    const WORKERS: [&str; 9] = [
+    const WORKERS: [&str; 10] = [
         "ai",
         "aviation",
         "forecast",
@@ -478,6 +524,7 @@ mod tests {
         "jobs",
         "places",
         "public-api",
+        "push",
         "stations",
         "tiles",
     ];
@@ -507,5 +554,39 @@ mod tests {
             let bound = ALL.iter().filter(|s| s.workers.contains(&worker)).count();
             assert_eq!(stores, bound, "{worker}");
         }
+    }
+
+    #[test]
+    fn the_vapid_private_key_is_bound_by_the_sender_alone() {
+        let vapid = ALL
+            .iter()
+            .find(|s| s.name == VAPID_PRIVATE_KEY)
+            .expect("registered");
+        assert_eq!(vapid.workers, &["push"], "no caller of the sender holds it");
+        assert_eq!(vapid.store, "MUKOKO_WEATHER_VAPID_PRIVATE_KEY");
+    }
+
+    #[test]
+    fn the_alert_sender_key_is_its_own_secret_held_by_jobs_alone() {
+        let sender = ALL
+            .iter()
+            .find(|s| s.name == ALERT_SENDER_KEY)
+            .expect("registered");
+        let shared = ALL
+            .iter()
+            .find(|s| s.name == NYUCHI_API_KEY)
+            .expect("registered");
+        assert_ne!(sender.store, shared.store);
+        assert_eq!(sender.workers, &["jobs"]);
+        assert!(!shared.workers.contains(&"jobs"));
+    }
+
+    #[test]
+    fn the_send_key_is_held_by_the_sender_and_its_one_caller() {
+        let send = ALL
+            .iter()
+            .find(|s| s.name == PUSH_SEND_KEY)
+            .expect("registered");
+        assert_eq!(send.workers, &["jobs", "push"]);
     }
 }
