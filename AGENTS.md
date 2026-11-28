@@ -383,40 +383,6 @@ The rules live in one place, the
 [`next-version`](./.github/actions/next-version) action and
 `reusable-trunk-release.yml`, which every repo's release flow pins by SHA.
 
-## GitHub environments
-
-Owner decision, 2026-11-23. A repository uses only these environment names,
-all lowercase, and there is no `staging`:
-
-| Name         | Used for                                                         |
-| ------------ | ---------------------------------------------------------------- |
-| `release`    | Tag-triggered publishing of packages and artifacts to registries |
-| `production` | Deploys                                                          |
-| `publish`    | Publishing docs or pages sites                                   |
-
-- Restrict `release` and `production` to `v*` tags, and to `main` as well
-  where the workflow deploys by push or dispatch from `main`. No required
-  reviewers: releases are automatic.
-- GitHub cannot rename an environment: create the new one, change every
-  workflow, merge, then delete the old one. Never delete one whose secrets
-  you cannot recreate.
-- Environments that Vercel, GitHub Pages, Copilot, Mintlify or another app
-  creates (`Production`, `Preview`, `Production – <project>`, `github-pages`,
-  `copilot`) are theirs; leave them alone. A name fixed by an outside
-  trusted-publisher setting (PyPI's `pypi`) stays as registered.
-- `repo-standards.yml` warns on a workflow that names any other environment.
-
-## Repo-level overrides
-
-A repo can extend or override this file by shipping its own
-`AGENTS.md` at the repo root (some product repos still carry a
-`CLAUDE.md`; read it the same way). Agents should merge the two mentally: **repo-level
-rules override org-level rules when they conflict**, and
-**repo-level rules add to org-level rules when they don't**.
-
-If you're an agent and the repo has no `AGENTS.md` / `CLAUDE.md`,
-these org rules are your ground truth.
-
 ---
 
 ## Repo-level overrides
