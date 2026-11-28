@@ -4,15 +4,14 @@
 #
 #   - A push to main that touches workers/** (or this file) deploys ALL
 #     Workers, in the binding order below, after the workers.yml gate passes.
-#     This is the release path: staging reaches main through the merge queue
+#     This is the release path: a PR reaches main through the merge queue
 #     and the Workers go out with it. No repository variable gates it.
 #   - Actions → Workers deploy → Run workflow (workflow_dispatch) still
 #     exists, for redeploying one Worker or all of them.
 #
-# Staging has no automatic Worker deploy. Staging is preview builds: the
-# Workers are checked by the workers.yml builds on every PR and push, and a
-# Worker that enables preview URLs can be tried on a Cloudflare preview
-# version (none does today). Production deploys only from main.
+# There is no staging. Workers are checked by the workers.yml builds on every
+# PR and push, and a Worker that enables preview URLs can be tried on a
+# Cloudflare preview version (none does today).
 #
 # Production deploys main only. The run must be on main (the guard job fails
 # otherwise) and deploys exactly the commit it ran on (github.sha). There is

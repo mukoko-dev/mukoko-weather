@@ -72,8 +72,8 @@ their `llms.txt` files.
    serving. Requests have timeouts and size limits. Services shut down
    gracefully. `/health` is liveness and `/ready` checks each dependency. The
    version reported is the real release, never hard-coded.
-3. **Everything ships to production.** Releases go `staging` → `main` through
-   the merge queue. Deploys run on every push to `main`, with no variable
+3. **Everything ships to production.** Merges to `main` ship through the
+   merge queue. Deploys run on every push to `main`, with no variable
    gates. A missing secret fails loudly, never silently skips.
 4. **Never close a conflicting PR.** Resolve the conflict and keep every
    feature.
@@ -354,32 +354,68 @@ tag in a trailing comment. Resolve the SHA first:
 
 ## Versioning
 
-Owner decision, 2026-10-04 ([#80](https://github.com/nyuchi/.github/issues/80)).
-The branch decides the bump. Nobody labels a PR, and agents add nothing
-to a PR to choose a version:
+Trunk-based, `main` only: there is no `staging` branch and no `staging`
+environment. Owner decision 2026-10-04 ([#80](https://github.com/nyuchi/.github/issues/80)),
+settled as trunk on 2026-11-23. Every merge to `main` is a release, and the
+semantic title of the merged PR decides the bump. Nobody labels a PR, and
+agents add nothing to a PR to choose a version:
 
 | Event                                        | Bump  | Example         |
 | -------------------------------------------- | ----- | --------------- |
-| A PR merged into `staging` (the live beta)   | PATCH | 0.27.3 → 0.27.4 |
-| `staging` released to `main`                 | MINOR | 0.27.4 → 0.28.0 |
+| A PR titled `fix:`, `chore:`, `docs:`, `ci:` | PATCH | 0.27.3 → 0.27.4 |
+| A PR titled `feat:`                          | MINOR | 0.27.4 → 0.28.0 |
 | A person runs the release with `bump: major` | MAJOR | 0.28.0 → 1.0.0  |
 
+- A breaking-change title (`feat!:`, `fix!:`) is refused by the release
+  workflow: a major is made by hand, never by a merge.
 - Minor and patch have no upper limit: patch 999 is followed by patch
   1000, minor 999 by minor 1000 (`v0.1000.0` is newer than `v0.999.0`).
   Versions compare as numbers. Only a major is manual, and the major
   segment stays 0–999.
 - **Agents never release a major** and never hand-edit a version to one.
   A major is the owner's call, made from the Actions tab.
-- In a repo whose version lives in a file (`package.json`,
-  `Cargo.toml`, ...), a PR that releases sets it to the next version
-  the policy allows. CI refuses anything else and names the right
-  version.
+- The version lives in tags; a repo does not commit it back. Where a
+  file carries a version (`package.json`, `Cargo.toml`, ...), CI names
+  the right one.
 - Released versions are never renumbered.
 
 The rules live in one place, the
-[`next-version`](./.github/actions/next-version) action, which
-`reusable-staging-release.yml`, `reusable-auto-tag.yml` and every repo's
-release flow pin by SHA.
+[`next-version`](./.github/actions/next-version) action and
+`reusable-trunk-release.yml`, which every repo's release flow pins by SHA.
+
+## GitHub environments
+
+Owner decision, 2026-11-23. A repository uses only these environment names,
+all lowercase, and there is no `staging`:
+
+| Name         | Used for                                                         |
+| ------------ | ---------------------------------------------------------------- |
+| `release`    | Tag-triggered publishing of packages and artifacts to registries |
+| `production` | Deploys                                                          |
+| `publish`    | Publishing docs or pages sites                                   |
+
+- Restrict `release` and `production` to `v*` tags, and to `main` as well
+  where the workflow deploys by push or dispatch from `main`. No required
+  reviewers: releases are automatic.
+- GitHub cannot rename an environment: create the new one, change every
+  workflow, merge, then delete the old one. Never delete one whose secrets
+  you cannot recreate.
+- Environments that Vercel, GitHub Pages, Copilot, Mintlify or another app
+  creates (`Production`, `Preview`, `Production – <project>`, `github-pages`,
+  `copilot`) are theirs; leave them alone. A name fixed by an outside
+  trusted-publisher setting (PyPI's `pypi`) stays as registered.
+- `repo-standards.yml` warns on a workflow that names any other environment.
+
+## Repo-level overrides
+
+A repo can extend or override this file by shipping its own
+`AGENTS.md` at the repo root (some product repos still carry a
+`CLAUDE.md`; read it the same way). Agents should merge the two mentally: **repo-level
+rules override org-level rules when they conflict**, and
+**repo-level rules add to org-level rules when they don't**.
+
+If you're an agent and the repo has no `AGENTS.md` / `CLAUDE.md`,
+these org rules are your ground truth.
 
 ---
 
@@ -409,10 +445,7 @@ starts — so another session, agent or person can pick it up.
   description when the merge completes the issue, so GitHub closes it
   on merge. Use `Refs #n` for partial work (the issue stays open), or
   `No issue: <reason>` for a trivial change. Bot PRs are exempt.
-- GitHub acts on a closing keyword only when the merge lands on the
-  default branch. A PR into `staging` therefore closes nothing yet: the
-  release PR to `main` repeats every `Closes #n` from the PRs it
-  carries, and the same check warns with the exact lines it is missing.
+- Every PR targets `main`, so a closing keyword takes effect when it merges.
 - Post progress, decisions and a hand-off note (what's done, what's
   left, branch names) as issue comments — at each merge and before a
   session or agent finishes.
@@ -470,35 +503,24 @@ concurrent merge calls, not from git itself. These rules remove it.
 
 ### Releases and the main gate
 
-- **The default branch takes releases only.** Where a repo has a `staging`
-  branch, a pull request into the default branch must come from `staging`,
-  a `release/*` branch, or the registry pin bot (`bot/registry-pin`). The
-  enforced release check refuses everything else; repos without `staging`
-  are not affected. Dependabot opens its PRs against `staging`
-  (`target-branch: staging`). A repo named `.github` has no `staging` at
-  all: every org's `.github` repo works directly on its default branch.
-- **Promote `staging` to the default branch with a merge commit, never
-  squash.** A squash release is one commit `staging` lacks; the branches
-  diverge and the next release silently erases work that exists only on
-  the default branch (it did, on 2026-10-21). A merge commit keeps the
-  default branch at `staging` plus one merge, so the next release cannot
-  conflict and needs no sync-back. See `settings/README.md`.
-- **Nothing stays on the default branch alone.** If a commit reaches it
-  outside a release (hotfix, pin bot), forward-port it to `staging` before
-  the next release. The gate blocks the release until then; once the
-  commits are on `staging`, the `forward-ported` label lets it through.
+- **Trunk-based: PRs go to `main`.** There is no `staging` branch in any
+  repo and no `staging` environment. Features, fixes, Dependabot and the
+  registry pin bot all open PRs into the default branch, squash-merged
+  through the merge queue with green required checks and no bypass. Do not
+  create a `staging` or `release/*` branch; a repo that still has one gets
+  it deleted by the owner, not by an agent.
 - **One pin for the shared workflows, estate-wide.** Every repo calls
   `nyuchi/.github/.github/workflows/<workflow>.yml@<40-hex sha>  # vX.Y.Z`
   at the same commit (two spaces before `#`); Dependabot raises the pin
   after each release. Never `@main`, never a bare SHA without its tag
   comment.
 - **Releases are automatic.** Agents do not cut minor or patch releases
-  by hand: `auto-release.yml` opens the staging → default-branch release
-  PR every 15 minutes and turns auto-merge on, as the enterprise-owned
-  `bundu-release` app (whose key lives only in the `org-release`
-  environment). A MAJOR is still the owner's call: the owner applies the
-  `semver:major` label. The hotfix lane is unchanged. A repo opts out with
-  the `AUTO_RELEASE=off` variable.
+  by hand: every merge to the default branch is tagged from its PR title
+  (`reusable-trunk-release.yml`, or `auto-release.yml` as the
+  enterprise-owned `bundu-release` app, whose key lives only in the
+  `org-release` environment, for repos with no release workflow of their
+  own). A MAJOR is still the owner's call, made by hand. A repo opts out
+  with the `AUTO_RELEASE=off` variable.
 - **Advisory waivers are org-level.** The dependency review blocks an
   advisory only while a patched release exists. The only waivers are the
   org allowlist (`AUDIT_ALLOW_GHSAS` in nyuchi/.github's

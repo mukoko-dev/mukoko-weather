@@ -204,48 +204,34 @@ The old analyzer names may have silently fallen through to Atlas defaults — th
 
 ## Dependency updates
 
-Dependabot is configured in `.github/dependabot.yml`: one grouped pull request a week for each of npm, Cargo and GitHub Actions, against `staging`, with a seven-day cooldown on new releases. Major versions are not proposed there; plan a major upgrade as its own issue.
+Dependabot is configured in `.github/dependabot.yml`: one grouped pull request a week for each of npm, Cargo and GitHub Actions, against `main`, with a seven-day cooldown on new releases. Major versions are not proposed there; plan a major upgrade as its own issue.
 
-Security updates are the exception. Dependabot raises them against the default branch (`main`) only, so the "`main` takes releases only" check fails them. Retarget one with `gh pr edit <n> --base staging` and let its checks run again. A group of green Dependabot pull requests is merged through the merge queue like any other pull request, and the ones that fail for a reason the update did not cause (for example `npm audit` on a lockfile that already had advisories) are fixed in their own pull request first.
+Security updates and version updates both target `main`. A group of green Dependabot pull requests is merged through the merge queue like any other pull request, and the ones that fail for a reason the update did not cause (for example `npm audit` on a lockfile that already had advisories) are fixed in their own pull request first.
 
 ## GitHub Workflows
 
 All workflows use `concurrency` groups with `cancel-in-progress: true` — rapid pushes cancel stale runs instead of creating zombie checks.
 
-| Workflow                   | Trigger                                                                              | Purpose                                                                                                                                                                                       |
-| -------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ci.yml`                   | Push/PR to `main`                                                                    | Single job: lint → typecheck → TypeScript tests. All steps appear under one check in the GitHub PR UI.                                                                                        |
-| `db-init.yml`              | Vercel production deploy succeeds                                                    | Syncs seed data to MongoDB (locations, activities, rules, prompts)                                                                                                                            |
-| `release-pr.yml`           | Manual (`workflow_dispatch`)                                                         | Cuts `release/<date>` from `staging`, asserts main's content is already in staging, records main with `git merge -s ours`, removes `CLAUDE.md` and `.claude/`, opens the release PR to `main` |
-| `no-dev-files-on-main.yml` | PR to `main`; push to `main`                                                         | Fails when `CLAUDE.md` or a `.claude/` directory is tracked, so `main` never holds development-only files                                                                                     |
-| `workers.yml`              | Push/PR touching `workers/**` or `tests/fixtures/**`; called by `workers-deploy.yml` | Rust Workers: fmt, clippy (native + wasm32), test, and build every Worker bundle                                                                                                              |
-| `workers-deploy.yml`       | Push to `main` touching `workers/**`; manual (`workflow_dispatch`, from `main`)      | After the `workers.yml` gate, builds and deploys the Rust Workers to Cloudflare in service-binding order (all of them on a push), then smoke-checks each public `/health`                     |
+| Workflow                   | Trigger                                                                              | Purpose                                                                                                                                                                   |
+| -------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci.yml`                   | Push/PR to `main`                                                                    | Single job: lint → typecheck → TypeScript tests. All steps appear under one check in the GitHub PR UI.                                                                    |
+| `db-init.yml`              | Vercel production deploy succeeds                                                    | Syncs seed data to MongoDB (locations, activities, rules, prompts)                                                                                                        |
+| `release.yml`              | Push to `main`; manual (`workflow_dispatch`)                                         | Tags the merged commit from its PR title and publishes the GitHub release (`feat:` minor, anything else patch; a major only by hand)                                      |
+| `no-dev-files-on-main.yml` | PR to `main`; push to `main`                                                         | Fails when `CLAUDE.md` or a `.claude/` directory is tracked, so `main` never holds development-only files                                                                 |
+| `workers.yml`              | Push/PR touching `workers/**` or `tests/fixtures/**`; called by `workers-deploy.yml` | Rust Workers: fmt, clippy (native + wasm32), test, and build every Worker bundle                                                                                          |
+| `workers-deploy.yml`       | Push to `main` touching `workers/**`; manual (`workflow_dispatch`, from `main`)      | After the `workers.yml` gate, builds and deploys the Rust Workers to Cloudflare in service-binding order (all of them on a push), then smoke-checks each public `/health` |
 
 ## Releases
 
-`staging` is released to `main` with a **squash** merge. A squash commit has no parent on `staging`, so after one release the next `staging → main` PR sees main's squash commit as unknown history. GitHub then marks the PR as conflicting ("dirty"), even when the content is identical.
+Every merge to `main` is a release. The `Release` workflow (`.github/workflows/release.yml`, calling the org's `reusable-trunk-release.yml`) tags the merged commit from the PR title: `feat:` is a minor, anything else a patch, and a breaking `!` title is refused. A major is only ever made by hand: Actions → Release → Run workflow, `bump: major`. The tag and the GitHub release are made with the run's `GITHUB_TOKEN`.
 
-To open a release PR, never open `staging → main` by hand. Run the **Release PR** workflow instead (`.github/workflows/release-pr.yml`, Actions → Release PR → Run workflow). The optional `date` input defaults to today in UTC. The workflow:
-
-1. Creates `release/<date>` from `origin/staging`. It fails if that branch already exists.
-2. Asserts that main's content is already in staging. Each file on `main` must either match staging's blob at the same path or appear somewhere in staging's history. If neither holds, the workflow fails loudly and names each file, which usually means a hotfix landed on `main` without being merged back. Merge `main` into `staging` and rerun.
-3. Runs `git merge -s ours origin/main -m "chore: record main in release history"`. This records `main` as a parent while the tree stays exactly staging's, and the workflow verifies that.
-4. Removes the development-only files in one extra commit: every `CLAUDE.md` and every `.claude/` directory, at any depth (matched case-insensitively). `main` never holds them, because they guide development and are not production code. `staging` keeps them, and the workflow fails if any is still tracked after the commit.
-5. Pushes the branch and opens the PR to `main` with `RELEASE_BUMP_TOKEN`, so CI runs on it.
-
-Squash-merge that PR. Because `main` is already in the branch's history, the squash is always clean.
-
-The `no-dev-files-on-main.yml` workflow backs step 4 up: it fails any PR to `main`, and any push to `main`, whose tree still tracks a `CLAUDE.md` or `.claude/` file. Make it a required status check on `main` in the repository's branch protection (an owner step) so a hand-opened PR cannot merge them. The Release PR workflow runs from `main`, so a change to it only takes effect after it has reached `main` once. That release has to remove the files by hand on its release branch.
-
-Once the release is on `main`, tag it with the `tag-release` workflow (Actions → tag-release → Run workflow). It tags the tip of `main` as the next version (`bump`, default patch, or an explicit `vX.Y.Z`) and publishes the GitHub release, using `RELEASE_BUMP_TOKEN`.
-
-The release PR is opened with `RELEASE_BUMP_TOKEN` (an org secret), so CI runs on it like any other PR. The workflow fails before it touches git if that secret is missing. A PR opened with `GITHUB_TOKEN` does not start CI.
+The `no-dev-files-on-main.yml` workflow fails any PR to `main`, and any push to `main`, whose tree tracks a `CLAUDE.md` or `.claude/` file, so `main` never holds development-only files. Make it a required status check on `main` (an owner step).
 
 ### Release notes (public)
 
 Every production release gets a public entry on [weather.mukoko.com/releases](https://weather.mukoko.com/releases) and in its Atom feed (`/releases/feed.xml`). The source is one Markdown file per release in `releases/`, named `v<version>.md`. The page is built from these files when the app builds; nothing is fetched from GitHub. `RELEASES.md` stays the technical, operator-facing history, and the automatic `vX.Y.Z (beta)` pre-releases on GitHub are never shown on the page.
 
-Add the file in the release PR (or in a PR to `staging` just before it), so the notes ship with the release they describe:
+Add the file in the PR that makes the release, so the notes ship with the release they describe:
 
 ```md
 ---
@@ -280,12 +266,12 @@ One or two optional sentences on what this release is about.
 
 The Rust Workers in `workers/` deploy to production from `main` automatically, and by hand when you need a redeploy (`.github/workflows/workers-deploy.yml`):
 
-- **A push to `main` that touches `workers/**` (or the workflow file) deploys all Workers**, in the service-binding order below, after the `workers.yml` gate (fmt, clippy, test, build) passes. That is the release path: the release PR from `staging`, squash-merged into `main`, deploys the Workers it changes together with the rest of the release. A push that changes nothing under `workers/` deploys nothing, and if the gate fails nothing deploys. No repository variable gates it.
+- **A push to `main` that touches `workers/**` (or the workflow file) deploys all Workers**, in the service-binding order below, after the `workers.yml` gate (fmt, clippy, test, build) passes. That is the release path: a PR squash-merged into `main` deploys the Workers it changes. A push that changes nothing under `workers/` deploys nothing, and if the gate fails nothing deploys. No repository variable gates it.
 - **Actions → Workers deploy → Run workflow** still exists, for redeploying one Worker or all of them. Inputs: `worker` (`all`, the default, or one Worker) and `environment` (`production`, the only one; a push always deploys production).
 
 Production deploys `main` only: a guard job fails a run on any other ref, and the run deploys exactly the commit it ran on. There is no `ref` input, so the job holding the Cloudflare secrets never checks out a caller-chosen ref. The job runs in the `production` GitHub Environment, so any required reviewers or branch rules set there apply to every deploy, a push included: a run that needs approval waits, and nothing is deployed until it is approved. Check that Environment's settings in the repository before relying on the automatic deploy; they are not in this repo.
 
-**Staging is preview builds.** `staging` has no automatic Worker deploy, and `workers-deploy.yml` never deploys from it. A Worker change is tested before `main` through the `workers.yml` builds on the pull request (fmt, clippy, tests, every Worker bundle built, with a size gate) and, where a Worker enables preview URLs, through a Cloudflare preview version (every wrangler config has `"preview_urls": false` today, and the automatic deploy does not change that). The app has Vercel previews. Production Workers change only from `main`.
+**There is no staging.** `workers-deploy.yml` deploys from `main` only. A Worker change is tested before `main` through the `workers.yml` builds on the pull request (fmt, clippy, tests, every Worker bundle built, with a size gate) and, where a Worker enables preview URLs, through a Cloudflare preview version (every wrangler config has `"preview_urls": false` today). The app has Vercel previews.
 
 `all` first runs the `workers.yml` gate (fmt, clippy, test, build), then deploys in service-binding order: `forecast`, `aviation`, `mongo-bridge`, `places`, `stations`, `tiles`, then `ai`, `internal-api`, `jobs`, then `public-api`. `mongo-bridge` (TypeScript, `workers/mongo-bridge`) comes before `places` because `places` binds it as `MONGO_BRIDGE`: the bridge is the only writer of device profiles, community weather reports and the archive days of the weather history (MongoDB, never D1), and it has no route and no workers.dev address. `places` also comes before `ai`, which binds it (`PLACES`) so the history analysis reads the same history the app shows (#268). Each Worker with a custom domain must answer `GET /health` with a 2xx, and the run summary lists every Worker's result. A single Worker skips the gate, so only deploy one alone when what it binds to is already live.
 
@@ -315,7 +301,7 @@ Create each one with `npx wrangler secrets-store secret create 56f84bfa8a564c54a
 
 ### Patch deploys, then the minor release
 
-The push deploy above is the normal path. This by-hand path predates it and stays for a fix that must reach the live Workers before a release. Deploy the Workers from `staging` by hand with wrangler, using the Cloudflare token from the environment (no GitHub Actions): `npm ci` in `workers/mongo-bridge`, then `npx wrangler@4.138.0 deploy` in each Worker directory in the order above, with `CLOUDFLARE_ACCOUNT_ID` set. There are no separate staging Workers, so this is a production deploy: record each Worker's live version first (`wrangler deployments list --name <script>`) as the rollback target, stop at the first failure, and check each custom domain's `/health` (and `/health?probe=mongo` on the public API) after it. Test the changed routes against the live Workers, and delete any test data you created. The release PR merged to `main` is the minor bump, tagged with `tag-release`, and its push deploys the Workers again from `main`.
+The push deploy above is the normal path. This by-hand path predates it and stays for a fix that must reach the live Workers before a release. Deploy the Workers from `main` by hand with wrangler, using the Cloudflare token from the environment (no GitHub Actions): `npm ci` in `workers/mongo-bridge`, then `npx wrangler@4.138.0 deploy` in each Worker directory in the order above, with `CLOUDFLARE_ACCOUNT_ID` set. This is a production deploy: record each Worker's live version first (`wrangler deployments list --name <script>`) as the rollback target, stop at the first failure, and check each custom domain's `/health` (and `/health?probe=mongo` on the public API) after it. Test the changed routes against the live Workers, and delete any test data you created. The release PR merged to `main` is the minor bump, tagged with `tag-release`, and its push deploys the Workers again from `main`.
 
 ## Apple WeatherKit
 
@@ -357,7 +343,7 @@ The documents the page writes are judged by the validator nyuchi-api installs in
 A signed-in person's selected activities are kept on their own `identity.persons` record, so a new phone or a cleared browser does not lose them (#484). It ships dark: `PERSON_PREFERENCES_READY` and `PERSON_SAVED_PLACES_READY` in `src/lib/person-preferences-switches.ts` are `false`, and `/api/profile/preferences` answers `503 preferences_unavailable` without touching storage. The interim home is one file, `src/lib/person-preferences-store.ts`; the truth moves to the person's CouchDB database, and the fields that die then are listed in [docs/mongodb-schema-map.md](docs/mongodb-schema-map.md). To turn activities on, in this order:
 
 1. nyuchi adds the `activities` and `savedPlaces` slots to `Person` in `nyuchi/data-infra` (`schemas/model/identity.yaml`, then `generate.py`) and applies the regenerated `identity.persons` validator. Neither is done from this repository, and no weather code creates a collection, a validator or an index.
-2. Check it on staging with a throwaway test person, never a real one: sign in, add an activity, reload on a second browser, remove it, and watch the Network tab (`GET` then `PUT /api/profile/preferences`, nothing on a signed-out page).
+2. Check it on a preview build with a throwaway test person, never a real one: sign in, add an activity, reload on a second browser, remove it, and watch the Network tab (`GET` then `PUT /api/profile/preferences`, nothing on a signed-out page).
 3. Flip `PERSON_PREFERENCES_READY` in code, and in the same change update `preferences-route-off.test.ts`, which pins the shipped state.
 
 Saved places stay off. They say where a person lives, so data-infra ADR-0002 keeps them encrypted on the device, and nothing here writes one until the key that would encrypt them has a home and the owner has chosen between ciphertext and a readable catalogue slug (the open question in the pull request for #484).
